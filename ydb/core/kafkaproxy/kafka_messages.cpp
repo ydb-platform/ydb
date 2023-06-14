@@ -127,31 +127,153 @@ const TRequestHeaderData::CorrelationIdMeta::Type TRequestHeaderData::Correlatio
 const TRequestHeaderData::ClientIdMeta::Type TRequestHeaderData::ClientIdMeta::Default = {""};
 
 TRequestHeaderData::TRequestHeaderData() 
-        : requestApiKey(RequestApiKeyMeta::Default)
-        , requestApiVersion(RequestApiVersionMeta::Default)
-        , correlationId(CorrelationIdMeta::Default)
-        , clientId(ClientIdMeta::Default)
+        : RequestApiKey(RequestApiKeyMeta::Default)
+        , RequestApiVersion(RequestApiVersionMeta::Default)
+        , CorrelationId(CorrelationIdMeta::Default)
+        , ClientId(ClientIdMeta::Default)
 {}
 
-void TRequestHeaderData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TRequestHeaderData";
-    }
-    NPrivate::Read<RequestApiKeyMeta>(_readable, _version, requestApiKey);
-    NPrivate::Read<RequestApiVersionMeta>(_readable, _version, requestApiVersion);
-    NPrivate::Read<CorrelationIdMeta>(_readable, _version, correlationId);
-    NPrivate::Read<ClientIdMeta>(_readable, _version, clientId);
+
+class TRequestHeaderData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TRequestHeaderData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TRequestHeaderData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<RequestApiKeyMeta> RequestApiKey;
+    NPrivate::TReadStrategy<RequestApiVersionMeta> RequestApiVersion;
+    NPrivate::TReadStrategy<CorrelationIdMeta> CorrelationId;
+    NPrivate::TReadStrategy<ClientIdMeta> ClientId;
+};
+
+TRequestHeaderData::TReadContext::TReadContext(TRequestHeaderData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , RequestApiKey()
+    , RequestApiVersion()
+    , CorrelationId()
+    , ClientId()
+{}
+
+
+TReadDemand TRequestHeaderData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                RequestApiKey.Init<NPrivate::ReadFieldRule<RequestApiKeyMeta>>(Value.RequestApiKey, Version);
             }
+            case 1: {
+                auto demand = RequestApiKey.Next<NPrivate::ReadFieldRule<RequestApiKeyMeta>>(Value.RequestApiKey, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                RequestApiVersion.Init<NPrivate::ReadFieldRule<RequestApiVersionMeta>>(Value.RequestApiVersion, Version);
+            }
+            case 3: {
+                auto demand = RequestApiVersion.Next<NPrivate::ReadFieldRule<RequestApiVersionMeta>>(Value.RequestApiVersion, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                CorrelationId.Init<NPrivate::ReadFieldRule<CorrelationIdMeta>>(Value.CorrelationId, Version);
+            }
+            case 5: {
+                auto demand = CorrelationId.Next<NPrivate::ReadFieldRule<CorrelationIdMeta>>(Value.CorrelationId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                ClientId.Init<NPrivate::ReadFieldRule<ClientIdMeta>>(Value.ClientId, Version);
+            }
+            case 7: {
+                auto demand = ClientId.Next<NPrivate::ReadFieldRule<ClientIdMeta>>(Value.ClientId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TRequestHeaderData::MessageMeta::FlexibleVersionMin, TRequestHeaderData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -161,10 +283,10 @@ void TRequestHeaderData::Write(TKafkaWritable& _writable, TKafkaVersion _version
         ythrow yexception() << "Can't write version " << _version << " of TRequestHeaderData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<RequestApiKeyMeta>(_collector, _writable, _version, requestApiKey);
-    NPrivate::Write<RequestApiVersionMeta>(_collector, _writable, _version, requestApiVersion);
-    NPrivate::Write<CorrelationIdMeta>(_collector, _writable, _version, correlationId);
-    NPrivate::Write<ClientIdMeta>(_collector, _writable, _version, clientId);
+    NPrivate::Write<RequestApiKeyMeta>(_collector, _writable, _version, RequestApiKey);
+    NPrivate::Write<RequestApiVersionMeta>(_collector, _writable, _version, RequestApiVersion);
+    NPrivate::Write<CorrelationIdMeta>(_collector, _writable, _version, CorrelationId);
+    NPrivate::Write<ClientIdMeta>(_collector, _writable, _version, ClientId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -174,15 +296,18 @@ void TRequestHeaderData::Write(TKafkaWritable& _writable, TKafkaVersion _version
 
 i32 TRequestHeaderData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<RequestApiKeyMeta>(_collector, _version, requestApiKey);
-    NPrivate::Size<RequestApiVersionMeta>(_collector, _version, requestApiVersion);
-    NPrivate::Size<CorrelationIdMeta>(_collector, _version, correlationId);
-    NPrivate::Size<ClientIdMeta>(_collector, _version, clientId);
+    NPrivate::Size<RequestApiKeyMeta>(_collector, _version, RequestApiKey);
+    NPrivate::Size<RequestApiVersionMeta>(_collector, _version, RequestApiVersion);
+    NPrivate::Size<CorrelationIdMeta>(_collector, _version, CorrelationId);
+    NPrivate::Size<ClientIdMeta>(_collector, _version, ClientId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TRequestHeaderData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -192,25 +317,108 @@ i32 TRequestHeaderData::Size(TKafkaVersion _version) const {
 const TResponseHeaderData::CorrelationIdMeta::Type TResponseHeaderData::CorrelationIdMeta::Default = 0;
 
 TResponseHeaderData::TResponseHeaderData() 
-        : correlationId(CorrelationIdMeta::Default)
+        : CorrelationId(CorrelationIdMeta::Default)
 {}
 
-void TResponseHeaderData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TResponseHeaderData";
-    }
-    NPrivate::Read<CorrelationIdMeta>(_readable, _version, correlationId);
+
+class TResponseHeaderData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TResponseHeaderData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TResponseHeaderData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<CorrelationIdMeta> CorrelationId;
+};
+
+TResponseHeaderData::TReadContext::TReadContext(TResponseHeaderData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , CorrelationId()
+{}
+
+
+TReadDemand TResponseHeaderData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                CorrelationId.Init<NPrivate::ReadFieldRule<CorrelationIdMeta>>(Value.CorrelationId, Version);
             }
+            case 1: {
+                auto demand = CorrelationId.Next<NPrivate::ReadFieldRule<CorrelationIdMeta>>(Value.CorrelationId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                if (!NPrivate::VersionCheck<TResponseHeaderData::MessageMeta::FlexibleVersionMin, TResponseHeaderData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 3: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 5: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 7: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 4;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -220,7 +428,7 @@ void TResponseHeaderData::Write(TKafkaWritable& _writable, TKafkaVersion _versio
         ythrow yexception() << "Can't write version " << _version << " of TResponseHeaderData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<CorrelationIdMeta>(_collector, _writable, _version, correlationId);
+    NPrivate::Write<CorrelationIdMeta>(_collector, _writable, _version, CorrelationId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -230,12 +438,15 @@ void TResponseHeaderData::Write(TKafkaWritable& _writable, TKafkaVersion _versio
 
 i32 TResponseHeaderData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<CorrelationIdMeta>(_collector, _version, correlationId);
+    NPrivate::Size<CorrelationIdMeta>(_collector, _version, CorrelationId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TResponseHeaderData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -247,30 +458,152 @@ const TProduceRequestData::AcksMeta::Type TProduceRequestData::AcksMeta::Default
 const TProduceRequestData::TimeoutMsMeta::Type TProduceRequestData::TimeoutMsMeta::Default = 0;
 
 TProduceRequestData::TProduceRequestData() 
-        : transactionalId(TransactionalIdMeta::Default)
-        , acks(AcksMeta::Default)
-        , timeoutMs(TimeoutMsMeta::Default)
+        : TransactionalId(TransactionalIdMeta::Default)
+        , Acks(AcksMeta::Default)
+        , TimeoutMs(TimeoutMsMeta::Default)
 {}
 
-void TProduceRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceRequestData";
-    }
-    NPrivate::Read<TransactionalIdMeta>(_readable, _version, transactionalId);
-    NPrivate::Read<AcksMeta>(_readable, _version, acks);
-    NPrivate::Read<TimeoutMsMeta>(_readable, _version, timeoutMs);
-    NPrivate::Read<TopicDataMeta>(_readable, _version, topicData);
+
+class TProduceRequestData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceRequestData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceRequestData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TransactionalIdMeta> TransactionalId;
+    NPrivate::TReadStrategy<AcksMeta> Acks;
+    NPrivate::TReadStrategy<TimeoutMsMeta> TimeoutMs;
+    NPrivate::TReadStrategy<TopicDataMeta> TopicData;
+};
+
+TProduceRequestData::TReadContext::TReadContext(TProduceRequestData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , TransactionalId()
+    , Acks()
+    , TimeoutMs()
+    , TopicData()
+{}
+
+
+TReadDemand TProduceRequestData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                TransactionalId.Init<NPrivate::ReadFieldRule<TransactionalIdMeta>>(Value.TransactionalId, Version);
             }
+            case 1: {
+                auto demand = TransactionalId.Next<NPrivate::ReadFieldRule<TransactionalIdMeta>>(Value.TransactionalId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Acks.Init<NPrivate::ReadFieldRule<AcksMeta>>(Value.Acks, Version);
+            }
+            case 3: {
+                auto demand = Acks.Next<NPrivate::ReadFieldRule<AcksMeta>>(Value.Acks, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                TimeoutMs.Init<NPrivate::ReadFieldRule<TimeoutMsMeta>>(Value.TimeoutMs, Version);
+            }
+            case 5: {
+                auto demand = TimeoutMs.Next<NPrivate::ReadFieldRule<TimeoutMsMeta>>(Value.TimeoutMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                TopicData.Init<NPrivate::ReadFieldRule<TopicDataMeta>>(Value.TopicData, Version);
+            }
+            case 7: {
+                auto demand = TopicData.Next<NPrivate::ReadFieldRule<TopicDataMeta>>(Value.TopicData, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TProduceRequestData::MessageMeta::FlexibleVersionMin, TProduceRequestData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -280,10 +613,10 @@ void TProduceRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _versio
         ythrow yexception() << "Can't write version " << _version << " of TProduceRequestData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TransactionalIdMeta>(_collector, _writable, _version, transactionalId);
-    NPrivate::Write<AcksMeta>(_collector, _writable, _version, acks);
-    NPrivate::Write<TimeoutMsMeta>(_collector, _writable, _version, timeoutMs);
-    NPrivate::Write<TopicDataMeta>(_collector, _writable, _version, topicData);
+    NPrivate::Write<TransactionalIdMeta>(_collector, _writable, _version, TransactionalId);
+    NPrivate::Write<AcksMeta>(_collector, _writable, _version, Acks);
+    NPrivate::Write<TimeoutMsMeta>(_collector, _writable, _version, TimeoutMs);
+    NPrivate::Write<TopicDataMeta>(_collector, _writable, _version, TopicData);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -293,15 +626,18 @@ void TProduceRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _versio
 
 i32 TProduceRequestData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TransactionalIdMeta>(_collector, _version, transactionalId);
-    NPrivate::Size<AcksMeta>(_collector, _version, acks);
-    NPrivate::Size<TimeoutMsMeta>(_collector, _version, timeoutMs);
-    NPrivate::Size<TopicDataMeta>(_collector, _version, topicData);
+    NPrivate::Size<TransactionalIdMeta>(_collector, _version, TransactionalId);
+    NPrivate::Size<AcksMeta>(_collector, _version, Acks);
+    NPrivate::Size<TimeoutMsMeta>(_collector, _version, TimeoutMs);
+    NPrivate::Size<TopicDataMeta>(_collector, _version, TopicData);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceRequestData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -311,26 +647,122 @@ i32 TProduceRequestData::Size(TKafkaVersion _version) const {
 const TProduceRequestData::TTopicProduceData::NameMeta::Type TProduceRequestData::TTopicProduceData::NameMeta::Default = {""};
 
 TProduceRequestData::TTopicProduceData::TTopicProduceData() 
-        : name(NameMeta::Default)
+        : Name(NameMeta::Default)
 {}
 
-void TProduceRequestData::TTopicProduceData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceRequestData::TTopicProduceData";
-    }
-    NPrivate::Read<NameMeta>(_readable, _version, name);
-    NPrivate::Read<PartitionDataMeta>(_readable, _version, partitionData);
+
+class TProduceRequestData::TTopicProduceData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceRequestData::TTopicProduceData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceRequestData::TTopicProduceData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<NameMeta> Name;
+    NPrivate::TReadStrategy<PartitionDataMeta> PartitionData;
+};
+
+TProduceRequestData::TTopicProduceData::TReadContext::TReadContext(TProduceRequestData::TTopicProduceData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Name()
+    , PartitionData()
+{}
+
+
+TReadDemand TProduceRequestData::TTopicProduceData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Name.Init<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
             }
+            case 1: {
+                auto demand = Name.Next<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                PartitionData.Init<NPrivate::ReadFieldRule<PartitionDataMeta>>(Value.PartitionData, Version);
+            }
+            case 3: {
+                auto demand = PartitionData.Next<NPrivate::ReadFieldRule<PartitionDataMeta>>(Value.PartitionData, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TProduceRequestData::TTopicProduceData::MessageMeta::FlexibleVersionMin, TProduceRequestData::TTopicProduceData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -340,8 +772,8 @@ void TProduceRequestData::TTopicProduceData::Write(TKafkaWritable& _writable, TK
         ythrow yexception() << "Can't write version " << _version << " of TProduceRequestData::TTopicProduceData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<NameMeta>(_collector, _writable, _version, name);
-    NPrivate::Write<PartitionDataMeta>(_collector, _writable, _version, partitionData);
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<PartitionDataMeta>(_collector, _writable, _version, PartitionData);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -351,13 +783,16 @@ void TProduceRequestData::TTopicProduceData::Write(TKafkaWritable& _writable, TK
 
 i32 TProduceRequestData::TTopicProduceData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<NameMeta>(_collector, _version, name);
-    NPrivate::Size<PartitionDataMeta>(_collector, _version, partitionData);
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<PartitionDataMeta>(_collector, _version, PartitionData);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceRequestData::TTopicProduceData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -367,26 +802,122 @@ i32 TProduceRequestData::TTopicProduceData::Size(TKafkaVersion _version) const {
 const TProduceRequestData::TTopicProduceData::TPartitionProduceData::IndexMeta::Type TProduceRequestData::TTopicProduceData::TPartitionProduceData::IndexMeta::Default = 0;
 
 TProduceRequestData::TTopicProduceData::TPartitionProduceData::TPartitionProduceData() 
-        : index(IndexMeta::Default)
+        : Index(IndexMeta::Default)
 {}
 
-void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceRequestData::TTopicProduceData::TPartitionProduceData";
-    }
-    NPrivate::Read<IndexMeta>(_readable, _version, index);
-    NPrivate::Read<RecordsMeta>(_readable, _version, records);
+
+class TProduceRequestData::TTopicProduceData::TPartitionProduceData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceRequestData::TTopicProduceData::TPartitionProduceData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceRequestData::TTopicProduceData::TPartitionProduceData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<IndexMeta> Index;
+    NPrivate::TReadStrategy<RecordsMeta> Records;
+};
+
+TProduceRequestData::TTopicProduceData::TPartitionProduceData::TReadContext::TReadContext(TProduceRequestData::TTopicProduceData::TPartitionProduceData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Index()
+    , Records()
+{}
+
+
+TReadDemand TProduceRequestData::TTopicProduceData::TPartitionProduceData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Index.Init<NPrivate::ReadFieldRule<IndexMeta>>(Value.Index, Version);
             }
+            case 1: {
+                auto demand = Index.Next<NPrivate::ReadFieldRule<IndexMeta>>(Value.Index, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Records.Init<NPrivate::ReadFieldRule<RecordsMeta>>(Value.Records, Version);
+            }
+            case 3: {
+                auto demand = Records.Next<NPrivate::ReadFieldRule<RecordsMeta>>(Value.Records, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TProduceRequestData::TTopicProduceData::TPartitionProduceData::MessageMeta::FlexibleVersionMin, TProduceRequestData::TTopicProduceData::TPartitionProduceData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -396,8 +927,8 @@ void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Write(TKafka
         ythrow yexception() << "Can't write version " << _version << " of TProduceRequestData::TTopicProduceData::TPartitionProduceData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<IndexMeta>(_collector, _writable, _version, index);
-    NPrivate::Write<RecordsMeta>(_collector, _writable, _version, records);
+    NPrivate::Write<IndexMeta>(_collector, _writable, _version, Index);
+    NPrivate::Write<RecordsMeta>(_collector, _writable, _version, Records);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -407,13 +938,16 @@ void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Write(TKafka
 
 i32 TProduceRequestData::TTopicProduceData::TPartitionProduceData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<IndexMeta>(_collector, _version, index);
-    NPrivate::Size<RecordsMeta>(_collector, _version, records);
+    NPrivate::Size<IndexMeta>(_collector, _version, Index);
+    NPrivate::Size<RecordsMeta>(_collector, _version, Records);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceRequestData::TTopicProduceData::TPartitionProduceData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -423,26 +957,122 @@ i32 TProduceRequestData::TTopicProduceData::TPartitionProduceData::Size(TKafkaVe
 const TProduceResponseData::ThrottleTimeMsMeta::Type TProduceResponseData::ThrottleTimeMsMeta::Default = 0;
 
 TProduceResponseData::TProduceResponseData() 
-        : throttleTimeMs(ThrottleTimeMsMeta::Default)
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
 {}
 
-void TProduceResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceResponseData";
-    }
-    NPrivate::Read<ResponsesMeta>(_readable, _version, responses);
-    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, throttleTimeMs);
+
+class TProduceResponseData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceResponseData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceResponseData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ResponsesMeta> Responses;
+    NPrivate::TReadStrategy<ThrottleTimeMsMeta> ThrottleTimeMs;
+};
+
+TProduceResponseData::TReadContext::TReadContext(TProduceResponseData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Responses()
+    , ThrottleTimeMs()
+{}
+
+
+TReadDemand TProduceResponseData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Responses.Init<NPrivate::ReadFieldRule<ResponsesMeta>>(Value.Responses, Version);
             }
+            case 1: {
+                auto demand = Responses.Next<NPrivate::ReadFieldRule<ResponsesMeta>>(Value.Responses, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ThrottleTimeMs.Init<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+            }
+            case 3: {
+                auto demand = ThrottleTimeMs.Next<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TProduceResponseData::MessageMeta::FlexibleVersionMin, TProduceResponseData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -452,8 +1082,8 @@ void TProduceResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _versi
         ythrow yexception() << "Can't write version " << _version << " of TProduceResponseData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ResponsesMeta>(_collector, _writable, _version, responses);
-    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, throttleTimeMs);
+    NPrivate::Write<ResponsesMeta>(_collector, _writable, _version, Responses);
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -463,13 +1093,16 @@ void TProduceResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _versi
 
 i32 TProduceResponseData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ResponsesMeta>(_collector, _version, responses);
-    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, throttleTimeMs);
+    NPrivate::Size<ResponsesMeta>(_collector, _version, Responses);
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceResponseData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -479,26 +1112,122 @@ i32 TProduceResponseData::Size(TKafkaVersion _version) const {
 const TProduceResponseData::TTopicProduceResponse::NameMeta::Type TProduceResponseData::TTopicProduceResponse::NameMeta::Default = {""};
 
 TProduceResponseData::TTopicProduceResponse::TTopicProduceResponse() 
-        : name(NameMeta::Default)
+        : Name(NameMeta::Default)
 {}
 
-void TProduceResponseData::TTopicProduceResponse::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceResponseData::TTopicProduceResponse";
-    }
-    NPrivate::Read<NameMeta>(_readable, _version, name);
-    NPrivate::Read<PartitionResponsesMeta>(_readable, _version, partitionResponses);
+
+class TProduceResponseData::TTopicProduceResponse::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceResponseData::TTopicProduceResponse& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceResponseData::TTopicProduceResponse& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<NameMeta> Name;
+    NPrivate::TReadStrategy<PartitionResponsesMeta> PartitionResponses;
+};
+
+TProduceResponseData::TTopicProduceResponse::TReadContext::TReadContext(TProduceResponseData::TTopicProduceResponse& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Name()
+    , PartitionResponses()
+{}
+
+
+TReadDemand TProduceResponseData::TTopicProduceResponse::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Name.Init<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
             }
+            case 1: {
+                auto demand = Name.Next<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                PartitionResponses.Init<NPrivate::ReadFieldRule<PartitionResponsesMeta>>(Value.PartitionResponses, Version);
+            }
+            case 3: {
+                auto demand = PartitionResponses.Next<NPrivate::ReadFieldRule<PartitionResponsesMeta>>(Value.PartitionResponses, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TProduceResponseData::TTopicProduceResponse::MessageMeta::FlexibleVersionMin, TProduceResponseData::TTopicProduceResponse::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -508,8 +1237,8 @@ void TProduceResponseData::TTopicProduceResponse::Write(TKafkaWritable& _writabl
         ythrow yexception() << "Can't write version " << _version << " of TProduceResponseData::TTopicProduceResponse";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<NameMeta>(_collector, _writable, _version, name);
-    NPrivate::Write<PartitionResponsesMeta>(_collector, _writable, _version, partitionResponses);
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<PartitionResponsesMeta>(_collector, _writable, _version, PartitionResponses);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -519,13 +1248,16 @@ void TProduceResponseData::TTopicProduceResponse::Write(TKafkaWritable& _writabl
 
 i32 TProduceResponseData::TTopicProduceResponse::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<NameMeta>(_collector, _version, name);
-    NPrivate::Size<PartitionResponsesMeta>(_collector, _version, partitionResponses);
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<PartitionResponsesMeta>(_collector, _version, PartitionResponses);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceResponseData::TTopicProduceResponse::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -540,36 +1272,197 @@ const TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Lo
 const TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::ErrorMessageMeta::Type TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::ErrorMessageMeta::Default = std::nullopt;
 
 TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TPartitionProduceResponse() 
-        : index(IndexMeta::Default)
-        , errorCode(ErrorCodeMeta::Default)
-        , baseOffset(BaseOffsetMeta::Default)
-        , logAppendTimeMs(LogAppendTimeMsMeta::Default)
-        , logStartOffset(LogStartOffsetMeta::Default)
-        , errorMessage(ErrorMessageMeta::Default)
+        : Index(IndexMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+        , BaseOffset(BaseOffsetMeta::Default)
+        , LogAppendTimeMs(LogAppendTimeMsMeta::Default)
+        , LogStartOffset(LogStartOffsetMeta::Default)
+        , ErrorMessage(ErrorMessageMeta::Default)
 {}
 
-void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse";
-    }
-    NPrivate::Read<IndexMeta>(_readable, _version, index);
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<BaseOffsetMeta>(_readable, _version, baseOffset);
-    NPrivate::Read<LogAppendTimeMsMeta>(_readable, _version, logAppendTimeMs);
-    NPrivate::Read<LogStartOffsetMeta>(_readable, _version, logStartOffset);
-    NPrivate::Read<RecordErrorsMeta>(_readable, _version, recordErrors);
-    NPrivate::Read<ErrorMessageMeta>(_readable, _version, errorMessage);
+
+class TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<IndexMeta> Index;
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<BaseOffsetMeta> BaseOffset;
+    NPrivate::TReadStrategy<LogAppendTimeMsMeta> LogAppendTimeMs;
+    NPrivate::TReadStrategy<LogStartOffsetMeta> LogStartOffset;
+    NPrivate::TReadStrategy<RecordErrorsMeta> RecordErrors;
+    NPrivate::TReadStrategy<ErrorMessageMeta> ErrorMessage;
+};
+
+TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TReadContext::TReadContext(TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Index()
+    , ErrorCode()
+    , BaseOffset()
+    , LogAppendTimeMs()
+    , LogStartOffset()
+    , RecordErrors()
+    , ErrorMessage()
+{}
+
+
+TReadDemand TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Index.Init<NPrivate::ReadFieldRule<IndexMeta>>(Value.Index, Version);
             }
+            case 1: {
+                auto demand = Index.Next<NPrivate::ReadFieldRule<IndexMeta>>(Value.Index, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+            }
+            case 3: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                BaseOffset.Init<NPrivate::ReadFieldRule<BaseOffsetMeta>>(Value.BaseOffset, Version);
+            }
+            case 5: {
+                auto demand = BaseOffset.Next<NPrivate::ReadFieldRule<BaseOffsetMeta>>(Value.BaseOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                LogAppendTimeMs.Init<NPrivate::ReadFieldRule<LogAppendTimeMsMeta>>(Value.LogAppendTimeMs, Version);
+            }
+            case 7: {
+                auto demand = LogAppendTimeMs.Next<NPrivate::ReadFieldRule<LogAppendTimeMsMeta>>(Value.LogAppendTimeMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                LogStartOffset.Init<NPrivate::ReadFieldRule<LogStartOffsetMeta>>(Value.LogStartOffset, Version);
+            }
+            case 9: {
+                auto demand = LogStartOffset.Next<NPrivate::ReadFieldRule<LogStartOffsetMeta>>(Value.LogStartOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                RecordErrors.Init<NPrivate::ReadFieldRule<RecordErrorsMeta>>(Value.RecordErrors, Version);
+            }
+            case 11: {
+                auto demand = RecordErrors.Next<NPrivate::ReadFieldRule<RecordErrorsMeta>>(Value.RecordErrors, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                ++Step;
+                ErrorMessage.Init<NPrivate::ReadFieldRule<ErrorMessageMeta>>(Value.ErrorMessage, Version);
+            }
+            case 13: {
+                auto demand = ErrorMessage.Next<NPrivate::ReadFieldRule<ErrorMessageMeta>>(Value.ErrorMessage, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                if (!NPrivate::VersionCheck<TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::MessageMeta::FlexibleVersionMin, TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 15: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 17: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 18: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 19: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 16;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -579,13 +1472,13 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Wri
         ythrow yexception() << "Can't write version " << _version << " of TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<IndexMeta>(_collector, _writable, _version, index);
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<BaseOffsetMeta>(_collector, _writable, _version, baseOffset);
-    NPrivate::Write<LogAppendTimeMsMeta>(_collector, _writable, _version, logAppendTimeMs);
-    NPrivate::Write<LogStartOffsetMeta>(_collector, _writable, _version, logStartOffset);
-    NPrivate::Write<RecordErrorsMeta>(_collector, _writable, _version, recordErrors);
-    NPrivate::Write<ErrorMessageMeta>(_collector, _writable, _version, errorMessage);
+    NPrivate::Write<IndexMeta>(_collector, _writable, _version, Index);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<BaseOffsetMeta>(_collector, _writable, _version, BaseOffset);
+    NPrivate::Write<LogAppendTimeMsMeta>(_collector, _writable, _version, LogAppendTimeMs);
+    NPrivate::Write<LogStartOffsetMeta>(_collector, _writable, _version, LogStartOffset);
+    NPrivate::Write<RecordErrorsMeta>(_collector, _writable, _version, RecordErrors);
+    NPrivate::Write<ErrorMessageMeta>(_collector, _writable, _version, ErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -595,18 +1488,21 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Wri
 
 i32 TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<IndexMeta>(_collector, _version, index);
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<BaseOffsetMeta>(_collector, _version, baseOffset);
-    NPrivate::Size<LogAppendTimeMsMeta>(_collector, _version, logAppendTimeMs);
-    NPrivate::Size<LogStartOffsetMeta>(_collector, _version, logStartOffset);
-    NPrivate::Size<RecordErrorsMeta>(_collector, _version, recordErrors);
-    NPrivate::Size<ErrorMessageMeta>(_collector, _version, errorMessage);
+    NPrivate::Size<IndexMeta>(_collector, _version, Index);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<BaseOffsetMeta>(_collector, _version, BaseOffset);
+    NPrivate::Size<LogAppendTimeMsMeta>(_collector, _version, LogAppendTimeMs);
+    NPrivate::Size<LogStartOffsetMeta>(_collector, _version, LogStartOffset);
+    NPrivate::Size<RecordErrorsMeta>(_collector, _version, RecordErrors);
+    NPrivate::Size<ErrorMessageMeta>(_collector, _version, ErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -617,27 +1513,123 @@ const TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TB
 const TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::BatchIndexErrorMessageMeta::Type TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::BatchIndexErrorMessageMeta::Default = std::nullopt;
 
 TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::TBatchIndexAndErrorMessage() 
-        : batchIndex(BatchIndexMeta::Default)
-        , batchIndexErrorMessage(BatchIndexErrorMessageMeta::Default)
+        : BatchIndex(BatchIndexMeta::Default)
+        , BatchIndexErrorMessage(BatchIndexErrorMessageMeta::Default)
 {}
 
-void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage";
-    }
-    NPrivate::Read<BatchIndexMeta>(_readable, _version, batchIndex);
-    NPrivate::Read<BatchIndexErrorMessageMeta>(_readable, _version, batchIndexErrorMessage);
+
+class TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<BatchIndexMeta> BatchIndex;
+    NPrivate::TReadStrategy<BatchIndexErrorMessageMeta> BatchIndexErrorMessage;
+};
+
+TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::TReadContext::TReadContext(TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , BatchIndex()
+    , BatchIndexErrorMessage()
+{}
+
+
+TReadDemand TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                BatchIndex.Init<NPrivate::ReadFieldRule<BatchIndexMeta>>(Value.BatchIndex, Version);
             }
+            case 1: {
+                auto demand = BatchIndex.Next<NPrivate::ReadFieldRule<BatchIndexMeta>>(Value.BatchIndex, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                BatchIndexErrorMessage.Init<NPrivate::ReadFieldRule<BatchIndexErrorMessageMeta>>(Value.BatchIndexErrorMessage, Version);
+            }
+            case 3: {
+                auto demand = BatchIndexErrorMessage.Next<NPrivate::ReadFieldRule<BatchIndexErrorMessageMeta>>(Value.BatchIndexErrorMessage, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::MessageMeta::FlexibleVersionMin, TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -647,8 +1639,8 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBa
         ythrow yexception() << "Can't write version " << _version << " of TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<BatchIndexMeta>(_collector, _writable, _version, batchIndex);
-    NPrivate::Write<BatchIndexErrorMessageMeta>(_collector, _writable, _version, batchIndexErrorMessage);
+    NPrivate::Write<BatchIndexMeta>(_collector, _writable, _version, BatchIndex);
+    NPrivate::Write<BatchIndexErrorMessageMeta>(_collector, _writable, _version, BatchIndexErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -658,13 +1650,16 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBa
 
 i32 TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<BatchIndexMeta>(_collector, _version, batchIndex);
-    NPrivate::Size<BatchIndexErrorMessageMeta>(_collector, _version, batchIndexErrorMessage);
+    NPrivate::Size<BatchIndexMeta>(_collector, _version, BatchIndex);
+    NPrivate::Size<BatchIndexErrorMessageMeta>(_collector, _version, BatchIndexErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBatchIndexAndErrorMessage::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -682,46 +1677,264 @@ const TFetchRequestData::SessionEpochMeta::Type TFetchRequestData::SessionEpochM
 const TFetchRequestData::RackIdMeta::Type TFetchRequestData::RackIdMeta::Default = {""};
 
 TFetchRequestData::TFetchRequestData() 
-        : clusterId(ClusterIdMeta::Default)
-        , replicaId(ReplicaIdMeta::Default)
-        , maxWaitMs(MaxWaitMsMeta::Default)
-        , minBytes(MinBytesMeta::Default)
-        , maxBytes(MaxBytesMeta::Default)
-        , isolationLevel(IsolationLevelMeta::Default)
-        , sessionId(SessionIdMeta::Default)
-        , sessionEpoch(SessionEpochMeta::Default)
-        , rackId(RackIdMeta::Default)
+        : ClusterId(ClusterIdMeta::Default)
+        , ReplicaId(ReplicaIdMeta::Default)
+        , MaxWaitMs(MaxWaitMsMeta::Default)
+        , MinBytes(MinBytesMeta::Default)
+        , MaxBytes(MaxBytesMeta::Default)
+        , IsolationLevel(IsolationLevelMeta::Default)
+        , SessionId(SessionIdMeta::Default)
+        , SessionEpoch(SessionEpochMeta::Default)
+        , RackId(RackIdMeta::Default)
 {}
 
-void TFetchRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchRequestData";
-    }
-    NPrivate::Read<ClusterIdMeta>(_readable, _version, clusterId);
-    NPrivate::Read<ReplicaIdMeta>(_readable, _version, replicaId);
-    NPrivate::Read<MaxWaitMsMeta>(_readable, _version, maxWaitMs);
-    NPrivate::Read<MinBytesMeta>(_readable, _version, minBytes);
-    NPrivate::Read<MaxBytesMeta>(_readable, _version, maxBytes);
-    NPrivate::Read<IsolationLevelMeta>(_readable, _version, isolationLevel);
-    NPrivate::Read<SessionIdMeta>(_readable, _version, sessionId);
-    NPrivate::Read<SessionEpochMeta>(_readable, _version, sessionEpoch);
-    NPrivate::Read<TopicsMeta>(_readable, _version, topics);
-    NPrivate::Read<ForgottenTopicsDataMeta>(_readable, _version, forgottenTopicsData);
-    NPrivate::Read<RackIdMeta>(_readable, _version, rackId);
+
+class TFetchRequestData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchRequestData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchRequestData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                case ClusterIdMeta::Tag:
-                    NPrivate::ReadTag<ClusterIdMeta>(_readable, _version, clusterId);
-                    break;
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ClusterIdMeta> ClusterId;
+    NPrivate::TReadStrategy<ReplicaIdMeta> ReplicaId;
+    NPrivate::TReadStrategy<MaxWaitMsMeta> MaxWaitMs;
+    NPrivate::TReadStrategy<MinBytesMeta> MinBytes;
+    NPrivate::TReadStrategy<MaxBytesMeta> MaxBytes;
+    NPrivate::TReadStrategy<IsolationLevelMeta> IsolationLevel;
+    NPrivate::TReadStrategy<SessionIdMeta> SessionId;
+    NPrivate::TReadStrategy<SessionEpochMeta> SessionEpoch;
+    NPrivate::TReadStrategy<TopicsMeta> Topics;
+    NPrivate::TReadStrategy<ForgottenTopicsDataMeta> ForgottenTopicsData;
+    NPrivate::TReadStrategy<RackIdMeta> RackId;
+};
+
+TFetchRequestData::TReadContext::TReadContext(TFetchRequestData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ClusterId()
+    , ReplicaId()
+    , MaxWaitMs()
+    , MinBytes()
+    , MaxBytes()
+    , IsolationLevel()
+    , SessionId()
+    , SessionEpoch()
+    , Topics()
+    , ForgottenTopicsData()
+    , RackId()
+{}
+
+
+TReadDemand TFetchRequestData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ClusterId.Init<NPrivate::ReadFieldRule<ClusterIdMeta>>(Value.ClusterId, Version);
             }
+            case 1: {
+                auto demand = ClusterId.Next<NPrivate::ReadFieldRule<ClusterIdMeta>>(Value.ClusterId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ReplicaId.Init<NPrivate::ReadFieldRule<ReplicaIdMeta>>(Value.ReplicaId, Version);
+            }
+            case 3: {
+                auto demand = ReplicaId.Next<NPrivate::ReadFieldRule<ReplicaIdMeta>>(Value.ReplicaId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                MaxWaitMs.Init<NPrivate::ReadFieldRule<MaxWaitMsMeta>>(Value.MaxWaitMs, Version);
+            }
+            case 5: {
+                auto demand = MaxWaitMs.Next<NPrivate::ReadFieldRule<MaxWaitMsMeta>>(Value.MaxWaitMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                MinBytes.Init<NPrivate::ReadFieldRule<MinBytesMeta>>(Value.MinBytes, Version);
+            }
+            case 7: {
+                auto demand = MinBytes.Next<NPrivate::ReadFieldRule<MinBytesMeta>>(Value.MinBytes, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                MaxBytes.Init<NPrivate::ReadFieldRule<MaxBytesMeta>>(Value.MaxBytes, Version);
+            }
+            case 9: {
+                auto demand = MaxBytes.Next<NPrivate::ReadFieldRule<MaxBytesMeta>>(Value.MaxBytes, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                IsolationLevel.Init<NPrivate::ReadFieldRule<IsolationLevelMeta>>(Value.IsolationLevel, Version);
+            }
+            case 11: {
+                auto demand = IsolationLevel.Next<NPrivate::ReadFieldRule<IsolationLevelMeta>>(Value.IsolationLevel, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                ++Step;
+                SessionId.Init<NPrivate::ReadFieldRule<SessionIdMeta>>(Value.SessionId, Version);
+            }
+            case 13: {
+                auto demand = SessionId.Next<NPrivate::ReadFieldRule<SessionIdMeta>>(Value.SessionId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                ++Step;
+                SessionEpoch.Init<NPrivate::ReadFieldRule<SessionEpochMeta>>(Value.SessionEpoch, Version);
+            }
+            case 15: {
+                auto demand = SessionEpoch.Next<NPrivate::ReadFieldRule<SessionEpochMeta>>(Value.SessionEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                ++Step;
+                Topics.Init<NPrivate::ReadFieldRule<TopicsMeta>>(Value.Topics, Version);
+            }
+            case 17: {
+                auto demand = Topics.Next<NPrivate::ReadFieldRule<TopicsMeta>>(Value.Topics, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 18: {
+                ++Step;
+                ForgottenTopicsData.Init<NPrivate::ReadFieldRule<ForgottenTopicsDataMeta>>(Value.ForgottenTopicsData, Version);
+            }
+            case 19: {
+                auto demand = ForgottenTopicsData.Next<NPrivate::ReadFieldRule<ForgottenTopicsDataMeta>>(Value.ForgottenTopicsData, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 20: {
+                ++Step;
+                RackId.Init<NPrivate::ReadFieldRule<RackIdMeta>>(Value.RackId, Version);
+            }
+            case 21: {
+                auto demand = RackId.Next<NPrivate::ReadFieldRule<RackIdMeta>>(Value.RackId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 22: {
+                if (!NPrivate::VersionCheck<TFetchRequestData::MessageMeta::FlexibleVersionMin, TFetchRequestData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 23: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 24: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 25: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 26: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 27: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    case 0: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            ClusterId.Init<NPrivate::ReadTaggedFieldRule<ClusterIdMeta>>(Value.ClusterId, Version);
+                        }
+                        demand = ClusterId.Next<NPrivate::ReadTaggedFieldRule<ClusterIdMeta>>(Value.ClusterId, Version);
+                        break;
+                    }
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 24;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -731,43 +1944,46 @@ void TFetchRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version)
         ythrow yexception() << "Can't write version " << _version << " of TFetchRequestData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ClusterIdMeta>(_collector, _writable, _version, clusterId);
-    NPrivate::Write<ReplicaIdMeta>(_collector, _writable, _version, replicaId);
-    NPrivate::Write<MaxWaitMsMeta>(_collector, _writable, _version, maxWaitMs);
-    NPrivate::Write<MinBytesMeta>(_collector, _writable, _version, minBytes);
-    NPrivate::Write<MaxBytesMeta>(_collector, _writable, _version, maxBytes);
-    NPrivate::Write<IsolationLevelMeta>(_collector, _writable, _version, isolationLevel);
-    NPrivate::Write<SessionIdMeta>(_collector, _writable, _version, sessionId);
-    NPrivate::Write<SessionEpochMeta>(_collector, _writable, _version, sessionEpoch);
-    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, topics);
-    NPrivate::Write<ForgottenTopicsDataMeta>(_collector, _writable, _version, forgottenTopicsData);
-    NPrivate::Write<RackIdMeta>(_collector, _writable, _version, rackId);
+    NPrivate::Write<ClusterIdMeta>(_collector, _writable, _version, ClusterId);
+    NPrivate::Write<ReplicaIdMeta>(_collector, _writable, _version, ReplicaId);
+    NPrivate::Write<MaxWaitMsMeta>(_collector, _writable, _version, MaxWaitMs);
+    NPrivate::Write<MinBytesMeta>(_collector, _writable, _version, MinBytes);
+    NPrivate::Write<MaxBytesMeta>(_collector, _writable, _version, MaxBytes);
+    NPrivate::Write<IsolationLevelMeta>(_collector, _writable, _version, IsolationLevel);
+    NPrivate::Write<SessionIdMeta>(_collector, _writable, _version, SessionId);
+    NPrivate::Write<SessionEpochMeta>(_collector, _writable, _version, SessionEpoch);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<ForgottenTopicsDataMeta>(_collector, _writable, _version, ForgottenTopicsData);
+    NPrivate::Write<RackIdMeta>(_collector, _writable, _version, RackId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
         
-        NPrivate::WriteTag<ClusterIdMeta>(_writable, _version, clusterId);
+        NPrivate::WriteTag<ClusterIdMeta>(_writable, _version, ClusterId);
     }
 }
 
 i32 TFetchRequestData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ClusterIdMeta>(_collector, _version, clusterId);
-    NPrivate::Size<ReplicaIdMeta>(_collector, _version, replicaId);
-    NPrivate::Size<MaxWaitMsMeta>(_collector, _version, maxWaitMs);
-    NPrivate::Size<MinBytesMeta>(_collector, _version, minBytes);
-    NPrivate::Size<MaxBytesMeta>(_collector, _version, maxBytes);
-    NPrivate::Size<IsolationLevelMeta>(_collector, _version, isolationLevel);
-    NPrivate::Size<SessionIdMeta>(_collector, _version, sessionId);
-    NPrivate::Size<SessionEpochMeta>(_collector, _version, sessionEpoch);
-    NPrivate::Size<TopicsMeta>(_collector, _version, topics);
-    NPrivate::Size<ForgottenTopicsDataMeta>(_collector, _version, forgottenTopicsData);
-    NPrivate::Size<RackIdMeta>(_collector, _version, rackId);
+    NPrivate::Size<ClusterIdMeta>(_collector, _version, ClusterId);
+    NPrivate::Size<ReplicaIdMeta>(_collector, _version, ReplicaId);
+    NPrivate::Size<MaxWaitMsMeta>(_collector, _version, MaxWaitMs);
+    NPrivate::Size<MinBytesMeta>(_collector, _version, MinBytes);
+    NPrivate::Size<MaxBytesMeta>(_collector, _version, MaxBytes);
+    NPrivate::Size<IsolationLevelMeta>(_collector, _version, IsolationLevel);
+    NPrivate::Size<SessionIdMeta>(_collector, _version, SessionId);
+    NPrivate::Size<SessionEpochMeta>(_collector, _version, SessionEpoch);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<ForgottenTopicsDataMeta>(_collector, _version, ForgottenTopicsData);
+    NPrivate::Size<RackIdMeta>(_collector, _version, RackId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchRequestData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -778,28 +1994,137 @@ const TFetchRequestData::TFetchTopic::TopicMeta::Type TFetchRequestData::TFetchT
 const TFetchRequestData::TFetchTopic::TopicIdMeta::Type TFetchRequestData::TFetchTopic::TopicIdMeta::Default = TKafkaUuid(0, 0);
 
 TFetchRequestData::TFetchTopic::TFetchTopic() 
-        : topic(TopicMeta::Default)
-        , topicId(TopicIdMeta::Default)
+        : Topic(TopicMeta::Default)
+        , TopicId(TopicIdMeta::Default)
 {}
 
-void TFetchRequestData::TFetchTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchRequestData::TFetchTopic";
-    }
-    NPrivate::Read<TopicMeta>(_readable, _version, topic);
-    NPrivate::Read<TopicIdMeta>(_readable, _version, topicId);
-    NPrivate::Read<PartitionsMeta>(_readable, _version, partitions);
+
+class TFetchRequestData::TFetchTopic::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchRequestData::TFetchTopic& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchRequestData::TFetchTopic& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TopicMeta> Topic;
+    NPrivate::TReadStrategy<TopicIdMeta> TopicId;
+    NPrivate::TReadStrategy<PartitionsMeta> Partitions;
+};
+
+TFetchRequestData::TFetchTopic::TReadContext::TReadContext(TFetchRequestData::TFetchTopic& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Topic()
+    , TopicId()
+    , Partitions()
+{}
+
+
+TReadDemand TFetchRequestData::TFetchTopic::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Topic.Init<NPrivate::ReadFieldRule<TopicMeta>>(Value.Topic, Version);
             }
+            case 1: {
+                auto demand = Topic.Next<NPrivate::ReadFieldRule<TopicMeta>>(Value.Topic, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                TopicId.Init<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+            }
+            case 3: {
+                auto demand = TopicId.Next<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                Partitions.Init<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+            }
+            case 5: {
+                auto demand = Partitions.Next<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                if (!NPrivate::VersionCheck<TFetchRequestData::TFetchTopic::MessageMeta::FlexibleVersionMin, TFetchRequestData::TFetchTopic::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 7: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 9: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 11: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 8;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -809,9 +2134,9 @@ void TFetchRequestData::TFetchTopic::Write(TKafkaWritable& _writable, TKafkaVers
         ythrow yexception() << "Can't write version " << _version << " of TFetchRequestData::TFetchTopic";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TopicMeta>(_collector, _writable, _version, topic);
-    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, topicId);
-    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, partitions);
+    NPrivate::Write<TopicMeta>(_collector, _writable, _version, Topic);
+    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, TopicId);
+    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -821,14 +2146,17 @@ void TFetchRequestData::TFetchTopic::Write(TKafkaWritable& _writable, TKafkaVers
 
 i32 TFetchRequestData::TFetchTopic::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TopicMeta>(_collector, _version, topic);
-    NPrivate::Size<TopicIdMeta>(_collector, _version, topicId);
-    NPrivate::Size<PartitionsMeta>(_collector, _version, partitions);
+    NPrivate::Size<TopicMeta>(_collector, _version, Topic);
+    NPrivate::Size<TopicIdMeta>(_collector, _version, TopicId);
+    NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchRequestData::TFetchTopic::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -843,35 +2171,183 @@ const TFetchRequestData::TFetchTopic::TFetchPartition::LogStartOffsetMeta::Type 
 const TFetchRequestData::TFetchTopic::TFetchPartition::PartitionMaxBytesMeta::Type TFetchRequestData::TFetchTopic::TFetchPartition::PartitionMaxBytesMeta::Default = 0;
 
 TFetchRequestData::TFetchTopic::TFetchPartition::TFetchPartition() 
-        : partition(PartitionMeta::Default)
-        , currentLeaderEpoch(CurrentLeaderEpochMeta::Default)
-        , fetchOffset(FetchOffsetMeta::Default)
-        , lastFetchedEpoch(LastFetchedEpochMeta::Default)
-        , logStartOffset(LogStartOffsetMeta::Default)
-        , partitionMaxBytes(PartitionMaxBytesMeta::Default)
+        : Partition(PartitionMeta::Default)
+        , CurrentLeaderEpoch(CurrentLeaderEpochMeta::Default)
+        , FetchOffset(FetchOffsetMeta::Default)
+        , LastFetchedEpoch(LastFetchedEpochMeta::Default)
+        , LogStartOffset(LogStartOffsetMeta::Default)
+        , PartitionMaxBytes(PartitionMaxBytesMeta::Default)
 {}
 
-void TFetchRequestData::TFetchTopic::TFetchPartition::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchRequestData::TFetchTopic::TFetchPartition";
-    }
-    NPrivate::Read<PartitionMeta>(_readable, _version, partition);
-    NPrivate::Read<CurrentLeaderEpochMeta>(_readable, _version, currentLeaderEpoch);
-    NPrivate::Read<FetchOffsetMeta>(_readable, _version, fetchOffset);
-    NPrivate::Read<LastFetchedEpochMeta>(_readable, _version, lastFetchedEpoch);
-    NPrivate::Read<LogStartOffsetMeta>(_readable, _version, logStartOffset);
-    NPrivate::Read<PartitionMaxBytesMeta>(_readable, _version, partitionMaxBytes);
+
+class TFetchRequestData::TFetchTopic::TFetchPartition::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchRequestData::TFetchTopic::TFetchPartition& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchRequestData::TFetchTopic::TFetchPartition& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<PartitionMeta> Partition;
+    NPrivate::TReadStrategy<CurrentLeaderEpochMeta> CurrentLeaderEpoch;
+    NPrivate::TReadStrategy<FetchOffsetMeta> FetchOffset;
+    NPrivate::TReadStrategy<LastFetchedEpochMeta> LastFetchedEpoch;
+    NPrivate::TReadStrategy<LogStartOffsetMeta> LogStartOffset;
+    NPrivate::TReadStrategy<PartitionMaxBytesMeta> PartitionMaxBytes;
+};
+
+TFetchRequestData::TFetchTopic::TFetchPartition::TReadContext::TReadContext(TFetchRequestData::TFetchTopic::TFetchPartition& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Partition()
+    , CurrentLeaderEpoch()
+    , FetchOffset()
+    , LastFetchedEpoch()
+    , LogStartOffset()
+    , PartitionMaxBytes()
+{}
+
+
+TReadDemand TFetchRequestData::TFetchTopic::TFetchPartition::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Partition.Init<NPrivate::ReadFieldRule<PartitionMeta>>(Value.Partition, Version);
             }
+            case 1: {
+                auto demand = Partition.Next<NPrivate::ReadFieldRule<PartitionMeta>>(Value.Partition, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                CurrentLeaderEpoch.Init<NPrivate::ReadFieldRule<CurrentLeaderEpochMeta>>(Value.CurrentLeaderEpoch, Version);
+            }
+            case 3: {
+                auto demand = CurrentLeaderEpoch.Next<NPrivate::ReadFieldRule<CurrentLeaderEpochMeta>>(Value.CurrentLeaderEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                FetchOffset.Init<NPrivate::ReadFieldRule<FetchOffsetMeta>>(Value.FetchOffset, Version);
+            }
+            case 5: {
+                auto demand = FetchOffset.Next<NPrivate::ReadFieldRule<FetchOffsetMeta>>(Value.FetchOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                LastFetchedEpoch.Init<NPrivate::ReadFieldRule<LastFetchedEpochMeta>>(Value.LastFetchedEpoch, Version);
+            }
+            case 7: {
+                auto demand = LastFetchedEpoch.Next<NPrivate::ReadFieldRule<LastFetchedEpochMeta>>(Value.LastFetchedEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                LogStartOffset.Init<NPrivate::ReadFieldRule<LogStartOffsetMeta>>(Value.LogStartOffset, Version);
+            }
+            case 9: {
+                auto demand = LogStartOffset.Next<NPrivate::ReadFieldRule<LogStartOffsetMeta>>(Value.LogStartOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                PartitionMaxBytes.Init<NPrivate::ReadFieldRule<PartitionMaxBytesMeta>>(Value.PartitionMaxBytes, Version);
+            }
+            case 11: {
+                auto demand = PartitionMaxBytes.Next<NPrivate::ReadFieldRule<PartitionMaxBytesMeta>>(Value.PartitionMaxBytes, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                if (!NPrivate::VersionCheck<TFetchRequestData::TFetchTopic::TFetchPartition::MessageMeta::FlexibleVersionMin, TFetchRequestData::TFetchTopic::TFetchPartition::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 13: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 15: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 17: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 14;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -881,12 +2357,12 @@ void TFetchRequestData::TFetchTopic::TFetchPartition::Write(TKafkaWritable& _wri
         ythrow yexception() << "Can't write version " << _version << " of TFetchRequestData::TFetchTopic::TFetchPartition";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<PartitionMeta>(_collector, _writable, _version, partition);
-    NPrivate::Write<CurrentLeaderEpochMeta>(_collector, _writable, _version, currentLeaderEpoch);
-    NPrivate::Write<FetchOffsetMeta>(_collector, _writable, _version, fetchOffset);
-    NPrivate::Write<LastFetchedEpochMeta>(_collector, _writable, _version, lastFetchedEpoch);
-    NPrivate::Write<LogStartOffsetMeta>(_collector, _writable, _version, logStartOffset);
-    NPrivate::Write<PartitionMaxBytesMeta>(_collector, _writable, _version, partitionMaxBytes);
+    NPrivate::Write<PartitionMeta>(_collector, _writable, _version, Partition);
+    NPrivate::Write<CurrentLeaderEpochMeta>(_collector, _writable, _version, CurrentLeaderEpoch);
+    NPrivate::Write<FetchOffsetMeta>(_collector, _writable, _version, FetchOffset);
+    NPrivate::Write<LastFetchedEpochMeta>(_collector, _writable, _version, LastFetchedEpoch);
+    NPrivate::Write<LogStartOffsetMeta>(_collector, _writable, _version, LogStartOffset);
+    NPrivate::Write<PartitionMaxBytesMeta>(_collector, _writable, _version, PartitionMaxBytes);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -896,17 +2372,20 @@ void TFetchRequestData::TFetchTopic::TFetchPartition::Write(TKafkaWritable& _wri
 
 i32 TFetchRequestData::TFetchTopic::TFetchPartition::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<PartitionMeta>(_collector, _version, partition);
-    NPrivate::Size<CurrentLeaderEpochMeta>(_collector, _version, currentLeaderEpoch);
-    NPrivate::Size<FetchOffsetMeta>(_collector, _version, fetchOffset);
-    NPrivate::Size<LastFetchedEpochMeta>(_collector, _version, lastFetchedEpoch);
-    NPrivate::Size<LogStartOffsetMeta>(_collector, _version, logStartOffset);
-    NPrivate::Size<PartitionMaxBytesMeta>(_collector, _version, partitionMaxBytes);
+    NPrivate::Size<PartitionMeta>(_collector, _version, Partition);
+    NPrivate::Size<CurrentLeaderEpochMeta>(_collector, _version, CurrentLeaderEpoch);
+    NPrivate::Size<FetchOffsetMeta>(_collector, _version, FetchOffset);
+    NPrivate::Size<LastFetchedEpochMeta>(_collector, _version, LastFetchedEpoch);
+    NPrivate::Size<LogStartOffsetMeta>(_collector, _version, LogStartOffset);
+    NPrivate::Size<PartitionMaxBytesMeta>(_collector, _version, PartitionMaxBytes);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchRequestData::TFetchTopic::TFetchPartition::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -917,28 +2396,137 @@ const TFetchRequestData::TForgottenTopic::TopicMeta::Type TFetchRequestData::TFo
 const TFetchRequestData::TForgottenTopic::TopicIdMeta::Type TFetchRequestData::TForgottenTopic::TopicIdMeta::Default = TKafkaUuid(0, 0);
 
 TFetchRequestData::TForgottenTopic::TForgottenTopic() 
-        : topic(TopicMeta::Default)
-        , topicId(TopicIdMeta::Default)
+        : Topic(TopicMeta::Default)
+        , TopicId(TopicIdMeta::Default)
 {}
 
-void TFetchRequestData::TForgottenTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchRequestData::TForgottenTopic";
-    }
-    NPrivate::Read<TopicMeta>(_readable, _version, topic);
-    NPrivate::Read<TopicIdMeta>(_readable, _version, topicId);
-    NPrivate::Read<PartitionsMeta>(_readable, _version, partitions);
+
+class TFetchRequestData::TForgottenTopic::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchRequestData::TForgottenTopic& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchRequestData::TForgottenTopic& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TopicMeta> Topic;
+    NPrivate::TReadStrategy<TopicIdMeta> TopicId;
+    NPrivate::TReadStrategy<PartitionsMeta> Partitions;
+};
+
+TFetchRequestData::TForgottenTopic::TReadContext::TReadContext(TFetchRequestData::TForgottenTopic& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Topic()
+    , TopicId()
+    , Partitions()
+{}
+
+
+TReadDemand TFetchRequestData::TForgottenTopic::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Topic.Init<NPrivate::ReadFieldRule<TopicMeta>>(Value.Topic, Version);
             }
+            case 1: {
+                auto demand = Topic.Next<NPrivate::ReadFieldRule<TopicMeta>>(Value.Topic, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                TopicId.Init<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+            }
+            case 3: {
+                auto demand = TopicId.Next<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                Partitions.Init<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+            }
+            case 5: {
+                auto demand = Partitions.Next<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                if (!NPrivate::VersionCheck<TFetchRequestData::TForgottenTopic::MessageMeta::FlexibleVersionMin, TFetchRequestData::TForgottenTopic::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 7: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 9: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 11: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 8;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -948,9 +2536,9 @@ void TFetchRequestData::TForgottenTopic::Write(TKafkaWritable& _writable, TKafka
         ythrow yexception() << "Can't write version " << _version << " of TFetchRequestData::TForgottenTopic";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TopicMeta>(_collector, _writable, _version, topic);
-    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, topicId);
-    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, partitions);
+    NPrivate::Write<TopicMeta>(_collector, _writable, _version, Topic);
+    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, TopicId);
+    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -960,14 +2548,17 @@ void TFetchRequestData::TForgottenTopic::Write(TKafkaWritable& _writable, TKafka
 
 i32 TFetchRequestData::TForgottenTopic::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TopicMeta>(_collector, _version, topic);
-    NPrivate::Size<TopicIdMeta>(_collector, _version, topicId);
-    NPrivate::Size<PartitionsMeta>(_collector, _version, partitions);
+    NPrivate::Size<TopicMeta>(_collector, _version, Topic);
+    NPrivate::Size<TopicIdMeta>(_collector, _version, TopicId);
+    NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchRequestData::TForgottenTopic::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -979,30 +2570,152 @@ const TFetchResponseData::ErrorCodeMeta::Type TFetchResponseData::ErrorCodeMeta:
 const TFetchResponseData::SessionIdMeta::Type TFetchResponseData::SessionIdMeta::Default = 0;
 
 TFetchResponseData::TFetchResponseData() 
-        : throttleTimeMs(ThrottleTimeMsMeta::Default)
-        , errorCode(ErrorCodeMeta::Default)
-        , sessionId(SessionIdMeta::Default)
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+        , SessionId(SessionIdMeta::Default)
 {}
 
-void TFetchResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData";
-    }
-    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, throttleTimeMs);
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<SessionIdMeta>(_readable, _version, sessionId);
-    NPrivate::Read<ResponsesMeta>(_readable, _version, responses);
+
+class TFetchResponseData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ThrottleTimeMsMeta> ThrottleTimeMs;
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<SessionIdMeta> SessionId;
+    NPrivate::TReadStrategy<ResponsesMeta> Responses;
+};
+
+TFetchResponseData::TReadContext::TReadContext(TFetchResponseData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ThrottleTimeMs()
+    , ErrorCode()
+    , SessionId()
+    , Responses()
+{}
+
+
+TReadDemand TFetchResponseData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ThrottleTimeMs.Init<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
             }
+            case 1: {
+                auto demand = ThrottleTimeMs.Next<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+            }
+            case 3: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                SessionId.Init<NPrivate::ReadFieldRule<SessionIdMeta>>(Value.SessionId, Version);
+            }
+            case 5: {
+                auto demand = SessionId.Next<NPrivate::ReadFieldRule<SessionIdMeta>>(Value.SessionId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                Responses.Init<NPrivate::ReadFieldRule<ResponsesMeta>>(Value.Responses, Version);
+            }
+            case 7: {
+                auto demand = Responses.Next<NPrivate::ReadFieldRule<ResponsesMeta>>(Value.Responses, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::MessageMeta::FlexibleVersionMin, TFetchResponseData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1012,10 +2725,10 @@ void TFetchResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, throttleTimeMs);
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<SessionIdMeta>(_collector, _writable, _version, sessionId);
-    NPrivate::Write<ResponsesMeta>(_collector, _writable, _version, responses);
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<SessionIdMeta>(_collector, _writable, _version, SessionId);
+    NPrivate::Write<ResponsesMeta>(_collector, _writable, _version, Responses);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1025,15 +2738,18 @@ void TFetchResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version
 
 i32 TFetchResponseData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, throttleTimeMs);
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<SessionIdMeta>(_collector, _version, sessionId);
-    NPrivate::Size<ResponsesMeta>(_collector, _version, responses);
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<SessionIdMeta>(_collector, _version, SessionId);
+    NPrivate::Size<ResponsesMeta>(_collector, _version, Responses);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1044,28 +2760,137 @@ const TFetchResponseData::TFetchableTopicResponse::TopicMeta::Type TFetchRespons
 const TFetchResponseData::TFetchableTopicResponse::TopicIdMeta::Type TFetchResponseData::TFetchableTopicResponse::TopicIdMeta::Default = TKafkaUuid(0, 0);
 
 TFetchResponseData::TFetchableTopicResponse::TFetchableTopicResponse() 
-        : topic(TopicMeta::Default)
-        , topicId(TopicIdMeta::Default)
+        : Topic(TopicMeta::Default)
+        , TopicId(TopicIdMeta::Default)
 {}
 
-void TFetchResponseData::TFetchableTopicResponse::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData::TFetchableTopicResponse";
-    }
-    NPrivate::Read<TopicMeta>(_readable, _version, topic);
-    NPrivate::Read<TopicIdMeta>(_readable, _version, topicId);
-    NPrivate::Read<PartitionsMeta>(_readable, _version, partitions);
+
+class TFetchResponseData::TFetchableTopicResponse::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData::TFetchableTopicResponse& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData::TFetchableTopicResponse& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TopicMeta> Topic;
+    NPrivate::TReadStrategy<TopicIdMeta> TopicId;
+    NPrivate::TReadStrategy<PartitionsMeta> Partitions;
+};
+
+TFetchResponseData::TFetchableTopicResponse::TReadContext::TReadContext(TFetchResponseData::TFetchableTopicResponse& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Topic()
+    , TopicId()
+    , Partitions()
+{}
+
+
+TReadDemand TFetchResponseData::TFetchableTopicResponse::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Topic.Init<NPrivate::ReadFieldRule<TopicMeta>>(Value.Topic, Version);
             }
+            case 1: {
+                auto demand = Topic.Next<NPrivate::ReadFieldRule<TopicMeta>>(Value.Topic, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                TopicId.Init<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+            }
+            case 3: {
+                auto demand = TopicId.Next<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                Partitions.Init<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+            }
+            case 5: {
+                auto demand = Partitions.Next<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::TFetchableTopicResponse::MessageMeta::FlexibleVersionMin, TFetchResponseData::TFetchableTopicResponse::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 7: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 9: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 11: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 8;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1075,9 +2900,9 @@ void TFetchResponseData::TFetchableTopicResponse::Write(TKafkaWritable& _writabl
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData::TFetchableTopicResponse";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TopicMeta>(_collector, _writable, _version, topic);
-    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, topicId);
-    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, partitions);
+    NPrivate::Write<TopicMeta>(_collector, _writable, _version, Topic);
+    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, TopicId);
+    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1087,14 +2912,17 @@ void TFetchResponseData::TFetchableTopicResponse::Write(TKafkaWritable& _writabl
 
 i32 TFetchResponseData::TFetchableTopicResponse::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TopicMeta>(_collector, _version, topic);
-    NPrivate::Size<TopicIdMeta>(_collector, _version, topicId);
-    NPrivate::Size<PartitionsMeta>(_collector, _version, partitions);
+    NPrivate::Size<TopicMeta>(_collector, _version, Topic);
+    NPrivate::Size<TopicIdMeta>(_collector, _version, TopicId);
+    NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::TFetchableTopicResponse::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1109,49 +2937,277 @@ const TFetchResponseData::TFetchableTopicResponse::TPartitionData::LogStartOffse
 const TFetchResponseData::TFetchableTopicResponse::TPartitionData::PreferredReadReplicaMeta::Type TFetchResponseData::TFetchableTopicResponse::TPartitionData::PreferredReadReplicaMeta::Default = -1;
 
 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TPartitionData() 
-        : partitionIndex(PartitionIndexMeta::Default)
-        , errorCode(ErrorCodeMeta::Default)
-        , highWatermark(HighWatermarkMeta::Default)
-        , lastStableOffset(LastStableOffsetMeta::Default)
-        , logStartOffset(LogStartOffsetMeta::Default)
-        , preferredReadReplica(PreferredReadReplicaMeta::Default)
+        : PartitionIndex(PartitionIndexMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+        , HighWatermark(HighWatermarkMeta::Default)
+        , LastStableOffset(LastStableOffsetMeta::Default)
+        , LogStartOffset(LogStartOffsetMeta::Default)
+        , PreferredReadReplica(PreferredReadReplicaMeta::Default)
 {}
 
-void TFetchResponseData::TFetchableTopicResponse::TPartitionData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData";
-    }
-    NPrivate::Read<PartitionIndexMeta>(_readable, _version, partitionIndex);
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<HighWatermarkMeta>(_readable, _version, highWatermark);
-    NPrivate::Read<LastStableOffsetMeta>(_readable, _version, lastStableOffset);
-    NPrivate::Read<LogStartOffsetMeta>(_readable, _version, logStartOffset);
-    NPrivate::Read<DivergingEpochMeta>(_readable, _version, divergingEpoch);
-    NPrivate::Read<CurrentLeaderMeta>(_readable, _version, currentLeader);
-    NPrivate::Read<SnapshotIdMeta>(_readable, _version, snapshotId);
-    NPrivate::Read<AbortedTransactionsMeta>(_readable, _version, abortedTransactions);
-    NPrivate::Read<PreferredReadReplicaMeta>(_readable, _version, preferredReadReplica);
-    NPrivate::Read<RecordsMeta>(_readable, _version, records);
+
+class TFetchResponseData::TFetchableTopicResponse::TPartitionData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData::TFetchableTopicResponse::TPartitionData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                case DivergingEpochMeta::Tag:
-                    NPrivate::ReadTag<DivergingEpochMeta>(_readable, _version, divergingEpoch);
-                    break;
-                case CurrentLeaderMeta::Tag:
-                    NPrivate::ReadTag<CurrentLeaderMeta>(_readable, _version, currentLeader);
-                    break;
-                case SnapshotIdMeta::Tag:
-                    NPrivate::ReadTag<SnapshotIdMeta>(_readable, _version, snapshotId);
-                    break;
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<PartitionIndexMeta> PartitionIndex;
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<HighWatermarkMeta> HighWatermark;
+    NPrivate::TReadStrategy<LastStableOffsetMeta> LastStableOffset;
+    NPrivate::TReadStrategy<LogStartOffsetMeta> LogStartOffset;
+    NPrivate::TReadStrategy<DivergingEpochMeta> DivergingEpoch;
+    NPrivate::TReadStrategy<CurrentLeaderMeta> CurrentLeader;
+    NPrivate::TReadStrategy<SnapshotIdMeta> SnapshotId;
+    NPrivate::TReadStrategy<AbortedTransactionsMeta> AbortedTransactions;
+    NPrivate::TReadStrategy<PreferredReadReplicaMeta> PreferredReadReplica;
+    NPrivate::TReadStrategy<RecordsMeta> Records;
+};
+
+TFetchResponseData::TFetchableTopicResponse::TPartitionData::TReadContext::TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , PartitionIndex()
+    , ErrorCode()
+    , HighWatermark()
+    , LastStableOffset()
+    , LogStartOffset()
+    , DivergingEpoch()
+    , CurrentLeader()
+    , SnapshotId()
+    , AbortedTransactions()
+    , PreferredReadReplica()
+    , Records()
+{}
+
+
+TReadDemand TFetchResponseData::TFetchableTopicResponse::TPartitionData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                PartitionIndex.Init<NPrivate::ReadFieldRule<PartitionIndexMeta>>(Value.PartitionIndex, Version);
             }
+            case 1: {
+                auto demand = PartitionIndex.Next<NPrivate::ReadFieldRule<PartitionIndexMeta>>(Value.PartitionIndex, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+            }
+            case 3: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                HighWatermark.Init<NPrivate::ReadFieldRule<HighWatermarkMeta>>(Value.HighWatermark, Version);
+            }
+            case 5: {
+                auto demand = HighWatermark.Next<NPrivate::ReadFieldRule<HighWatermarkMeta>>(Value.HighWatermark, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                LastStableOffset.Init<NPrivate::ReadFieldRule<LastStableOffsetMeta>>(Value.LastStableOffset, Version);
+            }
+            case 7: {
+                auto demand = LastStableOffset.Next<NPrivate::ReadFieldRule<LastStableOffsetMeta>>(Value.LastStableOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                LogStartOffset.Init<NPrivate::ReadFieldRule<LogStartOffsetMeta>>(Value.LogStartOffset, Version);
+            }
+            case 9: {
+                auto demand = LogStartOffset.Next<NPrivate::ReadFieldRule<LogStartOffsetMeta>>(Value.LogStartOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                DivergingEpoch.Init<NPrivate::ReadFieldRule<DivergingEpochMeta>>(Value.DivergingEpoch, Version);
+            }
+            case 11: {
+                auto demand = DivergingEpoch.Next<NPrivate::ReadFieldRule<DivergingEpochMeta>>(Value.DivergingEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                ++Step;
+                CurrentLeader.Init<NPrivate::ReadFieldRule<CurrentLeaderMeta>>(Value.CurrentLeader, Version);
+            }
+            case 13: {
+                auto demand = CurrentLeader.Next<NPrivate::ReadFieldRule<CurrentLeaderMeta>>(Value.CurrentLeader, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                ++Step;
+                SnapshotId.Init<NPrivate::ReadFieldRule<SnapshotIdMeta>>(Value.SnapshotId, Version);
+            }
+            case 15: {
+                auto demand = SnapshotId.Next<NPrivate::ReadFieldRule<SnapshotIdMeta>>(Value.SnapshotId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                ++Step;
+                AbortedTransactions.Init<NPrivate::ReadFieldRule<AbortedTransactionsMeta>>(Value.AbortedTransactions, Version);
+            }
+            case 17: {
+                auto demand = AbortedTransactions.Next<NPrivate::ReadFieldRule<AbortedTransactionsMeta>>(Value.AbortedTransactions, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 18: {
+                ++Step;
+                PreferredReadReplica.Init<NPrivate::ReadFieldRule<PreferredReadReplicaMeta>>(Value.PreferredReadReplica, Version);
+            }
+            case 19: {
+                auto demand = PreferredReadReplica.Next<NPrivate::ReadFieldRule<PreferredReadReplicaMeta>>(Value.PreferredReadReplica, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 20: {
+                ++Step;
+                Records.Init<NPrivate::ReadFieldRule<RecordsMeta>>(Value.Records, Version);
+            }
+            case 21: {
+                auto demand = Records.Next<NPrivate::ReadFieldRule<RecordsMeta>>(Value.Records, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 22: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::TFetchableTopicResponse::TPartitionData::MessageMeta::FlexibleVersionMin, TFetchResponseData::TFetchableTopicResponse::TPartitionData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 23: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 24: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 25: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 26: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 27: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    case 0: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            DivergingEpoch.Init<NPrivate::ReadTaggedFieldRule<DivergingEpochMeta>>(Value.DivergingEpoch, Version);
+                        }
+                        demand = DivergingEpoch.Next<NPrivate::ReadTaggedFieldRule<DivergingEpochMeta>>(Value.DivergingEpoch, Version);
+                        break;
+                    }
+                    case 1: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            CurrentLeader.Init<NPrivate::ReadTaggedFieldRule<CurrentLeaderMeta>>(Value.CurrentLeader, Version);
+                        }
+                        demand = CurrentLeader.Next<NPrivate::ReadTaggedFieldRule<CurrentLeaderMeta>>(Value.CurrentLeader, Version);
+                        break;
+                    }
+                    case 2: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            SnapshotId.Init<NPrivate::ReadTaggedFieldRule<SnapshotIdMeta>>(Value.SnapshotId, Version);
+                        }
+                        demand = SnapshotId.Next<NPrivate::ReadTaggedFieldRule<SnapshotIdMeta>>(Value.SnapshotId, Version);
+                        break;
+                    }
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 24;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1161,45 +3217,48 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::Write(TKafkaWr
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<PartitionIndexMeta>(_collector, _writable, _version, partitionIndex);
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<HighWatermarkMeta>(_collector, _writable, _version, highWatermark);
-    NPrivate::Write<LastStableOffsetMeta>(_collector, _writable, _version, lastStableOffset);
-    NPrivate::Write<LogStartOffsetMeta>(_collector, _writable, _version, logStartOffset);
-    NPrivate::Write<DivergingEpochMeta>(_collector, _writable, _version, divergingEpoch);
-    NPrivate::Write<CurrentLeaderMeta>(_collector, _writable, _version, currentLeader);
-    NPrivate::Write<SnapshotIdMeta>(_collector, _writable, _version, snapshotId);
-    NPrivate::Write<AbortedTransactionsMeta>(_collector, _writable, _version, abortedTransactions);
-    NPrivate::Write<PreferredReadReplicaMeta>(_collector, _writable, _version, preferredReadReplica);
-    NPrivate::Write<RecordsMeta>(_collector, _writable, _version, records);
+    NPrivate::Write<PartitionIndexMeta>(_collector, _writable, _version, PartitionIndex);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<HighWatermarkMeta>(_collector, _writable, _version, HighWatermark);
+    NPrivate::Write<LastStableOffsetMeta>(_collector, _writable, _version, LastStableOffset);
+    NPrivate::Write<LogStartOffsetMeta>(_collector, _writable, _version, LogStartOffset);
+    NPrivate::Write<DivergingEpochMeta>(_collector, _writable, _version, DivergingEpoch);
+    NPrivate::Write<CurrentLeaderMeta>(_collector, _writable, _version, CurrentLeader);
+    NPrivate::Write<SnapshotIdMeta>(_collector, _writable, _version, SnapshotId);
+    NPrivate::Write<AbortedTransactionsMeta>(_collector, _writable, _version, AbortedTransactions);
+    NPrivate::Write<PreferredReadReplicaMeta>(_collector, _writable, _version, PreferredReadReplica);
+    NPrivate::Write<RecordsMeta>(_collector, _writable, _version, Records);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
         
-        NPrivate::WriteTag<DivergingEpochMeta>(_writable, _version, divergingEpoch);
-        NPrivate::WriteTag<CurrentLeaderMeta>(_writable, _version, currentLeader);
-        NPrivate::WriteTag<SnapshotIdMeta>(_writable, _version, snapshotId);
+        NPrivate::WriteTag<DivergingEpochMeta>(_writable, _version, DivergingEpoch);
+        NPrivate::WriteTag<CurrentLeaderMeta>(_writable, _version, CurrentLeader);
+        NPrivate::WriteTag<SnapshotIdMeta>(_writable, _version, SnapshotId);
     }
 }
 
 i32 TFetchResponseData::TFetchableTopicResponse::TPartitionData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<PartitionIndexMeta>(_collector, _version, partitionIndex);
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<HighWatermarkMeta>(_collector, _version, highWatermark);
-    NPrivate::Size<LastStableOffsetMeta>(_collector, _version, lastStableOffset);
-    NPrivate::Size<LogStartOffsetMeta>(_collector, _version, logStartOffset);
-    NPrivate::Size<DivergingEpochMeta>(_collector, _version, divergingEpoch);
-    NPrivate::Size<CurrentLeaderMeta>(_collector, _version, currentLeader);
-    NPrivate::Size<SnapshotIdMeta>(_collector, _version, snapshotId);
-    NPrivate::Size<AbortedTransactionsMeta>(_collector, _version, abortedTransactions);
-    NPrivate::Size<PreferredReadReplicaMeta>(_collector, _version, preferredReadReplica);
-    NPrivate::Size<RecordsMeta>(_collector, _version, records);
+    NPrivate::Size<PartitionIndexMeta>(_collector, _version, PartitionIndex);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<HighWatermarkMeta>(_collector, _version, HighWatermark);
+    NPrivate::Size<LastStableOffsetMeta>(_collector, _version, LastStableOffset);
+    NPrivate::Size<LogStartOffsetMeta>(_collector, _version, LogStartOffset);
+    NPrivate::Size<DivergingEpochMeta>(_collector, _version, DivergingEpoch);
+    NPrivate::Size<CurrentLeaderMeta>(_collector, _version, CurrentLeader);
+    NPrivate::Size<SnapshotIdMeta>(_collector, _version, SnapshotId);
+    NPrivate::Size<AbortedTransactionsMeta>(_collector, _version, AbortedTransactions);
+    NPrivate::Size<PreferredReadReplicaMeta>(_collector, _version, PreferredReadReplica);
+    NPrivate::Size<RecordsMeta>(_collector, _version, Records);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::TFetchableTopicResponse::TPartitionData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1210,27 +3269,123 @@ const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffs
 const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::EndOffsetMeta::Type TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::EndOffsetMeta::Default = -1;
 
 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::TEpochEndOffset() 
-        : epoch(EpochMeta::Default)
-        , endOffset(EndOffsetMeta::Default)
+        : Epoch(EpochMeta::Default)
+        , EndOffset(EndOffsetMeta::Default)
 {}
 
-void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset";
-    }
-    NPrivate::Read<EpochMeta>(_readable, _version, epoch);
-    NPrivate::Read<EndOffsetMeta>(_readable, _version, endOffset);
+
+class TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<EpochMeta> Epoch;
+    NPrivate::TReadStrategy<EndOffsetMeta> EndOffset;
+};
+
+TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::TReadContext::TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Epoch()
+    , EndOffset()
+{}
+
+
+TReadDemand TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Epoch.Init<NPrivate::ReadFieldRule<EpochMeta>>(Value.Epoch, Version);
             }
+            case 1: {
+                auto demand = Epoch.Next<NPrivate::ReadFieldRule<EpochMeta>>(Value.Epoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                EndOffset.Init<NPrivate::ReadFieldRule<EndOffsetMeta>>(Value.EndOffset, Version);
+            }
+            case 3: {
+                auto demand = EndOffset.Next<NPrivate::ReadFieldRule<EndOffsetMeta>>(Value.EndOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::MessageMeta::FlexibleVersionMin, TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1240,8 +3395,8 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffse
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<EpochMeta>(_collector, _writable, _version, epoch);
-    NPrivate::Write<EndOffsetMeta>(_collector, _writable, _version, endOffset);
+    NPrivate::Write<EpochMeta>(_collector, _writable, _version, Epoch);
+    NPrivate::Write<EndOffsetMeta>(_collector, _writable, _version, EndOffset);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1251,13 +3406,16 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffse
 
 i32 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<EpochMeta>(_collector, _version, epoch);
-    NPrivate::Size<EndOffsetMeta>(_collector, _version, endOffset);
+    NPrivate::Size<EpochMeta>(_collector, _version, Epoch);
+    NPrivate::Size<EndOffsetMeta>(_collector, _version, EndOffset);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffset::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1268,27 +3426,123 @@ const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndE
 const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::LeaderEpochMeta::Type TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::LeaderEpochMeta::Default = -1;
 
 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::TLeaderIdAndEpoch() 
-        : leaderId(LeaderIdMeta::Default)
-        , leaderEpoch(LeaderEpochMeta::Default)
+        : LeaderId(LeaderIdMeta::Default)
+        , LeaderEpoch(LeaderEpochMeta::Default)
 {}
 
-void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch";
-    }
-    NPrivate::Read<LeaderIdMeta>(_readable, _version, leaderId);
-    NPrivate::Read<LeaderEpochMeta>(_readable, _version, leaderEpoch);
+
+class TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<LeaderIdMeta> LeaderId;
+    NPrivate::TReadStrategy<LeaderEpochMeta> LeaderEpoch;
+};
+
+TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::TReadContext::TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , LeaderId()
+    , LeaderEpoch()
+{}
+
+
+TReadDemand TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                LeaderId.Init<NPrivate::ReadFieldRule<LeaderIdMeta>>(Value.LeaderId, Version);
             }
+            case 1: {
+                auto demand = LeaderId.Next<NPrivate::ReadFieldRule<LeaderIdMeta>>(Value.LeaderId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                LeaderEpoch.Init<NPrivate::ReadFieldRule<LeaderEpochMeta>>(Value.LeaderEpoch, Version);
+            }
+            case 3: {
+                auto demand = LeaderEpoch.Next<NPrivate::ReadFieldRule<LeaderEpochMeta>>(Value.LeaderEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::MessageMeta::FlexibleVersionMin, TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1298,8 +3552,8 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEp
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<LeaderIdMeta>(_collector, _writable, _version, leaderId);
-    NPrivate::Write<LeaderEpochMeta>(_collector, _writable, _version, leaderEpoch);
+    NPrivate::Write<LeaderIdMeta>(_collector, _writable, _version, LeaderId);
+    NPrivate::Write<LeaderEpochMeta>(_collector, _writable, _version, LeaderEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1309,13 +3563,16 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEp
 
 i32 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<LeaderIdMeta>(_collector, _version, leaderId);
-    NPrivate::Size<LeaderEpochMeta>(_collector, _version, leaderEpoch);
+    NPrivate::Size<LeaderIdMeta>(_collector, _version, LeaderId);
+    NPrivate::Size<LeaderEpochMeta>(_collector, _version, LeaderEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEpoch::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1326,27 +3583,123 @@ const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::
 const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::EpochMeta::Type TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::EpochMeta::Default = -1;
 
 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::TSnapshotId() 
-        : endOffset(EndOffsetMeta::Default)
-        , epoch(EpochMeta::Default)
+        : EndOffset(EndOffsetMeta::Default)
+        , Epoch(EpochMeta::Default)
 {}
 
-void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId";
-    }
-    NPrivate::Read<EndOffsetMeta>(_readable, _version, endOffset);
-    NPrivate::Read<EpochMeta>(_readable, _version, epoch);
+
+class TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<EndOffsetMeta> EndOffset;
+    NPrivate::TReadStrategy<EpochMeta> Epoch;
+};
+
+TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::TReadContext::TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , EndOffset()
+    , Epoch()
+{}
+
+
+TReadDemand TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                EndOffset.Init<NPrivate::ReadFieldRule<EndOffsetMeta>>(Value.EndOffset, Version);
             }
+            case 1: {
+                auto demand = EndOffset.Next<NPrivate::ReadFieldRule<EndOffsetMeta>>(Value.EndOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Epoch.Init<NPrivate::ReadFieldRule<EpochMeta>>(Value.Epoch, Version);
+            }
+            case 3: {
+                auto demand = Epoch.Next<NPrivate::ReadFieldRule<EpochMeta>>(Value.Epoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::MessageMeta::FlexibleVersionMin, TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1356,8 +3709,8 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::W
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<EndOffsetMeta>(_collector, _writable, _version, endOffset);
-    NPrivate::Write<EpochMeta>(_collector, _writable, _version, epoch);
+    NPrivate::Write<EndOffsetMeta>(_collector, _writable, _version, EndOffset);
+    NPrivate::Write<EpochMeta>(_collector, _writable, _version, Epoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1367,13 +3720,16 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::W
 
 i32 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<EndOffsetMeta>(_collector, _version, endOffset);
-    NPrivate::Size<EpochMeta>(_collector, _version, epoch);
+    NPrivate::Size<EndOffsetMeta>(_collector, _version, EndOffset);
+    NPrivate::Size<EpochMeta>(_collector, _version, Epoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1384,27 +3740,123 @@ const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTrans
 const TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::FirstOffsetMeta::Type TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::FirstOffsetMeta::Default = 0;
 
 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::TAbortedTransaction() 
-        : producerId(ProducerIdMeta::Default)
-        , firstOffset(FirstOffsetMeta::Default)
+        : ProducerId(ProducerIdMeta::Default)
+        , FirstOffset(FirstOffsetMeta::Default)
 {}
 
-void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction";
-    }
-    NPrivate::Read<ProducerIdMeta>(_readable, _version, producerId);
-    NPrivate::Read<FirstOffsetMeta>(_readable, _version, firstOffset);
+
+class TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ProducerIdMeta> ProducerId;
+    NPrivate::TReadStrategy<FirstOffsetMeta> FirstOffset;
+};
+
+TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::TReadContext::TReadContext(TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ProducerId()
+    , FirstOffset()
+{}
+
+
+TReadDemand TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ProducerId.Init<NPrivate::ReadFieldRule<ProducerIdMeta>>(Value.ProducerId, Version);
             }
+            case 1: {
+                auto demand = ProducerId.Next<NPrivate::ReadFieldRule<ProducerIdMeta>>(Value.ProducerId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                FirstOffset.Init<NPrivate::ReadFieldRule<FirstOffsetMeta>>(Value.FirstOffset, Version);
+            }
+            case 3: {
+                auto demand = FirstOffset.Next<NPrivate::ReadFieldRule<FirstOffsetMeta>>(Value.FirstOffset, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::MessageMeta::FlexibleVersionMin, TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1414,8 +3866,8 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransa
         ythrow yexception() << "Can't write version " << _version << " of TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, producerId);
-    NPrivate::Write<FirstOffsetMeta>(_collector, _writable, _version, firstOffset);
+    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, ProducerId);
+    NPrivate::Write<FirstOffsetMeta>(_collector, _writable, _version, FirstOffset);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1425,13 +3877,16 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransa
 
 i32 TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ProducerIdMeta>(_collector, _version, producerId);
-    NPrivate::Size<FirstOffsetMeta>(_collector, _version, firstOffset);
+    NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
+    NPrivate::Size<FirstOffsetMeta>(_collector, _version, FirstOffset);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransaction::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1443,30 +3898,152 @@ const TMetadataRequestData::IncludeClusterAuthorizedOperationsMeta::Type TMetada
 const TMetadataRequestData::IncludeTopicAuthorizedOperationsMeta::Type TMetadataRequestData::IncludeTopicAuthorizedOperationsMeta::Default = false;
 
 TMetadataRequestData::TMetadataRequestData() 
-        : allowAutoTopicCreation(AllowAutoTopicCreationMeta::Default)
-        , includeClusterAuthorizedOperations(IncludeClusterAuthorizedOperationsMeta::Default)
-        , includeTopicAuthorizedOperations(IncludeTopicAuthorizedOperationsMeta::Default)
+        : AllowAutoTopicCreation(AllowAutoTopicCreationMeta::Default)
+        , IncludeClusterAuthorizedOperations(IncludeClusterAuthorizedOperationsMeta::Default)
+        , IncludeTopicAuthorizedOperations(IncludeTopicAuthorizedOperationsMeta::Default)
 {}
 
-void TMetadataRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TMetadataRequestData";
-    }
-    NPrivate::Read<TopicsMeta>(_readable, _version, topics);
-    NPrivate::Read<AllowAutoTopicCreationMeta>(_readable, _version, allowAutoTopicCreation);
-    NPrivate::Read<IncludeClusterAuthorizedOperationsMeta>(_readable, _version, includeClusterAuthorizedOperations);
-    NPrivate::Read<IncludeTopicAuthorizedOperationsMeta>(_readable, _version, includeTopicAuthorizedOperations);
+
+class TMetadataRequestData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TMetadataRequestData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TMetadataRequestData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TopicsMeta> Topics;
+    NPrivate::TReadStrategy<AllowAutoTopicCreationMeta> AllowAutoTopicCreation;
+    NPrivate::TReadStrategy<IncludeClusterAuthorizedOperationsMeta> IncludeClusterAuthorizedOperations;
+    NPrivate::TReadStrategy<IncludeTopicAuthorizedOperationsMeta> IncludeTopicAuthorizedOperations;
+};
+
+TMetadataRequestData::TReadContext::TReadContext(TMetadataRequestData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Topics()
+    , AllowAutoTopicCreation()
+    , IncludeClusterAuthorizedOperations()
+    , IncludeTopicAuthorizedOperations()
+{}
+
+
+TReadDemand TMetadataRequestData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Topics.Init<NPrivate::ReadFieldRule<TopicsMeta>>(Value.Topics, Version);
             }
+            case 1: {
+                auto demand = Topics.Next<NPrivate::ReadFieldRule<TopicsMeta>>(Value.Topics, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                AllowAutoTopicCreation.Init<NPrivate::ReadFieldRule<AllowAutoTopicCreationMeta>>(Value.AllowAutoTopicCreation, Version);
+            }
+            case 3: {
+                auto demand = AllowAutoTopicCreation.Next<NPrivate::ReadFieldRule<AllowAutoTopicCreationMeta>>(Value.AllowAutoTopicCreation, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                IncludeClusterAuthorizedOperations.Init<NPrivate::ReadFieldRule<IncludeClusterAuthorizedOperationsMeta>>(Value.IncludeClusterAuthorizedOperations, Version);
+            }
+            case 5: {
+                auto demand = IncludeClusterAuthorizedOperations.Next<NPrivate::ReadFieldRule<IncludeClusterAuthorizedOperationsMeta>>(Value.IncludeClusterAuthorizedOperations, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                IncludeTopicAuthorizedOperations.Init<NPrivate::ReadFieldRule<IncludeTopicAuthorizedOperationsMeta>>(Value.IncludeTopicAuthorizedOperations, Version);
+            }
+            case 7: {
+                auto demand = IncludeTopicAuthorizedOperations.Next<NPrivate::ReadFieldRule<IncludeTopicAuthorizedOperationsMeta>>(Value.IncludeTopicAuthorizedOperations, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TMetadataRequestData::MessageMeta::FlexibleVersionMin, TMetadataRequestData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1476,10 +4053,10 @@ void TMetadataRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _versi
         ythrow yexception() << "Can't write version " << _version << " of TMetadataRequestData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, topics);
-    NPrivate::Write<AllowAutoTopicCreationMeta>(_collector, _writable, _version, allowAutoTopicCreation);
-    NPrivate::Write<IncludeClusterAuthorizedOperationsMeta>(_collector, _writable, _version, includeClusterAuthorizedOperations);
-    NPrivate::Write<IncludeTopicAuthorizedOperationsMeta>(_collector, _writable, _version, includeTopicAuthorizedOperations);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<AllowAutoTopicCreationMeta>(_collector, _writable, _version, AllowAutoTopicCreation);
+    NPrivate::Write<IncludeClusterAuthorizedOperationsMeta>(_collector, _writable, _version, IncludeClusterAuthorizedOperations);
+    NPrivate::Write<IncludeTopicAuthorizedOperationsMeta>(_collector, _writable, _version, IncludeTopicAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1489,15 +4066,18 @@ void TMetadataRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _versi
 
 i32 TMetadataRequestData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TopicsMeta>(_collector, _version, topics);
-    NPrivate::Size<AllowAutoTopicCreationMeta>(_collector, _version, allowAutoTopicCreation);
-    NPrivate::Size<IncludeClusterAuthorizedOperationsMeta>(_collector, _version, includeClusterAuthorizedOperations);
-    NPrivate::Size<IncludeTopicAuthorizedOperationsMeta>(_collector, _version, includeTopicAuthorizedOperations);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<AllowAutoTopicCreationMeta>(_collector, _version, AllowAutoTopicCreation);
+    NPrivate::Size<IncludeClusterAuthorizedOperationsMeta>(_collector, _version, IncludeClusterAuthorizedOperations);
+    NPrivate::Size<IncludeTopicAuthorizedOperationsMeta>(_collector, _version, IncludeTopicAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TMetadataRequestData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1508,27 +4088,123 @@ const TMetadataRequestData::TMetadataRequestTopic::TopicIdMeta::Type TMetadataRe
 const TMetadataRequestData::TMetadataRequestTopic::NameMeta::Type TMetadataRequestData::TMetadataRequestTopic::NameMeta::Default = {""};
 
 TMetadataRequestData::TMetadataRequestTopic::TMetadataRequestTopic() 
-        : topicId(TopicIdMeta::Default)
-        , name(NameMeta::Default)
+        : TopicId(TopicIdMeta::Default)
+        , Name(NameMeta::Default)
 {}
 
-void TMetadataRequestData::TMetadataRequestTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TMetadataRequestData::TMetadataRequestTopic";
-    }
-    NPrivate::Read<TopicIdMeta>(_readable, _version, topicId);
-    NPrivate::Read<NameMeta>(_readable, _version, name);
+
+class TMetadataRequestData::TMetadataRequestTopic::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TMetadataRequestData::TMetadataRequestTopic& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TMetadataRequestData::TMetadataRequestTopic& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TopicIdMeta> TopicId;
+    NPrivate::TReadStrategy<NameMeta> Name;
+};
+
+TMetadataRequestData::TMetadataRequestTopic::TReadContext::TReadContext(TMetadataRequestData::TMetadataRequestTopic& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , TopicId()
+    , Name()
+{}
+
+
+TReadDemand TMetadataRequestData::TMetadataRequestTopic::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                TopicId.Init<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
             }
+            case 1: {
+                auto demand = TopicId.Next<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Name.Init<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+            }
+            case 3: {
+                auto demand = Name.Next<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TMetadataRequestData::TMetadataRequestTopic::MessageMeta::FlexibleVersionMin, TMetadataRequestData::TMetadataRequestTopic::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1538,8 +4214,8 @@ void TMetadataRequestData::TMetadataRequestTopic::Write(TKafkaWritable& _writabl
         ythrow yexception() << "Can't write version " << _version << " of TMetadataRequestData::TMetadataRequestTopic";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, topicId);
-    NPrivate::Write<NameMeta>(_collector, _writable, _version, name);
+    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, TopicId);
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1549,13 +4225,16 @@ void TMetadataRequestData::TMetadataRequestTopic::Write(TKafkaWritable& _writabl
 
 i32 TMetadataRequestData::TMetadataRequestTopic::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TopicIdMeta>(_collector, _version, topicId);
-    NPrivate::Size<NameMeta>(_collector, _version, name);
+    NPrivate::Size<TopicIdMeta>(_collector, _version, TopicId);
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TMetadataRequestData::TMetadataRequestTopic::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1568,33 +4247,181 @@ const TMetadataResponseData::ControllerIdMeta::Type TMetadataResponseData::Contr
 const TMetadataResponseData::ClusterAuthorizedOperationsMeta::Type TMetadataResponseData::ClusterAuthorizedOperationsMeta::Default = -2147483648;
 
 TMetadataResponseData::TMetadataResponseData() 
-        : throttleTimeMs(ThrottleTimeMsMeta::Default)
-        , clusterId(ClusterIdMeta::Default)
-        , controllerId(ControllerIdMeta::Default)
-        , clusterAuthorizedOperations(ClusterAuthorizedOperationsMeta::Default)
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , ClusterId(ClusterIdMeta::Default)
+        , ControllerId(ControllerIdMeta::Default)
+        , ClusterAuthorizedOperations(ClusterAuthorizedOperationsMeta::Default)
 {}
 
-void TMetadataResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TMetadataResponseData";
-    }
-    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, throttleTimeMs);
-    NPrivate::Read<BrokersMeta>(_readable, _version, brokers);
-    NPrivate::Read<ClusterIdMeta>(_readable, _version, clusterId);
-    NPrivate::Read<ControllerIdMeta>(_readable, _version, controllerId);
-    NPrivate::Read<TopicsMeta>(_readable, _version, topics);
-    NPrivate::Read<ClusterAuthorizedOperationsMeta>(_readable, _version, clusterAuthorizedOperations);
+
+class TMetadataResponseData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TMetadataResponseData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TMetadataResponseData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ThrottleTimeMsMeta> ThrottleTimeMs;
+    NPrivate::TReadStrategy<BrokersMeta> Brokers;
+    NPrivate::TReadStrategy<ClusterIdMeta> ClusterId;
+    NPrivate::TReadStrategy<ControllerIdMeta> ControllerId;
+    NPrivate::TReadStrategy<TopicsMeta> Topics;
+    NPrivate::TReadStrategy<ClusterAuthorizedOperationsMeta> ClusterAuthorizedOperations;
+};
+
+TMetadataResponseData::TReadContext::TReadContext(TMetadataResponseData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ThrottleTimeMs()
+    , Brokers()
+    , ClusterId()
+    , ControllerId()
+    , Topics()
+    , ClusterAuthorizedOperations()
+{}
+
+
+TReadDemand TMetadataResponseData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ThrottleTimeMs.Init<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
             }
+            case 1: {
+                auto demand = ThrottleTimeMs.Next<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Brokers.Init<NPrivate::ReadFieldRule<BrokersMeta>>(Value.Brokers, Version);
+            }
+            case 3: {
+                auto demand = Brokers.Next<NPrivate::ReadFieldRule<BrokersMeta>>(Value.Brokers, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                ClusterId.Init<NPrivate::ReadFieldRule<ClusterIdMeta>>(Value.ClusterId, Version);
+            }
+            case 5: {
+                auto demand = ClusterId.Next<NPrivate::ReadFieldRule<ClusterIdMeta>>(Value.ClusterId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                ControllerId.Init<NPrivate::ReadFieldRule<ControllerIdMeta>>(Value.ControllerId, Version);
+            }
+            case 7: {
+                auto demand = ControllerId.Next<NPrivate::ReadFieldRule<ControllerIdMeta>>(Value.ControllerId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                Topics.Init<NPrivate::ReadFieldRule<TopicsMeta>>(Value.Topics, Version);
+            }
+            case 9: {
+                auto demand = Topics.Next<NPrivate::ReadFieldRule<TopicsMeta>>(Value.Topics, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                ClusterAuthorizedOperations.Init<NPrivate::ReadFieldRule<ClusterAuthorizedOperationsMeta>>(Value.ClusterAuthorizedOperations, Version);
+            }
+            case 11: {
+                auto demand = ClusterAuthorizedOperations.Next<NPrivate::ReadFieldRule<ClusterAuthorizedOperationsMeta>>(Value.ClusterAuthorizedOperations, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                if (!NPrivate::VersionCheck<TMetadataResponseData::MessageMeta::FlexibleVersionMin, TMetadataResponseData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 13: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 15: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 17: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 14;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1604,12 +4431,12 @@ void TMetadataResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _vers
         ythrow yexception() << "Can't write version " << _version << " of TMetadataResponseData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, throttleTimeMs);
-    NPrivate::Write<BrokersMeta>(_collector, _writable, _version, brokers);
-    NPrivate::Write<ClusterIdMeta>(_collector, _writable, _version, clusterId);
-    NPrivate::Write<ControllerIdMeta>(_collector, _writable, _version, controllerId);
-    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, topics);
-    NPrivate::Write<ClusterAuthorizedOperationsMeta>(_collector, _writable, _version, clusterAuthorizedOperations);
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<BrokersMeta>(_collector, _writable, _version, Brokers);
+    NPrivate::Write<ClusterIdMeta>(_collector, _writable, _version, ClusterId);
+    NPrivate::Write<ControllerIdMeta>(_collector, _writable, _version, ControllerId);
+    NPrivate::Write<TopicsMeta>(_collector, _writable, _version, Topics);
+    NPrivate::Write<ClusterAuthorizedOperationsMeta>(_collector, _writable, _version, ClusterAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1619,17 +4446,20 @@ void TMetadataResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _vers
 
 i32 TMetadataResponseData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, throttleTimeMs);
-    NPrivate::Size<BrokersMeta>(_collector, _version, brokers);
-    NPrivate::Size<ClusterIdMeta>(_collector, _version, clusterId);
-    NPrivate::Size<ControllerIdMeta>(_collector, _version, controllerId);
-    NPrivate::Size<TopicsMeta>(_collector, _version, topics);
-    NPrivate::Size<ClusterAuthorizedOperationsMeta>(_collector, _version, clusterAuthorizedOperations);
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<BrokersMeta>(_collector, _version, Brokers);
+    NPrivate::Size<ClusterIdMeta>(_collector, _version, ClusterId);
+    NPrivate::Size<ControllerIdMeta>(_collector, _version, ControllerId);
+    NPrivate::Size<TopicsMeta>(_collector, _version, Topics);
+    NPrivate::Size<ClusterAuthorizedOperationsMeta>(_collector, _version, ClusterAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TMetadataResponseData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1642,31 +4472,153 @@ const TMetadataResponseData::TMetadataResponseBroker::PortMeta::Type TMetadataRe
 const TMetadataResponseData::TMetadataResponseBroker::RackMeta::Type TMetadataResponseData::TMetadataResponseBroker::RackMeta::Default = std::nullopt;
 
 TMetadataResponseData::TMetadataResponseBroker::TMetadataResponseBroker() 
-        : nodeId(NodeIdMeta::Default)
-        , host(HostMeta::Default)
-        , port(PortMeta::Default)
-        , rack(RackMeta::Default)
+        : NodeId(NodeIdMeta::Default)
+        , Host(HostMeta::Default)
+        , Port(PortMeta::Default)
+        , Rack(RackMeta::Default)
 {}
 
-void TMetadataResponseData::TMetadataResponseBroker::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TMetadataResponseData::TMetadataResponseBroker";
-    }
-    NPrivate::Read<NodeIdMeta>(_readable, _version, nodeId);
-    NPrivate::Read<HostMeta>(_readable, _version, host);
-    NPrivate::Read<PortMeta>(_readable, _version, port);
-    NPrivate::Read<RackMeta>(_readable, _version, rack);
+
+class TMetadataResponseData::TMetadataResponseBroker::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TMetadataResponseData::TMetadataResponseBroker& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TMetadataResponseData::TMetadataResponseBroker& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<NodeIdMeta> NodeId;
+    NPrivate::TReadStrategy<HostMeta> Host;
+    NPrivate::TReadStrategy<PortMeta> Port;
+    NPrivate::TReadStrategy<RackMeta> Rack;
+};
+
+TMetadataResponseData::TMetadataResponseBroker::TReadContext::TReadContext(TMetadataResponseData::TMetadataResponseBroker& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , NodeId()
+    , Host()
+    , Port()
+    , Rack()
+{}
+
+
+TReadDemand TMetadataResponseData::TMetadataResponseBroker::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                NodeId.Init<NPrivate::ReadFieldRule<NodeIdMeta>>(Value.NodeId, Version);
             }
+            case 1: {
+                auto demand = NodeId.Next<NPrivate::ReadFieldRule<NodeIdMeta>>(Value.NodeId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Host.Init<NPrivate::ReadFieldRule<HostMeta>>(Value.Host, Version);
+            }
+            case 3: {
+                auto demand = Host.Next<NPrivate::ReadFieldRule<HostMeta>>(Value.Host, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                Port.Init<NPrivate::ReadFieldRule<PortMeta>>(Value.Port, Version);
+            }
+            case 5: {
+                auto demand = Port.Next<NPrivate::ReadFieldRule<PortMeta>>(Value.Port, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                Rack.Init<NPrivate::ReadFieldRule<RackMeta>>(Value.Rack, Version);
+            }
+            case 7: {
+                auto demand = Rack.Next<NPrivate::ReadFieldRule<RackMeta>>(Value.Rack, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TMetadataResponseData::TMetadataResponseBroker::MessageMeta::FlexibleVersionMin, TMetadataResponseData::TMetadataResponseBroker::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1676,10 +4628,10 @@ void TMetadataResponseData::TMetadataResponseBroker::Write(TKafkaWritable& _writ
         ythrow yexception() << "Can't write version " << _version << " of TMetadataResponseData::TMetadataResponseBroker";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<NodeIdMeta>(_collector, _writable, _version, nodeId);
-    NPrivate::Write<HostMeta>(_collector, _writable, _version, host);
-    NPrivate::Write<PortMeta>(_collector, _writable, _version, port);
-    NPrivate::Write<RackMeta>(_collector, _writable, _version, rack);
+    NPrivate::Write<NodeIdMeta>(_collector, _writable, _version, NodeId);
+    NPrivate::Write<HostMeta>(_collector, _writable, _version, Host);
+    NPrivate::Write<PortMeta>(_collector, _writable, _version, Port);
+    NPrivate::Write<RackMeta>(_collector, _writable, _version, Rack);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1689,15 +4641,18 @@ void TMetadataResponseData::TMetadataResponseBroker::Write(TKafkaWritable& _writ
 
 i32 TMetadataResponseData::TMetadataResponseBroker::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<NodeIdMeta>(_collector, _version, nodeId);
-    NPrivate::Size<HostMeta>(_collector, _version, host);
-    NPrivate::Size<PortMeta>(_collector, _version, port);
-    NPrivate::Size<RackMeta>(_collector, _version, rack);
+    NPrivate::Size<NodeIdMeta>(_collector, _version, NodeId);
+    NPrivate::Size<HostMeta>(_collector, _version, Host);
+    NPrivate::Size<PortMeta>(_collector, _version, Port);
+    NPrivate::Size<RackMeta>(_collector, _version, Rack);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TMetadataResponseData::TMetadataResponseBroker::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1711,34 +4666,182 @@ const TMetadataResponseData::TMetadataResponseTopic::IsInternalMeta::Type TMetad
 const TMetadataResponseData::TMetadataResponseTopic::TopicAuthorizedOperationsMeta::Type TMetadataResponseData::TMetadataResponseTopic::TopicAuthorizedOperationsMeta::Default = -2147483648;
 
 TMetadataResponseData::TMetadataResponseTopic::TMetadataResponseTopic() 
-        : errorCode(ErrorCodeMeta::Default)
-        , name(NameMeta::Default)
-        , topicId(TopicIdMeta::Default)
-        , isInternal(IsInternalMeta::Default)
-        , topicAuthorizedOperations(TopicAuthorizedOperationsMeta::Default)
+        : ErrorCode(ErrorCodeMeta::Default)
+        , Name(NameMeta::Default)
+        , TopicId(TopicIdMeta::Default)
+        , IsInternal(IsInternalMeta::Default)
+        , TopicAuthorizedOperations(TopicAuthorizedOperationsMeta::Default)
 {}
 
-void TMetadataResponseData::TMetadataResponseTopic::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TMetadataResponseData::TMetadataResponseTopic";
-    }
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<NameMeta>(_readable, _version, name);
-    NPrivate::Read<TopicIdMeta>(_readable, _version, topicId);
-    NPrivate::Read<IsInternalMeta>(_readable, _version, isInternal);
-    NPrivate::Read<PartitionsMeta>(_readable, _version, partitions);
-    NPrivate::Read<TopicAuthorizedOperationsMeta>(_readable, _version, topicAuthorizedOperations);
+
+class TMetadataResponseData::TMetadataResponseTopic::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TMetadataResponseData::TMetadataResponseTopic& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TMetadataResponseData::TMetadataResponseTopic& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<NameMeta> Name;
+    NPrivate::TReadStrategy<TopicIdMeta> TopicId;
+    NPrivate::TReadStrategy<IsInternalMeta> IsInternal;
+    NPrivate::TReadStrategy<PartitionsMeta> Partitions;
+    NPrivate::TReadStrategy<TopicAuthorizedOperationsMeta> TopicAuthorizedOperations;
+};
+
+TMetadataResponseData::TMetadataResponseTopic::TReadContext::TReadContext(TMetadataResponseData::TMetadataResponseTopic& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ErrorCode()
+    , Name()
+    , TopicId()
+    , IsInternal()
+    , Partitions()
+    , TopicAuthorizedOperations()
+{}
+
+
+TReadDemand TMetadataResponseData::TMetadataResponseTopic::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
             }
+            case 1: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                Name.Init<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+            }
+            case 3: {
+                auto demand = Name.Next<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                TopicId.Init<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+            }
+            case 5: {
+                auto demand = TopicId.Next<NPrivate::ReadFieldRule<TopicIdMeta>>(Value.TopicId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                IsInternal.Init<NPrivate::ReadFieldRule<IsInternalMeta>>(Value.IsInternal, Version);
+            }
+            case 7: {
+                auto demand = IsInternal.Next<NPrivate::ReadFieldRule<IsInternalMeta>>(Value.IsInternal, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                Partitions.Init<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+            }
+            case 9: {
+                auto demand = Partitions.Next<NPrivate::ReadFieldRule<PartitionsMeta>>(Value.Partitions, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                TopicAuthorizedOperations.Init<NPrivate::ReadFieldRule<TopicAuthorizedOperationsMeta>>(Value.TopicAuthorizedOperations, Version);
+            }
+            case 11: {
+                auto demand = TopicAuthorizedOperations.Next<NPrivate::ReadFieldRule<TopicAuthorizedOperationsMeta>>(Value.TopicAuthorizedOperations, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                if (!NPrivate::VersionCheck<TMetadataResponseData::TMetadataResponseTopic::MessageMeta::FlexibleVersionMin, TMetadataResponseData::TMetadataResponseTopic::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 13: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 15: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 17: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 14;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1748,12 +4851,12 @@ void TMetadataResponseData::TMetadataResponseTopic::Write(TKafkaWritable& _writa
         ythrow yexception() << "Can't write version " << _version << " of TMetadataResponseData::TMetadataResponseTopic";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<NameMeta>(_collector, _writable, _version, name);
-    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, topicId);
-    NPrivate::Write<IsInternalMeta>(_collector, _writable, _version, isInternal);
-    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, partitions);
-    NPrivate::Write<TopicAuthorizedOperationsMeta>(_collector, _writable, _version, topicAuthorizedOperations);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<TopicIdMeta>(_collector, _writable, _version, TopicId);
+    NPrivate::Write<IsInternalMeta>(_collector, _writable, _version, IsInternal);
+    NPrivate::Write<PartitionsMeta>(_collector, _writable, _version, Partitions);
+    NPrivate::Write<TopicAuthorizedOperationsMeta>(_collector, _writable, _version, TopicAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1763,17 +4866,20 @@ void TMetadataResponseData::TMetadataResponseTopic::Write(TKafkaWritable& _writa
 
 i32 TMetadataResponseData::TMetadataResponseTopic::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<NameMeta>(_collector, _version, name);
-    NPrivate::Size<TopicIdMeta>(_collector, _version, topicId);
-    NPrivate::Size<IsInternalMeta>(_collector, _version, isInternal);
-    NPrivate::Size<PartitionsMeta>(_collector, _version, partitions);
-    NPrivate::Size<TopicAuthorizedOperationsMeta>(_collector, _version, topicAuthorizedOperations);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<TopicIdMeta>(_collector, _version, TopicId);
+    NPrivate::Size<IsInternalMeta>(_collector, _version, IsInternal);
+    NPrivate::Size<PartitionsMeta>(_collector, _version, Partitions);
+    NPrivate::Size<TopicAuthorizedOperationsMeta>(_collector, _version, TopicAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TMetadataResponseData::TMetadataResponseTopic::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1786,34 +4892,195 @@ const TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition:
 const TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::LeaderEpochMeta::Type TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::LeaderEpochMeta::Default = -1;
 
 TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::TMetadataResponsePartition() 
-        : errorCode(ErrorCodeMeta::Default)
-        , partitionIndex(PartitionIndexMeta::Default)
-        , leaderId(LeaderIdMeta::Default)
-        , leaderEpoch(LeaderEpochMeta::Default)
+        : ErrorCode(ErrorCodeMeta::Default)
+        , PartitionIndex(PartitionIndexMeta::Default)
+        , LeaderId(LeaderIdMeta::Default)
+        , LeaderEpoch(LeaderEpochMeta::Default)
 {}
 
-void TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition";
-    }
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<PartitionIndexMeta>(_readable, _version, partitionIndex);
-    NPrivate::Read<LeaderIdMeta>(_readable, _version, leaderId);
-    NPrivate::Read<LeaderEpochMeta>(_readable, _version, leaderEpoch);
-    NPrivate::Read<ReplicaNodesMeta>(_readable, _version, replicaNodes);
-    NPrivate::Read<IsrNodesMeta>(_readable, _version, isrNodes);
-    NPrivate::Read<OfflineReplicasMeta>(_readable, _version, offlineReplicas);
+
+class TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<PartitionIndexMeta> PartitionIndex;
+    NPrivate::TReadStrategy<LeaderIdMeta> LeaderId;
+    NPrivate::TReadStrategy<LeaderEpochMeta> LeaderEpoch;
+    NPrivate::TReadStrategy<ReplicaNodesMeta> ReplicaNodes;
+    NPrivate::TReadStrategy<IsrNodesMeta> IsrNodes;
+    NPrivate::TReadStrategy<OfflineReplicasMeta> OfflineReplicas;
+};
+
+TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::TReadContext::TReadContext(TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ErrorCode()
+    , PartitionIndex()
+    , LeaderId()
+    , LeaderEpoch()
+    , ReplicaNodes()
+    , IsrNodes()
+    , OfflineReplicas()
+{}
+
+
+TReadDemand TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
             }
+            case 1: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                PartitionIndex.Init<NPrivate::ReadFieldRule<PartitionIndexMeta>>(Value.PartitionIndex, Version);
+            }
+            case 3: {
+                auto demand = PartitionIndex.Next<NPrivate::ReadFieldRule<PartitionIndexMeta>>(Value.PartitionIndex, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                LeaderId.Init<NPrivate::ReadFieldRule<LeaderIdMeta>>(Value.LeaderId, Version);
+            }
+            case 5: {
+                auto demand = LeaderId.Next<NPrivate::ReadFieldRule<LeaderIdMeta>>(Value.LeaderId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                LeaderEpoch.Init<NPrivate::ReadFieldRule<LeaderEpochMeta>>(Value.LeaderEpoch, Version);
+            }
+            case 7: {
+                auto demand = LeaderEpoch.Next<NPrivate::ReadFieldRule<LeaderEpochMeta>>(Value.LeaderEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                ReplicaNodes.Init<NPrivate::ReadFieldRule<ReplicaNodesMeta>>(Value.ReplicaNodes, Version);
+            }
+            case 9: {
+                auto demand = ReplicaNodes.Next<NPrivate::ReadFieldRule<ReplicaNodesMeta>>(Value.ReplicaNodes, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                IsrNodes.Init<NPrivate::ReadFieldRule<IsrNodesMeta>>(Value.IsrNodes, Version);
+            }
+            case 11: {
+                auto demand = IsrNodes.Next<NPrivate::ReadFieldRule<IsrNodesMeta>>(Value.IsrNodes, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                ++Step;
+                OfflineReplicas.Init<NPrivate::ReadFieldRule<OfflineReplicasMeta>>(Value.OfflineReplicas, Version);
+            }
+            case 13: {
+                auto demand = OfflineReplicas.Next<NPrivate::ReadFieldRule<OfflineReplicasMeta>>(Value.OfflineReplicas, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                if (!NPrivate::VersionCheck<TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::MessageMeta::FlexibleVersionMin, TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 15: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 17: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 18: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 19: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 16;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1823,13 +5090,13 @@ void TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::
         ythrow yexception() << "Can't write version " << _version << " of TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<PartitionIndexMeta>(_collector, _writable, _version, partitionIndex);
-    NPrivate::Write<LeaderIdMeta>(_collector, _writable, _version, leaderId);
-    NPrivate::Write<LeaderEpochMeta>(_collector, _writable, _version, leaderEpoch);
-    NPrivate::Write<ReplicaNodesMeta>(_collector, _writable, _version, replicaNodes);
-    NPrivate::Write<IsrNodesMeta>(_collector, _writable, _version, isrNodes);
-    NPrivate::Write<OfflineReplicasMeta>(_collector, _writable, _version, offlineReplicas);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<PartitionIndexMeta>(_collector, _writable, _version, PartitionIndex);
+    NPrivate::Write<LeaderIdMeta>(_collector, _writable, _version, LeaderId);
+    NPrivate::Write<LeaderEpochMeta>(_collector, _writable, _version, LeaderEpoch);
+    NPrivate::Write<ReplicaNodesMeta>(_collector, _writable, _version, ReplicaNodes);
+    NPrivate::Write<IsrNodesMeta>(_collector, _writable, _version, IsrNodes);
+    NPrivate::Write<OfflineReplicasMeta>(_collector, _writable, _version, OfflineReplicas);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1839,18 +5106,21 @@ void TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::
 
 i32 TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<PartitionIndexMeta>(_collector, _version, partitionIndex);
-    NPrivate::Size<LeaderIdMeta>(_collector, _version, leaderId);
-    NPrivate::Size<LeaderEpochMeta>(_collector, _version, leaderEpoch);
-    NPrivate::Size<ReplicaNodesMeta>(_collector, _version, replicaNodes);
-    NPrivate::Size<IsrNodesMeta>(_collector, _version, isrNodes);
-    NPrivate::Size<OfflineReplicasMeta>(_collector, _version, offlineReplicas);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<PartitionIndexMeta>(_collector, _version, PartitionIndex);
+    NPrivate::Size<LeaderIdMeta>(_collector, _version, LeaderId);
+    NPrivate::Size<LeaderEpochMeta>(_collector, _version, LeaderEpoch);
+    NPrivate::Size<ReplicaNodesMeta>(_collector, _version, ReplicaNodes);
+    NPrivate::Size<IsrNodesMeta>(_collector, _version, IsrNodes);
+    NPrivate::Size<OfflineReplicasMeta>(_collector, _version, OfflineReplicas);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1861,27 +5131,123 @@ const TApiVersionsRequestData::ClientSoftwareNameMeta::Type TApiVersionsRequestD
 const TApiVersionsRequestData::ClientSoftwareVersionMeta::Type TApiVersionsRequestData::ClientSoftwareVersionMeta::Default = {""};
 
 TApiVersionsRequestData::TApiVersionsRequestData() 
-        : clientSoftwareName(ClientSoftwareNameMeta::Default)
-        , clientSoftwareVersion(ClientSoftwareVersionMeta::Default)
+        : ClientSoftwareName(ClientSoftwareNameMeta::Default)
+        , ClientSoftwareVersion(ClientSoftwareVersionMeta::Default)
 {}
 
-void TApiVersionsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TApiVersionsRequestData";
-    }
-    NPrivate::Read<ClientSoftwareNameMeta>(_readable, _version, clientSoftwareName);
-    NPrivate::Read<ClientSoftwareVersionMeta>(_readable, _version, clientSoftwareVersion);
+
+class TApiVersionsRequestData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TApiVersionsRequestData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TApiVersionsRequestData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ClientSoftwareNameMeta> ClientSoftwareName;
+    NPrivate::TReadStrategy<ClientSoftwareVersionMeta> ClientSoftwareVersion;
+};
+
+TApiVersionsRequestData::TReadContext::TReadContext(TApiVersionsRequestData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ClientSoftwareName()
+    , ClientSoftwareVersion()
+{}
+
+
+TReadDemand TApiVersionsRequestData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ClientSoftwareName.Init<NPrivate::ReadFieldRule<ClientSoftwareNameMeta>>(Value.ClientSoftwareName, Version);
             }
+            case 1: {
+                auto demand = ClientSoftwareName.Next<NPrivate::ReadFieldRule<ClientSoftwareNameMeta>>(Value.ClientSoftwareName, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ClientSoftwareVersion.Init<NPrivate::ReadFieldRule<ClientSoftwareVersionMeta>>(Value.ClientSoftwareVersion, Version);
+            }
+            case 3: {
+                auto demand = ClientSoftwareVersion.Next<NPrivate::ReadFieldRule<ClientSoftwareVersionMeta>>(Value.ClientSoftwareVersion, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                if (!NPrivate::VersionCheck<TApiVersionsRequestData::MessageMeta::FlexibleVersionMin, TApiVersionsRequestData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 5: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 7: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 9: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 6;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1891,8 +5257,8 @@ void TApiVersionsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _ve
         ythrow yexception() << "Can't write version " << _version << " of TApiVersionsRequestData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ClientSoftwareNameMeta>(_collector, _writable, _version, clientSoftwareName);
-    NPrivate::Write<ClientSoftwareVersionMeta>(_collector, _writable, _version, clientSoftwareVersion);
+    NPrivate::Write<ClientSoftwareNameMeta>(_collector, _writable, _version, ClientSoftwareName);
+    NPrivate::Write<ClientSoftwareVersionMeta>(_collector, _writable, _version, ClientSoftwareVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -1902,13 +5268,16 @@ void TApiVersionsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _ve
 
 i32 TApiVersionsRequestData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ClientSoftwareNameMeta>(_collector, _version, clientSoftwareName);
-    NPrivate::Size<ClientSoftwareVersionMeta>(_collector, _version, clientSoftwareVersion);
+    NPrivate::Size<ClientSoftwareNameMeta>(_collector, _version, ClientSoftwareName);
+    NPrivate::Size<ClientSoftwareVersionMeta>(_collector, _version, ClientSoftwareVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TApiVersionsRequestData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -1921,46 +5290,227 @@ const TApiVersionsResponseData::FinalizedFeaturesEpochMeta::Type TApiVersionsRes
 const TApiVersionsResponseData::ZkMigrationReadyMeta::Type TApiVersionsResponseData::ZkMigrationReadyMeta::Default = false;
 
 TApiVersionsResponseData::TApiVersionsResponseData() 
-        : errorCode(ErrorCodeMeta::Default)
-        , throttleTimeMs(ThrottleTimeMsMeta::Default)
-        , finalizedFeaturesEpoch(FinalizedFeaturesEpochMeta::Default)
-        , zkMigrationReady(ZkMigrationReadyMeta::Default)
+        : ErrorCode(ErrorCodeMeta::Default)
+        , ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , FinalizedFeaturesEpoch(FinalizedFeaturesEpochMeta::Default)
+        , ZkMigrationReady(ZkMigrationReadyMeta::Default)
 {}
 
-void TApiVersionsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TApiVersionsResponseData";
-    }
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<ApiKeysMeta>(_readable, _version, apiKeys);
-    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, throttleTimeMs);
-    NPrivate::Read<SupportedFeaturesMeta>(_readable, _version, supportedFeatures);
-    NPrivate::Read<FinalizedFeaturesEpochMeta>(_readable, _version, finalizedFeaturesEpoch);
-    NPrivate::Read<FinalizedFeaturesMeta>(_readable, _version, finalizedFeatures);
-    NPrivate::Read<ZkMigrationReadyMeta>(_readable, _version, zkMigrationReady);
+
+class TApiVersionsResponseData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TApiVersionsResponseData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TApiVersionsResponseData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                case SupportedFeaturesMeta::Tag:
-                    NPrivate::ReadTag<SupportedFeaturesMeta>(_readable, _version, supportedFeatures);
-                    break;
-                case FinalizedFeaturesEpochMeta::Tag:
-                    NPrivate::ReadTag<FinalizedFeaturesEpochMeta>(_readable, _version, finalizedFeaturesEpoch);
-                    break;
-                case FinalizedFeaturesMeta::Tag:
-                    NPrivate::ReadTag<FinalizedFeaturesMeta>(_readable, _version, finalizedFeatures);
-                    break;
-                case ZkMigrationReadyMeta::Tag:
-                    NPrivate::ReadTag<ZkMigrationReadyMeta>(_readable, _version, zkMigrationReady);
-                    break;
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<ApiKeysMeta> ApiKeys;
+    NPrivate::TReadStrategy<ThrottleTimeMsMeta> ThrottleTimeMs;
+    NPrivate::TReadStrategy<SupportedFeaturesMeta> SupportedFeatures;
+    NPrivate::TReadStrategy<FinalizedFeaturesEpochMeta> FinalizedFeaturesEpoch;
+    NPrivate::TReadStrategy<FinalizedFeaturesMeta> FinalizedFeatures;
+    NPrivate::TReadStrategy<ZkMigrationReadyMeta> ZkMigrationReady;
+};
+
+TApiVersionsResponseData::TReadContext::TReadContext(TApiVersionsResponseData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ErrorCode()
+    , ApiKeys()
+    , ThrottleTimeMs()
+    , SupportedFeatures()
+    , FinalizedFeaturesEpoch()
+    , FinalizedFeatures()
+    , ZkMigrationReady()
+{}
+
+
+TReadDemand TApiVersionsResponseData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
             }
+            case 1: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ApiKeys.Init<NPrivate::ReadFieldRule<ApiKeysMeta>>(Value.ApiKeys, Version);
+            }
+            case 3: {
+                auto demand = ApiKeys.Next<NPrivate::ReadFieldRule<ApiKeysMeta>>(Value.ApiKeys, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                ThrottleTimeMs.Init<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+            }
+            case 5: {
+                auto demand = ThrottleTimeMs.Next<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                SupportedFeatures.Init<NPrivate::ReadFieldRule<SupportedFeaturesMeta>>(Value.SupportedFeatures, Version);
+            }
+            case 7: {
+                auto demand = SupportedFeatures.Next<NPrivate::ReadFieldRule<SupportedFeaturesMeta>>(Value.SupportedFeatures, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                FinalizedFeaturesEpoch.Init<NPrivate::ReadFieldRule<FinalizedFeaturesEpochMeta>>(Value.FinalizedFeaturesEpoch, Version);
+            }
+            case 9: {
+                auto demand = FinalizedFeaturesEpoch.Next<NPrivate::ReadFieldRule<FinalizedFeaturesEpochMeta>>(Value.FinalizedFeaturesEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                FinalizedFeatures.Init<NPrivate::ReadFieldRule<FinalizedFeaturesMeta>>(Value.FinalizedFeatures, Version);
+            }
+            case 11: {
+                auto demand = FinalizedFeatures.Next<NPrivate::ReadFieldRule<FinalizedFeaturesMeta>>(Value.FinalizedFeatures, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                ++Step;
+                ZkMigrationReady.Init<NPrivate::ReadFieldRule<ZkMigrationReadyMeta>>(Value.ZkMigrationReady, Version);
+            }
+            case 13: {
+                auto demand = ZkMigrationReady.Next<NPrivate::ReadFieldRule<ZkMigrationReadyMeta>>(Value.ZkMigrationReady, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 14: {
+                if (!NPrivate::VersionCheck<TApiVersionsResponseData::MessageMeta::FlexibleVersionMin, TApiVersionsResponseData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 15: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 16: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 17: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 18: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 19: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    case 0: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            SupportedFeatures.Init<NPrivate::ReadTaggedFieldRule<SupportedFeaturesMeta>>(Value.SupportedFeatures, Version);
+                        }
+                        demand = SupportedFeatures.Next<NPrivate::ReadTaggedFieldRule<SupportedFeaturesMeta>>(Value.SupportedFeatures, Version);
+                        break;
+                    }
+                    case 1: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            FinalizedFeaturesEpoch.Init<NPrivate::ReadTaggedFieldRule<FinalizedFeaturesEpochMeta>>(Value.FinalizedFeaturesEpoch, Version);
+                        }
+                        demand = FinalizedFeaturesEpoch.Next<NPrivate::ReadTaggedFieldRule<FinalizedFeaturesEpochMeta>>(Value.FinalizedFeaturesEpoch, Version);
+                        break;
+                    }
+                    case 2: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            FinalizedFeatures.Init<NPrivate::ReadTaggedFieldRule<FinalizedFeaturesMeta>>(Value.FinalizedFeatures, Version);
+                        }
+                        demand = FinalizedFeatures.Next<NPrivate::ReadTaggedFieldRule<FinalizedFeaturesMeta>>(Value.FinalizedFeatures, Version);
+                        break;
+                    }
+                    case 3: {
+                        if (!TagInitialized_) {
+                            TagInitialized_=true;
+                            ZkMigrationReady.Init<NPrivate::ReadTaggedFieldRule<ZkMigrationReadyMeta>>(Value.ZkMigrationReady, Version);
+                        }
+                        demand = ZkMigrationReady.Next<NPrivate::ReadTaggedFieldRule<ZkMigrationReadyMeta>>(Value.ZkMigrationReady, Version);
+                        break;
+                    }
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 16;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -1970,38 +5520,41 @@ void TApiVersionsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _v
         ythrow yexception() << "Can't write version " << _version << " of TApiVersionsResponseData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<ApiKeysMeta>(_collector, _writable, _version, apiKeys);
-    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, throttleTimeMs);
-    NPrivate::Write<SupportedFeaturesMeta>(_collector, _writable, _version, supportedFeatures);
-    NPrivate::Write<FinalizedFeaturesEpochMeta>(_collector, _writable, _version, finalizedFeaturesEpoch);
-    NPrivate::Write<FinalizedFeaturesMeta>(_collector, _writable, _version, finalizedFeatures);
-    NPrivate::Write<ZkMigrationReadyMeta>(_collector, _writable, _version, zkMigrationReady);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<ApiKeysMeta>(_collector, _writable, _version, ApiKeys);
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<SupportedFeaturesMeta>(_collector, _writable, _version, SupportedFeatures);
+    NPrivate::Write<FinalizedFeaturesEpochMeta>(_collector, _writable, _version, FinalizedFeaturesEpoch);
+    NPrivate::Write<FinalizedFeaturesMeta>(_collector, _writable, _version, FinalizedFeatures);
+    NPrivate::Write<ZkMigrationReadyMeta>(_collector, _writable, _version, ZkMigrationReady);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
         
-        NPrivate::WriteTag<SupportedFeaturesMeta>(_writable, _version, supportedFeatures);
-        NPrivate::WriteTag<FinalizedFeaturesEpochMeta>(_writable, _version, finalizedFeaturesEpoch);
-        NPrivate::WriteTag<FinalizedFeaturesMeta>(_writable, _version, finalizedFeatures);
-        NPrivate::WriteTag<ZkMigrationReadyMeta>(_writable, _version, zkMigrationReady);
+        NPrivate::WriteTag<SupportedFeaturesMeta>(_writable, _version, SupportedFeatures);
+        NPrivate::WriteTag<FinalizedFeaturesEpochMeta>(_writable, _version, FinalizedFeaturesEpoch);
+        NPrivate::WriteTag<FinalizedFeaturesMeta>(_writable, _version, FinalizedFeatures);
+        NPrivate::WriteTag<ZkMigrationReadyMeta>(_writable, _version, ZkMigrationReady);
     }
 }
 
 i32 TApiVersionsResponseData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<ApiKeysMeta>(_collector, _version, apiKeys);
-    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, throttleTimeMs);
-    NPrivate::Size<SupportedFeaturesMeta>(_collector, _version, supportedFeatures);
-    NPrivate::Size<FinalizedFeaturesEpochMeta>(_collector, _version, finalizedFeaturesEpoch);
-    NPrivate::Size<FinalizedFeaturesMeta>(_collector, _version, finalizedFeatures);
-    NPrivate::Size<ZkMigrationReadyMeta>(_collector, _version, zkMigrationReady);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<ApiKeysMeta>(_collector, _version, ApiKeys);
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<SupportedFeaturesMeta>(_collector, _version, SupportedFeatures);
+    NPrivate::Size<FinalizedFeaturesEpochMeta>(_collector, _version, FinalizedFeaturesEpoch);
+    NPrivate::Size<FinalizedFeaturesMeta>(_collector, _version, FinalizedFeatures);
+    NPrivate::Size<ZkMigrationReadyMeta>(_collector, _version, ZkMigrationReady);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TApiVersionsResponseData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -2013,29 +5566,138 @@ const TApiVersionsResponseData::TApiVersion::MinVersionMeta::Type TApiVersionsRe
 const TApiVersionsResponseData::TApiVersion::MaxVersionMeta::Type TApiVersionsResponseData::TApiVersion::MaxVersionMeta::Default = 0;
 
 TApiVersionsResponseData::TApiVersion::TApiVersion() 
-        : apiKey(ApiKeyMeta::Default)
-        , minVersion(MinVersionMeta::Default)
-        , maxVersion(MaxVersionMeta::Default)
+        : ApiKey(ApiKeyMeta::Default)
+        , MinVersion(MinVersionMeta::Default)
+        , MaxVersion(MaxVersionMeta::Default)
 {}
 
-void TApiVersionsResponseData::TApiVersion::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TApiVersionsResponseData::TApiVersion";
-    }
-    NPrivate::Read<ApiKeyMeta>(_readable, _version, apiKey);
-    NPrivate::Read<MinVersionMeta>(_readable, _version, minVersion);
-    NPrivate::Read<MaxVersionMeta>(_readable, _version, maxVersion);
+
+class TApiVersionsResponseData::TApiVersion::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TApiVersionsResponseData::TApiVersion& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TApiVersionsResponseData::TApiVersion& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ApiKeyMeta> ApiKey;
+    NPrivate::TReadStrategy<MinVersionMeta> MinVersion;
+    NPrivate::TReadStrategy<MaxVersionMeta> MaxVersion;
+};
+
+TApiVersionsResponseData::TApiVersion::TReadContext::TReadContext(TApiVersionsResponseData::TApiVersion& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ApiKey()
+    , MinVersion()
+    , MaxVersion()
+{}
+
+
+TReadDemand TApiVersionsResponseData::TApiVersion::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ApiKey.Init<NPrivate::ReadFieldRule<ApiKeyMeta>>(Value.ApiKey, Version);
             }
+            case 1: {
+                auto demand = ApiKey.Next<NPrivate::ReadFieldRule<ApiKeyMeta>>(Value.ApiKey, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                MinVersion.Init<NPrivate::ReadFieldRule<MinVersionMeta>>(Value.MinVersion, Version);
+            }
+            case 3: {
+                auto demand = MinVersion.Next<NPrivate::ReadFieldRule<MinVersionMeta>>(Value.MinVersion, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                MaxVersion.Init<NPrivate::ReadFieldRule<MaxVersionMeta>>(Value.MaxVersion, Version);
+            }
+            case 5: {
+                auto demand = MaxVersion.Next<NPrivate::ReadFieldRule<MaxVersionMeta>>(Value.MaxVersion, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                if (!NPrivate::VersionCheck<TApiVersionsResponseData::TApiVersion::MessageMeta::FlexibleVersionMin, TApiVersionsResponseData::TApiVersion::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 7: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 9: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 11: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 8;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -2045,9 +5707,9 @@ void TApiVersionsResponseData::TApiVersion::Write(TKafkaWritable& _writable, TKa
         ythrow yexception() << "Can't write version " << _version << " of TApiVersionsResponseData::TApiVersion";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ApiKeyMeta>(_collector, _writable, _version, apiKey);
-    NPrivate::Write<MinVersionMeta>(_collector, _writable, _version, minVersion);
-    NPrivate::Write<MaxVersionMeta>(_collector, _writable, _version, maxVersion);
+    NPrivate::Write<ApiKeyMeta>(_collector, _writable, _version, ApiKey);
+    NPrivate::Write<MinVersionMeta>(_collector, _writable, _version, MinVersion);
+    NPrivate::Write<MaxVersionMeta>(_collector, _writable, _version, MaxVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -2057,14 +5719,17 @@ void TApiVersionsResponseData::TApiVersion::Write(TKafkaWritable& _writable, TKa
 
 i32 TApiVersionsResponseData::TApiVersion::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ApiKeyMeta>(_collector, _version, apiKey);
-    NPrivate::Size<MinVersionMeta>(_collector, _version, minVersion);
-    NPrivate::Size<MaxVersionMeta>(_collector, _version, maxVersion);
+    NPrivate::Size<ApiKeyMeta>(_collector, _version, ApiKey);
+    NPrivate::Size<MinVersionMeta>(_collector, _version, MinVersion);
+    NPrivate::Size<MaxVersionMeta>(_collector, _version, MaxVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TApiVersionsResponseData::TApiVersion::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -2076,29 +5741,138 @@ const TApiVersionsResponseData::TSupportedFeatureKey::MinVersionMeta::Type TApiV
 const TApiVersionsResponseData::TSupportedFeatureKey::MaxVersionMeta::Type TApiVersionsResponseData::TSupportedFeatureKey::MaxVersionMeta::Default = 0;
 
 TApiVersionsResponseData::TSupportedFeatureKey::TSupportedFeatureKey() 
-        : name(NameMeta::Default)
-        , minVersion(MinVersionMeta::Default)
-        , maxVersion(MaxVersionMeta::Default)
+        : Name(NameMeta::Default)
+        , MinVersion(MinVersionMeta::Default)
+        , MaxVersion(MaxVersionMeta::Default)
 {}
 
-void TApiVersionsResponseData::TSupportedFeatureKey::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TApiVersionsResponseData::TSupportedFeatureKey";
-    }
-    NPrivate::Read<NameMeta>(_readable, _version, name);
-    NPrivate::Read<MinVersionMeta>(_readable, _version, minVersion);
-    NPrivate::Read<MaxVersionMeta>(_readable, _version, maxVersion);
+
+class TApiVersionsResponseData::TSupportedFeatureKey::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TApiVersionsResponseData::TSupportedFeatureKey& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TApiVersionsResponseData::TSupportedFeatureKey& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<NameMeta> Name;
+    NPrivate::TReadStrategy<MinVersionMeta> MinVersion;
+    NPrivate::TReadStrategy<MaxVersionMeta> MaxVersion;
+};
+
+TApiVersionsResponseData::TSupportedFeatureKey::TReadContext::TReadContext(TApiVersionsResponseData::TSupportedFeatureKey& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Name()
+    , MinVersion()
+    , MaxVersion()
+{}
+
+
+TReadDemand TApiVersionsResponseData::TSupportedFeatureKey::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Name.Init<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
             }
+            case 1: {
+                auto demand = Name.Next<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                MinVersion.Init<NPrivate::ReadFieldRule<MinVersionMeta>>(Value.MinVersion, Version);
+            }
+            case 3: {
+                auto demand = MinVersion.Next<NPrivate::ReadFieldRule<MinVersionMeta>>(Value.MinVersion, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                MaxVersion.Init<NPrivate::ReadFieldRule<MaxVersionMeta>>(Value.MaxVersion, Version);
+            }
+            case 5: {
+                auto demand = MaxVersion.Next<NPrivate::ReadFieldRule<MaxVersionMeta>>(Value.MaxVersion, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                if (!NPrivate::VersionCheck<TApiVersionsResponseData::TSupportedFeatureKey::MessageMeta::FlexibleVersionMin, TApiVersionsResponseData::TSupportedFeatureKey::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 7: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 9: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 11: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 8;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -2108,9 +5882,9 @@ void TApiVersionsResponseData::TSupportedFeatureKey::Write(TKafkaWritable& _writ
         ythrow yexception() << "Can't write version " << _version << " of TApiVersionsResponseData::TSupportedFeatureKey";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<NameMeta>(_collector, _writable, _version, name);
-    NPrivate::Write<MinVersionMeta>(_collector, _writable, _version, minVersion);
-    NPrivate::Write<MaxVersionMeta>(_collector, _writable, _version, maxVersion);
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<MinVersionMeta>(_collector, _writable, _version, MinVersion);
+    NPrivate::Write<MaxVersionMeta>(_collector, _writable, _version, MaxVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -2120,14 +5894,17 @@ void TApiVersionsResponseData::TSupportedFeatureKey::Write(TKafkaWritable& _writ
 
 i32 TApiVersionsResponseData::TSupportedFeatureKey::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<NameMeta>(_collector, _version, name);
-    NPrivate::Size<MinVersionMeta>(_collector, _version, minVersion);
-    NPrivate::Size<MaxVersionMeta>(_collector, _version, maxVersion);
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<MinVersionMeta>(_collector, _version, MinVersion);
+    NPrivate::Size<MaxVersionMeta>(_collector, _version, MaxVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TApiVersionsResponseData::TSupportedFeatureKey::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -2139,29 +5916,138 @@ const TApiVersionsResponseData::TFinalizedFeatureKey::MaxVersionLevelMeta::Type 
 const TApiVersionsResponseData::TFinalizedFeatureKey::MinVersionLevelMeta::Type TApiVersionsResponseData::TFinalizedFeatureKey::MinVersionLevelMeta::Default = 0;
 
 TApiVersionsResponseData::TFinalizedFeatureKey::TFinalizedFeatureKey() 
-        : name(NameMeta::Default)
-        , maxVersionLevel(MaxVersionLevelMeta::Default)
-        , minVersionLevel(MinVersionLevelMeta::Default)
+        : Name(NameMeta::Default)
+        , MaxVersionLevel(MaxVersionLevelMeta::Default)
+        , MinVersionLevel(MinVersionLevelMeta::Default)
 {}
 
-void TApiVersionsResponseData::TFinalizedFeatureKey::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TApiVersionsResponseData::TFinalizedFeatureKey";
-    }
-    NPrivate::Read<NameMeta>(_readable, _version, name);
-    NPrivate::Read<MaxVersionLevelMeta>(_readable, _version, maxVersionLevel);
-    NPrivate::Read<MinVersionLevelMeta>(_readable, _version, minVersionLevel);
+
+class TApiVersionsResponseData::TFinalizedFeatureKey::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TApiVersionsResponseData::TFinalizedFeatureKey& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TApiVersionsResponseData::TFinalizedFeatureKey& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<NameMeta> Name;
+    NPrivate::TReadStrategy<MaxVersionLevelMeta> MaxVersionLevel;
+    NPrivate::TReadStrategy<MinVersionLevelMeta> MinVersionLevel;
+};
+
+TApiVersionsResponseData::TFinalizedFeatureKey::TReadContext::TReadContext(TApiVersionsResponseData::TFinalizedFeatureKey& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , Name()
+    , MaxVersionLevel()
+    , MinVersionLevel()
+{}
+
+
+TReadDemand TApiVersionsResponseData::TFinalizedFeatureKey::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                Name.Init<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
             }
+            case 1: {
+                auto demand = Name.Next<NPrivate::ReadFieldRule<NameMeta>>(Value.Name, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                MaxVersionLevel.Init<NPrivate::ReadFieldRule<MaxVersionLevelMeta>>(Value.MaxVersionLevel, Version);
+            }
+            case 3: {
+                auto demand = MaxVersionLevel.Next<NPrivate::ReadFieldRule<MaxVersionLevelMeta>>(Value.MaxVersionLevel, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                MinVersionLevel.Init<NPrivate::ReadFieldRule<MinVersionLevelMeta>>(Value.MinVersionLevel, Version);
+            }
+            case 5: {
+                auto demand = MinVersionLevel.Next<NPrivate::ReadFieldRule<MinVersionLevelMeta>>(Value.MinVersionLevel, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                if (!NPrivate::VersionCheck<TApiVersionsResponseData::TFinalizedFeatureKey::MessageMeta::FlexibleVersionMin, TApiVersionsResponseData::TFinalizedFeatureKey::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 7: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 9: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 11: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 8;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -2171,9 +6057,9 @@ void TApiVersionsResponseData::TFinalizedFeatureKey::Write(TKafkaWritable& _writ
         ythrow yexception() << "Can't write version " << _version << " of TApiVersionsResponseData::TFinalizedFeatureKey";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<NameMeta>(_collector, _writable, _version, name);
-    NPrivate::Write<MaxVersionLevelMeta>(_collector, _writable, _version, maxVersionLevel);
-    NPrivate::Write<MinVersionLevelMeta>(_collector, _writable, _version, minVersionLevel);
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<MaxVersionLevelMeta>(_collector, _writable, _version, MaxVersionLevel);
+    NPrivate::Write<MinVersionLevelMeta>(_collector, _writable, _version, MinVersionLevel);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -2183,14 +6069,17 @@ void TApiVersionsResponseData::TFinalizedFeatureKey::Write(TKafkaWritable& _writ
 
 i32 TApiVersionsResponseData::TFinalizedFeatureKey::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<NameMeta>(_collector, _version, name);
-    NPrivate::Size<MaxVersionLevelMeta>(_collector, _version, maxVersionLevel);
-    NPrivate::Size<MinVersionLevelMeta>(_collector, _version, minVersionLevel);
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<MaxVersionLevelMeta>(_collector, _version, MaxVersionLevel);
+    NPrivate::Size<MinVersionLevelMeta>(_collector, _version, MinVersionLevel);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TApiVersionsResponseData::TFinalizedFeatureKey::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -2203,31 +6092,153 @@ const TInitProducerIdRequestData::ProducerIdMeta::Type TInitProducerIdRequestDat
 const TInitProducerIdRequestData::ProducerEpochMeta::Type TInitProducerIdRequestData::ProducerEpochMeta::Default = -1;
 
 TInitProducerIdRequestData::TInitProducerIdRequestData() 
-        : transactionalId(TransactionalIdMeta::Default)
-        , transactionTimeoutMs(TransactionTimeoutMsMeta::Default)
-        , producerId(ProducerIdMeta::Default)
-        , producerEpoch(ProducerEpochMeta::Default)
+        : TransactionalId(TransactionalIdMeta::Default)
+        , TransactionTimeoutMs(TransactionTimeoutMsMeta::Default)
+        , ProducerId(ProducerIdMeta::Default)
+        , ProducerEpoch(ProducerEpochMeta::Default)
 {}
 
-void TInitProducerIdRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TInitProducerIdRequestData";
-    }
-    NPrivate::Read<TransactionalIdMeta>(_readable, _version, transactionalId);
-    NPrivate::Read<TransactionTimeoutMsMeta>(_readable, _version, transactionTimeoutMs);
-    NPrivate::Read<ProducerIdMeta>(_readable, _version, producerId);
-    NPrivate::Read<ProducerEpochMeta>(_readable, _version, producerEpoch);
+
+class TInitProducerIdRequestData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TInitProducerIdRequestData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TInitProducerIdRequestData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<TransactionalIdMeta> TransactionalId;
+    NPrivate::TReadStrategy<TransactionTimeoutMsMeta> TransactionTimeoutMs;
+    NPrivate::TReadStrategy<ProducerIdMeta> ProducerId;
+    NPrivate::TReadStrategy<ProducerEpochMeta> ProducerEpoch;
+};
+
+TInitProducerIdRequestData::TReadContext::TReadContext(TInitProducerIdRequestData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , TransactionalId()
+    , TransactionTimeoutMs()
+    , ProducerId()
+    , ProducerEpoch()
+{}
+
+
+TReadDemand TInitProducerIdRequestData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                TransactionalId.Init<NPrivate::ReadFieldRule<TransactionalIdMeta>>(Value.TransactionalId, Version);
             }
+            case 1: {
+                auto demand = TransactionalId.Next<NPrivate::ReadFieldRule<TransactionalIdMeta>>(Value.TransactionalId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                TransactionTimeoutMs.Init<NPrivate::ReadFieldRule<TransactionTimeoutMsMeta>>(Value.TransactionTimeoutMs, Version);
+            }
+            case 3: {
+                auto demand = TransactionTimeoutMs.Next<NPrivate::ReadFieldRule<TransactionTimeoutMsMeta>>(Value.TransactionTimeoutMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                ProducerId.Init<NPrivate::ReadFieldRule<ProducerIdMeta>>(Value.ProducerId, Version);
+            }
+            case 5: {
+                auto demand = ProducerId.Next<NPrivate::ReadFieldRule<ProducerIdMeta>>(Value.ProducerId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                ProducerEpoch.Init<NPrivate::ReadFieldRule<ProducerEpochMeta>>(Value.ProducerEpoch, Version);
+            }
+            case 7: {
+                auto demand = ProducerEpoch.Next<NPrivate::ReadFieldRule<ProducerEpochMeta>>(Value.ProducerEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TInitProducerIdRequestData::MessageMeta::FlexibleVersionMin, TInitProducerIdRequestData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -2237,10 +6248,10 @@ void TInitProducerIdRequestData::Write(TKafkaWritable& _writable, TKafkaVersion 
         ythrow yexception() << "Can't write version " << _version << " of TInitProducerIdRequestData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<TransactionalIdMeta>(_collector, _writable, _version, transactionalId);
-    NPrivate::Write<TransactionTimeoutMsMeta>(_collector, _writable, _version, transactionTimeoutMs);
-    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, producerId);
-    NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, producerEpoch);
+    NPrivate::Write<TransactionalIdMeta>(_collector, _writable, _version, TransactionalId);
+    NPrivate::Write<TransactionTimeoutMsMeta>(_collector, _writable, _version, TransactionTimeoutMs);
+    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, ProducerId);
+    NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, ProducerEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -2250,15 +6261,18 @@ void TInitProducerIdRequestData::Write(TKafkaWritable& _writable, TKafkaVersion 
 
 i32 TInitProducerIdRequestData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<TransactionalIdMeta>(_collector, _version, transactionalId);
-    NPrivate::Size<TransactionTimeoutMsMeta>(_collector, _version, transactionTimeoutMs);
-    NPrivate::Size<ProducerIdMeta>(_collector, _version, producerId);
-    NPrivate::Size<ProducerEpochMeta>(_collector, _version, producerEpoch);
+    NPrivate::Size<TransactionalIdMeta>(_collector, _version, TransactionalId);
+    NPrivate::Size<TransactionTimeoutMsMeta>(_collector, _version, TransactionTimeoutMs);
+    NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
+    NPrivate::Size<ProducerEpochMeta>(_collector, _version, ProducerEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TInitProducerIdRequestData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 
 
@@ -2271,31 +6285,153 @@ const TInitProducerIdResponseData::ProducerIdMeta::Type TInitProducerIdResponseD
 const TInitProducerIdResponseData::ProducerEpochMeta::Type TInitProducerIdResponseData::ProducerEpochMeta::Default = 0;
 
 TInitProducerIdResponseData::TInitProducerIdResponseData() 
-        : throttleTimeMs(ThrottleTimeMsMeta::Default)
-        , errorCode(ErrorCodeMeta::Default)
-        , producerId(ProducerIdMeta::Default)
-        , producerEpoch(ProducerEpochMeta::Default)
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+        , ProducerId(ProducerIdMeta::Default)
+        , ProducerEpoch(ProducerEpochMeta::Default)
 {}
 
-void TInitProducerIdResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
-    if (!NPrivate::VersionCheck<MessageMeta::PresentVersionMin, MessageMeta::PresentVersionMax>(_version)) {
-        ythrow yexception() << "Can't read version " << _version << " of TInitProducerIdResponseData";
-    }
-    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, throttleTimeMs);
-    NPrivate::Read<ErrorCodeMeta>(_readable, _version, errorCode);
-    NPrivate::Read<ProducerIdMeta>(_readable, _version, producerId);
-    NPrivate::Read<ProducerEpochMeta>(_readable, _version, producerEpoch);
+
+class TInitProducerIdResponseData::TReadContext : public NKafka::TReadContext {
+public:
+    TReadContext(TInitProducerIdResponseData& value, TKafkaVersion version);
+    TReadDemand Next() override;
+private:
+    TInitProducerIdResponseData& Value;
+    TKafkaVersion Version;
+    size_t Step;
     
-    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
-            switch (_tag) {
-                default:
-                    _readable.skip(_size); // skip unknown tag
-                    break;
+    NPrivate::ReadUnsignedVarintStrategy NumTaggedFields_;
+    NPrivate::ReadUnsignedVarintStrategy Tag_;
+    NPrivate::ReadUnsignedVarintStrategy TagSize_;
+    bool TagInitialized_;
+    
+    NPrivate::TReadStrategy<ThrottleTimeMsMeta> ThrottleTimeMs;
+    NPrivate::TReadStrategy<ErrorCodeMeta> ErrorCode;
+    NPrivate::TReadStrategy<ProducerIdMeta> ProducerId;
+    NPrivate::TReadStrategy<ProducerEpochMeta> ProducerEpoch;
+};
+
+TInitProducerIdResponseData::TReadContext::TReadContext(TInitProducerIdResponseData& value, TKafkaVersion version)
+    : Value(value)
+    , Version(version)
+    , Step(0)
+    , ThrottleTimeMs()
+    , ErrorCode()
+    , ProducerId()
+    , ProducerEpoch()
+{}
+
+
+TReadDemand TInitProducerIdResponseData::TReadContext::Next() {
+    while(true) {
+        switch(Step) {
+            case 0: {
+                ++Step;
+                ThrottleTimeMs.Init<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
             }
+            case 1: {
+                auto demand = ThrottleTimeMs.Next<NPrivate::ReadFieldRule<ThrottleTimeMsMeta>>(Value.ThrottleTimeMs, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 2: {
+                ++Step;
+                ErrorCode.Init<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+            }
+            case 3: {
+                auto demand = ErrorCode.Next<NPrivate::ReadFieldRule<ErrorCodeMeta>>(Value.ErrorCode, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 4: {
+                ++Step;
+                ProducerId.Init<NPrivate::ReadFieldRule<ProducerIdMeta>>(Value.ProducerId, Version);
+            }
+            case 5: {
+                auto demand = ProducerId.Next<NPrivate::ReadFieldRule<ProducerIdMeta>>(Value.ProducerId, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 6: {
+                ++Step;
+                ProducerEpoch.Init<NPrivate::ReadFieldRule<ProducerEpochMeta>>(Value.ProducerEpoch, Version);
+            }
+            case 7: {
+                auto demand = ProducerEpoch.Next<NPrivate::ReadFieldRule<ProducerEpochMeta>>(Value.ProducerEpoch, Version);
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 8: {
+                if (!NPrivate::VersionCheck<TInitProducerIdResponseData::MessageMeta::FlexibleVersionMin, TInitProducerIdResponseData::MessageMeta::FlexibleVersionMax>(Version)) return NoDemand;
+                ++Step;
+                NumTaggedFields_.Init();
+            }
+            case 9: {
+                auto demand = NumTaggedFields_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 10: {
+                ++Step;
+                if (NumTaggedFields_.Value <= 0) return NoDemand;
+                --NumTaggedFields_.Value;
+                Tag_.Init();
+                TagSize_.Init();
+                TagInitialized_=false;
+            }
+            case 11: {
+                auto demand = Tag_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 12: {
+                auto demand = TagSize_.Next();
+                if (demand) {
+                    return demand;
+                } else {
+                    ++Step;
+                }
+            }
+            case 13: {
+                TReadDemand demand;
+                switch(Tag_.Value) {
+                    default: {
+                        if (!TagInitialized_) {
+                            TagInitialized_ = true;
+                            demand = TReadDemand(TagSize_.Value);
+                        } else {
+                            demand = NoDemand;
+                        }
+                    }
+                }
+                if (demand) {
+                    return demand;
+                } else {
+                    Step = 10;
+                    break;
+                }
+            }
+            default:
+                return NoDemand;
         }
     }
 }
@@ -2305,10 +6441,10 @@ void TInitProducerIdResponseData::Write(TKafkaWritable& _writable, TKafkaVersion
         ythrow yexception() << "Can't write version " << _version << " of TInitProducerIdResponseData";
     }
     NPrivate::TWriteCollector _collector;
-    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, throttleTimeMs);
-    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, errorCode);
-    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, producerId);
-    NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, producerEpoch);
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<ProducerIdMeta>(_collector, _writable, _version, ProducerId);
+    NPrivate::Write<ProducerEpochMeta>(_collector, _writable, _version, ProducerEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _writable.writeUnsignedVarint(_collector.NumTaggedFields);
@@ -2318,14 +6454,17 @@ void TInitProducerIdResponseData::Write(TKafkaWritable& _writable, TKafkaVersion
 
 i32 TInitProducerIdResponseData::Size(TKafkaVersion _version) const {
     NPrivate::TSizeCollector _collector;
-    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, throttleTimeMs);
-    NPrivate::Size<ErrorCodeMeta>(_collector, _version, errorCode);
-    NPrivate::Size<ProducerIdMeta>(_collector, _version, producerId);
-    NPrivate::Size<ProducerEpochMeta>(_collector, _version, producerEpoch);
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
+    NPrivate::Size<ProducerEpochMeta>(_collector, _version, ProducerEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersionMin, MessageMeta::FlexibleVersionMax>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
     return _collector.Size;
+}
+std::unique_ptr<NKafka::TReadContext> TInitProducerIdResponseData::CreateReadContext(TKafkaVersion _version) {
+    return std::unique_ptr<NKafka::TReadContext>(new TReadContext(*this, _version));
 }
 } //namespace NKafka

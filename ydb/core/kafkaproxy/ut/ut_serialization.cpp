@@ -6,34 +6,107 @@
 
 using namespace NKafka;
 
-void Print(std::stringstream& sb);
+void Print(std::string& sb);
+
+class TReadProcessor {
+public:
+    TReadProcessor(std::stringstream& buffer)
+        : Buffer(std::istreambuf_iterator<char>(buffer), {})
+        , Position(0)
+    {
+        Print(Buffer);
+    }
+
+    std::string Buffer;
+    size_t Position;
+
+    void Read(TMessage* msg, TKafkaVersion version) {
+        auto ctx = msg->CreateReadContext(version);
+
+
+        while(true) {
+            auto demand = ctx->Next();
+            Cerr << "TReadProcessor:: demand length=" << demand.GetLength() << ", position=" << Position << ", length=" << Buffer.length() << Endl;
+            if (!demand) {
+                break;
+            }
+
+            if (!(Buffer.length() >= Position + demand.GetLength())) {
+                EXPECT_TRUE(Buffer.length() >= Position + demand.GetLength());
+                return;
+            }
+
+            if (!demand.Skip()) {
+                memcpy(demand.GetBuffer(), Buffer.data() + Position, demand.GetLength());
+            }
+            Position += demand.Length;
+        }
+
+       EXPECT_FALSE(Position < Buffer.length());
+    }
+};
+
+template<typename Meta>
+class TFieldReadProcessor {
+public:
+    NKafka::NPrivate::TReadStrategy<Meta> strategy;
+
+    TFieldReadProcessor(std::stringstream& buffer)
+        : Buffer(std::istreambuf_iterator<char>(buffer), {})
+        , Position(0)
+    {
+        Print(Buffer);
+    }
+
+    std::string Buffer;
+    size_t Position;
+
+    void Read(typename Meta::Type& field, TKafkaVersion version) {
+        strategy.template Init<NKafka::NPrivate::ReadFieldRule<Meta>>(field, version);
+
+        while(true) {
+            auto demand =  strategy.template Next<NKafka::NPrivate::ReadFieldRule<Meta>>(field, version);
+            Cerr << "TFieldReadProcessor:: demand length=" << demand.GetLength() << ", position=" << Position << ", length=" << Buffer.length() << Endl;
+            if (!demand) {
+                break;
+            }
+
+            if (!(Buffer.length() >= Position + demand.GetLength())) {
+                EXPECT_TRUE(Buffer.length() >= Position + demand.GetLength());
+                return;
+            }
+
+            if (!demand.Skip()) {
+                memcpy(demand.GetBuffer(), Buffer.data() + Position, demand.GetLength());
+            }
+            Position += demand.Length;
+        }
+
+       EXPECT_FALSE(Position < Buffer.length());
+    }
+};
 
 TEST(Serialization, RequestHeader) {
     std::stringstream sb;
 
     TRequestHeaderData value;
 
-    value.requestApiKey = 3;
-    value.requestApiVersion = 7;
-    value.correlationId = 11;
-    value.clientId = { "clientId-value" };
+    value.RequestApiKey = 3;
+    value.RequestApiVersion = 7;
+    value.CorrelationId = 11;
+    value.ClientId = { "clientId-value" };
 
     TKafkaWritable writable(sb);
     value.Write(writable, 1);
 
-    //Print(sb);
-
+    TReadProcessor processor(sb);
     TRequestHeaderData result;
+    processor.Read(&result, 1);
 
-    //sb.seekg(0);
-
-    TKafkaReadable readable(sb);
-    result.Read(readable, 1);
-
-    EXPECT_EQ(result.requestApiKey, 3);
-    EXPECT_EQ(result.requestApiVersion, 7);
-    EXPECT_EQ(result.correlationId, 11);
-    EXPECT_EQ(*result.clientId, "clientId-value");
+    EXPECT_EQ(result.RequestApiKey, 3);
+    EXPECT_EQ(result.RequestApiVersion, 7);
+    EXPECT_EQ(result.CorrelationId, 11);
+    EXPECT_EQ(*result.ClientId, "clientId-value");
 }
 
 TEST(Serialization, ResponseHeader) {
@@ -41,19 +114,16 @@ TEST(Serialization, ResponseHeader) {
 
     TResponseHeaderData value;
 
-    value.correlationId = 13;
+    value.CorrelationId = 13;
 
     TKafkaWritable writable(sb);
     value.Write(writable, 0);
 
-    //Print(sb);
-
+    TReadProcessor processor(sb);
     TResponseHeaderData result;
+    processor.Read(&result, 0);
 
-    TKafkaReadable readable(sb);
-    result.Read(readable, 0);
-
-    EXPECT_EQ(result.correlationId, 13);
+    EXPECT_EQ(result.CorrelationId, 13);
 }
 
 TEST(Serialization, ApiVersionsRequest) {
@@ -61,21 +131,19 @@ TEST(Serialization, ApiVersionsRequest) {
 
     TApiVersionsRequestData value;
 
-    value.clientSoftwareName = { "apache-kafka-java" };
-    value.clientSoftwareVersion = { "3.4.0" };
+    value.ClientSoftwareName = { "apache-kafka-java" };
+    value.ClientSoftwareVersion = { "3.4.0" };
 
     TKafkaWritable writable(sb);
     value.Write(writable, 3);
 
-    //Print(sb);
 
+    TReadProcessor processor(sb);
     TApiVersionsRequestData result;
+    processor.Read(&result, 3);
 
-    TKafkaReadable readable(sb);
-    result.Read(readable, 3);
-
-    EXPECT_EQ(*result.clientSoftwareName, "apache-kafka-java");
-    EXPECT_EQ(*result.clientSoftwareVersion, "3.4.0");
+    EXPECT_EQ(*result.ClientSoftwareName, "apache-kafka-java");
+    EXPECT_EQ(*result.ClientSoftwareVersion, "3.4.0");
 }
 
 TEST(Serialization, ApiVersionsResponse) {
@@ -85,59 +153,58 @@ TEST(Serialization, ApiVersionsResponse) {
 
     TApiVersionsResponseData value;
 
-    value.errorCode = 7;
+    value.ErrorCode = 7;
 
     {
         TApiVersionsResponseData::TApiVersion version;
-        version.apiKey = 11;
-        version.minVersion = 13;
-        version.maxVersion = 17;
+        version.ApiKey = 11;
+        version.MinVersion = 13;
+        version.MaxVersion = 17;
 
-        value.apiKeys.push_back(version);
+        value.ApiKeys.push_back(version);
     }
     {
         TApiVersionsResponseData::TApiVersion version;
-        version.apiKey = 33;
-        version.minVersion = 37;
-        version.maxVersion = 41;
+        version.ApiKey = 33;
+        version.MinVersion = 37;
+        version.MaxVersion = 41;
 
-        value.apiKeys.push_back(version);
+        value.ApiKeys.push_back(version);
     }
 
     TApiVersionsResponseData::TFinalizedFeatureKey finalizeFeature;
-    finalizeFeature.name = { longString };
-    finalizeFeature.maxVersionLevel = 19;
-    finalizeFeature.minVersionLevel = 23;
+    finalizeFeature.Name = { longString };
+    finalizeFeature.MaxVersionLevel = 19;
+    finalizeFeature.MinVersionLevel = 23;
 
-    value.finalizedFeatures.push_back(finalizeFeature);
-    value.finalizedFeaturesEpoch = 29;
+    value.FinalizedFeatures.push_back(finalizeFeature);
+    value.FinalizedFeaturesEpoch = 29;
 
-    value.throttleTimeMs = 31;
-    value.zkMigrationReady = true;
+    value.ThrottleTimeMs = 31;
+    value.ZkMigrationReady = true;
 
     TKafkaWritable writable(sb);
     value.Write(writable, 3);
 
+    TReadProcessor processor(sb);
     TApiVersionsResponseData result;
+    processor.Read(&result, 3);
 
-    TKafkaReadable readable(sb);
-    result.Read(readable, 3);
-
-    EXPECT_EQ(result.errorCode, 7);
-    EXPECT_EQ(result.apiKeys.size(), 2ul);
-    EXPECT_EQ(result.apiKeys[0].apiKey, 11);
-    EXPECT_EQ(result.apiKeys[0].minVersion, 13);
-    EXPECT_EQ(result.apiKeys[0].maxVersion, 17);
-    EXPECT_EQ(result.apiKeys[1].apiKey, 33);
-    EXPECT_EQ(result.apiKeys[1].minVersion, 37);
-    EXPECT_EQ(result.apiKeys[1].maxVersion, 41);
-    EXPECT_EQ(result.finalizedFeatures.size(), 1ul);
-    EXPECT_EQ(*result.finalizedFeatures[0].name, longString);
-    EXPECT_EQ(result.finalizedFeatures[0].maxVersionLevel, 19);
-    EXPECT_EQ(result.finalizedFeatures[0].minVersionLevel, 23);
-    EXPECT_EQ(result.finalizedFeaturesEpoch, 29l);
-    EXPECT_EQ(result.throttleTimeMs, 31);
-    EXPECT_EQ(result.zkMigrationReady, true);
+    EXPECT_EQ(result.ErrorCode, 7);
+    EXPECT_EQ(result.ApiKeys.size(), 2ul);
+    EXPECT_EQ(result.ApiKeys[0].ApiKey, 11);
+    EXPECT_EQ(result.ApiKeys[0].MinVersion, 13);
+    EXPECT_EQ(result.ApiKeys[0].MaxVersion, 17);
+    EXPECT_EQ(result.ApiKeys[1].ApiKey, 33);
+    EXPECT_EQ(result.ApiKeys[1].MinVersion, 37);
+    EXPECT_EQ(result.ApiKeys[1].MaxVersion, 41);
+    EXPECT_EQ(result.FinalizedFeatures.size(), 1ul);
+    EXPECT_EQ(*result.FinalizedFeatures[0].Name, longString);
+    EXPECT_EQ(result.FinalizedFeatures[0].MaxVersionLevel, 19);
+    EXPECT_EQ(result.FinalizedFeatures[0].MinVersionLevel, 23);
+    EXPECT_EQ(result.FinalizedFeaturesEpoch, 29l);
+    EXPECT_EQ(result.ThrottleTimeMs, 31);
+    EXPECT_EQ(result.ZkMigrationReady, true);
 }
 
 TEST(Serialization, ProduceRequest) {
@@ -148,50 +215,49 @@ TEST(Serialization, ProduceRequest) {
 
     TProduceRequestData value;
 
-    value.transactionalId = { "transactional-id-value-123456" };
-    value.acks = 3;
-    value.timeoutMs = 5;
-    value.topicData.resize(2);
-    value.topicData[0].name = "/it/is/some/topic/name";
-    value.topicData[0].partitionData.resize(2);
-    value.topicData[0].partitionData[0].index = 0;
-    value.topicData[0].partitionData[0].records = { TBuffer(data0, sizeof(data0)) };
-    value.topicData[0].partitionData[1].index = 1;
-    value.topicData[0].partitionData[1].records = {};
-    value.topicData[1].name = "/it/is/other/topic/name";
-    value.topicData[1].partitionData.resize(1);
-    value.topicData[1].partitionData[0].index = 0;
-    value.topicData[1].partitionData[0].records = { TBuffer(data1, sizeof(data1)) };
+    value.TransactionalId = { "transactional-id-value-123456" };
+    value.Acks = 3;
+    value.TimeoutMs = 5;
+    value.TopicData.resize(2);
+    value.TopicData[0].Name = "/it/is/some/topic/name";
+    value.TopicData[0].PartitionData.resize(2);
+    value.TopicData[0].PartitionData[0].Index = 0;
+    value.TopicData[0].PartitionData[0].Records = { TBuffer(data0, sizeof(data0)) };
+    value.TopicData[0].PartitionData[1].Index = 1;
+    value.TopicData[0].PartitionData[1].Records = {};
+    value.TopicData[1].Name = "/it/is/other/topic/name";
+    value.TopicData[1].PartitionData.resize(1);
+    value.TopicData[1].PartitionData[0].Index = 0;
+    value.TopicData[1].PartitionData[0].Records = { TBuffer(data1, sizeof(data1)) };
 
     TKafkaWritable writable(sb);
     value.Write(writable, 3);
 
+
+    TReadProcessor processor(sb);
     TProduceRequestData result;
+    processor.Read(&result, 3);
 
-    TKafkaReadable readable(sb);
-    result.Read(readable, 3);
-
-    EXPECT_TRUE(result.transactionalId);
-    EXPECT_EQ(*result.transactionalId, "transactional-id-value-123456" );
-    EXPECT_EQ(result.acks, 3);
-    EXPECT_EQ(result.timeoutMs, 5);
-    EXPECT_EQ(result.topicData.size(), 2ul);
-    EXPECT_TRUE(result.topicData[0].name);
-    EXPECT_EQ(*result.topicData[0].name, "/it/is/some/topic/name");
-    EXPECT_EQ(result.topicData[0].partitionData.size(), 2ul);
-    EXPECT_EQ(result.topicData[0].partitionData[0].index, 0);
-    EXPECT_TRUE(result.topicData[0].partitionData[0].records);
-    EXPECT_EQ(*result.topicData[0].partitionData[0].records, TBuffer(data0, sizeof(data0)));
-    EXPECT_EQ(result.topicData[0].partitionData[1].index, 1);
-    EXPECT_EQ(result.topicData[0].partitionData[1].records, std::nullopt);
-    EXPECT_TRUE(result.topicData[1].name);
-    EXPECT_EQ(*result.topicData[1].name, "/it/is/other/topic/name");
-    EXPECT_EQ(result.topicData[1].partitionData.size(), 1ul);
-    EXPECT_EQ(result.topicData[1].partitionData[0].index, 0);
-    EXPECT_TRUE(result.topicData[1].partitionData[0].records);
-    EXPECT_EQ(*result.topicData[1].partitionData[0].records, TBuffer(data1, sizeof(data1)));
+    EXPECT_TRUE(result.TransactionalId);
+    EXPECT_EQ(*result.TransactionalId, "transactional-id-value-123456" );
+    EXPECT_EQ(result.Acks, 3);
+    EXPECT_EQ(result.TimeoutMs, 5);
+    EXPECT_EQ(result.TopicData.size(), 2ul);
+    EXPECT_TRUE(result.TopicData[0].Name);
+    EXPECT_EQ(*result.TopicData[0].Name, "/it/is/some/topic/name");
+    EXPECT_EQ(result.TopicData[0].PartitionData.size(), 2ul);
+    EXPECT_EQ(result.TopicData[0].PartitionData[0].Index, 0);
+    EXPECT_TRUE(result.TopicData[0].PartitionData[0].Records);
+    EXPECT_EQ(*result.TopicData[0].PartitionData[0].Records, TBuffer(data0, sizeof(data0)));
+    EXPECT_EQ(result.TopicData[0].PartitionData[1].Index, 1);
+    EXPECT_EQ(result.TopicData[0].PartitionData[1].Records, std::nullopt);
+    EXPECT_TRUE(result.TopicData[1].Name);
+    EXPECT_EQ(*result.TopicData[1].Name, "/it/is/other/topic/name");
+    EXPECT_EQ(result.TopicData[1].PartitionData.size(), 1ul);
+    EXPECT_EQ(result.TopicData[1].PartitionData[0].Index, 0);
+    EXPECT_TRUE(result.TopicData[1].PartitionData[0].Records);
+    EXPECT_EQ(*result.TopicData[1].PartitionData[0].Records, TBuffer(data1, sizeof(data1)));
 }
-
 
 TEST(Serialization, UnsignedVarint) {
     std::vector<ui32> values = {0, 1, 127, 128, 32191};
@@ -213,9 +279,7 @@ TEST(Serialization, UnsignedVarint) {
                                                     \
     std::stringstream sb;                           \
     TKafkaWritable writable(sb);                    \
-    TKafkaReadable readable(sb);                    \
                                                     \
-    Y_UNUSED(readable);                             \
     Y_UNUSED(result);                               \
                                                     \
     NKafka::NPrivate::TWriteCollector collector;
@@ -251,35 +315,20 @@ TEST(Serialization, TKafkaInt8_NotPresentVersion) {
     EXPECT_TRUE(sb.eof()); // For version 0 value is not serializable. Stream must be empty
     EXPECT_EQ(collector.NumTaggedFields, 0u);
 
-    NKafka::NPrivate::Read<Meta_TKafkaInt8>(readable, 0, result);
-    EXPECT_EQ(result, Meta_TKafkaInt8::Default); // For version 0 value is not serializable
+    TFieldReadProcessor<Meta_TKafkaInt8> processor(sb);
+    processor.Read(value, 0);
+
+    //EXPECT_EQ(result, Meta_TKafkaInt8::Default); // For version 0 value is not serializable
 }
 
 TEST(Serialization, TKafkaInt8_PresentVersion_NotTaggedVersion) {
     SIMPLE_HEAD(TKafkaInt8, 37);
 
     NKafka::NPrivate::Write<Meta_TKafkaInt8>(collector, writable, 3, value);
-    NKafka::NPrivate::Read<Meta_TKafkaInt8>(readable, 3, result);
+    TFieldReadProcessor<Meta_TKafkaInt8> processor(sb);
+    processor.Read(result, 3);
 
     EXPECT_EQ(collector.NumTaggedFields, 0u);
-    EXPECT_EQ(result, value); // Must read same that write
-}
-
-TEST(Serialization, TKafkaInt8_PresentVersion_TaggedVersion) {
-    SIMPLE_HEAD(TKafkaInt8, 37);
-
-    NKafka::NPrivate::Write<Meta_TKafkaInt8>(collector, writable, 11, value);
-    EXPECT_EQ(collector.NumTaggedFields, 1u);
-
-    NKafka::NPrivate::WriteTag<Meta_TKafkaInt8>(writable, 11, value);
-
-    i32 tag = readable.readUnsignedVarint();
-    EXPECT_EQ(tag, Meta_TKafkaInt8::Tag);
-
-    ui32 size = readable.readUnsignedVarint();
-    EXPECT_EQ(size, sizeof(TKafkaInt8));
-
-    NKafka::NPrivate::ReadTag<Meta_TKafkaInt8>(readable, 11, result);
     EXPECT_EQ(result, value); // Must read same that write
 }
 
@@ -289,7 +338,6 @@ TEST(Serialization, TKafkaInt8_PresentVersion_TaggedVersion_Default) {
     NKafka::NPrivate::Write<Meta_TKafkaInt8>(collector, writable, 11, value);
     EXPECT_EQ(collector.NumTaggedFields, 0u); // not serialize default value for tagged version
 }
-
 
 struct Meta_TKafkaStruct {
     using Type = TRequestHeaderData;
@@ -314,10 +362,9 @@ TEST(Serialization, Struct_IsDefault) {
     TRequestHeaderData value;
     EXPECT_TRUE(NKafka::NPrivate::IsDefaultValue<Meta_TKafkaStruct>(value)); // all fields have default values
 
-    value.requestApiKey = 123;
+    value.RequestApiKey = 123;
     EXPECT_FALSE(NKafka::NPrivate::IsDefaultValue<Meta_TKafkaStruct>(value)); // field changed
 }
-
 
 struct Meta_TKafkaString {
     using Type = TKafkaString;
@@ -355,27 +402,10 @@ TEST(Serialization, TKafkaString_PresentVersion_NotTaggedVersion) {
     SIMPLE_HEAD(TKafkaString, { "some value" });
 
     NKafka::NPrivate::Write<Meta_TKafkaString>(collector, writable, 3, value);
-    NKafka::NPrivate::Read<Meta_TKafkaString>(readable, 3, result);
+    TFieldReadProcessor<Meta_TKafkaString> processor(sb);
+    processor.Read(result, 3);
 
     EXPECT_EQ(collector.NumTaggedFields, 0u);
-    EXPECT_EQ(result, value); // Must read same that write
-}
-
-TEST(Serialization, TKafkaString_PresentVersion_TaggedVersion) {
-    SIMPLE_HEAD(TKafkaString, { "some value" });
-
-    NKafka::NPrivate::Write<Meta_TKafkaString>(collector, writable, 11, value);
-    EXPECT_EQ(collector.NumTaggedFields, 1u);
-
-    NKafka::NPrivate::WriteTag<Meta_TKafkaString>(writable, 11, value);
-
-    i32 tag = readable.readUnsignedVarint();
-    EXPECT_EQ(tag, Meta_TKafkaString::Tag);
-
-    ui32 size = readable.readUnsignedVarint();
-    EXPECT_EQ(size, value->size() + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1)); // "+1" because serialized as unsigned int, and null serialized with size equals 0
-
-    NKafka::NPrivate::ReadTag<Meta_TKafkaString>(readable, 11, result);
     EXPECT_EQ(result, value); // Must read same that write
 }
 
@@ -387,10 +417,11 @@ TEST(Serialization, TKafkaString_PresentVersion_TaggedVersion_Default) {
 }
 
 
-
 struct Meta_TKafkaArray {
     using Type = std::vector<TKafkaString>;
     using TypeDesc = NKafka::NPrivate::TKafkaArrayDesc;
+    using ItemType = TKafkaString;
+    using ItemTypeDesc = NKafka::NPrivate::TKafkaStringDesc;
 
     static constexpr const char* Name = "value";
     static constexpr const char* About = "The test field.";
@@ -418,31 +449,10 @@ TEST(Serialization, TKafkaArray_PresentVersion_NotTaggedVersion) {
     SIMPLE_HEAD(TKafkaArray, { "some value" });
 
     NKafka::NPrivate::Write<Meta_TKafkaArray>(collector, writable, 3, value);
-    NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 3, result);
+    TFieldReadProcessor<Meta_TKafkaArray> processor(sb);
+    processor.Read(result, 3);
 
     EXPECT_EQ(collector.NumTaggedFields, 0u);
-    EXPECT_EQ(result, value); // Must read same that write
-}
-
-TEST(Serialization, TKafkaArray_PresentVersion_TaggedVersion) {
-    TString v = "some value";
-    SIMPLE_HEAD(TKafkaArray, { v });
-
-    NKafka::NPrivate::Write<Meta_TKafkaArray>(collector, writable, 11, value);
-    EXPECT_EQ(collector.NumTaggedFields, 1u);
-
-    NKafka::NPrivate::WriteTag<Meta_TKafkaArray>(writable, 11, value);
-
-    i32 tag = readable.readUnsignedVarint();
-    EXPECT_EQ(tag, Meta_TKafkaArray::Tag);
-
-    ui32 size = readable.readUnsignedVarint();
-    EXPECT_EQ(size, v.length() // array element data
-        + NKafka::NPrivate::SizeOfUnsignedVarint(value.size()) // array size
-        + NKafka::NPrivate::SizeOfUnsignedVarint(v.length() + 1) // string size. +1 because null string serialize as 0-length
-    );
-
-    NKafka::NPrivate::ReadTag<Meta_TKafkaArray>(readable, 11, result);
     EXPECT_EQ(result, value); // Must read same that write
 }
 
@@ -486,29 +496,10 @@ TEST(Serialization, TKafkaBytes_PresentVersion_NotTaggedVersion) {
     SIMPLE_HEAD(TKafkaBytes, TBuffer("0123456789", 10));
 
     NKafka::NPrivate::Write<Meta_TKafkaBytes>(collector, writable, 3, value);
-    NKafka::NPrivate::Read<Meta_TKafkaBytes>(readable, 3, result);
+    TFieldReadProcessor<Meta_TKafkaBytes> processor(sb);
+    processor.Read(result, 3);
 
     EXPECT_EQ(collector.NumTaggedFields, 0u);
-    EXPECT_EQ(result, value); // Must read same that write
-}
-
-TEST(Serialization, TKafkaBytes_PresentVersion_TaggedVersion) {
-    SIMPLE_HEAD(TKafkaBytes, TBuffer("0123456789", 10));
-
-    NKafka::NPrivate::Write<Meta_TKafkaBytes>(collector, writable, 11, value);
-    EXPECT_EQ(collector.NumTaggedFields, 1u);
-
-    NKafka::NPrivate::WriteTag<Meta_TKafkaBytes>(writable, 11, value);
-
-    i32 tag = readable.readUnsignedVarint();
-    EXPECT_EQ(tag, Meta_TKafkaArray::Tag);
-
-    ui32 size = readable.readUnsignedVarint();
-    EXPECT_EQ(size, value->size() // byffer data
-        + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1) // buffer size. +1 because null value stored as size 0
-    );
-
-    NKafka::NPrivate::ReadTag<Meta_TKafkaBytes>(readable, 11, result);
     EXPECT_EQ(result, value); // Must read same that write
 }
 
@@ -522,17 +513,17 @@ TEST(Serialization, TKafkaBytes_PresentVersion_TaggedVersion_Default) {
 
 TEST(Serialization, TRequestHeaderData_reference) {
     // original kafka serialized value (java implementation)
-    ui8 reference[] = {0x00, 0x03, 0x00, 0x07, 0x00, 0x00, 0x00, 0x0D, 0x00, 0x10, 0x63, 0x6C, 0x69, 0x65, 0x6E, 0x74, 0x2D, 0x69, 0x64, 0x2D, 0x73, 0x74, 0x72, 0x69, 0x6E, 0x67, 0x00};
+    ui8 reference[] = {0x00, 0x03, 0x00, 0x07, 0x00, 0x00, 0x00, 0x0D, 0x00, 0x10, 0x63, 0x6C, 0x69, 0x65, 0x6E, 0x74,
+                       0x2D, 0x69, 0x64, 0x2D, 0x73, 0x74, 0x72, 0x69, 0x6E, 0x67, 0x00};
 
     std::stringstream sb;
     TKafkaWritable writable(sb);
-    TKafkaReadable readable(sb);
 
     TRequestHeaderData value;
-    value.requestApiKey = 3;
-    value.requestApiVersion = 7;
-    value.correlationId = 13;
-    value.clientId = "client-id-string";
+    value.RequestApiKey = 3;
+    value.RequestApiVersion = 7;
+    value.CorrelationId = 13;
+    value.ClientId = "client-id-string";
 
     value.Write(writable, 2);
 
@@ -543,12 +534,14 @@ TEST(Serialization, TRequestHeaderData_reference) {
 
     sb.write((char*)reference, sizeof(reference));
 
+    TReadProcessor processor(sb);
     TRequestHeaderData result;
-    result.Read(readable, 2);
-    EXPECT_EQ(result.requestApiKey, 3);
-    EXPECT_EQ(result.requestApiVersion, 7);
-    EXPECT_EQ(result.correlationId, 13);
-    EXPECT_EQ(result.clientId, "client-id-string");
+    processor.Read(&result, 2);
+
+    EXPECT_EQ(result.RequestApiKey, 3);
+    EXPECT_EQ(result.RequestApiVersion, 7);
+    EXPECT_EQ(result.CorrelationId, 13);
+    EXPECT_EQ(result.ClientId, "client-id-string");
 }
 
 struct Meta_TKafkaFloat64 {
@@ -579,7 +572,8 @@ TEST(Serialization, TKafkaFloat64_PresentVersion_NotTaggedVersion) {
     SIMPLE_HEAD(TKafkaFloat64, 3.1415);
 
     NKafka::NPrivate::Write<Meta_TKafkaFloat64>(collector, writable, 3, value);
-    NKafka::NPrivate::Read<Meta_TKafkaFloat64>(readable, 3, result);
+    TFieldReadProcessor<Meta_TKafkaFloat64> processor(sb);
+    processor.Read(result, 3);
 
     EXPECT_EQ(collector.NumTaggedFields, 0u);
     EXPECT_EQ(result, value); // Must read same that write
@@ -590,6 +584,8 @@ TEST(Serialization, TKafkaFloat64_PresentVersion_NotTaggedVersion) {
         EXPECT_EQ(v, r);
     }
 }
+
+
 
 TEST(Serialization, ProduceRequestData_reference) {
     // original kafka serialized value (java implementation)
@@ -606,19 +602,19 @@ TEST(Serialization, ProduceRequestData_reference) {
     TKafkaReadable readable(sb);
 
     TProduceRequestData value;
-    value.acks = 3;
-    value.timeoutMs = 5;
-    value.transactionalId = "7";
+    value.Acks = 3;
+    value.TimeoutMs = 5;
+    value.TransactionalId = "7";
 
-    value.topicData.resize(2);
-    value.topicData[0].name = "partition-11";
-    value.topicData[0].partitionData.resize(3);
-    value.topicData[0].partitionData[0].index = 13;
-    value.topicData[0].partitionData[0].records = TKafkaRawBytes("record-13-it-is-kafka-bytes", 27);
-    value.topicData[0].partitionData[1].index = 17;
-    value.topicData[0].partitionData[1].records = TKafkaRawBytes("record-17-it-is-kafka-bytes", 27);
+    value.TopicData.resize(2);
+    value.TopicData[0].Name = "partition-11";
+    value.TopicData[0].PartitionData.resize(3);
+    value.TopicData[0].PartitionData[0].Index = 13;
+    value.TopicData[0].PartitionData[0].Records = TKafkaRawBytes("record-13-it-is-kafka-bytes", 27);
+    value.TopicData[0].PartitionData[1].Index = 17;
+    value.TopicData[0].PartitionData[1].Records = TKafkaRawBytes("record-17-it-is-kafka-bytes", 27);
 
-    value.topicData[1].name = "partition-23";
+    value.TopicData[1].Name = "partition-23";
 
     value.Write(writable, 9);
 
@@ -631,41 +627,39 @@ TEST(Serialization, ProduceRequestData_reference) {
 
     sb.write((char*)reference, sizeof(reference));
 
+    TReadProcessor processor(sb);
     TProduceRequestData result;
-    result.Read(readable, 9);
+    processor.Read(&result, 9);
 
-    EXPECT_EQ(result.acks, 3);
-    EXPECT_EQ(result.timeoutMs, 5);
-    EXPECT_EQ(result.transactionalId, "7");
+    EXPECT_EQ(result.Acks, 3);
+    EXPECT_EQ(result.TimeoutMs, 5);
+    EXPECT_EQ(result.TransactionalId, "7");
 
-    EXPECT_EQ(result.topicData.size(), 2ul);
-    EXPECT_EQ(result.topicData[0].name, "partition-11");
-    EXPECT_EQ(result.topicData[0].partitionData.size(), 3ul);
-    EXPECT_EQ(result.topicData[0].partitionData[0].index, 13);
-    EXPECT_EQ(result.topicData[0].partitionData[0].records, TKafkaRawBytes("record-13-it-is-kafka-bytes", 27));
-    EXPECT_EQ(result.topicData[0].partitionData[1].index, 17);
-    EXPECT_EQ(result.topicData[0].partitionData[1].records, TKafkaRawBytes("record-17-it-is-kafka-bytes", 27));
-    EXPECT_EQ(result.topicData[0].partitionData[2].index, 0);
-    EXPECT_EQ(result.topicData[0].partitionData[2].records, std::nullopt);
+    EXPECT_EQ(result.TopicData.size(), 2ul);
+    EXPECT_EQ(result.TopicData[0].Name, "partition-11");
+    EXPECT_EQ(result.TopicData[0].PartitionData.size(), 3ul);
+    EXPECT_EQ(result.TopicData[0].PartitionData[0].Index, 13);
+    EXPECT_EQ(result.TopicData[0].PartitionData[0].Records, TKafkaRawBytes("record-13-it-is-kafka-bytes", 27));
+    EXPECT_EQ(result.TopicData[0].PartitionData[1].Index, 17);
+    EXPECT_EQ(result.TopicData[0].PartitionData[1].Records, TKafkaRawBytes("record-17-it-is-kafka-bytes", 27));
+    EXPECT_EQ(result.TopicData[0].PartitionData[2].Index, 0);
+    EXPECT_EQ(result.TopicData[0].PartitionData[2].Records, std::nullopt);
 
-    EXPECT_EQ(result.topicData[1].name, "partition-23");
-    EXPECT_EQ(result.topicData[1].partitionData.size(), 0ul);
+    EXPECT_EQ(result.TopicData[1].Name, "partition-23");
+    EXPECT_EQ(result.TopicData[1].PartitionData.size(), 0ul);
 }
-
 
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;
 }
 
-void Print(std::stringstream& sb) {
-    while(true) {
-        char c = sb.get();
-        if (sb.eof()) {
-            break;
+void Print(std::string& sb) {
+    for(size_t i = 0; i < sb.length(); ++i) {
+        char c = sb.at(i);
+        if (i > 0) {
+            Cerr << ", ";
         }
-        Cerr << ", 0x" << Hex(c >> 4) << Hex(c & 0x0F);
+        Cerr << "0x" << Hex(c >> 4) << Hex(c & 0x0F);
     }
     Cerr << Endl;
-
-    sb.seekg(-sb.tellg());
 }

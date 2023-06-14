@@ -1,7 +1,15 @@
 #pragma once
 
 #include <istream>
+#include <optional>
 #include <ostream>
+
+#include <ydb/library/yql/public/decimal/yql_wide_int.h>
+
+#include <util/generic/buffer.h>
+#include <util/generic/strbuf.h>
+#include <util/system/types.h>
+
 
 namespace NKafka {
 
@@ -46,6 +54,7 @@ using TKafkaRecords = std::optional<TKafkaRawBytes>;
 
 
 using TKafkaVersion = i16;
+
 
 void ErrorOnUnexpectedEnd(std::istream& is);
 
@@ -108,15 +117,49 @@ private:
 };
 
 
+struct TReadDemand {
+    constexpr TReadDemand()
+        : Buffer(nullptr)
+        , Length(0)
+    {}
+
+    constexpr TReadDemand(char* buffer, size_t length)
+        : Buffer(buffer)
+        , Length(length)
+    {}
+
+    constexpr TReadDemand(size_t length)
+        : Buffer(nullptr)
+        , Length(length)
+    {}
+
+    char* GetBuffer() const { return Buffer; }
+    size_t GetLength() const { return Length; }
+    explicit operator bool() const { return 0 < Length; }
+    bool Skip() const { return nullptr == Buffer; }
+
+
+    char* Buffer;
+    size_t Length;
+};
+
+static constexpr TReadDemand NoDemand;
+
+class TReadContext {
+public:
+    virtual ~TReadContext() = default;
+    virtual TReadDemand Next() = 0;
+};
+
+
 class TMessage {
 public:
     virtual ~TMessage() = default;
 
-    virtual i16 LowestSupportedVersion() const = 0;
-    virtual i16 HighestSupportedVersion() const = 0;
     virtual i32 Size(TKafkaVersion version) const = 0;
-    virtual void Read(TKafkaReadable& readable, TKafkaVersion version) = 0;
+    //virtual void Read(TKafkaReadable& readable, TKafkaVersion version) = 0;
     virtual void Write(TKafkaWritable& writable, TKafkaVersion version) const = 0;
+    virtual std::unique_ptr<TReadContext> CreateReadContext(TKafkaVersion version) = 0;
 
     bool operator==(const TMessage& other) const = default;
 };

@@ -2,19 +2,12 @@
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <vector>
-
-#include <util/generic/buffer.h>
-#include <util/generic/strbuf.h>
 
 #include <util/generic/array_ref.h>
 #include <util/generic/yexception.h>
-#include <util/system/types.h>
 
 #include <contrib/libs/cxxsupp/libcxx/include/type_traits>
-
-#include <ydb/library/yql/public/decimal/yql_wide_int.h>
 
 #include "kafka.h"
 
@@ -126,7 +119,6 @@ struct TSizeCollector {
 };
 
 
-
 constexpr i32 SizeOfUnsignedVarint(i32 value) {
     int bytes = 1;
     while ((value & 0xffffff80) != 0L) {
@@ -162,7 +154,22 @@ inline bool VersionCheck(const TKafkaVersion value) {
     }
 }
 
+template<typename Meta>
+class ReadFieldRule {
+public:
+    static bool Apply(TKafkaVersion version) {
+        return VersionCheck<Meta::PresentVersionMin, Meta::PresentVersionMax>(version) 
+            && !VersionCheck<Meta::TaggedVersionMin, Meta::TaggedVersionMax>(version);
+    }
+};
 
+template<typename Meta>
+class ReadTaggedFieldRule {
+public:
+    static bool Apply(TKafkaVersion /*version*/) {
+        return true;
+    }
+};
 
 template<typename Meta>
 bool IsDefaultValue(const typename Meta::Type& value) {
@@ -223,6 +230,336 @@ inline TKafkaInt32 ReadArraySize(TKafkaReadable& readable, TKafkaVersion version
         return v;
     }
 }
+
+
+template<typename T>
+void NormalizeNumber(T& value) {
+#ifndef WORDS_BIGENDIAN
+        char* b = (char*)&value;
+        char* e = b + sizeof(T) - 1;
+        while(b < e) {
+            std::swap(*b, *e);
+            ++b;
+            --e;
+        }
+#endif
+}
+
+class ReadUnsignedVarintStrategy {
+public:
+    void Init() {
+        Finished = 0;
+        Shift = -1;
+        Value = 0;
+    }
+
+    TReadDemand Next() {
+        if (Finished) {
+            return NoDemand;
+        }
+        if (Shift >= 0) {
+            Finished = !(Buffer & 0x80);
+            ui32 v = Buffer & 0x7F;
+            Value |= v << Shift;
+            Shift += 7;
+        } else {
+            Shift = 0;
+        }
+
+        if (Finished) {
+            return NoDemand;
+        } else {
+            return TReadDemand(&Buffer, sizeof(char));
+        }
+    }
+
+    TKafkaInt32 Value;
+
+private:
+    bool Finished;
+    char Buffer;
+    i8 Shift;
+};
+
+
+
+template<typename Meta, typename TOldSizeType>
+class ReadSizeStrategy {
+public:
+    void Init() {
+        WasRead = false;
+        WasNormalized = false;
+        OldValue = 0;
+        UnsignedVarintStrategy.Init();
+    }
+
+    TReadDemand Next(TKafkaVersion version) {
+        if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+            return UnsignedVarintStrategy.Next();
+        } else {
+            if (WasRead) {
+                if (!WasNormalized) {
+                    WasNormalized = true;
+                    NormalizeNumber(OldValue);
+                }
+                return NoDemand;
+            }
+            WasRead = true;
+            return TReadDemand((char*)&OldValue, sizeof(TOldSizeType));
+        }
+    }
+
+    TKafkaInt32 Value(TKafkaVersion version) {
+        if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+            return UnsignedVarintStrategy.Value - 1;
+        } else {
+            return OldValue;
+        }
+    }
+
+private:
+    bool WasRead;
+    bool WasNormalized;
+    TOldSizeType OldValue;
+
+    ReadUnsignedVarintStrategy UnsignedVarintStrategy;
+};
+
+
+
+template<typename Meta,
+         typename TValueType = typename Meta::Type,
+         typename TTypeDesc = typename Meta::TypeDesc>
+class TReadStrategy {
+public:
+    template<typename Rule>
+    void Init(TValueType& /*value*/, TKafkaVersion /*version*/) {
+        WasRead = false;
+    }
+
+    template<typename Rule>
+    TReadDemand Next(TValueType& value, TKafkaVersion version) {
+        if (!Rule::Apply(version)) {
+            if constexpr (Meta::TypeDesc::Default) {
+                value = Meta::Default;
+            }
+            return NoDemand;
+        }
+        if (WasRead) {
+            NormalizeNumber(value);
+            return NoDemand;
+        }
+        WasRead = true;
+        return TReadDemand((char*)&value, sizeof(TValueType));
+    }
+
+private:
+    bool WasRead;
+};
+
+
+template<typename Meta, typename TValueType>
+class TReadStrategy<Meta, TValueType, TKafkaStructDesc> {
+public:
+    template<typename Rule>
+    void Init(TValueType& value, TKafkaVersion version) {
+        if (Rule::Apply(version)) {
+            Context = value.CreateReadContext(version);
+        }
+    }
+
+    template<typename Rule>
+    TReadDemand Next(TValueType& /*value*/, TKafkaVersion version) {
+        if (Rule::Apply(version)) {
+            return Context.get()->Next();
+        } else {
+            return NoDemand;
+        }
+    }
+
+private:
+    std::unique_ptr<TReadContext> Context;
+};
+
+
+template<typename Meta, typename TValueType>
+class TReadStrategy<Meta, TValueType, TKafkaUuidDesc> {
+public:
+    template<typename Rule>
+    void Init(TKafkaUuid& /*value*/, TKafkaVersion /*version*/) {
+        WasRead = false;
+    }
+
+    template<typename Rule>
+    TReadDemand Next(TKafkaUuid& value, TKafkaVersion version) {
+        if (!Rule::Apply(version)) {
+            return NoDemand;
+        }
+        if (WasRead) {
+            NormalizeNumber(Buffer[0]);
+            NormalizeNumber(Buffer[1]);
+            value = TKafkaUuid(Buffer[0], Buffer[1]);
+            return NoDemand;
+        }
+        WasRead = true;
+        return TReadDemand((char*)Buffer, sizeof(ui64) << 1);
+    }
+
+private:
+    bool WasRead;
+    ui64 Buffer[2];
+};
+
+
+
+template<typename Meta, typename TValueType>
+class TReadStrategy<Meta, TValueType, TKafkaStringDesc> {
+public:
+    template<typename Rule>
+    void Init(TKafkaString& /*value*/, TKafkaVersion /*version*/) {
+        WasRead = false;
+        Size.Init();
+    }
+
+    template<typename Rule>
+    TReadDemand Next(TKafkaString& value, TKafkaVersion version) {
+        if (WasRead || !Rule::Apply(version)) {
+            return NoDemand;
+        }
+        auto demand = Size.Next(version);
+        if (demand) {
+            return demand;
+        }
+        WasRead = true;
+        TKafkaInt32 length = Size.Value(version);
+
+        if (length < 0) {
+            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
+                value = std::nullopt;
+                return NoDemand;
+            } else {
+                ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
+            }
+        } else if (length > Max<i16>()){
+            ythrow yexception() << "string field " << Meta::Name << " had invalid length " << length;
+        }
+
+        value = TString();
+        value->ReserveAndResize(length);
+        return TReadDemand((char*)value->data(), length);
+    }
+
+private:
+    bool WasRead;
+
+    ReadSizeStrategy<Meta, TKafkaInt16> Size;
+};
+
+
+template<typename Meta, typename Desc>
+class TReadStrategy<Meta, TKafkaRecords, Desc> {
+public:
+    template<typename Rule>
+    void Init(TKafkaRecords& /*value*/, TKafkaVersion /*version*/) {
+        WasRead = false;
+        Size.Init();
+    }
+
+    template<typename Rule>
+    TReadDemand Next(TKafkaRecords& value, TKafkaVersion version) {
+        if (WasRead || !Rule::Apply(version)) {
+            return NoDemand;
+        }
+        auto demand = Size.Next(version);
+        if (demand) {
+            return demand;
+        }
+        WasRead = true;
+        TKafkaInt32 length = Size.Value(version);
+
+        if (length < 0) {
+            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
+                value = std::nullopt;
+                return NoDemand;
+            } else {
+                ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
+            }
+        }
+
+        value = TKafkaRawBytes();
+        value->Resize(length);
+        return TReadDemand(value->data(), length);
+    }
+
+private:
+    bool WasRead;
+
+    ReadSizeStrategy<Meta, TKafkaInt32> Size;
+};
+
+
+template<typename Meta, typename TValueType>
+class TReadStrategy<Meta, TValueType, TKafkaArrayDesc> {
+public:
+    template<typename Rule>
+    void Init(std::vector<typename Meta::ItemType>& /*value*/, TKafkaVersion /*version*/) {
+        ItemStep = -1;
+        Size.Init();
+    }
+
+    template<typename Rule>
+    TReadDemand Next(std::vector<typename Meta::ItemType>& value, TKafkaVersion version) {
+        if (!Rule::Apply(version)) {
+            return NoDemand;
+        }
+        auto demand = Size.Next(version);
+        if (demand) {
+            return demand;
+        }
+        if (-1 == ItemStep) {
+            TKafkaInt32 length = Size.Value(version);
+
+            if (length < 0) {
+                if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
+                    value.resize(0);
+                    return NoDemand;
+                } else {
+                    ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
+                }
+            }
+
+            value.resize(length);
+            if (0 == length) {
+                return NoDemand;
+            }
+
+            ItemStep = 0;
+            ItemStrategy.template Init<Rule>(value[ItemStep], version);
+        } else if (ItemStep == (i32)value.size()) {
+            return NoDemand;
+        }
+
+        demand = ItemStrategy.template Next<Rule>(value[ItemStep], version);
+        if (demand) {
+            return demand;
+        }
+
+        ++ItemStep;
+        if (ItemStep == (i32)value.size()) {
+            return NoDemand;
+        }
+        ItemStrategy.template Init<Rule>(value[ItemStep], version);
+        return ItemStrategy.template Next<Rule>(value[ItemStep], version);
+    }
+
+private:
+    i32 ItemStep;
+
+    ReadSizeStrategy<Meta, TKafkaInt32> Size;
+    TReadStrategy<Meta, typename Meta::ItemType, typename Meta::ItemTypeDesc> ItemStrategy;
+};
+
+
 
 
 

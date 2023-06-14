@@ -23,6 +23,7 @@ PEERDIR(
     library/cpp/malloc/api
     library/cpp/monlib/service/pages
     library/cpp/ytalloc/api
+    library/cpp/yt/memory
     ydb/core/base
     ydb/core/control
 )

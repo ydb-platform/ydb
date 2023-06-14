@@ -13,6 +13,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -266,15 +267,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         *cookie = nodeId;
 
         auto& record = (*ev)->Get()->Record;
-        auto sample = record.tabletstateinfo(0);
         record.clear_tabletstateinfo();
 
         for (int i = 0; i < tabletsTotal; i++) {
             auto tablet = record.add_tabletstateinfo();
-            tablet->CopyFrom(sample);
             tablet->set_tabletid(tabletId++);
             tablet->set_type(NKikimrTabletBase::TTabletTypes::Mediator);
             tablet->set_nodeid(nodeId);
+            tablet->set_generation(2);
         }
 
         nodeId++;
@@ -351,5 +351,86 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "BASE_PERF = " << BASE_PERF << Endl;
         UNIT_ASSERT_LT(timer.Passed(), BASE_PERF);
 
+    }
+
+    Y_UNIT_TEST(TenantInfo5kkTablets)
+    {
+        const int nodesTotal = 5;
+        const int tabletsTotal = 1000000;
+
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(nodesTotal)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("path", "/Root");
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("storage", "true");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/tenantinfo", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        int tabletIdCount = 1;
+        int nodeIdCount = 1;
+        auto observerFunc = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            Y_UNUSED(ev);
+            switch (ev->GetTypeRewrite()) {
+                case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    Ydb::Cms::ListDatabasesResult listTenantsResult;
+                    (*x)->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+                    listTenantsResult.Addpaths("/Root");
+                    (*x)->Get()->Record.MutableResponse()->mutable_operation()->mutable_result()->PackFrom(listTenantsResult);
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    auto &domain = (*x)->Get()->Request->ResultSet.begin()->DomainInfo;
+                    domain->Params.SetHive(1);
+                    break;
+                }
+                case TEvHive::EvResponseHiveDomainStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveDomainStats::TPtr*>(&ev);
+                    auto &record = (*x)->Get()->Record;
+                    auto *domainStats = record.AddDomainStats();
+                    for (int i = 1; i <= nodesTotal; i++) {
+                        domainStats->AddNodeIds(i);
+                    }
+                    domainStats->SetShardId(NKikimr::Tests::SchemeRoot);
+                    domainStats->SetPathId(1);
+                    break;
+                }
+                case TEvWhiteboard::EvTabletStateResponse: {
+                    auto *x = reinterpret_cast<TEvWhiteboard::TEvTabletStateResponse::TPtr*>(&ev);
+                    ChangeTabletStateResponse(x, tabletsTotal, tabletIdCount, nodeIdCount);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        THPTimer timer;
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        Ctest << "Request timer = " << timer.Passed() << Endl;
+        Ctest << "BASE_PERF = " << BASE_PERF << Endl;
+        UNIT_ASSERT_LT(timer.Passed(), BASE_PERF);
     }
 }

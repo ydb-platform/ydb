@@ -78,10 +78,10 @@ private:
     TString ErrorInfo;
 public:
     virtual ~IQueryResultScanner() = default;
-    virtual void OnStart() = 0;
+    virtual void OnStart(const TVector<NYdb::TColumn>& columns) = 0;
     virtual void OnBeforeRow() = 0;
     virtual void OnAfterRow() = 0;
-    virtual void OnRowItem(const NYdb::TValue& value) = 0;
+    virtual void OnRowItem(const NYdb::TColumn& c, const NYdb::TValue& value) = 0;
     virtual void OnFinish() = 0;
     void OnError(const TString& info) {
         ErrorInfo = info;
@@ -91,7 +91,6 @@ public:
     }
 
     bool Scan(NTable::TScanQueryPartIterator& it) {
-        OnStart();
         for (;;) {
             auto streamPart = it.ReadNext().GetValueSync();
             if (!streamPart.IsSuccess()) {
@@ -106,17 +105,18 @@ public:
                 auto result = streamPart.ExtractResultSet();
                 auto columns = result.GetColumnsMeta();
 
+                OnStart(columns);
                 NYdb::TResultSetParser parser(result);
                 while (parser.TryNextRow()) {
                     OnBeforeRow();
                     for (ui32 i = 0; i < columns.size(); ++i) {
-                        OnRowItem(parser.GetValue(i));
+                        OnRowItem(columns[i], parser.GetValue(i));
                     }
                     OnAfterRow();
                 }
+                OnFinish();
             }
         }
-        OnFinish();
         return true;
     }
 };
@@ -129,9 +129,9 @@ public:
         Scanners.emplace_back(scanner);
     }
 
-    virtual void OnStart() override {
+    virtual void OnStart(const TVector<NYdb::TColumn>& columns) override {
         for (auto&& i : Scanners) {
-            i->OnStart();
+            i->OnStart(columns);
         }
     }
     virtual void OnBeforeRow() override {
@@ -144,9 +144,9 @@ public:
             i->OnAfterRow();
         }
     }
-    virtual void OnRowItem(const NYdb::TValue& value) override {
+    virtual void OnRowItem(const NYdb::TColumn& c, const NYdb::TValue& value) override {
         for (auto&& i : Scanners) {
-            i->OnRowItem(value);
+            i->OnRowItem(c, value);
         }
     }
     virtual void OnFinish() override {
@@ -167,7 +167,7 @@ public:
         Writer.reset();
         return ResultString.Str();
     }
-    virtual void OnStart() override {
+    virtual void OnStart(const TVector<NYdb::TColumn>& /*columns*/) override {
         Writer = std::make_unique<NYson::TYsonWriter>(&ResultString, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
         Writer->OnBeginList();
     }
@@ -178,7 +178,7 @@ public:
     virtual void OnAfterRow() override {
         Writer->OnEndList();
     }
-    virtual void OnRowItem(const NYdb::TValue& value) override {
+    virtual void OnRowItem(const NYdb::TColumn& /*c*/, const NYdb::TValue& value) override {
         Writer->OnListItem();
         FormatValueYson(value, *Writer);
     }
@@ -187,34 +187,20 @@ public:
     }
 };
 
-class TCSVResultScanner: public IQueryResultScanner {
-private:
-    TStringStream ResultString;
-    bool IsFirstInRow = false;
-    bool IsFirstRow = true;
+class TCSVResultScanner: public IQueryResultScanner, public TQueryResultInfo {
 public:
     TCSVResultScanner() {
     }
-    TString GetResult() const {
-        return ResultString.Str();
-    }
-    virtual void OnStart() override {
+    virtual void OnStart(const TVector<NYdb::TColumn>& columns) override {
+        Columns = columns;
     }
     virtual void OnBeforeRow() override {
-        if (!IsFirstRow) {
-            ResultString << "\n";
-            IsFirstRow = false;
-        }
-        IsFirstInRow = true;
+        Result.emplace_back(std::vector<NYdb::TValue>());
     }
     virtual void OnAfterRow() override {
     }
-    virtual void OnRowItem(const NYdb::TValue& value) override {
-        if (!IsFirstInRow) {
-            ResultString << ",";
-            IsFirstInRow = false;
-        }
-        ResultString << FormatValueYson(value);
+    virtual void OnRowItem(const NYdb::TColumn& /*c*/, const NYdb::TValue& value) override {
+        Result.back().emplace_back(value);
     }
     virtual void OnFinish() override {
     }
@@ -234,7 +220,7 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
     } else {
-        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), scannerCSV->GetResult());
+        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV);
     }
 }
 

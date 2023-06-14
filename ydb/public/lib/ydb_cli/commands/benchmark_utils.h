@@ -18,17 +18,39 @@ struct TTestInfo {
     explicit TTestInfo(std::vector<TDuration>&& timings);
 };
 
+class TQueryResultInfo {
+protected:
+    std::vector<std::vector<NYdb::TValue>> Result;
+    TVector<NYdb::TColumn> Columns;
+public:
+    std::map<TString, ui32> GetColumnsRemap() const {
+        std::map<TString, ui32> result;
+        ui32 idx = 0;
+        for (auto&& i : Columns) {
+            result.emplace(i.Name, idx++);
+        }
+        return result;
+    }
+
+    const std::vector<std::vector<NYdb::TValue>>& GetResult() const {
+        return Result;
+    }
+    const TVector<NYdb::TColumn>& GetColumns() const {
+        return Columns;
+    }
+};
+
 class TQueryBenchmarkResult {
 private:
     TString ErrorInfo;
     TString YSONResult;
-    TString CSVResult;
+    TQueryResultInfo QueryResult;
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(const TString& yson, const TString& csv) {
+    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult) {
         TQueryBenchmarkResult result;
         result.YSONResult = yson;
-        result.CSVResult = csv;
+        result.QueryResult = queryResult;
         return result;
     }
     static TQueryBenchmarkResult Error(const TString& error) {
@@ -45,8 +67,8 @@ public:
     const TString& GetYSONResult() const {
         return YSONResult;
     }
-    const TString& GetCSVResult() const {
-        return CSVResult;
+    const TQueryResultInfo& GetQueryResult() const {
+        return QueryResult;
     }
 };
 

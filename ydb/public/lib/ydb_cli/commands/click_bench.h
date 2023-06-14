@@ -1,8 +1,10 @@
 #pragma once
 
+#include <library/cpp/string_utils/csv/csv.h>
 #include <util/generic/set.h>
 
 #include "ydb_command.h"
+#include "benchmark_utils.h"
 
 namespace NYdb::NConsoleClient {
 
@@ -51,6 +53,18 @@ public:
     private:
         TString Query;
         TString ExpectedResult;
+
+        template <class T>
+        bool CompareValueImpl(const T valResult, const TStringBuf vExpected) const {
+            T valExpected;
+            if (!TryFromString<T>(vExpected, valExpected)) {
+                Cerr << "cannot parse expected as " << typeid(valResult).name() << "(" << vExpected << ")" << Endl;
+                return false;
+            }
+            return valResult == valExpected;
+        }
+
+        bool CompareValue(const NYdb::TValue& v, const TStringBuf vExpected) const;
     public:
         TQueryFullInfo(const TString& query, const TString& expectedResult)
             : Query(query)
@@ -59,22 +73,7 @@ public:
 
         }
 
-        bool IsCorrectResult(const TString& result) const {
-            if (!ExpectedResult) {
-                return true;
-            }
-            const auto resultLines = StringSplitter(result).Split('\n').SkipEmpty().ToList<TString>();
-            const auto expectedLines = StringSplitter(ExpectedResult).Split('\n').SkipEmpty().ToList<TString>();
-            if (resultLines.size() + 1 != expectedLines.size()) {
-                return false;
-            }
-            for (ui32 i = 0; i < resultLines.size(); ++i) {
-                if (expectedLines[i + 1] != resultLines[i]) {
-                    return false;
-                }
-            }
-            return true;
-        }
+        bool IsCorrectResult(const BenchmarkUtils::TQueryResultInfo& result) const;
 
         const TString& GetQuery() const {
             return Query;

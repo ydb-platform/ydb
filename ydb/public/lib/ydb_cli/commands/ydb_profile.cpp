@@ -1,5 +1,6 @@
 #include "ydb_profile.h"
 
+#include <cstdlib>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 #include <util/folder/dirut.h>
@@ -1043,7 +1044,7 @@ int TCommandUpdateProfile::Run(TConfig& config) {
 }
 
 TCommandReplaceProfile::TCommandReplaceProfile()
-            : TCommandProfileCommon("replace", {}, "Deletes profile and creates a new with the same name")
+            : TCommandProfileCommon("replace", {}, "Deletes profile and creates a new one with the same name and new property values from provided options")
 {}
 
 void TCommandReplaceProfile::Config(TConfig& config) {
@@ -1061,9 +1062,9 @@ int TCommandReplaceProfile::Run(TConfig& config) {
     auto profileManager = CreateProfileManager(config.ProfileFile);
     if (profileManager->HasProfile(ProfileName)) {
         if (!Force) {
-            Cout << "Profile data will be permanently removed. Continue? (y/n): ";
+            Cout << "Current profile will be replaced with a new one. All current profile data will be lost. Continue? (y/n): ";
             if (!AskYesOrNo()) {
-                return EXIT_SUCCESS;
+                return EXIT_FAILURE;
             }
         }
         profileManager->RemoveProfile(ProfileName);

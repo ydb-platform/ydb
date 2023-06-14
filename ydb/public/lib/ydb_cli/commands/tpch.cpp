@@ -90,18 +90,18 @@ bool TTpchCommandRun::RunBench(TConfig& config)
             auto duration = TInstant::Now() - t1;
 
             Cout << "\titeration " << i << ":\t";
-            if (res.second == "") {
+            if (!!res) {
                 Cout << "ok\t" << duration << " seconds" << Endl;
                 timings.emplace_back(duration);
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << getQueryNumber(queryN) << ": " << Endl
-                        << res.first << res.second << Endl << Endl;
+                        << res.GetYSONResult() << Endl << Endl;
                 }
             } else {
                 Cout << "failed\t" << duration << " seconds" << Endl;
                 Cerr << getQueryNumber(queryN) << ": " << query << Endl
-                     << res.first << res.second << Endl;
+                     << res.GetErrorInfo() << Endl;
                 Sleep(TDuration::Seconds(1));
             }
         }

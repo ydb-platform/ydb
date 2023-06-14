@@ -63,7 +63,17 @@ public:
             if (!ExpectedResult) {
                 return true;
             }
-            return result == ExpectedResult;
+            const auto resultLines = StringSplitter(result).Split('\n').SkipEmpty().ToList<TString>();
+            const auto expectedLines = StringSplitter(ExpectedResult).Split('\n').SkipEmpty().ToList<TString>();
+            if (resultLines.size() + 1 != expectedLines.size()) {
+                return false;
+            }
+            for (ui32 i = 0; i < resultLines.size(); ++i) {
+                if (expectedLines[i + 1] != resultLines[i]) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         const TString& GetQuery() const {

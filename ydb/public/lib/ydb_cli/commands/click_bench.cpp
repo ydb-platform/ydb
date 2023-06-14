@@ -152,36 +152,36 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
         Cerr << query << Endl << Endl;
 
         ui32 successIteration = 0;
-        TString prevResult = "";
+        std::optional<TString> prevResult;
         for (ui32 i = 0; i < IterationsCount * 10 && successIteration < IterationsCount; ++i) {
             auto t1 = TInstant::Now();
-            std::pair<TString, TString> res;
+            TQueryBenchmarkResult res = TQueryBenchmarkResult::Error("undefined");
             try {
                 res = Execute(query, client);
             } catch (...) {
-                res = std::make_pair<TString, TString>("", CurrentExceptionMessage());
+                res = TQueryBenchmarkResult::Error(CurrentExceptionMessage());
             }
             auto duration = TInstant::Now() - t1;
 
             Cout << "\titeration " << i << ":\t";
-            if (res.second == "") {
+            if (!!res) {
                 Cout << "ok\t" << duration << " seconds" << Endl;
                 timings.emplace_back(duration);
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << queryN << ": " << Endl
-                        << res.first << res.second << Endl << Endl;
+                        << res.GetYSONResult() << Endl << Endl;
                 }
-                if (prevResult != res.first && !qInfo.IsCorrectResult(res.first)) {
+                if ((!prevResult || *prevResult != res.GetCSVResult()) && !qInfo.IsCorrectResult(res.GetCSVResult())) {
                     outFStream << queryN << ": UNEXPECTED DIFF: " << Endl
-                        << "RESULT: " << Endl << res.first << Endl
+                        << "RESULT: " << Endl << res.GetCSVResult() << Endl
                         << "EXPECTATION: " << Endl << qInfo.GetExpectedResult() << Endl;
-                    prevResult = res.first;
+                    prevResult = res.GetCSVResult();
                 }
             } else {
                 Cout << "failed\t" << duration << " seconds" << Endl;
                 Cerr << queryN << ": " << query << Endl
-                     << res.first << res.second << Endl;
+                    << res.GetErrorInfo() << Endl;
                 Sleep(TDuration::Seconds(1));
             }
         }

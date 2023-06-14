@@ -11,16 +11,15 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams&& params) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*params.Driver);
 
     auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerIdx);
-
-    auto consumers = topicClient->DescribeTopic(TOPIC, {}).GetValueSync().GetTopicDescription().GetConsumers();
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, *params.Driver);
+    auto consumers = describeTopicResult.GetConsumers();
     if (!std::any_of(consumers.begin(), consumers.end(), [consumerName](const auto& consumer) { return consumer.GetConsumerName() == consumerName; }))
     {
-        WRITE_LOG(params.Log, ELogPriority::TLOG_EMERG, TStringBuilder() << "Topic '" << TOPIC << "' doesn't have a consumer '" << consumerName << "'. Run command 'workload init' with parameter '--consumers'.");
+        WRITE_LOG(params.Log, ELogPriority::TLOG_EMERG, TStringBuilder() << "Topic '" << params.TopicName << "' doesn't have a consumer '" << consumerName << "'. Run command 'workload init' with parameter '--consumers'.");
         exit(EXIT_FAILURE);
     }
-
     NYdb::NTopic::TReadSessionSettings settings;
-    settings.ConsumerName(consumerName).AppendTopics(TOPIC);
+    settings.ConsumerName(consumerName).AppendTopics(params.TopicName);
 
     auto readSession = topicClient->CreateReadSession(settings);
     WRITE_LOG(params.Log, ELogPriority::TLOG_INFO, "Reader session was created.");

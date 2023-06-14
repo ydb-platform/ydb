@@ -18,13 +18,12 @@ namespace NYdb {
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
             std::shared_ptr<std::atomic<bool>> ErrorFlag;
             std::shared_ptr<std::atomic_uint> StartedCount;
-
+            TString TopicName;
             size_t ByteRate;
             ui32 ProducerThreadCount;
             ui32 WriterIdx;
             TString ProducerId;
             ui32 PartitionId;
-
             size_t MessageSize;
             ui32 Codec = 0;
         };

@@ -48,6 +48,9 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
         .DefaultValue(1)
         .StoreResult(&Warmup);
+    config.Opts->AddLongOption("topic", "Topic name.")
+        .DefaultValue(TOPIC)
+        .StoreResult(&TopicName);
 
     // Specific params
     config.Opts->AddLongOption('c', "consumers", "Number of consumers in a topic.")
@@ -92,7 +95,8 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
                 .StatsCollector = StatsCollector,
                 .ErrorFlag = ErrorFlag,
                 .StartedCount = consumerStartedCount,
-
+                .Database = config.Database,
+                .TopicName = TopicName,
                 .ConsumerIdx = consumerIdx,
                 .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
 

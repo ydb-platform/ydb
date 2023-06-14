@@ -11,21 +11,27 @@ TString TCommandWorkloadTopicDescribe::GenerateConsumerName(ui32 consumerIdx)
     return consumerName;
 }
 
-NYdb::NTopic::TTopicDescription TCommandWorkloadTopicDescribe::DescribeTopic(TString database, const NYdb::TDriver& driver)
+TString TCommandWorkloadTopicDescribe::GenerateFullTopicName(const TString& database, const TString& topicName)
+{
+    TString fullTopicName = TStringBuilder() << database << "/" << topicName;
+    return fullTopicName;
+}
+
+NYdb::NTopic::TTopicDescription TCommandWorkloadTopicDescribe::DescribeTopic(const TString& database, const TString& topicName, const NYdb::TDriver& driver)
 {
     NYdb::NTopic::TTopicClient topicClient(driver);
 
-    auto topicName = database + "/" + TOPIC;
-    auto result = topicClient.DescribeTopic(topicName, {}).GetValueSync();
+    TString fullTopicName = GenerateFullTopicName(database, topicName);
+    auto result = topicClient.DescribeTopic(fullTopicName, {}).GetValueSync();
 
     if (!result.IsSuccess() || result.GetIssues()) {
-        Cerr << "Error describe topic " << topicName << ": " << (NYdb::TStatus)result << "\n";
+        Cerr << "Error describe topic " << fullTopicName << "\n" << (NYdb::TStatus)result << "\n";
         exit(EXIT_FAILURE);
     }
 
     NYdb::NTopic::TTopicDescription description = result.GetTopicDescription();
     if (description.GetTotalPartitionsCount() == 0) {
-        Cerr << "Topic " << topicName << " does not exists.\n";
+        Cerr << "Topic " << fullTopicName << " does not have partitions.\n";
         exit(EXIT_FAILURE);
     }
 

@@ -10,7 +10,8 @@ namespace NYdb {
         class TCommandWorkloadTopicDescribe {
         public:
             static TString GenerateConsumerName(ui32 consumerIdx);
-            static NTopic::TTopicDescription DescribeTopic(TString database, const NYdb::TDriver& driver);
+            static TString GenerateFullTopicName(const TString& database, const TString& topicName);
+            static NTopic::TTopicDescription DescribeTopic(const TString& database, const TString& topicName, const NYdb::TDriver& driver);
         };
     }
 }

@@ -50,7 +50,10 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config) {
     config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
         .DefaultValue(1)
         .StoreResult(&Warmup);
-        
+    config.Opts->AddLongOption("topic", "Topic name.")
+        .DefaultValue(TOPIC)
+        .StoreResult(&TopicName);
+
     // Specific params
     config.Opts->AddLongOption('t', "threads", "Number of producer threads.")
         .DefaultValue(1)
@@ -94,7 +97,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
     StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, 0, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Warmup, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
 
-    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, *Driver);
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
     ui32 partitionCount = describeTopicResult.GetTotalPartitionsCount();
     ui32 partitionSeed = RandomNumber<ui32>(partitionCount);
 
@@ -109,7 +112,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
             .StatsCollector = StatsCollector,
             .ErrorFlag = ErrorFlag,
             .StartedCount = producerStartedCount,
-
+            .TopicName = TopicName,
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
             .ProducerThreadCount = ProducerThreadCount,
             .WriterIdx = writerIdx,

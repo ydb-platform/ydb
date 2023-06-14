@@ -17,7 +17,8 @@ namespace NYdb {
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
             std::shared_ptr<std::atomic_bool> ErrorFlag;
             std::shared_ptr<std::atomic_uint> StartedCount;
-
+            TString Database;
+            TString TopicName;
             ui32 ConsumerIdx;
             ui64 ReaderIdx;
         };

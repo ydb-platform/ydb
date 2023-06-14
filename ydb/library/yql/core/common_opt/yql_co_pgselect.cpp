@@ -3240,6 +3240,59 @@ TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext&
 TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     Y_UNUSED(optCtx);
     const bool insensitive = node->IsCallable("PgILike");
+    if (!insensitive) {
+        auto pattern = node->Child(1);
+        if (pattern->IsCallable("PgConst") && 
+            pattern->Tail().IsCallable("PgType") && 
+            pattern->Tail().Head().Content() == "text") {
+            auto str = pattern->Head().Content();
+            auto hasUnderscore = AnyOf(str, [](char c) { return c == '_'; });
+            size_t countOfPercents = 0;
+            ForEach(str.begin(), str.end(), [&](char c) { countOfPercents += (c == '%');});
+            if (!hasUnderscore && countOfPercents == 0) {
+                return ctx.Builder(node->Pos())
+                    .Callable("PgOp")
+                        .Atom(0, "=")
+                        .Add(1, node->ChildPtr(0))
+                        .Add(2, pattern)
+                    .Seal()
+                    .Build();
+            }
+
+            TStringBuf op;
+            TStringBuf arg;
+            if (!hasUnderscore && countOfPercents == 1 && str.StartsWith('%')) {
+                op = "EndsWith";
+                arg = str.SubString(1, str.Size() - 1);
+            }
+
+            if (!hasUnderscore && countOfPercents == 1 && str.EndsWith('%')) {
+                op = "StartsWith";
+                arg = str.SubString(0, str.Size() - 1);
+            }
+
+            if (!hasUnderscore && countOfPercents == 2 && str.StartsWith('%') && str.EndsWith('%')) {
+                op = "StringContains";
+                arg = str.SubString(1, str.Size() - 2);
+            }
+
+            if (!op.empty()) {
+                return ctx.Builder(node->Pos())
+                    .Callable("ToPg")
+                        .Callable(0, op)
+                            .Callable(0, "FromPg")
+                                .Add(0, node->ChildPtr(0))
+                            .Seal()
+                            .Callable(1, "String")
+                                .Atom(0, arg)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+        }
+    }
+
     auto matcher = ctx.Builder(node->Pos())
         .Callable("Udf")
             .Atom(0, "Re2.Match")

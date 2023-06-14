@@ -398,55 +398,40 @@ message Filter {
 
 // ---------- Utils ----------
 
+// Describes the kind of external data source
+enum DataSourceKind {
+    DATA_SOURCE_KIND_RESERVED = 0;
+    CLICKHOUSE = 1;
+    POSTGRESQL = 2;
+}
+
+message Endpoint {
+    string host = 1;
+    uint32 port = 2;
+}
+
+message Credentials {
+    // Basic
+    message Basic {
+        string username = 1;
+        string password = 2;
+    }
+
+    oneof payload {
+        Basic basic = 1;
+    }
+}
+
 // DataSourceInstance helps to identify the instance of a data source to route request to.
 message DataSourceInstance {
-    oneof location {
-        // Network address to connect to '<prefix>://<path>[:<port>]', for example:
-        // http://my_external_service:2023
-        // grpc://my_external_service:2023
-        string endpoint = 1;
+    // Kind of the DataSource
+    DataSourceKind kind = 1;
 
-        // Preconfigured installation name hiding network details.
-        // This installation must be described in the configuration of Connector service app:
-        // installations {
-        // { "postgres", {"https://postgres.yandexcloud.net", other_params}
-        // }
-        string installation = 2;
-    }
+    // Network address to connect
+    Endpoint endpoint = 2;
 
     // What database to connect
     string database = 3;
-
-    message Credentials {
-        // Basic
-        message Basic {
-            string username = 1;
-            string password = 2;
-        }
-
-        // Copied from: https://a.yandex-team.ru/arcadia/ydb/public/api/protos/draft/fq.proto?rev=r10844260#L419
-        message NoneAuth {}
-
-        // Copied from: https://a.yandex-team.ru/arcadia/ydb/public/api/protos/draft/fq.proto?rev=r10844260#L426
-        message IamAuth {
-            message CurrentIAMTokenAuth {}
-
-            message ServiceAccountAuth {
-                string id = 1;
-            }
-
-            oneof identity {
-                CurrentIAMTokenAuth current_iam = 1;
-                ServiceAccountAuth service_account = 2;
-            }
-        }
-
-        oneof payload {
-            Basic basic = 1;
-            IamAuth iam_auth = 2;
-            NoneAuth none = 3;
-        }
-    }
 
     // Information for authentication
     Credentials credentials = 4;

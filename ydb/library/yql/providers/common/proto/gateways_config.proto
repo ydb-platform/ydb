@@ -2,6 +2,7 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "ydb/library/yql/protos/clickhouse.proto";
+import "ydb/library/yql/providers/generic/connector/api/protos/connector.proto";
 
 
 /////////////////////////////// common ///////////////////////////////
@@ -532,11 +533,29 @@ message TDbToolConfig {
 
 /////////// Generic gateway for the external data sources ////////////
 
+message TGenericClusterConfig {
+    // Cluster name
+    required string Name = 1;
+
+    // Data source kind
+    required NYql.Connector.API.DataSourceKind Kind = 2;
+
+    // Location represents the network address of a data source instance we want to connect
+    oneof Location {
+        // Endpoint must be used for on-premise deployments.
+        NYql.Connector.API.Endpoint Endpoint = 3; 
+        // DatabaseID must be used when the data source is deployed in cloud.
+        // Data source FQDN and port will be resolved by MDB service. 
+        string DatabaseID = 4;
+    }
+
+    required NYql.Connector.API.Credentials Credentials = 5;
+}
+
 message TGenericGatewayConfig {
     required string Endpoint = 1;
-
-    // external data sources that can be accessed via connector
-    optional TClickHouseGatewayConfig ClickHouse = 2;
+    reserved 2;
+    repeated TGenericClusterConfig ClusterMapping = 3;
 }
 
 /////////////////////////////// Root ///////////////////////////////

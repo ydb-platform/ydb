@@ -36,6 +36,7 @@ target_link_libraries(providers-common-proto PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-yql-protos
+  connector-api-protos
   contrib-libs-protobuf
 )
 target_proto_messages(providers-common-proto PRIVATE

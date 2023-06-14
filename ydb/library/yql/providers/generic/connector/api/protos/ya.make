@@ -4,7 +4,8 @@ PEERDIR(
     ydb/public/api/protos
 )
 
-ONLY_TAGS(CPP_PROTO PY3_PROTO)
+# Because Go is excluded in YDB protofiles
+EXCLUDE_TAGS(GO_PROTO)
 
 SRCS(
     connector.proto

@@ -96,12 +96,11 @@ namespace NYql {
                     const auto& cluster = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
                     const auto& table = settings.Table().StringValue();
                     const auto& token = settings.Token().Name().StringValue();
-                    const auto& connect = State_->Configuration->Urls[cluster];
-                    const auto endpoint = connect.Endpoint();
+                    const auto& endpoint = State_->Configuration->ClusterConfigs[cluster].endpoint();
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
-                        << ": cluster: " << cluster << ", table: " << table << ", endpoint: " << endpoint;
+                        << ": cluster: " << cluster << ", table: " << table << ", endpoint: " << endpoint.DebugString();
 
                     Generic::TSource srcDesc;
                     srcDesc.set_token(token);

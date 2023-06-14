@@ -49,13 +49,12 @@ namespace NYql {
                         const TGenRead read(node);
                         const auto cluster = read.DataSource().Cluster().StringValue();
                         YQL_CLOG(DEBUG, ProviderGeneric) << "Found cluster: " << cluster;
-                        auto dbId = State_->Configuration->Endpoints[cluster].first;
-                        dbId = dbId.substr(0, dbId.find(':'));
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "Found dbId: " << dbId;
-                        const auto idKey = std::make_pair(dbId, NYql::DatabaseType::Generic);
+                        auto databaseID = State_->Configuration->ClusterConfigs[cluster].GetDatabaseID();
+                        YQL_CLOG(DEBUG, ProviderGeneric) << "Found cloudID: " << databaseID;
+                        const auto idKey = std::make_pair(databaseID, NYql::DatabaseType::Generic);
                         const auto iter = State_->DatabaseIds.find(idKey);
                         if (iter != State_->DatabaseIds.end()) {
-                            YQL_CLOG(DEBUG, ProviderGeneric) << "Resolve CH id: " << dbId;
+                            YQL_CLOG(DEBUG, ProviderGeneric) << "Resolve CloudID: " << databaseID;
                             ids[idKey] = iter->second;
                         }
                     }
@@ -89,25 +88,12 @@ namespace NYql {
                                         DbResolverResponse_->DatabaseId2Endpoint.end());
                 DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ResolvedIds: " << FullResolvedIds_.size();
-                auto& endpoints = State_->Configuration->Endpoints;
                 const auto& id2Clusters = State_->Configuration->DbId2Clusters;
                 for (const auto& [dbIdWithType, info] : FullResolvedIds_) {
                     const auto& dbId = dbIdWithType.first;
                     const auto iter = id2Clusters.find(dbId);
                     if (iter == id2Clusters.end()) {
                         continue;
-                    }
-                    for (const auto& clusterName : iter->second) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "Resolved endpoint: " << info.Endpoint << " for id: " << dbId;
-                        auto& [endpoint, secure] = endpoints[clusterName];
-                        if (const auto it = endpoint.find(':'); it != TString::npos) {
-                            secure = info.Secure;
-                            endpoint = info.Endpoint;
-                            if (info.Endpoint.find(':') == TString::npos) {
-                                const auto port = endpoint.substr(it);
-                                endpoint += port;
-                            }
-                        }
                     }
                 }
                 return TStatus::Ok;

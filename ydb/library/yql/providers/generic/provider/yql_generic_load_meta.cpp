@@ -103,26 +103,23 @@ namespace NYql {
             for (const auto& item : pendingTables) {
                 Connector::API::DescribeTableRequest request;
 
-                const auto& cluster = item.first;
-                const auto it = State_->Configuration->Urls.find(cluster);
-                YQL_ENSURE(State_->Configuration->Urls.cend() != it, "Cluster not found:" << cluster);
+                const auto& clusterName = item.first;
+                const auto it = State_->Configuration->ClusterConfigs.find(clusterName);
+                YQL_ENSURE(State_->Configuration->ClusterConfigs.cend() != it, "Cluster not found:" << clusterName);
+
+                const auto& clusterConfig = it->second;
 
                 TString token;
-                if (const auto cred = State_->Types->Credentials->FindCredential("default_" + cluster)) {
+                if (const auto cred = State_->Types->Credentials->FindCredential("default_" + clusterName)) {
                     token = cred->Content;
                 } else {
-                    token = State_->Configuration->Tokens[cluster];
+                    token = State_->Configuration->Tokens[clusterName];
                 }
 
-                const auto one = token.find('#'), two = token.rfind('#');
-                YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
-
                 auto dsi = request.mutable_data_source_instance();
-                dsi->set_endpoint(it->second.Endpoint());
-
-                auto auth = request.mutable_data_source_instance()->mutable_credentials()->mutable_basic();
-                auth->set_username(token.substr(one + 1U, two - one - 1U));
-                auth->set_password(token.substr(two + 1U));
+                dsi->mutable_endpoint()->CopyFrom(clusterConfig.GetEndpoint());
+                dsi->set_kind(clusterConfig.GetKind());
+                dsi->mutable_credentials()->CopyFrom(clusterConfig.GetCredentials());
 
                 const auto& table = item.second;
                 TStringBuf db, dbTable;

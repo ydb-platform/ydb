@@ -6,7 +6,8 @@ const TString TableName = "example_3";
 
 void SetDatabaseSourceInstance(NYql::Connector::API::DataSourceInstance* dsi) {
     dsi->set_database("dqrun");
-    dsi->set_endpoint("localhost:9000");
+    dsi->mutable_endpoint()->set_host("localhost");
+    dsi->mutable_endpoint()->set_port(9000);
     dsi->mutable_credentials()->mutable_basic()->set_username("crab");
     dsi->mutable_credentials()->mutable_basic()->set_password("qwerty12345");
 }

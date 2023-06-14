@@ -137,6 +137,8 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+private:
+    bool Force = false;
 };
 
 }

@@ -393,7 +393,9 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     }
 
     TInteractiveCLI interactiveCLI(config, prompt);
-    return interactiveCLI.Run();
+    interactiveCLI.Run();
+
+    return EXIT_SUCCESS;
 }
 
 namespace {

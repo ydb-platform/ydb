@@ -491,7 +491,7 @@ private:
     const TString DedupId;
     const TString SchemaData;
     const TString Data;
-    ui32 NumRetries;
+    ui32 NumRetries = 0;
     TWritersController::TPtr ExternalController;
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;

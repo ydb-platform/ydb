@@ -96,6 +96,7 @@ struct TRequestInfo {
         request.MutableActions()->CopyFrom(Request.GetActions());
         request.SetPartialPermissionAllowed(Request.GetPartialPermissionAllowed());
         request.SetReason(Request.GetReason());
+        request.SetAvailabilityMode(Request.GetAvailabilityMode());
     }
 
     TString RequestId;

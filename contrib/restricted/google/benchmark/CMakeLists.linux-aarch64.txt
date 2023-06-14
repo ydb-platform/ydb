@@ -13,8 +13,10 @@ target_compile_options(restricted-google-benchmark PUBLIC
 )
 target_compile_options(restricted-google-benchmark PRIVATE
   -DHAVE_POSIX_REGEX
+  -DHAVE_PTHREAD_AFFINITY
   -DHAVE_STD_REGEX
   -DHAVE_STEADY_CLOCK
+  -DBENCHMARK_HAS_PTHREAD_AFFINITY
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-google-benchmark PUBLIC
@@ -43,7 +45,6 @@ target_sources(restricted-google-benchmark PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/json_reporter.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/perf_counters.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/reporter.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/sleep.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/statistics.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/string_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/google/benchmark/src/sysinfo.cc

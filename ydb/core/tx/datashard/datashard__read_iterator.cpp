@@ -709,11 +709,15 @@ private:
     template <typename TIterator>
     EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
         Y_UNUSED(ctx);
+
+        std::optional<TOwnedCellVec> lastProcessedKey;
+        bool stoppedByLimit = false;
+
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             TDbTupleRef rowKey = iter->GetKey();
-            TSerializedCellVec::Serialize(LastProcessedKey, rowKey.Cells());
-
             TDbTupleRef rowValues = iter->GetValues();
+
+            lastProcessedKey = TOwnedCellVec(rowKey.Cells());
 
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
@@ -725,9 +729,17 @@ private:
             Self->GetKeyAccessSampler()->AddSample(TableId, rowKey.Cells());
 
             if (ShouldStop()) {
-                return EReadStatus::StoppedByLimit;
+                stoppedByLimit = true;
+                break;
             }
         }
+
+        if (lastProcessedKey) {
+            LastProcessedKey = TSerializedCellVec::Serialize(*lastProcessedKey);
+        }
+
+        if (stoppedByLimit)
+            return EReadStatus::StoppedByLimit;
 
         // last iteration to Page or Gone also might have deleted or invisible rows
         InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
@@ -1763,7 +1775,7 @@ public:
                             "Can't read from a backup table");
                         return true;
                     }
-                    
+
                     if (!Self->IsMvccEnabled()) {
                         ReplyError(
                             Ydb::StatusIds::UNSUPPORTED,

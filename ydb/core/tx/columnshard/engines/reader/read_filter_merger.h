@@ -20,6 +20,8 @@ protected:
 public:
     TSortableBatchPosition() = default;
 
+    NJson::TJsonValue DebugJson() const;
+
     bool IsSameSchema(const std::shared_ptr<arrow::Schema> schema) const;
 
     TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& columns, const bool reverseSort)
@@ -79,6 +81,7 @@ public:
 
 class TMergePartialStream {
 private:
+    std::optional<TSortableBatchPosition> CurrentKeyColumns;
     class TBatchIterator {
     private:
         bool ControlPointFlag;
@@ -100,6 +103,8 @@ private:
         }
 
     public:
+        NJson::TJsonValue DebugJson() const;
+
         bool IsControlPoint() const {
             return ControlPointFlag;
         }
@@ -308,22 +313,7 @@ public:
         return SortHeap.empty();
     }
 
-    bool DrainCurrent() {
-        if (SortHeap.empty()) {
-            return false;
-        }
-        while (SortHeap.size()) {
-            auto currentPosition = DrainCurrentPosition();
-            if (currentPosition.IsControlPoint()) {
-                return false;
-            }
-            if (currentPosition.IsDeleted()) {
-                continue;
-            }
-            return true;
-        }
-        return false;
-    }
+    bool DrainCurrent();
 };
 
 

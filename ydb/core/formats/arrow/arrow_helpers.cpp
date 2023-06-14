@@ -881,4 +881,51 @@ std::shared_ptr<arrow::RecordBatch> BuildSingleRecordBatch(const std::shared_ptr
     return arrow::RecordBatch::Make(schema, 1, arrays);
 }
 
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head, const ui32 tail) {
+    if (!array) {
+        return NJson::JSON_NULL;
+    }
+    NJson::TJsonValue resultFull = NJson::JSON_MAP;
+    resultFull.InsertValue("length", array->length());
+    SwitchType(array->type_id(), [&](const auto& type) {
+        using TWrap = std::decay_t<decltype(type)>;
+        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+
+        auto& column = static_cast<const TArray&>(*array);
+        resultFull.InsertValue("type", typeid(TArray).name());
+        resultFull.InsertValue("head", head);
+        resultFull.InsertValue("tail", tail);
+        auto& result = resultFull.InsertValue("data", NJson::JSON_ARRAY);
+        for (int i = 0; i < column.length(); ++i) {
+            if (i >= (int)head && i + (int)tail <= column.length()) {
+                continue;
+            }
+            if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+                auto value = column.GetString(i);
+                result.AppendValue(TString(value.data(), value.size()));
+            }
+            if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                result.AppendValue(column.Value(i));
+            }
+        }
+        return true;
+        });
+    return resultFull;
+}
+
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail) {
+    if (!batch) {
+        return NJson::JSON_NULL;
+    }
+    NJson::TJsonValue result = NJson::JSON_ARRAY;
+    ui32 idx = 0;
+    for (auto&& i : batch->columns()) {
+        auto& jsonColumn = result.AppendValue(NJson::JSON_MAP);
+        jsonColumn.InsertValue("name", batch->column_name(idx));
+        jsonColumn.InsertValue("data", DebugJson(i, head, tail));
+        ++idx;
+    }
+    return result;
+}
+
 }

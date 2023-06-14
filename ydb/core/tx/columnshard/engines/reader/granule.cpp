@@ -71,6 +71,7 @@ std::deque<TGranule::TBatchForMerge> TGranule::SortBatchesByPK(const bool revers
     std::map<TSortableBatchPosition, ui32> poolIds;
     for (auto&& i : batches) {
         if (!i.GetFrom()) {
+            Y_VERIFY(!currentPoolId);
             continue;
         }
         auto it = poolIds.rbegin();

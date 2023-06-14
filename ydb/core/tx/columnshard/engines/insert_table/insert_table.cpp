@@ -73,8 +73,7 @@ THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
     }
     LastCleanup = now;
 
-    const TInstant timeBorder = now - WaitCommitDelay;
-    return Summary.GetDeprecatedInsertions(timeBorder);
+    return Summary.GetDeprecatedInsertions(now - WaitCommitDelay);
 }
 
 THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {

@@ -440,15 +440,16 @@ def onadd_ytest(unit, *args):
     if is_implicit_data_needed and unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
+    if flat_args[1] == "fuzz.test":
+        unit.ondata("arcadia/fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
+
     test_data = sorted(
         _common.filter_out_by_keyword(
             spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'
         )
     )
 
-    if flat_args[1] == "fuzz.test":
-        unit.ondata("arcadia/fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
-    elif flat_args[1] == "go.test":
+    if flat_args[1] == "go.test":
         data, _ = get_canonical_test_resources(unit)
         test_data += data
     elif flat_args[1] == "coverage.extractor" and not match_coverage_extractor_requirements(unit):

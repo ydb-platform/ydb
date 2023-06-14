@@ -63,11 +63,6 @@ int IntVal(const Value& node) {
     return intVal(&node);
 }
 
-double FloatVal(const Value& node) {
-    Y_ENSURE(node.type == T_Float);
-    return floatVal(&node);
-}
-
 const char* StrFloatVal(const Value& node) {
     Y_ENSURE(node.type == T_Float);
     return strVal(&node);
@@ -2038,7 +2033,10 @@ public:
             return L(A("PgConst"), QA(ToString(IntVal(val))), L(A("PgType"), QA("int4")));
         }
         case T_Float: {
-            return L(A("PgConst"), QA(ToString(StrFloatVal(val))), L(A("PgType"), QA("float8")));
+            auto s = StrFloatVal(val);
+            i64 v;
+            const bool isInt8 = TryFromString<i64>(s, v);
+            return L(A("PgConst"), QA(ToString(s)), L(A("PgType"), isInt8 ? QA("int8") : QA("numeric")));
         }
         case T_String: {
             return L(A("PgConst"), QAX(ToString(StrVal(val))), L(A("PgType"), QA("text")));

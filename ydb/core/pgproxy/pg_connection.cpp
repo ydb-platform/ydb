@@ -375,7 +375,7 @@ protected:
 
     void HandleMessage(const TPGQuery* message) {
         SyncSequenceNumber = IncomingSequenceNumber;
-        Send(DatabaseProxy, new TEvPGEvents::TEvQuery(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
+        Send(DatabaseProxy, new TEvPGEvents::TEvQuery(MakePGMessageCopy(message), TransactionStatus), 0, IncomingSequenceNumber++);
     }
 
     void HandleMessage(const TPGParse* message) {
@@ -399,7 +399,7 @@ protected:
     }
 
     void HandleMessage(const TPGExecute* message) {
-        Send(DatabaseProxy, new TEvPGEvents::TEvExecute(MakePGMessageCopy(message)), 0, IncomingSequenceNumber++);
+        Send(DatabaseProxy, new TEvPGEvents::TEvExecute(MakePGMessageCopy(message), TransactionStatus), 0, IncomingSequenceNumber++);
     }
 
     void HandleMessage(const TPGClose* message) {
@@ -577,6 +577,9 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvExecuteResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
+            if (ev->Get()->TransactionStatus) {
+                TransactionStatus = ev->Get()->TransactionStatus;
+            }
             if (ev->Get()->ErrorFields.empty()) {
                 if (ev->Get()->EmptyQuery) {
                     SendMessage(TPGEmptyQueryResponse());
@@ -592,7 +595,9 @@ protected:
                             SendStream(dataRow);
                         }
                     }
-                    { // commandComplete
+                    if (ev->Get()->CommandCompleted) {
+                        // commandComplete
+                        TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
                         TPGStreamOutput<TPGCommandComplete> commandComplete;
                         commandComplete << tag << '\0';
                         SendStream(commandComplete);
@@ -607,8 +612,10 @@ protected:
                 errorResponse << '\0';
                 SendStream(errorResponse);
             }
-            ++OutgoingSequenceNumber;
-            BecomeReadyForQuery();
+            if (ev->Get()->CommandCompleted) {
+                ++OutgoingSequenceNumber;
+                BecomeReadyForQuery();
+            }
         } else {
             PostponeEvent(ev);
         }

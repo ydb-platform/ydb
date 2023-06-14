@@ -52,10 +52,6 @@ namespace NKikimr {
 
         bool Success = false;
 
-        enum {
-            EvGenerateRestoreCorruptedBlobQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
-        };
-
     private:
         struct TUnreadableBlobState {
             NMatrix::TVectorType UnreadableParts; // parts we're going to recover from peer disks
@@ -79,6 +75,8 @@ namespace NKikimr {
         void AddUnreadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType corrupted, TDiskPart corruptedPart);
         void UpdateUnreadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType corrupted, TDiskPart corruptedPart);
         void UpdateReadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType readable);
+        void Handle(TEvTakeHullSnapshotResult::TPtr ev);
+        void FilterUnreadableBlobs(THullDsSnap& snap, TBarriersSnapshot::TBarriersEssence& barriers);
 
         ui64 GenerateRestoreCorruptedBlobQuery();
         void Handle(TAutoPtr<TEventHandle<TEvRestoreCorruptedBlobResult>> ev);

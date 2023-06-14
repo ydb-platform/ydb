@@ -29,7 +29,9 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-DEPENDS(ydb/apps/ydbd)
+DEPENDS(
+    ydb/apps/ydbd
+)
 
 PEERDIR(
     ydb/tests/library

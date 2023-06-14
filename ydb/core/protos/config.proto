@@ -811,6 +811,7 @@ message TFeatureFlags {
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];
+    optional bool EnableTopicMessageMeta = 100 [default = false];
 }
 
 message THttpProxyConfig {

@@ -8,6 +8,7 @@
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
 #include <library/cpp/lfalloc/dbg_info/dbg_info.h>
 #include <library/cpp/ytalloc/api/ytalloc.h>
+#include <library/cpp/yt/memory/memory_tag.h>
 #endif
 
 #include <util/generic/singleton.h>
@@ -83,8 +84,8 @@ namespace NProfiling {
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
     static ui32 SetThreadAllocTag_YT(ui32 tag) {
-        auto prev = NYT::NYTAlloc::GetCurrentMemoryTag();
-        NYT::NYTAlloc::SetCurrentMemoryTag(tag);
+        auto prev = NYT::GetCurrentMemoryTag();
+        NYT::SetCurrentMemoryTag(tag);
         return prev;
     }
 

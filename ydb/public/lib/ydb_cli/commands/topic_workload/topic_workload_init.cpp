@@ -19,6 +19,10 @@ void TCommandWorkloadTopicInit::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
+    config.Opts->AddLongOption("topic", "Topic name.")
+        .DefaultValue(TOPIC)
+        .StoreResult(&TopicName);
+
     config.Opts->AddLongOption('p', "partitions", "Number of partitions in the topic.")
         .DefaultValue(128)
         .StoreResult(&PartitionCount);
@@ -34,11 +38,11 @@ void TCommandWorkloadTopicInit::Parse(TConfig& config) {
 int TCommandWorkloadTopicInit::Run(TConfig& config) {
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*Driver);
-    auto topicName = config.Database + "/" + TOPIC;
 
-    auto describeTopicResult = topicClient->DescribeTopic(topicName, {}).GetValueSync();
+    auto fullTopicName = TCommandWorkloadTopicDescribe::GenerateFullTopicName(config.Database, TopicName);
+    auto describeTopicResult = topicClient->DescribeTopic(fullTopicName, {}).GetValueSync();
     if (describeTopicResult.GetTopicDescription().GetTotalPartitionsCount() != 0) {
-        Cout << "Topic " << topicName << " already exists.\n";
+        Cout << "Topic " << TopicName << " already exists.\n";
         return EXIT_FAILURE;
     }
 
@@ -50,7 +54,7 @@ int TCommandWorkloadTopicInit::Run(TConfig& config) {
             .EndAddConsumer();
     }
 
-    auto result = topicClient->CreateTopic(topicName, settings).GetValueSync();
+    auto result = topicClient->CreateTopic(fullTopicName, settings).GetValueSync();
     ThrowOnError(result);
 
     return EXIT_SUCCESS;

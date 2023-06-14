@@ -1011,7 +1011,10 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
     Y_VERIFY(spg);
 
     if (updateStats) {
-        UpdatePortionStats(spg->GetPortionVerified(portion), EStatsUpdateType::ERASE);
+        auto* p = spg->GetPortionPointer(portion);
+        if (p) {
+            UpdatePortionStats(*p, EStatsUpdateType::ERASE);
+        }
     }
     Y_VERIFY(spg->ErasePortion(portion));
 

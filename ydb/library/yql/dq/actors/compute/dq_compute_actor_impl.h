@@ -192,7 +192,7 @@ protected:
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
         , TaskCounters(taskCounters)
-        , DqComputeActorMetrics(taskCounters)
+        , MetricsReporter(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
@@ -225,7 +225,7 @@ protected:
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
         , TaskCounters(taskCounters)
-        , DqComputeActorMetrics(taskCounters)
+        , MetricsReporter(taskCounters)
         , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
         , Running(!Task.GetCreateSuspended())
     {
@@ -280,6 +280,8 @@ protected:
     }
 
     STFUNC(BaseStateFuncBody) {
+        MetricsReporter.ReportEvent(ev->GetTypeRewrite());
+
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
@@ -1683,7 +1685,7 @@ protected:
                 ContinueExecute();
             }
 
-            DqComputeActorMetrics.ReportAsyncInputData(inputIndex, batch.RowCount(), watermark);
+            MetricsReporter.ReportAsyncInputData(inputIndex, batch.RowCount(), watermark);
 
             if (watermark) {
                 const auto inputWatermarkChanged = WatermarksTracker.NotifyAsyncInputWatermarkReceived(
@@ -2176,7 +2178,7 @@ protected:
     THolder<TDqMemoryQuota> MemoryQuota;
     TDqComputeActorWatermarks WatermarksTracker;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
-    TDqComputeActorMetrics DqComputeActorMetrics;
+    TDqComputeActorMetrics MetricsReporter;
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
 private:

@@ -435,7 +435,9 @@ def onadd_ytest(unit, *args):
         "FORK_TESTS": 0,
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
-    if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
+
+    is_implicit_data_needed = flat_args[1] in ("unittest.py", "gunittest", "g_benchmark", "go.test", "boost.test")
+    if is_implicit_data_needed and unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
     test_data = sorted(

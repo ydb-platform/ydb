@@ -114,19 +114,7 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
                       thd_arg arg = *static_cast<thd_arg*>(v);
                       free(v);
                       if (arg.name != nullptr) {
-#if GPR_APPLE_PTHREAD_NAME
-                        /* Apple supports 64 characters, and will
-                         * truncate if it's longer. */
-                        pthread_setname_np(arg.name);
-#elif GPR_LINUX_PTHREAD_NAME
-                        /* Linux supports 16 characters max, and will
-                         * error if it's longer. */
-                        char buf[16];
-                        size_t buf_len = GPR_ARRAY_SIZE(buf) - 1;
-                        strncpy(buf, arg.name, buf_len);
-                        buf[buf_len] = '\0';
-                        pthread_setname_np(pthread_self(), buf);
-#endif  // GPR_APPLE_PTHREAD_NAME
+                        TThread::SetCurrentThreadName(arg.name);
                       }
 
                       gpr_mu_lock(&arg.thread->mu_);

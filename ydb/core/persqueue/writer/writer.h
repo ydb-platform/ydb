@@ -113,9 +113,11 @@ struct TEvPartitionWriter {
 struct TPartitionWriterOpts {
     bool CheckState = false;
     bool AutoRegister = false;
+    bool UseDeduplication = true;
 
     TPartitionWriterOpts& WithCheckState(bool value) { CheckState = value; return *this; }
     TPartitionWriterOpts& WithAutoRegister(bool value) { AutoRegister = value; return *this; }
+    TPartitionWriterOpts& WithDeduplication(bool value) { UseDeduplication = value; return *this; }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, const TString& sourceId,

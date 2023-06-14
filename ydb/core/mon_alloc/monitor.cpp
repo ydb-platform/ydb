@@ -14,6 +14,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/ytalloc/api/ytalloc.h>
+#include <library/cpp/yt/memory/memory_tag.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
@@ -270,7 +271,7 @@ namespace NKikimr {
             void Update(TDuration interval) override {
                 Y_UNUSED(interval);
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-                using namespace NYT::NYTAlloc;
+                using namespace NYT;
 
                 size_t maxTag = NProfiling::GetTagsCount();
 
@@ -303,7 +304,7 @@ namespace NKikimr {
             void Dump(IOutputStream& out, const TString& relPath) override {
                 Y_UNUSED(relPath);
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-                using namespace NYT::NYTAlloc;
+                using namespace NYT;
 
                 size_t maxTag = NProfiling::GetTagsCount();
 

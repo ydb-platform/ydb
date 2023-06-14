@@ -1566,6 +1566,13 @@ void THive::UpdateCounterBootQueueSize(ui64 bootQueueSize) {
         counter.Set(bootQueueSize);
     }
 }
+void THive::UpdateCounterEventQueueSize(i64 eventQueueSizeDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_EVENTQUEUE_SIZE];
+        auto newValue = counter.Get() + eventQueueSizeDiff;
+        counter.Set(newValue);
+    }
+}
 
 bool THive::DomainHasNodes(const TSubDomainKey &domainKey) const {
     return !DomainsView.IsEmpty(domainKey);
@@ -2495,6 +2502,11 @@ void THive::Handle(TEvHive::TEvReassignOnDecommitGroup::TPtr& ev) {
     Execute(CreateReassignGroupsOnDecommit(groupId, std::move(reply)));
 }
 
+void THive::Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr&) {
+    UpdateCounterEventQueueSize(-1);
+    EventQueue.ProcessIncomingEvent();
+}
+
 void THive::InitDefaultChannelBind(TChannelBind& bind) {
     if (!bind.HasIOPS()) {
         bind.SetIOPS(GetDefaultUnitIOPS());
@@ -2528,18 +2540,24 @@ void THive::RequestPoolsInformation() {
     }
 }
 
-STFUNC(THive::StateInit) {
+ui32 THive::GetEventPriority(IEventHandle* ev) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-    default:
-        StateInitImpl(ev, SelfId());
+        case TEvHive::EvRequestHiveInfo:
+        case TEvHive::EvRequestHiveDomainStats:
+        case TEvHive::EvRequestHiveNodeStats:
+        case TEvHive::EvRequestHiveStorageStats:
+            return 10;
+        default:
+            return 50;
     }
 }
 
-STFUNC(THive::StateWork) {
-    if (ResponsivenessPinger)
-        ResponsivenessPinger->OnAnyEvent();
+void THive::PushProcessIncomingEvent() {
+    Send(SelfId(), new TEvPrivate::TEvProcessIncomingEvent());
+}
 
+void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
+    TAutoPtr ev = event.release();
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvHive::TEvCreateTablet, Handle);
         hFunc(TEvHive::TEvAdoptTablet, Handle);
@@ -2609,6 +2627,96 @@ STFUNC(THive::StateWork) {
         hFunc(TEvHive::TEvRequestTabletOwners, Handle);
         hFunc(TEvHive::TEvTabletOwnersReply, Handle);
         hFunc(TEvPrivate::TEvBalancerOut, Handle);
+    }
+}
+
+void THive::EnqueueIncomingEvent(STATEFN_SIG) {
+    EventQueue.EnqueueIncomingEvent(ev);
+    UpdateCounterEventQueueSize(+1);
+}
+
+STFUNC(THive::StateInit) {
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+    default:
+        StateInitImpl(ev, SelfId());
+    }
+}
+
+STFUNC(THive::StateWork) {
+    if (ResponsivenessPinger)
+        ResponsivenessPinger->OnAnyEvent();
+
+    switch (ev->GetTypeRewrite()) {
+        fFunc(TEvHive::TEvCreateTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvAdoptTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvStopTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvBootTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvLocal::TEvStatus::EventType, EnqueueIncomingEvent);
+        fFunc(TEvLocal::TEvTabletStatus::EventType, EnqueueIncomingEvent); // from bootqueue
+        fFunc(TEvLocal::TEvRegisterNode::EventType, EnqueueIncomingEvent); // from local
+        fFunc(TEvBlobStorage::TEvControllerSelectGroupsResult::EventType, EnqueueIncomingEvent);
+        fFunc(TEvents::TEvPoisonPill::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTabletPipe::TEvClientConnected::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTabletPipe::TEvClientDestroyed::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTabletPipe::TEvServerConnected::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTabletPipe::TEvServerDisconnected::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvBootTablets::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvInitMigration::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvQueryMigration::EventType, EnqueueIncomingEvent);
+        fFunc(TEvInterconnect::TEvNodeConnected::EventType, EnqueueIncomingEvent);
+        fFunc(TEvInterconnect::TEvNodeDisconnected::EventType, EnqueueIncomingEvent);
+        fFunc(TEvInterconnect::TEvNodeInfo::EventType, EnqueueIncomingEvent);
+        fFunc(TEvInterconnect::TEvNodesInfo::EventType, EnqueueIncomingEvent);
+        fFunc(TEvents::TEvUndelivered::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessBootQueue::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvPostponeProcessBootQueue::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessPendingOperations::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessDisconnectNode::EventType, EnqueueIncomingEvent);
+        fFunc(TEvLocal::TEvSyncTablets::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvKickTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvTabletMetrics::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTabletBase::TEvBlockBlobStorageResult::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTabletBase::TEvDeleteTabletResult::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvReassignTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvInitiateBlockStorage::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvDeleteTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvDeleteOwnerTablets::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestHiveInfo::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvLookupTablet::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvLookupChannelInfo::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvCutTabletHistory::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvDrainNode::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvFillNode::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvInitiateDeleteStorage::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvGetTabletStorageInfo::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvLockTabletExecution::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvUnlockTabletExecution::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessTabletBalancer::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvUnlockTabletReconnectTimeout::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvInitiateTabletExternalBoot::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestHiveDomainStats::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestHiveNodeStats::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestHiveStorageStats::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvInvalidateStoragePools::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvReassignOnDecommitGroup::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestTabletIdSequence::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvResponseTabletIdSequence::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvSeizeTablets::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvSeizeTabletsReply::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvReleaseTablets::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvReleaseTabletsReply::EventType, EnqueueIncomingEvent);
+        fFunc(TEvSubDomain::TEvConfigure::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvConfigureHive::EventType, EnqueueIncomingEvent);
+        fFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
+        fFunc(NSysView::TEvSysView::TEvGetTabletIdsRequest::EventType, EnqueueIncomingEvent);
+        fFunc(NSysView::TEvSysView::TEvGetTabletsRequest::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvRequestTabletOwners::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvTabletOwnersReply::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvBalancerOut::EventType, EnqueueIncomingEvent);
+        hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
             BLOG_W("THive::StateWork unhandled event type: " << ev->GetTypeRewrite()

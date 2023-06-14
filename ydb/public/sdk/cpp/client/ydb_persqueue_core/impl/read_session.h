@@ -265,6 +265,13 @@ public:
         return BatchesMeta[batchIndex];
     }
 
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr GetMessageMeta(size_t batchIndex, size_t messageIndex) const {
+        Y_ASSERT(batchIndex < MessagesMeta.size());
+        Y_ASSERT(messageIndex < MessagesMeta[batchIndex].size());
+        return MessagesMeta[batchIndex][messageIndex];
+    }
+
     bool HasMoreData() const {
         return CurrentReadingMessage.first < static_cast<size_t>(GetServerMessage().batches_size());
     }
@@ -322,7 +329,9 @@ private:
 
 private:
     TPartitionData<UseMigrationProtocol> ServerMessage;
-    std::vector<typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr> BatchesMeta;
+    using TMetadataPtrVector = std::vector<typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr>;
+    TMetadataPtrVector BatchesMeta;
+    std::vector<TMetadataPtrVector> MessagesMeta;
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     bool DoDecompress;
     i64 ServerBytesSize = 0;

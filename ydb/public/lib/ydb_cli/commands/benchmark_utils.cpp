@@ -73,49 +73,169 @@ bool HasCharsInString(const TString& str) {
     return false;
 }
 
-std::pair<TString, TString> ResultToYson(NTable::TScanQueryPartIterator& it) {
-    TStringStream out;
-    TStringStream err_out;
-    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
-    writer.OnBeginList();
-
-    for (;;) {
-        auto streamPart = it.ReadNext().GetValueSync();
-        if (!streamPart.IsSuccess()) {
-            if (!streamPart.EOS()) {
-                err_out << streamPart.GetIssues().ToString() << Endl;
-            }
-            break;
-        }
-
-        if (streamPart.HasResultSet()) {
-            auto result = streamPart.ExtractResultSet();
-            auto columns = result.GetColumnsMeta();
-
-            NYdb::TResultSetParser parser(result);
-            while (parser.TryNextRow()) {
-                writer.OnListItem();
-                writer.OnBeginList();
-                for (ui32 i = 0; i < columns.size(); ++i) {
-                    writer.OnListItem();
-                    FormatValueYson(parser.GetValue(i), writer);
-                }
-                writer.OnEndList();
-                out << "\n";
-            }
-        }
+class IQueryResultScanner {
+private:
+    TString ErrorInfo;
+public:
+    virtual ~IQueryResultScanner() = default;
+    virtual void OnStart() = 0;
+    virtual void OnBeforeRow() = 0;
+    virtual void OnAfterRow() = 0;
+    virtual void OnRowItem(const NYdb::TValue& value) = 0;
+    virtual void OnFinish() = 0;
+    void OnError(const TString& info) {
+        ErrorInfo = info;
+    }
+    const TString& GetErrorInfo() const {
+        return ErrorInfo;
     }
 
-    writer.OnEndList();
-    return {out.Str(), err_out.Str()};
-}
+    bool Scan(NTable::TScanQueryPartIterator& it) {
+        OnStart();
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                if (!streamPart.EOS()) {
+                    OnError(streamPart.GetIssues().ToString());
+                    return false;
+                }
+                break;
+            }
 
-std::pair<TString, TString> Execute(const TString& query, NTable::TTableClient& client) {
+            if (streamPart.HasResultSet()) {
+                auto result = streamPart.ExtractResultSet();
+                auto columns = result.GetColumnsMeta();
+
+                NYdb::TResultSetParser parser(result);
+                while (parser.TryNextRow()) {
+                    OnBeforeRow();
+                    for (ui32 i = 0; i < columns.size(); ++i) {
+                        OnRowItem(parser.GetValue(i));
+                    }
+                    OnAfterRow();
+                }
+            }
+        }
+        OnFinish();
+        return true;
+    }
+};
+
+class TQueryResultScannerComposite: public IQueryResultScanner {
+private:
+    std::vector<std::shared_ptr<IQueryResultScanner>> Scanners;
+public:
+    void AddScanner(std::shared_ptr<IQueryResultScanner> scanner) {
+        Scanners.emplace_back(scanner);
+    }
+
+    virtual void OnStart() override {
+        for (auto&& i : Scanners) {
+            i->OnStart();
+        }
+    }
+    virtual void OnBeforeRow() override {
+        for (auto&& i : Scanners) {
+            i->OnBeforeRow();
+        }
+    }
+    virtual void OnAfterRow() override {
+        for (auto&& i : Scanners) {
+            i->OnAfterRow();
+        }
+    }
+    virtual void OnRowItem(const NYdb::TValue& value) override {
+        for (auto&& i : Scanners) {
+            i->OnRowItem(value);
+        }
+    }
+    virtual void OnFinish() override {
+        for (auto&& i : Scanners) {
+            i->OnFinish();
+        }
+    }
+};
+
+class TYSONResultScanner: public IQueryResultScanner {
+private:
+    TStringStream ResultString;
+    mutable std::unique_ptr<NYson::TYsonWriter> Writer;
+public:
+    TYSONResultScanner() {
+    }
+    TString GetResult() const {
+        Writer.reset();
+        return ResultString.Str();
+    }
+    virtual void OnStart() override {
+        Writer = std::make_unique<NYson::TYsonWriter>(&ResultString, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+        Writer->OnBeginList();
+    }
+    virtual void OnBeforeRow() override {
+        Writer->OnListItem();
+        Writer->OnBeginList();
+    }
+    virtual void OnAfterRow() override {
+        Writer->OnEndList();
+    }
+    virtual void OnRowItem(const NYdb::TValue& value) override {
+        Writer->OnListItem();
+        FormatValueYson(value, *Writer);
+    }
+    virtual void OnFinish() override {
+        Writer->OnEndList();
+    }
+};
+
+class TCSVResultScanner: public IQueryResultScanner {
+private:
+    TStringStream ResultString;
+    bool IsFirstInRow = false;
+    bool IsFirstRow = true;
+public:
+    TCSVResultScanner() {
+    }
+    TString GetResult() const {
+        return ResultString.Str();
+    }
+    virtual void OnStart() override {
+    }
+    virtual void OnBeforeRow() override {
+        if (!IsFirstRow) {
+            ResultString << "\n";
+            IsFirstRow = false;
+        }
+        IsFirstInRow = true;
+    }
+    virtual void OnAfterRow() override {
+    }
+    virtual void OnRowItem(const NYdb::TValue& value) override {
+        if (!IsFirstInRow) {
+            ResultString << ",";
+            IsFirstInRow = false;
+        }
+        ResultString << FormatValueYson(value);
+    }
+    virtual void OnFinish() override {
+    }
+};
+
+TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client) {
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
     ThrowOnError(it);
-    return ResultToYson(it);
+
+    std::shared_ptr<TYSONResultScanner> scannerYson = std::make_shared<TYSONResultScanner>();
+    std::shared_ptr<TCSVResultScanner> scannerCSV = std::make_shared<TCSVResultScanner>();
+    TQueryResultScannerComposite composite;
+    composite.AddScanner(scannerYson);
+    composite.AddScanner(scannerCSV);
+    if (!composite.Scan(it)) {
+        return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
+    } else {
+        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), scannerCSV->GetResult());
+    }
 }
 
 NJson::TJsonValue GetQueryLabels(ui32 queryId) {

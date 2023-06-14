@@ -62,7 +62,7 @@ Error types:
 | SCHEME_ERROR | The query doesn't match the schema | Fix the query or schema | N |
 | GENERIC_ERROR | An unclassified error, possibly related to the query | See the detailed error message and contact the developers | N |
 | TIMEOUT | The query timeout expired | Can be repeated in case of idempotent queries | C |
-| BAD_SESSION | This session is no longer available | Re-create a session | N |
+| BAD_SESSION | This session is no longer available | Re-create a session | R |
 | PRECONDITION_FAILED | The query cannot be executed for the current state (for example, inserting data into a table with an existing key) | Fix the state or query and retry | C |
 | TRANSPORT_UNAVAILABLE | A transport error, the endpoint is unavailable, or the connection was interrupted and can't be reestablished | Check the endpoint or other network settings | C |
 | CLIENT_RESOURCE_EXHAUSTED | There are not enough resources available to fulfill the query | Reduce the rate of queries and check client balancing | R |

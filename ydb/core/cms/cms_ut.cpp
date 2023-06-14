@@ -552,6 +552,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(rec3.GetRequests(0).GetOwner(), "user");
         UNIT_ASSERT_VALUES_EQUAL(rec3.GetRequests(0).ActionsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(rec3.GetRequests(0).GetPartialPermissionAllowed(), true);
+        UNIT_ASSERT_VALUES_EQUAL(rec3.GetRequests(0).GetAvailabilityMode(), MODE_MAX_AVAILABILITY);
 
         // Done with permission-1.
         env.CheckDonePermission("user", pid1);

@@ -50,15 +50,15 @@ public:
     bool Load(TInsertTableAccessor& accessor,
               const TInstant&) override {
         for (auto&& i : Inserted) {
-            accessor.AddInserted(i.first, std::move(i.second));
+            accessor.AddInserted(std::move(i.second), true);
         }
         for (auto&& i : Aborted) {
-            accessor.AddAborted(i.first, std::move(i.second));
+            accessor.AddAborted(std::move(i.second), true);
         }
         for (auto&& i : Committed) {
             for (auto&& c: i.second) {
                 auto copy = c;
-                accessor.AddCommitted(std::move(copy));
+                accessor.AddCommitted(std::move(copy), true);
             }
         }
         return true;

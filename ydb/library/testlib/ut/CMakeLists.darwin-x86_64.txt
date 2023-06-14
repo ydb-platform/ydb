@@ -19,6 +19,8 @@ target_link_options(ydb-library-testlib-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-testlib-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/testlib/ut/gtest_compat_ut.cpp

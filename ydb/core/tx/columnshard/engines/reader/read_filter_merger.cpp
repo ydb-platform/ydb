@@ -17,15 +17,26 @@ bool TSortableBatchPosition::IsSameSchema(const std::shared_ptr<arrow::Schema> s
     return true;
 }
 
+NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
+    NJson::TJsonValue result;
+    result["reverse"] = ReverseSort;
+    result["records_count"] = RecordsCount;
+    result["position"] = Position;
+    Y_VERIFY(Columns.size() == Fields.size());
+    for (ui32 i = 0; i < Columns.size(); ++i) {
+        auto& jsonColumn = result["columns"].AppendValue(NJson::JSON_MAP);
+        jsonColumn["name"] = Fields[i]->name();
+        jsonColumn["info"] = NArrow::DebugJson(Columns[i]);
+    }
+    return result;
+}
+
 void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition> point) {
     Y_VERIFY(point);
     Y_VERIFY(point->IsSameSchema(SortSchema));
     Y_VERIFY(++ControlPoints == 1);
 
     SortHeap.emplace_back(TBatchIterator(*point));
-    if (SortHeap.size() > 1) {
-        Y_VERIFY(SortHeap.front().GetKeyColumns().Compare(SortHeap.back().GetKeyColumns()) != std::partial_ordering::greater);
-    }
     std::push_heap(SortHeap.begin(), SortHeap.end());
 }
 
@@ -68,6 +79,39 @@ void TMergePartialStream::RemoveControlPoint() {
     Y_VERIFY(-- ControlPoints == 0);
     std::pop_heap(SortHeap.begin(), SortHeap.end());
     SortHeap.pop_back();
+}
+
+bool TMergePartialStream::DrainCurrent() {
+    if (SortHeap.empty()) {
+        return false;
+    }
+    while (SortHeap.size()) {
+        auto currentPosition = DrainCurrentPosition();
+        if (CurrentKeyColumns) {
+            Y_VERIFY(CurrentKeyColumns->Compare(currentPosition.GetKeyColumns()) != std::partial_ordering::greater);
+        }
+        CurrentKeyColumns = currentPosition.GetKeyColumns();
+        if (currentPosition.IsControlPoint()) {
+            return false;
+        }
+        if (currentPosition.IsDeleted()) {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
+
+NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
+    NJson::TJsonValue result;
+    result["is_cp"] = IsControlPoint();
+    if (PoolId) {
+        result["pool_id"] = *PoolId;
+    } else {
+        result["pool_id"] = "absent";
+    }
+    result["key"] = KeyColumns.DebugJson();
+    return result;
 }
 
 }

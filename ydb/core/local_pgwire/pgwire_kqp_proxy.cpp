@@ -17,154 +17,27 @@ namespace NLocalPgWire {
 using namespace NActors;
 using namespace NKikimr;
 
-class TPgwireKqpProxy : public TActor<TPgwireKqpProxy> {
-    using TBase = TActor<TPgwireKqpProxy>;
+template<typename Base>
+class TPgwireKqpProxy : public TActorBootstrapped<Base> {
+protected:
+    using TBase = TActorBootstrapped<Base>;
 
-    NActors::TActorId RequestActorId_;
-    ui64 RequestCookie_;
-    bool InTransaction_;
+    TActorId Owner_;
     std::unordered_map<TString, TString> ConnectionParams_;
-    TMap<ui32, NYdb::TResultSet> ResultSets_;
-public:
-    TPgwireKqpProxy(std::unordered_map<TString, TString> params)
-        : TActor<TPgwireKqpProxy>(&TPgwireKqpProxy::StateWork)
+    TConnectionState Connection_;
+    TString Tag_;
+
+    TPgwireKqpProxy(const TActorId owner, std::unordered_map<TString, TString> params, const TConnectionState& connection)
+        : Owner_(owner)
         , ConnectionParams_(std::move(params))
-    {}
-
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        NYdb::TResultSet resultSet(std::move(*ev->Get()->Record.MutableResultSet()));
-        ResultSets_.emplace(ev->Get()->Record.GetQueryResultIndex(), resultSet);
-
-        BLOG_D(this->SelfId() << "Send stream data ack"
-            << ", to: " << ev->Sender);
-
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(std::numeric_limits<ui64>::max());
-        Send(ev->Sender, resp.Release());
-    }
-
-    void FillResultSet(const NYdb::TResultSet& resultSet, NPG::TEvPGEvents::TEvQueryResponse* response) {
-        {
-            for (const NYdb::TColumn& column : resultSet.GetColumnsMeta()) {
-                // TODO: fill data types and sizes
-                response->DataFields.push_back({
-                    .Name = column.Name,
-                    .DataType = GetPgOidFromYdbType(column.Type),
-                    // .DataTypeSize = column.Type.GetProto().Getpg_type().Gettyplen()
-                });
-            }
-        }
-        {
-            NYdb::TResultSetParser parser(std::move(resultSet));
-            while (parser.TryNextRow()) {
-                response->DataRows.emplace_back();
-                auto& row = response->DataRows.back();
-                row.resize(parser.ColumnsCount());
-                for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                    row[index] = ColumnValueToString(parser.ColumnParser(index));
-                }
-            }
+        , Connection_(connection)
+    {
+        if (!Connection_.Transaction.Status) {
+            Connection_.Transaction.Status = 'I';
         }
     }
 
-    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        BLOG_D("Handling TEvKqp::TEvQueryResponse");
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
-
-        auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
-        // HACK
-        if (InTransaction_) {
-            response->Tag = "BEGIN";
-            response->TransactionStatus = 'T';
-        }
-        try {
-            if (record.HasYdbStatus()) {
-                if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    Y_ENSURE(record.GetResponse().GetYdbResults().empty());
-                    if (!ResultSets_.empty()) {
-                        FillResultSet(ResultSets_.begin()->second, response.get());
-                    }
-
-                    // HACK
-                    response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
-                    // HACK
-                } else {
-                    NYql::TIssues issues;
-                    NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-                    NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', TStringBuilder() << status});
-                }
-            } else {
-                response->ErrorFields.push_back({'E', "ERROR"});
-                response->ErrorFields.push_back({'M', "No result received"});
-            }
-        } catch (const std::exception& e) {
-            response->ErrorFields.push_back({'E', "ERROR"});
-            response->ErrorFields.push_back({'M', e.what()});
-        }
-        BLOG_D("Finally replying to " << RequestActorId_);
-        Send(RequestActorId_, response.release(), 0, RequestCookie_);
-        PassAway();
-    }
-
-    void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
-        BLOG_D("TEvQuery, sender: " << ev->Sender << " , self: " << SelfId());
-        RequestActorId_ = ev->Sender;
-        RequestCookie_ = ev->Cookie;
-        auto query(ev->Get()->Message->GetQuery());
-        TString database;
-        if (ConnectionParams_.count("database")) {
-            database = ConnectionParams_["database"];
-        }
-        TString token;
-        if (ConnectionParams_.count("ydb-serialized-token")) {
-            token = ConnectionParams_["ydb-serialized-token"];
-        }
-
-        auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
-        request.SetQuery(ToPgSyntax(query, ConnectionParams_));
-        request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-        request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        request.MutableTxControl()->set_commit_tx(true);
-        request.SetKeepSession(false);
-        request.SetDatabase(database);
-        event->Record.SetUserToken(token);
-        InTransaction_ = query.starts_with("BEGIN");
-        ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        BLOG_D("Sent event to kqpProxy, RequestActorId = " << RequestActorId_ << ", self: " << SelfId());
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NPG::TEvPGEvents::TEvQuery, Handle);
-            hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-        }
-    }
-};
-
-class TPgwireKqpProxyQuery : public TActorBootstrapped<TPgwireKqpProxyQuery> {
-    using TBase = TActorBootstrapped<TPgwireKqpProxyQuery>;
-
-    std::unordered_map<TString, TString> ConnectionParams_;
-    NPG::TEvPGEvents::TEvQuery::TPtr EventQuery_;
-    bool WasMeta_ = false;
-    TString Tag;
-    char TransactionStatus = 0;
-
-public:
-    TPgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery)
-        : ConnectionParams_(std::move(params))
-        , EventQuery_(std::move(evQuery))
-    {}
-
-    void Bootstrap() {
-        auto query(EventQuery_->Get()->Message->GetQuery());
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeKqpRequest() {
         TString database;
         if (ConnectionParams_.count("database")) {
             database = ConnectionParams_["database"];
@@ -175,35 +48,103 @@ public:
         }
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
-        request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        request.MutableTxControl()->set_commit_tx(true);
-        request.SetKeepSession(false);
         request.SetDatabase(database);
         event->Record.SetUserToken(token);
+        return event;
+    }
 
+    void ConvertQueryToRequest(TStringBuf query, NKikimrKqp::TQueryRequest& request) {
+        if (Connection_.SessionId) {
+            request.SetSessionId(Connection_.SessionId);
+        }
+        request.SetKeepSession(true);
         // HACK
-        if (query.starts_with("BEGIN")) {
-            Tag = "BEGIN";
-            TransactionStatus = 'T';
+        TString q(ToUpperUTF8(query.substr(0, 10)));
+        if (q.StartsWith("BEGIN")) {
+            Tag_ = "BEGIN";
             request.SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
-        } else if (query.starts_with("COMMIT")) {
-            Tag = "COMMIT";
-            TransactionStatus = 'I';
+            request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        } else if (q.StartsWith("COMMIT")) {
+            Tag_ = "COMMIT";
             request.SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
-        } else if (query.starts_with("ROLLBACK")) {
-            Tag = "ROLLBACK";
-            TransactionStatus = 'I';
-            request.SetAction(NKikimrKqp::QUERY_ACTION_ROLLBACK_TX);
+            request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
+        } else if (q.StartsWith("ROLLBACK")) {
+            Tag_ = "ROLLBACK";
+            if (Connection_.Transaction.Status == 'T') {
+                request.SetAction(NKikimrKqp::QUERY_ACTION_ROLLBACK_TX);
+                request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
+            } else if (Connection_.Transaction.Status == 'E') {
+                // ignore, reset to I
+                auto evQueryResponse = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
+                evQueryResponse->Record.GetRef().SetYdbStatus(Ydb::StatusIds::SUCCESS);
+                evQueryResponse->Record.GetRef().MutableResponse()->SetSessionId(request.GetSessionId());
+                TBase::Send(TBase::SelfId(), evQueryResponse.Release());
+            }
         } else {
+            if (q.StartsWith("SELECT")) {
+                Tag_ = "SELECT";
+            }
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetQuery(ToPgSyntax(query, ConnectionParams_));
+            if (Connection_.Transaction.Status == 'I') {
+                request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.MutableTxControl()->set_commit_tx(true);
+            } else if (Connection_.Transaction.Status == 'T') {
+                request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
+            }
+        }
+    }
+
+    void ProcessKqpResponseReleaseProxy(const NKikimrKqp::TEvQueryResponse& record) {
+        Connection_.SessionId = record.GetResponse().GetSessionId();
+
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            Connection_.Transaction.Id = record.GetResponse().GetTxMeta().id();
+            if (Connection_.Transaction.Id) {
+                Connection_.Transaction.Status = 'T';
+            } else {
+                Connection_.Transaction.Status = 'I';
+            }
+        } else {
+            if (Connection_.Transaction.Id) {
+                Connection_.Transaction.Id.clear();
+                Connection_.Transaction.Status = 'E';
+            } else {
+                Connection_.Transaction.Status = 'I';
+            }
         }
 
-        ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        BLOG_D("Sent event to kqpProxy, RequestActorId = " << EventQuery_->Sender << ", self: " << SelfId());
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+        TBase::Send(Owner_, new TEvEvents::TEvProxyCompleted(Connection_));
+    }
+};
 
+class TPgwireKqpProxyQuery : public TPgwireKqpProxy<TPgwireKqpProxyQuery> {
+    using TBase = TPgwireKqpProxy<TPgwireKqpProxyQuery>;
+
+    NPG::TEvPGEvents::TEvQuery::TPtr EventQuery_;
+    bool WasMeta_ = false;
+    std::size_t RowsSelected_ = 0;
+
+public:
+    TPgwireKqpProxyQuery(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery)
+        : TPgwireKqpProxy(owner, std::move(params), connection)
+        , EventQuery_(std::move(evQuery))
+    {
+    }
+
+    void Bootstrap() {
+        auto query(EventQuery_->Get()->Message->GetQuery());
+        auto event = MakeKqpRequest();
+        NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
+
+        // HACK
+        ConvertQueryToRequest(query, request);
+        if (request.HasAction()) {
+            ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+            BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+        }
         // TODO(xenoxeno): timeout
         Become(&TPgwireKqpProxyQuery::StateWork);
     }
@@ -234,8 +175,8 @@ public:
     std::unique_ptr<NPG::TEvPGEvents::TEvQueryResponse> MakeResponse() {
         auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
 
-        response->Tag = Tag;
-        response->TransactionStatus = TransactionStatus;
+        response->Tag = Tag_;
+        response->TransactionStatus = Connection_.Transaction.Status;
 
         return response;
     }
@@ -250,10 +191,7 @@ public:
         FillResultSet(resultSet, response.get());
         response->CommandCompleted = false;
 
-        // HACK
-        if (response->DataRows.size() > 0) {
-            response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
-        }
+        RowsSelected_ += response->DataRows.size();
 
         BLOG_D(this->SelfId() << "Send rowset data (" << ev->Get()->Record.GetSeqNo() << ") to: " << EventQuery_->Sender);
         Send(EventQuery_->Sender, response.release(), 0, EventQuery_->Cookie);
@@ -266,18 +204,18 @@ public:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
-        BLOG_D("Handling TEvKqp::TEvQueryResponse");
+        BLOG_D("Handling TEvKqp::TEvQueryResponse " << ev->Get()->Record.ShortDebugString());
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
-
+        ProcessKqpResponseReleaseProxy(record);
         auto response = MakeResponse();
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    Y_ENSURE(record.GetResponse().GetResults().empty());
+                    BLOG_ENSURE(record.GetResponse().GetResults().empty());
 
                     // HACK
-                    if (response->DataRows.size() > 0) {
-                        response->Tag = TStringBuilder() << "SELECT " << response->DataRows.size();
+                    if (response->Tag == "SELECT") {
+                        response->Tag = TStringBuilder() << response->Tag << " " << RowsSelected_;
                     }
                 } else {
                     NYql::TIssues issues;
@@ -308,58 +246,41 @@ public:
     }
 };
 
-class TPgwireKqpProxyDescribe : public TActorBootstrapped<TPgwireKqpProxyDescribe> {
-    using TBase = TActorBootstrapped<TPgwireKqpProxyDescribe>;
+class TPgwireKqpProxyDescribe : public TPgwireKqpProxy<TPgwireKqpProxyDescribe> {
+    using TBase = TPgwireKqpProxy<TPgwireKqpProxyDescribe>;
 
-    std::unordered_map<TString, TString> ConnectionParams_;
     NPG::TEvPGEvents::TEvDescribe::TPtr EventDescribe_;
-    TString Script_;
+    TParsedStatement Statement_;
 
 public:
-    TPgwireKqpProxyDescribe(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TString& script)
-        : ConnectionParams_(std::move(params))
+    TPgwireKqpProxyDescribe(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TParsedStatement& statement)
+        : TPgwireKqpProxy(owner, std::move(params), connection)
         , EventDescribe_(std::move(evDescribe))
-        , Script_(script)
+        , Statement_(statement)
     {}
 
     void Bootstrap() {
-        auto query(Script_);
-        TString database;
-        if (ConnectionParams_.count("database")) {
-            database = ConnectionParams_["database"];
-        }
-        TString token;
-        if (ConnectionParams_.count("ydb-serialized-token")) {
-            token = ConnectionParams_["ydb-serialized-token"];
-        }
-        auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto query(ConvertQuery(Statement_));
+        auto event = MakeKqpRequest();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
-        request.SetQuery(ToPgSyntax(query, ConnectionParams_));
-        request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
-        auto noScript = ConnectionParams_.find("no-script");
-        if (noScript == ConnectionParams_.end()) {
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
-        } else {
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.MutableTxControl()->set_commit_tx(true);
+
+        // HACK
+        ConvertQueryToRequest(query.Query, request);
+        if (request.HasAction()) {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+
+            ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+            BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
         }
-        request.SetKeepSession(false);
-        request.SetDatabase(database);
-        event->Record.SetUserToken(token);
-
-        ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        BLOG_D("Sent event to kqpProxy, RequestActorId = " << EventDescribe_->Sender << ", self: " << SelfId());
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
-
         // TODO(xenoxeno): timeout
         Become(&TPgwireKqpProxyDescribe::StateWork);
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         BLOG_D("Handling TEvKqp::TEvQueryResponse");
+        Send(Owner_, new TEvEvents::TEvProxyCompleted());
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
-
         auto response = std::make_unique<NPG::TEvPGEvents::TEvDescribeResponse>();
         try {
             if (record.HasYdbStatus()) {
@@ -396,17 +317,140 @@ public:
     }
 };
 
+class TPgwireKqpProxyExecute : public TPgwireKqpProxy<TPgwireKqpProxyExecute> {
+    using TBase = TPgwireKqpProxy<TPgwireKqpProxyExecute>;
 
-NActors::IActor* CreatePgwireKqpProxy(std::unordered_map<TString, TString> params) {
-    return new TPgwireKqpProxy(std::move(params));
+    NPG::TEvPGEvents::TEvExecute::TPtr EventExecute_;
+    TParsedStatement Statement_;
+    std::size_t RowsSelected_ = 0;
+
+public:
+    TPgwireKqpProxyExecute(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute, const TParsedStatement& statement)
+        : TPgwireKqpProxy(owner, std::move(params), connection)
+        , EventExecute_(std::move(evExecute))
+        , Statement_(statement)
+    {
+    }
+
+    void Bootstrap() {
+        auto query(ConvertQuery(Statement_));
+        auto event = MakeKqpRequest();
+        NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
+
+        // HACK
+        ConvertQueryToRequest(query.Query, request);
+        if (request.HasAction()) {
+            ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+            BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+        }
+        // TODO(xenoxeno): timeout
+        Become(&TPgwireKqpProxyQuery::StateWork);
+    }
+
+    void FillResultSet(const NYdb::TResultSet& resultSet, NPG::TEvPGEvents::TEvExecuteResponse* response) {
+        NYdb::TResultSetParser parser(std::move(resultSet));
+        while (parser.TryNextRow()) {
+            response->DataRows.emplace_back();
+            auto& row = response->DataRows.back();
+            row.resize(parser.ColumnsCount());
+            for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
+                row[index] = ColumnValueToString(parser.ColumnParser(index));
+            }
+        }
+    }
+
+    std::unique_ptr<NPG::TEvPGEvents::TEvExecuteResponse> MakeResponse() {
+        auto response = std::make_unique<NPG::TEvPGEvents::TEvExecuteResponse>();
+
+        response->Tag = Tag_;
+        response->TransactionStatus = Connection_.Transaction.Status;
+
+        return response;
+    }
+
+    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+        NYdb::TResultSet resultSet(std::move(*ev->Get()->Record.MutableResultSet()));
+        auto response = MakeResponse();
+        FillResultSet(resultSet, response.get());
+        response->CommandCompleted = false;
+
+        RowsSelected_ += response->DataRows.size();
+
+        BLOG_D(this->SelfId() << "Send rowset data (" << ev->Get()->Record.GetSeqNo() << ") to: " << EventExecute_->Sender);
+        Send(EventExecute_->Sender, response.release(), 0, EventExecute_->Cookie);
+
+        BLOG_D(this->SelfId() << "Send stream data ack to: " << ev->Sender);
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        resp->Record.SetFreeSpace(std::numeric_limits<ui64>::max());
+        Send(ev->Sender, resp.Release());
+    }
+
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+        BLOG_D("Handling TEvKqp::TEvQueryResponse");
+        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
+        ProcessKqpResponseReleaseProxy(record);
+        auto response = MakeResponse();
+        try {
+            if (record.HasYdbStatus()) {
+                if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+                    BLOG_ENSURE(record.GetResponse().GetResults().empty());
+
+                    // HACK
+                    if (response->Tag == "SELECT") {
+                        response->Tag = TStringBuilder() << response->Tag << " " << RowsSelected_;
+                    }
+                } else {
+                    NYql::TIssues issues;
+                    NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+                    NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
+                    response->ErrorFields.push_back({'E', "ERROR"});
+                    response->ErrorFields.push_back({'M', TStringBuilder() << status});
+                }
+            } else {
+                response->ErrorFields.push_back({'E', "ERROR"});
+                response->ErrorFields.push_back({'M', "No result received"});
+            }
+        } catch (const std::exception& e) {
+            response->ErrorFields.push_back({'E', "ERROR"});
+            response->ErrorFields.push_back({'M', e.what()});
+        }
+        response->CommandCompleted = true;
+        BLOG_D("Finally replying to " << EventExecute_->Sender);
+        Send(EventExecute_->Sender, response.release(), 0, EventExecute_->Cookie);
+        PassAway();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+        }
+    }
+};
+
+NActors::IActor* CreatePgwireKqpProxyQuery(const TActorId& owner,
+                                           std::unordered_map<TString, TString> params,
+                                           const TConnectionState& connection,
+                                           NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery) {
+    return new TPgwireKqpProxyQuery(owner, std::move(params), connection, std::move(evQuery));
 }
 
-NActors::IActor* CreatePgwireKqpProxyQuery(std::unordered_map<TString, TString> params, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery) {
-    return new TPgwireKqpProxyQuery(std::move(params), std::move(evQuery));
+NActors::IActor* CreatePgwireKqpProxyDescribe(const TActorId& owner,
+                                              std::unordered_map<TString, TString> params,
+                                              const TConnectionState& connection,
+                                              NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe,
+                                              const TParsedStatement& statement) {
+    return new TPgwireKqpProxyDescribe(owner, std::move(params), connection, std::move(evDescribe), statement);
 }
 
-NActors::IActor* CreatePgwireKqpProxyDescribe(std::unordered_map<TString, TString> params,  NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TString& script) {
-    return new TPgwireKqpProxyDescribe(std::move(params), std::move(evDescribe), script);
+NActors::IActor* CreatePgwireKqpProxyExecute(const TActorId& owner,
+                                             std::unordered_map<TString, TString> params,
+                                             const TConnectionState& connection,
+                                             NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute,
+                                             const TParsedStatement& statement) {
+    return new TPgwireKqpProxyExecute(owner, std::move(params), connection, std::move(evExecute), statement);
 }
 
 } //namespace NLocalPgwire

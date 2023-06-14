@@ -135,8 +135,8 @@ namespace NKikimr {
                 }
             }
             if (when != TInstant::Max()) {
-                GetActorSystem()->Schedule(when, new IEventHandle(EvGenerateRestoreCorruptedBlobQuery, 0, SelfActorId,
-                    {}, nullptr, 0));
+                GetActorSystem()->Schedule(when, new IEventHandle(ScrubCtx->SkeletonId, SelfActorId,
+                    new TEvTakeHullSnapshot(false)));
                 GenerateRestoreCorruptedBlobQueryScheduled = true;
             }
         }
@@ -151,10 +151,37 @@ namespace NKikimr {
         GenerateRestoreCorruptedBlobQuery();
     }
 
-    void TScrubCoroImpl::HandleGenerateRestoreCorruptedBlobQuery() {
+    void TScrubCoroImpl::Handle(TEvTakeHullSnapshotResult::TPtr ev) {
         Y_VERIFY(GenerateRestoreCorruptedBlobQueryScheduled);
         GenerateRestoreCorruptedBlobQueryScheduled = false;
+
+        auto& snap = ev->Get()->Snap;
+        auto barriers = snap.BarriersSnap.CreateEssence(snap.HullCtx);
+        FilterUnreadableBlobs(snap, *barriers);
+
         GenerateRestoreCorruptedBlobQuery();
+    }
+
+    void TScrubCoroImpl::FilterUnreadableBlobs(THullDsSnap& snap, TBarriersSnapshot::TBarriersEssence& barriers) {
+        TLevelIndexSnapshot::TForwardIterator iter(snap.HullCtx, &snap.LogoBlobsSnap);
+        TIndexRecordMerger merger(Info->Type);
+
+        for (auto it = UnreadableBlobs.begin(); it != UnreadableBlobs.end(); ) {
+            const TLogoBlobID id = it->first;
+            ++it;
+
+            bool keepData = false;
+            if (iter.Seek(id); iter.Valid() && iter.GetCurKey().LogoBlobID() == id) {
+                iter.PutToMerger(&merger);
+                merger.Finish();
+                keepData = barriers.Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(), snap.HullCtx->AllowKeepFlags).KeepData;
+                merger.Clear();
+            }
+
+            if (!keepData) {
+                DropGarbageBlob(id);
+            }
+        }
     }
 
 } // NKikimr

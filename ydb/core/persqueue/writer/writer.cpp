@@ -10,6 +10,7 @@
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include <util/generic/deque.h>
+#include <util/generic/guid.h>
 #include <util/generic/map.h>
 #include <util/string/builder.h>
 
@@ -179,7 +180,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         auto ev = MakeRequest(PartitionId, PipeClient);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetOwnership();
-        cmd.SetOwner(SourceId);
+        if (Opts.UseDeduplication) {
+            cmd.SetOwner(SourceId);
+        } else {
+            cmd.SetOwner(CreateGuidAsString());
+        }
         cmd.SetForce(true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
@@ -382,6 +387,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
 
+        if (!Opts.UseDeduplication) {
+            request.SetPartition(PartitionId);
+        }
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
         PendingWrite.emplace_back(cookie);
@@ -479,7 +487,6 @@ public:
         };
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
-
         GetOwnership();
     }
 

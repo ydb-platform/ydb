@@ -35,7 +35,10 @@ protected:
     TString ExternalQueries;
     TString ExternalQueriesFile;
     TString ExternalQueriesDir;
+    TString ExternalResultsDir;
     TString ExternalVariablesString;
+
+    TMap<ui32, TString> LoadExternalResults() const;
 public:
     TClickBenchCommandRun();
     void Config(TConfig& config);
@@ -44,7 +47,45 @@ public:
     bool NeedRun(const ui32 queryIdx) const;
     bool RunBench(TConfig& config);
 
-    TVector<TString> GetQueries(const TString& fullTablePath) const;
+    class TQueryFullInfo {
+    private:
+        TString Query;
+        TString ExpectedResult;
+    public:
+        TQueryFullInfo(const TString& query, const TString& expectedResult)
+            : Query(query)
+            , ExpectedResult(expectedResult)
+        {
+
+        }
+
+        bool IsCorrectResult(const TString& result) const {
+            if (!ExpectedResult) {
+                return true;
+            }
+            const auto resultLines = StringSplitter(result).Split('\n').SkipEmpty().ToList<TString>();
+            const auto expectedLines = StringSplitter(ExpectedResult).Split('\n').SkipEmpty().ToList<TString>();
+            if (resultLines.size() + 1 != expectedLines.size()) {
+                return false;
+            }
+            for (ui32 i = 0; i < resultLines.size(); ++i) {
+                if (expectedLines[i + 1] != resultLines[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        const TString& GetQuery() const {
+            return Query;
+        }
+
+        const TString& GetExpectedResult() const {
+            return ExpectedResult;
+        }
+    };
+
+    TVector<TQueryFullInfo> GetQueries(const TString& fullTablePath) const;
 
     TString OutFilePath;
     ui32 IterationsCount;

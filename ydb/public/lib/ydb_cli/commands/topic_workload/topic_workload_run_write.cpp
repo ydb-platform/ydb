@@ -44,6 +44,15 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config) {
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
         .StoreTrue(&PrintTimestamp);
+    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
+        .DefaultValue(50)
+        .StoreResult(&Percentile);
+    config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
+        .DefaultValue(1)
+        .StoreResult(&Warmup);
+    config.Opts->AddLongOption("topic", "Topic name.")
+        .DefaultValue(TOPIC)
+        .StoreResult(&TopicName);
 
     // Specific params
     config.Opts->AddLongOption('t', "threads", "Number of producer threads.")
@@ -62,9 +71,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config) {
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Codec, &TCommandWorkloadTopicParams::StrToCodec);
-    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
-        .DefaultValue(50)
-        .StoreResult(&Percentile);
+
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
@@ -78,16 +85,19 @@ void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
     if (Percentile >= 100) {
         throw TMisuseException() << "--percentile should be less than 100.";
     }
+    if (Warmup >= Seconds) {
+        throw TMisuseException() << "--warmup should be less than --seconds.";
+    }
 }
 
 int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
     Log = std::make_shared<TLog>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, 0, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Percentile, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, 0, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Warmup, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
 
-    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, *Driver);
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
     ui32 partitionCount = describeTopicResult.GetTotalPartitionsCount();
     ui32 partitionSeed = RandomNumber<ui32>(partitionCount);
 
@@ -102,7 +112,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
             .StatsCollector = StatsCollector,
             .ErrorFlag = ErrorFlag,
             .StartedCount = producerStartedCount,
-
+            .TopicName = TopicName,
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
             .ProducerThreadCount = ProducerThreadCount,
             .WriterIdx = writerIdx,

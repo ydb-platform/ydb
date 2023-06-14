@@ -42,6 +42,15 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config) {
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
         .StoreTrue(&PrintTimestamp);
+    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
+        .DefaultValue(50)
+        .StoreResult(&Percentile);
+    config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
+        .DefaultValue(1)
+        .StoreResult(&Warmup);
+    config.Opts->AddLongOption("topic", "Topic name.")
+        .DefaultValue(TOPIC)
+        .StoreResult(&TopicName);
 
     // Specific params
     config.Opts->AddLongOption('c', "consumers", "Number of consumers in a topic.")
@@ -50,9 +59,6 @@ void TCommandWorkloadTopicRunRead::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&ConsumerThreadCount);
-    config.Opts->AddLongOption("percentile", "Percentile for output statistics.")
-        .DefaultValue(50)
-        .StoreResult(&Percentile);
 
     config.IsNetworkIntensive = true;
 }
@@ -64,6 +70,9 @@ void TCommandWorkloadTopicRunRead::Parse(TConfig& config)
     if (Percentile >= 100) {
         throw TMisuseException() << "--percentile should be less than 100.";
     }
+    if (Warmup >= Seconds) {
+        throw TMisuseException() << "--warmup should be less than --seconds.";
+    }
 }
 
 int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
@@ -71,7 +80,7 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
     Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(0, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Percentile, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(0, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Warmup, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
 
     std::vector<std::future<void>> threads;
@@ -86,7 +95,8 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
                 .StatsCollector = StatsCollector,
                 .ErrorFlag = ErrorFlag,
                 .StartedCount = consumerStartedCount,
-
+                .Database = config.Database,
+                .TopicName = TopicName,
                 .ConsumerIdx = consumerIdx,
                 .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
 

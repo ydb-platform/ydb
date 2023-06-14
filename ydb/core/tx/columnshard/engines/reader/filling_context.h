@@ -115,7 +115,7 @@ public:
     void OnGranuleReady(TGranule& granule) {
         Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
         Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
-        Y_VERIFY(GranulesInProcessing.erase(granule.GetGranuleId()));
+        GranulesInProcessing.erase(granule.GetGranuleId());
         BlobsSizeInProcessing -= granule.GetBlobsDataSize();
         Y_VERIFY(BlobsSizeInProcessing >= 0);
     }

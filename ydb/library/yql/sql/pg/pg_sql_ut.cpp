@@ -217,6 +217,22 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
+    
+    Y_UNIT_TEST(CreateTableStmt_Temp) {
+        auto res = PgSqlToYql("create temp table t ()");
+        UNIT_ASSERT(res.Root);
+
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '()) '('temporary))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
 
     Y_UNIT_TEST(VariableShowStmt) {
         auto res = PgSqlToYql("Show server_version_num");

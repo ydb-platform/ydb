@@ -216,7 +216,7 @@ void TTopicWorkloadWriterWorker::CreateTopicWorker() {
     Y_VERIFY(Params.Driver);
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
-    settings.Path(TOPIC);
+    settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
     settings.PartitionId(Params.PartitionId);
     WriteSession = NYdb::NTopic::TTopicClient(*Params.Driver).CreateWriteSession(settings);

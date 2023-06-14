@@ -12,6 +12,8 @@ namespace NYdb {
             virtual int Run(TConfig& config) override;
 
         private:
+            TString TopicName;
+
             ui32 PartitionCount;
             ui32 ConsumerCount;
         };

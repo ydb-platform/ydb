@@ -10,6 +10,7 @@ struct TDqComputeActorMetrics {
 public:
     TDqComputeActorMetrics(const NMonitoring::TDynamicCounterPtr& counters);
 
+    void ReportEvent(ui32 type);
     void ReportAsyncInputData(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
     void ReportInputChannelWatermark(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
     void ReportInjectedToTaskRunnerWatermark(TInstant watermark);
@@ -29,6 +30,25 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr InjectedToTaskRunnerWatermark;
     NMonitoring::TDynamicCounters::TCounterPtr InjectedToOutputsWatermark;
     NMonitoring::THistogramPtr WatermarkCollectLatency;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ResumeExecution;
+    NMonitoring::TDynamicCounters::TCounterPtr ChannelsInfo;
+    NMonitoring::TDynamicCounters::TCounterPtr AbortExecution;
+    NMonitoring::TDynamicCounters::TCounterPtr Wakeup;
+    NMonitoring::TDynamicCounters::TCounterPtr Undelivered;
+    NMonitoring::TDynamicCounters::TCounterPtr ChannelData;
+    NMonitoring::TDynamicCounters::TCounterPtr ChannelDataAck;
+    NMonitoring::TDynamicCounters::TCounterPtr Run;
+    NMonitoring::TDynamicCounters::TCounterPtr StateRequest;
+    NMonitoring::TDynamicCounters::TCounterPtr CheckpointCoordinator;
+    NMonitoring::TDynamicCounters::TCounterPtr InjectCheckpoint;
+    NMonitoring::TDynamicCounters::TCounterPtr CommitState;
+    NMonitoring::TDynamicCounters::TCounterPtr RestoreFromCheckpoint;
+    NMonitoring::TDynamicCounters::TCounterPtr NodeDisconnected;
+    NMonitoring::TDynamicCounters::TCounterPtr NodeConnected;
+    NMonitoring::TDynamicCounters::TCounterPtr NewAsyncInputDataArrived;
+    NMonitoring::TDynamicCounters::TCounterPtr AsyncInputError;
+    NMonitoring::TDynamicCounters::TCounterPtr OtherEvent;
 
     THashMap<TInstant, TInstant> WatermarkStartedAt;
 };

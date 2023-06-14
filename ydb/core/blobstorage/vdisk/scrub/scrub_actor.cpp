@@ -35,7 +35,6 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvRecoverBlob, ForwardToBlobRecoveryActor);
             hFunc(TEvRestoreCorruptedBlobResult, Handle);
             hFunc(TEvNonrestoredCorruptedBlobNotify, Handle);
-            cFunc(EvGenerateRestoreCorruptedBlobQuery, HandleGenerateRestoreCorruptedBlobQuery);
             hFunc(NPDisk::TEvLogResult, Handle);
             hFunc(NPDisk::TEvCutLog, Handle);
 
@@ -76,9 +75,9 @@ namespace NKikimr {
                 const TInstant end = start + TDuration::Seconds(30);
                 do {
                     Quantum();
-                    Send(ScrubCtx->SkeletonId, new TEvReportScrubStatus(UnreadableBlobs.size()));
+                    Send(ScrubCtx->SkeletonId, new TEvReportScrubStatus(!UnreadableBlobs.empty()));
                 } while (State && TActorCoroImpl::Now() < end);
-                Send(ScrubCtx->SkeletonId, new TEvReportScrubStatus(UnreadableBlobs.size()));
+                Send(ScrubCtx->SkeletonId, new TEvReportScrubStatus(!UnreadableBlobs.empty()));
                 CommitStateUpdate();
             }
         } catch (const TExDie&) {
@@ -153,6 +152,9 @@ namespace NKikimr {
                 State.reset(); // we're done
             }
         }
+
+        // validate currently held blobs
+        FilterUnreadableBlobs(*Snap, *GetBarriersEssence());
 
         ReleaseSnapshot();
 

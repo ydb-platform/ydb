@@ -168,16 +168,16 @@ class YamlConfigState {
 
     loadYaml() {
         clearTimeout(this.loadYamlTimeout);
-        $.get(this.url).done(this.onYamlLoaded.bind(this)).fail(this.onYamlLoaded.bind(this));
+        $.get(this.url).done(this.onYamlLoaded.bind(this, true)).fail(this.onYamlLoaded.bind(this, false));
     }
 
-    onYamlLoaded(data) {
-        if (data?.Response?.operation?.status === "SUCCESS") {
-            this.cluster = data.Response.cluster;
-            $('#yaml-cluster').text(data.Response.cluster);
+    onYamlLoaded(success, data) {
+        if (success) {
+            this.cluster = data.Response.identity.cluster;
+            $('#yaml-cluster').text(data.Response.identity.cluster);
 
-            this.version = data.Response.version;
-            $('#yaml-version').text(data.Response.version);
+            this.version = data.Response.identity.version;
+            $('#yaml-version').text(data.Response.identity.version);
 
             if (this.config !== data.Response.config) {
                 this.codeMirror.setValue((data.Response.config !== undefined) ? data.Response.config : "");
@@ -246,11 +246,11 @@ class YamlConfigState {
         this.loadYamlTimeout = setTimeout(this.loadYaml.bind(this), this.fetchInterval);
     }
 
-    onVolatileConfigChanged(data) {
-        if (data?.Response?.operation?.status === "SUCCESS") {
+    onVolatileConfigChanged(success, data) {
+        if (success) {
             this.loadYaml();
         } else {
-            showToast("Error", "Invalid volatile config\n" + data.Response.operation.issues[0].message, 15000);
+            showToast("Error", "Invalid volatile config\n" + data.responseJSON.issues, 15000);
         }
     }
 
@@ -265,8 +265,8 @@ class YamlConfigState {
         };
 
         $.post(this.applyUrl, JSON.stringify(cmd))
-         .done(this.onVolatileConfigChanged.bind(this))
-         .fail(this.onVolatileConfigChanged.bind(this));
+         .done(this.onVolatileConfigChanged.bind(this, true))
+         .fail(this.onVolatileConfigChanged.bind(this, false));
 
         this.volatileCodeMirror.setValue("");
 
@@ -284,8 +284,8 @@ class YamlConfigState {
         };
 
         $.post(this.removeVolatileUrl, JSON.stringify(cmd))
-         .done(this.onVolatileConfigChanged.bind(this))
-         .fail(this.onVolatileConfigChanged.bind(this));
+         .done(this.onVolatileConfigChanged.bind(this, true))
+         .fail(this.onVolatileConfigChanged.bind(this, false));
     }
 
     removeVolatileConfig(id) {
@@ -298,15 +298,15 @@ class YamlConfigState {
         };
 
         $.post(this.removeVolatileUrl, JSON.stringify(cmd))
-         .done(this.onVolatileConfigChanged.bind(this))
-         .fail(this.onVolatileConfigChanged.bind(this));
+         .done(this.onVolatileConfigChanged.bind(this, true))
+         .fail(this.onVolatileConfigChanged.bind(this, false));
     }
 
-    onResolved(data) {
-        if (data?.Response?.operation?.status === "SUCCESS") {
+    onResolved(success, data) {
+        if (success) {
             this.resolvedCodeMirror.setValue(data.Response.config);
         } else {
-            showToast("Error", "Config resolution error\n" + data.Response.operation.issues[0].message, 15000);
+            showToast("Error", "Config resolution error\n" + data.responseJSON.issues, 15000);
         }
 
     }
@@ -320,8 +320,8 @@ class YamlConfigState {
         };
 
         $.post(this.resolveAllUrl, JSON.stringify(cmd))
-         .done(this.onResolved.bind(this))
-         .fail(this.onResolved.bind(this));
+         .done(this.onResolved.bind(this, true))
+         .fail(this.onResolved.bind(this, false));
     }
 
     resolveForLabels() {
@@ -342,8 +342,8 @@ class YamlConfigState {
         };
 
         $.post(this.resolveUrl, JSON.stringify(cmd))
-         .done(this.onResolved.bind(this))
-         .fail(this.onResolved.bind(this));
+         .done(this.onResolved.bind(this, true))
+         .fail(this.onResolved.bind(this, false));
     }
 
     initTab() {

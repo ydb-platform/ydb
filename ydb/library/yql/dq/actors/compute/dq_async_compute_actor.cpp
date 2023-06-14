@@ -320,7 +320,7 @@ private:
             WatermarkTakeInputChannelDataRequests[*watermark]++;
         }
 
-        DqComputeActorMetrics.ReportInputChannelWatermark(
+        MetricsReporter.ReportInputChannelWatermark(
             channelData.GetChannelId(),
             channelData.GetData().GetRows(),
             watermark);
@@ -378,7 +378,7 @@ private:
             return Nothing();
         }
 
-        DqComputeActorMetrics.ReportInjectedToTaskRunnerWatermark(pendingWatermark);
+        MetricsReporter.ReportInjectedToTaskRunnerWatermark(pendingWatermark);
 
         return pendingWatermark;
     }

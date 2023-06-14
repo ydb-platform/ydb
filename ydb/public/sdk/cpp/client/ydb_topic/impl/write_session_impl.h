@@ -173,12 +173,15 @@ private:
         TStringBuf DataRef;
         TMaybe<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
-        TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {}, ui32 originalSize = 0)
+        std::unordered_map<TString, TString> MessageMeta;
+        TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {},
+                 ui32 originalSize = 0, const std::unordered_map<TString, TString>& messageMeta = {})
             : SeqNo(seqNo)
             , CreatedAt(createdAt)
             , DataRef(data)
             , Codec(codec)
             , OriginalSize(originalSize)
+            , MessageMeta(messageMeta)
         {}
     };
 
@@ -189,11 +192,12 @@ private:
         TInstant StartedAt = TInstant::Zero();
         bool Acquired = false;
         bool FlushRequested = false;
-        void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize) {
+        void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
+                 const std::unordered_map<TString, TString>& messageMeta) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize);
+            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize, messageMeta);
             Acquired = false;
         }
 
@@ -262,10 +266,18 @@ private:
         ui64 SeqNo;
         TInstant CreatedAt;
         size_t Size;
+        std::unordered_map<TString, TString> MessageMeta;
         TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size)
-                : SeqNo(sequenceNumber)
-                , CreatedAt(createdAt)
-                , Size(size)
+            : SeqNo(sequenceNumber)
+            , CreatedAt(createdAt)
+            , Size(size)
+        {}
+        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size,
+                         std::unordered_map<TString, TString>&& messageMeta)
+            : SeqNo(sequenceNumber)
+            , CreatedAt(createdAt)
+            , Size(size)
+            , MessageMeta(std::move(messageMeta))
         {}
     };
 

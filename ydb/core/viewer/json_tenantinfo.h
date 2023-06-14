@@ -381,6 +381,7 @@ public:
         BLOG_TRACE("ReplyAndPassAway() started");
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        THashMap<TString, NKikimrViewer::EFlag> OverallByDomainId;
         for (const auto& [subDomainKey, tenantBySubDomainKey] : TenantBySubDomainKey) {
             TString id(GetDomainId(subDomainKey));
             NKikimrWhiteboard::TEvTabletStateResponse tabletInfo;
@@ -588,6 +589,7 @@ public:
                     }
                 }
                 tenant.SetOverall(overall);
+                OverallByDomainId[tenant.GetId()] = overall;
             }
         }
         for (const std::pair<const TString, NKikimrViewer::TTenant>& prTenant : TenantByPath) {
@@ -604,6 +606,18 @@ public:
             tenant.MergeFrom(tenantByPath);
             tenant.SetName(path);
             tenant.SetOverall(overall);
+            if (tenant.GetId()) {
+                OverallByDomainId[tenant.GetId()] = overall;
+            }
+        }
+        for (NKikimrViewer::TTenant& tenant: *Result.MutableTenantInfo()) {
+            if (tenant.GetType() != NKikimrViewer::Serverless) {
+                continue;
+            }
+            auto it = OverallByDomainId.find(tenant.GetResourceId());
+            if (it != OverallByDomainId.end()) {
+                tenant.SetOverall(it->second);
+            }
         }
         std::sort(Result.MutableTenantInfo()->begin(), Result.MutableTenantInfo()->end(), 
             [](const NKikimrViewer::TTenant& a, const NKikimrViewer::TTenant& b) {

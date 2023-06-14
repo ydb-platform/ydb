@@ -1,7 +1,7 @@
 # Building YDB from sources
 
 ## Build Requirements
- We have tested YDB builds using Ubuntu 18.04 and Ubuntu 20.04. Other Linux distributions are likely to work, but additional effort may be needed. Only x86_64 Linux is currently supported.
+ We have tested YDB builds using Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be needed. Only x86_64 Linux is currently supported.
 
  Below is a list of packages that need to be installed before building YDB. 'How to Build' section contains step by step instructions to obtain these packages.
 
@@ -9,7 +9,6 @@
  - clang-12
  - lld-12
  - git 2.20+
- - python2.7
  - python3.8
  - pip3
  - antlr3
@@ -27,26 +26,42 @@
 
 # How to Build
 
-## Add repositories for dependencies
+## (optional) Add CMake and LLVM APT repositories (for Ubuntu 18.04 and 20.04)
 
-Note: the following repositories are required for **Ubuntu 18.04 and Ubuntu 20.04**. You may skip this step if your GNU/Linux distribution has all required packages in their default repository.
-For more information please read your distribution documentation and https://apt.llvm.org as well as https://apt.kitware.com/
+## Ubuntu 18.04
+
+For Ubuntu 18.04, you have to add CMake and LLVM APT repositories:
+
 ```bash
-wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
 wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
 echo "deb http://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
-echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+
+wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-12 main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
 
 sudo apt-get update
+
 ```
 
-For Ubuntu 18, use `llvm-toolchain-$(lsb_release -cs)-12` in the command above.
+## Ubuntu 20.04
+
+For Ubuntu 20.04, you have to add CMake APT repository:
+
+```bash
+wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
+echo "deb http://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+
+sudo apt-get update
+
+```
+
 
 ## Install dependencies
 
 ```bash
-sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev
+sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev llvm-12
 sudo pip3 install conan==1.59
+
 ```
 
 ## Create the work directory. 
@@ -55,6 +70,7 @@ sudo pip3 install conan==1.59
 ```bash
 mkdir ~/ydbwork && cd ~/ydbwork
 mkdir build
+
 ```
 
 ## Clone the ydb repository.
@@ -74,10 +90,11 @@ Run cmake to generate build configuration:
 ```bash
 cd build
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+
 ```
 
 
-### (optionally) Configure with Ccache
+### (optional) Configure with Ccache
 
 With enabled Ccache, you can finish the compilation of all targets on supported Linux distributions in a few minutes. 
   Or just `ydbd` or `ydb` binary in a couple of seconds. To optionally enable `Ccache` and enhance the compilation speed, follow these steps:
@@ -86,27 +103,30 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     ```bash
     (V=4.8.1; curl -L https://github.com/ccache/ccache/releases/download/v${V}/ccache-${V}-linux-x86_64.tar.xz | \
      sudo tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
+
     ```
 
 2. Configure `Ccache` to use remote storage using environment variables
     ```bash
-    export CCACHE_REMOTE_STORAGE="http://158.160.20.102:8080|layout=bazel"
+    export CCACHE_REMOTE_STORAGE="http://158.160.20.102:8080|read-only|layout=bazel"
     export CCACHE_SLOPPINESS=locale
     export CCACHE_BASEDIR=~/ydbwork/
+   
     ```
     <details>
     <summary>or using Ccache config file</summary>
 
     ```bash
-    ccache -o remote_storage="http://158.160.20.102:8080|layout=bazel"
+    ccache -o remote_storage="http://158.160.20.102:8080|read-only|layout=bazel"
     ccache -o sloppiness=locale 
-    ccache -o basedir=~/ydbwork/
+    ccache -o base_dir=~/ydbwork/
+   
     ```
     </details>
 3. Also, you should change Conan's home folder to the build folder for better cache hit 
-   ```bash
-   export CONAN_USER_HOME=~/ydbwork/build
-   ```
+    ```bash
+    export CONAN_USER_HOME=~/ydbwork/build
+    ```
 
 4. Genreate build configuration using `ccache`
     ```bash
@@ -115,6 +135,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
     -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
     ../ydb
+   
     ```
 
 ## Build

@@ -53,16 +53,15 @@ struct TSettings {
     TControlWrapper CacheDataAfterIndexing;
     TControlWrapper CacheDataAfterCompaction;
     TControlWrapper MaxSmallBlobSize;
-    TControlWrapper OverloadTxInFly;
-    TControlWrapper OverloadWritesInFly;
+    static constexpr ui64 OverloadTxInFlight = 1000;
+    static constexpr ui64 OverloadWritesInFlight = 1000;
+    static constexpr ui64 OverloadWritesSizeInFlight = 128 * 1024 * 1024;
 
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
         , CacheDataAfterCompaction(1, 0, 1)
         , MaxSmallBlobSize(0, 0, 8000000)
-        , OverloadTxInFly(1000, 0, 10000)
-        , OverloadWritesInFly(1000, 0, 10000)
     {}
 
     void RegisterControls(TControlBoard& icb) {
@@ -70,8 +69,6 @@ struct TSettings {
         icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing");
         icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
         icb.RegisterSharedControl(MaxSmallBlobSize, "ColumnShardControls.MaxSmallBlobSize");
-        icb.RegisterSharedControl(OverloadTxInFly, "ColumnShardControls.OverloadTxInFly");
-        icb.RegisterSharedControl(OverloadWritesInFly, "ColumnShardControls.OverloadWritesInFly");
     }
 };
 
@@ -416,7 +413,8 @@ private:
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
     ui64 LastExportNo = 0;
-    ui64 WritesInFly = 0;
+    ui64 WritesInFlight = 0;
+    ui64 WritesSizeInFlight = 0;
     ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
     ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
@@ -487,10 +485,12 @@ private:
     bool HaveOutdatedTxs() const;
 
     bool ShardOverloaded() const {
-        ui64 txLimit = Settings.OverloadTxInFly;
-        ui64 writesLimit = Settings.OverloadWritesInFly;
+        ui64 txLimit = Settings.OverloadTxInFlight;
+        ui64 writesLimit = Settings.OverloadWritesInFlight;
+        ui64 writesSizeLimit = Settings.OverloadWritesSizeInFlight;
         return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
-           (writesLimit && WritesInFly > writesLimit);
+           (writesLimit && WritesInFlight > writesLimit) ||
+           (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
     }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);

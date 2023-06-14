@@ -10,13 +10,13 @@ namespace NYdb {
             virtual void Config(TConfig& config) override;
             virtual void Parse(TConfig& config) override;
             virtual int Run(TConfig& config) override;
+        private:
+            TString TopicName;
         };
 
         class TCommandWorkloadTopicRun: public TClientCommandTree {
         public:
             TCommandWorkloadTopicRun();
-
-        private:
         };
     }
 }

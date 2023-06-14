@@ -40,7 +40,7 @@ public:
         return Committed;
     }
 
-    bool AddCommitted(TInsertedData&& data);
+    bool AddCommitted(TInsertedData&& data, const bool load = false);
 
     bool IsOverloaded() const {
         return CommittedOverload || InsertedOverload;

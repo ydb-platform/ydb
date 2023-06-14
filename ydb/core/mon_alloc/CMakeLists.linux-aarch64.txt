@@ -21,6 +21,7 @@ target_link_libraries(ydb-core-mon_alloc PUBLIC
   cpp-malloc-api
   monlib-service-pages
   cpp-ytalloc-api
+  cpp-yt-memory
   ydb-core-base
   ydb-core-control
 )

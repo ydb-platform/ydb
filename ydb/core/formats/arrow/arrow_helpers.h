@@ -4,6 +4,7 @@
 #include "replace_key.h"
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
@@ -131,5 +132,8 @@ inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);
+
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head = 5, const ui32 tail = 5);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head = 5, const ui32 tail = 5);
 
 }

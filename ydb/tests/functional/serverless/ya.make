@@ -16,7 +16,9 @@ REQUIREMENTS(
 SIZE(MEDIUM)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-DEPENDS(ydb/apps/ydbd)
+DEPENDS(
+    ydb/apps/ydbd
+)
 
 PEERDIR(
     contrib/python/tornado/tornado-4

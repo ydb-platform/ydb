@@ -57,7 +57,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    RequestApiKeyMeta::Type requestApiKey;
+    RequestApiKeyMeta::Type RequestApiKey;
     
     struct RequestApiVersionMeta {
         using Type = TKafkaInt16;
@@ -76,7 +76,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    RequestApiVersionMeta::Type requestApiVersion;
+    RequestApiVersionMeta::Type RequestApiVersion;
     
     struct CorrelationIdMeta {
         using Type = TKafkaInt32;
@@ -95,7 +95,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    CorrelationIdMeta::Type correlationId;
+    CorrelationIdMeta::Type CorrelationId;
     
     struct ClientIdMeta {
         using Type = TKafkaString;
@@ -109,19 +109,18 @@ public:
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 1;
+        static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = -1;
     };
-    ClientIdMeta::Type clientId;
+    ClientIdMeta::Type ClientId;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return HEADER; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TRequestHeaderData& other) const = default;
@@ -157,14 +156,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 1;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    CorrelationIdMeta::Type correlationId;
+    CorrelationIdMeta::Type CorrelationId;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return HEADER; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TResponseHeaderData& other) const = default;
@@ -224,7 +222,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            IndexMeta::Type index;
+            IndexMeta::Type Index;
             
             struct RecordsMeta {
                 using Type = TKafkaRecords;
@@ -242,13 +240,12 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            RecordsMeta::Type records;
+            RecordsMeta::Type Records;
             
+            class TReadContext;
             
-            TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-            TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
             i32 Size(TKafkaVersion version) const override;
-            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TPartitionProduceData& other) const = default;
@@ -271,9 +268,11 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NameMeta::Type name;
+        NameMeta::Type Name;
         
         struct PartitionDataMeta {
+            using ItemType = TPartitionProduceData;
+            using ItemTypeDesc = NPrivate::TKafkaStructDesc;
             using Type = std::vector<TPartitionProduceData>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
@@ -289,15 +288,12 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PartitionDataMeta::Type partitionData;
+        PartitionDataMeta::Type PartitionData;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TTopicProduceData& other) const = default;
@@ -315,12 +311,12 @@ public:
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 3;
+        static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TransactionalIdMeta::Type transactionalId;
+    TransactionalIdMeta::Type TransactionalId;
     
     struct AcksMeta {
         using Type = TKafkaInt16;
@@ -339,7 +335,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    AcksMeta::Type acks;
+    AcksMeta::Type Acks;
     
     struct TimeoutMsMeta {
         using Type = TKafkaInt32;
@@ -358,9 +354,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TimeoutMsMeta::Type timeoutMs;
+    TimeoutMsMeta::Type TimeoutMs;
     
     struct TopicDataMeta {
+        using ItemType = TTopicProduceData;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TTopicProduceData>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -376,14 +374,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TopicDataMeta::Type topicData;
+    TopicDataMeta::Type TopicData;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return PRODUCE; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TProduceRequestData& other) const = default;
@@ -446,7 +443,7 @@ public:
                     static constexpr const char* About = "The batch index of the record that cause the batch to be dropped";
                     static const Type Default; // = 0;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 8;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
@@ -455,7 +452,7 @@ public:
                     static constexpr TKafkaVersion FlexibleVersionMin = 9;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                BatchIndexMeta::Type batchIndex;
+                BatchIndexMeta::Type BatchIndex;
                 
                 struct BatchIndexErrorMessageMeta {
                     using Type = TKafkaString;
@@ -465,22 +462,21 @@ public:
                     static constexpr const char* About = "The error message of the record that caused the batch to be dropped";
                     static const Type Default; // = std::nullopt;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 8;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 8;
+                    static constexpr TKafkaVersion NullableVersionMin = 0;
                     static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion FlexibleVersionMin = 9;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                BatchIndexErrorMessageMeta::Type batchIndexErrorMessage;
+                BatchIndexErrorMessageMeta::Type BatchIndexErrorMessage;
                 
+                class TReadContext;
                 
-                TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-                TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
                 i32 Size(TKafkaVersion version) const override;
-                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TBatchIndexAndErrorMessage& other) const = default;
@@ -503,7 +499,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            IndexMeta::Type index;
+            IndexMeta::Type Index;
             
             struct ErrorCodeMeta {
                 using Type = TKafkaInt16;
@@ -522,7 +518,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            ErrorCodeMeta::Type errorCode;
+            ErrorCodeMeta::Type ErrorCode;
             
             struct BaseOffsetMeta {
                 using Type = TKafkaInt64;
@@ -541,7 +537,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            BaseOffsetMeta::Type baseOffset;
+            BaseOffsetMeta::Type BaseOffset;
             
             struct LogAppendTimeMsMeta {
                 using Type = TKafkaInt64;
@@ -560,7 +556,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LogAppendTimeMsMeta::Type logAppendTimeMs;
+            LogAppendTimeMsMeta::Type LogAppendTimeMs;
             
             struct LogStartOffsetMeta {
                 using Type = TKafkaInt64;
@@ -579,9 +575,11 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LogStartOffsetMeta::Type logStartOffset;
+            LogStartOffsetMeta::Type LogStartOffset;
             
             struct RecordErrorsMeta {
+                using ItemType = TBatchIndexAndErrorMessage;
+                using ItemTypeDesc = NPrivate::TKafkaStructDesc;
                 using Type = std::vector<TBatchIndexAndErrorMessage>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
@@ -597,7 +595,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            RecordErrorsMeta::Type recordErrors;
+            RecordErrorsMeta::Type RecordErrors;
             
             struct ErrorMessageMeta {
                 using Type = TKafkaString;
@@ -611,18 +609,17 @@ public:
                 static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion TaggedVersionMin = 0;
                 static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 8;
+                static constexpr TKafkaVersion NullableVersionMin = 0;
                 static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            ErrorMessageMeta::Type errorMessage;
+            ErrorMessageMeta::Type ErrorMessage;
             
+            class TReadContext;
             
-            TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-            TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
             i32 Size(TKafkaVersion version) const override;
-            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TPartitionProduceResponse& other) const = default;
@@ -645,9 +642,11 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NameMeta::Type name;
+        NameMeta::Type Name;
         
         struct PartitionResponsesMeta {
+            using ItemType = TPartitionProduceResponse;
+            using ItemTypeDesc = NPrivate::TKafkaStructDesc;
             using Type = std::vector<TPartitionProduceResponse>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
@@ -663,21 +662,20 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PartitionResponsesMeta::Type partitionResponses;
+        PartitionResponsesMeta::Type PartitionResponses;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TTopicProduceResponse& other) const = default;
     };
     
     struct ResponsesMeta {
+        using ItemType = TTopicProduceResponse;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TTopicProduceResponse>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -693,7 +691,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ResponsesMeta::Type responses;
+    ResponsesMeta::Type Responses;
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
@@ -712,14 +710,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ThrottleTimeMsMeta::Type throttleTimeMs;
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return PRODUCE; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TProduceResponseData& other) const = default;
@@ -779,7 +776,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            PartitionMeta::Type partition;
+            PartitionMeta::Type Partition;
             
             struct CurrentLeaderEpochMeta {
                 using Type = TKafkaInt32;
@@ -798,7 +795,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            CurrentLeaderEpochMeta::Type currentLeaderEpoch;
+            CurrentLeaderEpochMeta::Type CurrentLeaderEpoch;
             
             struct FetchOffsetMeta {
                 using Type = TKafkaInt64;
@@ -817,7 +814,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            FetchOffsetMeta::Type fetchOffset;
+            FetchOffsetMeta::Type FetchOffset;
             
             struct LastFetchedEpochMeta {
                 using Type = TKafkaInt32;
@@ -833,10 +830,10 @@ public:
                 static constexpr TKafkaVersion TaggedVersionMax = -1;
                 static constexpr TKafkaVersion NullableVersionMin = 0;
                 static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                static constexpr TKafkaVersion FlexibleVersionMin = 0;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LastFetchedEpochMeta::Type lastFetchedEpoch;
+            LastFetchedEpochMeta::Type LastFetchedEpoch;
             
             struct LogStartOffsetMeta {
                 using Type = TKafkaInt64;
@@ -855,7 +852,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LogStartOffsetMeta::Type logStartOffset;
+            LogStartOffsetMeta::Type LogStartOffset;
             
             struct PartitionMaxBytesMeta {
                 using Type = TKafkaInt32;
@@ -874,13 +871,12 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            PartitionMaxBytesMeta::Type partitionMaxBytes;
+            PartitionMaxBytesMeta::Type PartitionMaxBytes;
             
+            class TReadContext;
             
-            TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-            TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
             i32 Size(TKafkaVersion version) const override;
-            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TFetchPartition& other) const = default;
@@ -903,7 +899,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 12;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicMeta::Type topic;
+        TopicMeta::Type Topic;
         
         struct TopicIdMeta {
             using Type = TKafkaUuid;
@@ -919,12 +915,14 @@ public:
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicIdMeta::Type topicId;
+        TopicIdMeta::Type TopicId;
         
         struct PartitionsMeta {
+            using ItemType = TFetchPartition;
+            using ItemTypeDesc = NPrivate::TKafkaStructDesc;
             using Type = std::vector<TFetchPartition>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
@@ -940,13 +938,12 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 12;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PartitionsMeta::Type partitions;
+        PartitionsMeta::Type Partitions;
         
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TFetchTopic& other) const = default;
@@ -972,7 +969,7 @@ public:
             static constexpr const char* About = "The topic name.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 7;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = 12;
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
@@ -981,7 +978,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 12;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicMeta::Type topic;
+        TopicMeta::Type Topic;
         
         struct TopicIdMeta {
             using Type = TKafkaUuid;
@@ -997,19 +994,21 @@ public:
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicIdMeta::Type topicId;
+        TopicIdMeta::Type TopicId;
         
         struct PartitionsMeta {
+            using ItemType = TKafkaInt32;
+            using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
             using Type = std::vector<TKafkaInt32>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
             static constexpr const char* Name = "partitions";
             static constexpr const char* About = "The partitions indexes to forget.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 7;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
@@ -1018,13 +1017,12 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 12;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PartitionsMeta::Type partitions;
+        PartitionsMeta::Type Partitions;
         
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TForgottenTopic& other) const = default;
@@ -1041,14 +1039,14 @@ public:
         
         static constexpr TKafkaVersion PresentVersionMin = 12;
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 12;
+        static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion NullableVersionMin = 12;
+        static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ClusterIdMeta::Type clusterId;
+    ClusterIdMeta::Type ClusterId;
     
     struct ReplicaIdMeta {
         using Type = TKafkaInt32;
@@ -1067,7 +1065,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ReplicaIdMeta::Type replicaId;
+    ReplicaIdMeta::Type ReplicaId;
     
     struct MaxWaitMsMeta {
         using Type = TKafkaInt32;
@@ -1086,7 +1084,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    MaxWaitMsMeta::Type maxWaitMs;
+    MaxWaitMsMeta::Type MaxWaitMs;
     
     struct MinBytesMeta {
         using Type = TKafkaInt32;
@@ -1105,7 +1103,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    MinBytesMeta::Type minBytes;
+    MinBytesMeta::Type MinBytes;
     
     struct MaxBytesMeta {
         using Type = TKafkaInt32;
@@ -1124,7 +1122,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    MaxBytesMeta::Type maxBytes;
+    MaxBytesMeta::Type MaxBytes;
     
     struct IsolationLevelMeta {
         using Type = TKafkaInt8;
@@ -1143,7 +1141,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    IsolationLevelMeta::Type isolationLevel;
+    IsolationLevelMeta::Type IsolationLevel;
     
     struct SessionIdMeta {
         using Type = TKafkaInt32;
@@ -1162,7 +1160,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    SessionIdMeta::Type sessionId;
+    SessionIdMeta::Type SessionId;
     
     struct SessionEpochMeta {
         using Type = TKafkaInt32;
@@ -1181,9 +1179,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    SessionEpochMeta::Type sessionEpoch;
+    SessionEpochMeta::Type SessionEpoch;
     
     struct TopicsMeta {
+        using ItemType = TFetchTopic;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TFetchTopic>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -1199,9 +1199,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TopicsMeta::Type topics;
+    TopicsMeta::Type Topics;
     
     struct ForgottenTopicsDataMeta {
+        using ItemType = TForgottenTopic;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TForgottenTopic>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -1217,7 +1219,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ForgottenTopicsDataMeta::Type forgottenTopicsData;
+    ForgottenTopicsDataMeta::Type ForgottenTopicsData;
     
     struct RackIdMeta {
         using Type = TKafkaString;
@@ -1236,14 +1238,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    RackIdMeta::Type rackId;
+    RackIdMeta::Type RackId;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return FETCH; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TFetchRequestData& other) const = default;
@@ -1291,7 +1292,7 @@ public:
                 struct MessageMeta {
                     static constexpr TKafkaVersion PresentVersionMin = 12;
                     static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
                 
@@ -1306,16 +1307,16 @@ public:
                     static constexpr const char* About = "";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
                     static constexpr TKafkaVersion NullableVersionMin = 0;
                     static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                EpochMeta::Type epoch;
+                EpochMeta::Type Epoch;
                 
                 struct EndOffsetMeta {
                     using Type = TKafkaInt64;
@@ -1325,22 +1326,21 @@ public:
                     static constexpr const char* About = "";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
                     static constexpr TKafkaVersion NullableVersionMin = 0;
                     static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                EndOffsetMeta::Type endOffset;
+                EndOffsetMeta::Type EndOffset;
                 
+                class TReadContext;
                 
-                TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-                TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
                 i32 Size(TKafkaVersion version) const override;
-                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TEpochEndOffset& other) const = default;
@@ -1351,7 +1351,7 @@ public:
                 struct MessageMeta {
                     static constexpr TKafkaVersion PresentVersionMin = 12;
                     static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
                 
@@ -1366,16 +1366,16 @@ public:
                     static constexpr const char* About = "The ID of the current leader or -1 if the leader is unknown.";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
                     static constexpr TKafkaVersion NullableVersionMin = 0;
                     static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                LeaderIdMeta::Type leaderId;
+                LeaderIdMeta::Type LeaderId;
                 
                 struct LeaderEpochMeta {
                     using Type = TKafkaInt32;
@@ -1385,22 +1385,21 @@ public:
                     static constexpr const char* About = "The latest known leader epoch";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
                     static constexpr TKafkaVersion NullableVersionMin = 0;
                     static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                LeaderEpochMeta::Type leaderEpoch;
+                LeaderEpochMeta::Type LeaderEpoch;
                 
+                class TReadContext;
                 
-                TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-                TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
                 i32 Size(TKafkaVersion version) const override;
-                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TLeaderIdAndEpoch& other) const = default;
@@ -1411,7 +1410,7 @@ public:
                 struct MessageMeta {
                     static constexpr TKafkaVersion PresentVersionMin = 12;
                     static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
                 
@@ -1435,7 +1434,7 @@ public:
                     static constexpr TKafkaVersion FlexibleVersionMin = 12;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                EndOffsetMeta::Type endOffset;
+                EndOffsetMeta::Type EndOffset;
                 
                 struct EpochMeta {
                     using Type = TKafkaInt32;
@@ -1454,13 +1453,12 @@ public:
                     static constexpr TKafkaVersion FlexibleVersionMin = 12;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                EpochMeta::Type epoch;
+                EpochMeta::Type Epoch;
                 
+                class TReadContext;
                 
-                TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-                TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
                 i32 Size(TKafkaVersion version) const override;
-                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TSnapshotId& other) const = default;
@@ -1486,7 +1484,7 @@ public:
                     static constexpr const char* About = "The producer id associated with the aborted transaction.";
                     static const Type Default; // = 0;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 4;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
@@ -1495,7 +1493,7 @@ public:
                     static constexpr TKafkaVersion FlexibleVersionMin = 12;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                ProducerIdMeta::Type producerId;
+                ProducerIdMeta::Type ProducerId;
                 
                 struct FirstOffsetMeta {
                     using Type = TKafkaInt64;
@@ -1505,7 +1503,7 @@ public:
                     static constexpr const char* About = "The first offset in the aborted transaction.";
                     static const Type Default; // = 0;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 4;
+                    static constexpr TKafkaVersion PresentVersionMin = 0;
                     static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                     static constexpr TKafkaVersion TaggedVersionMin = 0;
                     static constexpr TKafkaVersion TaggedVersionMax = -1;
@@ -1514,13 +1512,12 @@ public:
                     static constexpr TKafkaVersion FlexibleVersionMin = 12;
                     static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
                 };
-                FirstOffsetMeta::Type firstOffset;
+                FirstOffsetMeta::Type FirstOffset;
                 
+                class TReadContext;
                 
-                TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-                TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
                 i32 Size(TKafkaVersion version) const override;
-                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TAbortedTransaction& other) const = default;
@@ -1543,7 +1540,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            PartitionIndexMeta::Type partitionIndex;
+            PartitionIndexMeta::Type PartitionIndex;
             
             struct ErrorCodeMeta {
                 using Type = TKafkaInt16;
@@ -1562,7 +1559,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            ErrorCodeMeta::Type errorCode;
+            ErrorCodeMeta::Type ErrorCode;
             
             struct HighWatermarkMeta {
                 using Type = TKafkaInt64;
@@ -1581,7 +1578,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            HighWatermarkMeta::Type highWatermark;
+            HighWatermarkMeta::Type HighWatermark;
             
             struct LastStableOffsetMeta {
                 using Type = TKafkaInt64;
@@ -1600,7 +1597,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LastStableOffsetMeta::Type lastStableOffset;
+            LastStableOffsetMeta::Type LastStableOffset;
             
             struct LogStartOffsetMeta {
                 using Type = TKafkaInt64;
@@ -1619,7 +1616,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LogStartOffsetMeta::Type logStartOffset;
+            LogStartOffsetMeta::Type LogStartOffset;
             
             struct DivergingEpochMeta {
                 using Type = TEpochEndOffset;
@@ -1631,14 +1628,14 @@ public:
                 
                 static constexpr TKafkaVersion PresentVersionMin = 12;
                 static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 12;
+                static constexpr TKafkaVersion TaggedVersionMin = 0;
                 static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion NullableVersionMin = 0;
                 static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                static constexpr TKafkaVersion FlexibleVersionMin = 0;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            DivergingEpochMeta::Type divergingEpoch;
+            DivergingEpochMeta::Type DivergingEpoch;
             
             struct CurrentLeaderMeta {
                 using Type = TLeaderIdAndEpoch;
@@ -1650,14 +1647,14 @@ public:
                 
                 static constexpr TKafkaVersion PresentVersionMin = 12;
                 static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 12;
+                static constexpr TKafkaVersion TaggedVersionMin = 0;
                 static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion NullableVersionMin = 0;
                 static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                static constexpr TKafkaVersion FlexibleVersionMin = 0;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            CurrentLeaderMeta::Type currentLeader;
+            CurrentLeaderMeta::Type CurrentLeader;
             
             struct SnapshotIdMeta {
                 using Type = TSnapshotId;
@@ -1669,16 +1666,18 @@ public:
                 
                 static constexpr TKafkaVersion PresentVersionMin = 12;
                 static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 12;
+                static constexpr TKafkaVersion TaggedVersionMin = 0;
                 static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion NullableVersionMin = 0;
                 static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
+                static constexpr TKafkaVersion FlexibleVersionMin = 0;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            SnapshotIdMeta::Type snapshotId;
+            SnapshotIdMeta::Type SnapshotId;
             
             struct AbortedTransactionsMeta {
+                using ItemType = TAbortedTransaction;
+                using ItemTypeDesc = NPrivate::TKafkaStructDesc;
                 using Type = std::vector<TAbortedTransaction>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
@@ -1689,12 +1688,12 @@ public:
                 static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion TaggedVersionMin = 0;
                 static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 4;
+                static constexpr TKafkaVersion NullableVersionMin = 0;
                 static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            AbortedTransactionsMeta::Type abortedTransactions;
+            AbortedTransactionsMeta::Type AbortedTransactions;
             
             struct PreferredReadReplicaMeta {
                 using Type = TKafkaInt32;
@@ -1713,7 +1712,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            PreferredReadReplicaMeta::Type preferredReadReplica;
+            PreferredReadReplicaMeta::Type PreferredReadReplica;
             
             struct RecordsMeta {
                 using Type = TKafkaRecords;
@@ -1731,13 +1730,12 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 12;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            RecordsMeta::Type records;
+            RecordsMeta::Type Records;
             
+            class TReadContext;
             
-            TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-            TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
             i32 Size(TKafkaVersion version) const override;
-            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TPartitionData& other) const = default;
@@ -1760,7 +1758,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 12;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicMeta::Type topic;
+        TopicMeta::Type Topic;
         
         struct TopicIdMeta {
             using Type = TKafkaUuid;
@@ -1776,12 +1774,14 @@ public:
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicIdMeta::Type topicId;
+        TopicIdMeta::Type TopicId;
         
         struct PartitionsMeta {
+            using ItemType = TPartitionData;
+            using ItemTypeDesc = NPrivate::TKafkaStructDesc;
             using Type = std::vector<TPartitionData>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
@@ -1797,13 +1797,12 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 12;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PartitionsMeta::Type partitions;
+        PartitionsMeta::Type Partitions;
         
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TFetchableTopicResponse& other) const = default;
@@ -1826,7 +1825,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ThrottleTimeMsMeta::Type throttleTimeMs;
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
     struct ErrorCodeMeta {
         using Type = TKafkaInt16;
@@ -1845,7 +1844,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ErrorCodeMeta::Type errorCode;
+    ErrorCodeMeta::Type ErrorCode;
     
     struct SessionIdMeta {
         using Type = TKafkaInt32;
@@ -1864,9 +1863,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    SessionIdMeta::Type sessionId;
+    SessionIdMeta::Type SessionId;
     
     struct ResponsesMeta {
+        using ItemType = TFetchableTopicResponse;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TFetchableTopicResponse>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -1882,14 +1883,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 12;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ResponsesMeta::Type responses;
+    ResponsesMeta::Type Responses;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return FETCH; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TFetchResponseData& other) const = default;
@@ -1934,10 +1934,10 @@ public:
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicIdMeta::Type topicId;
+        TopicIdMeta::Type TopicId;
         
         struct NameMeta {
             using Type = TKafkaString;
@@ -1956,19 +1956,20 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NameMeta::Type name;
+        NameMeta::Type Name;
         
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TMetadataRequestTopic& other) const = default;
     };
     
     struct TopicsMeta {
+        using ItemType = TMetadataRequestTopic;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TMetadataRequestTopic>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -1984,7 +1985,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TopicsMeta::Type topics;
+    TopicsMeta::Type Topics;
     
     struct AllowAutoTopicCreationMeta {
         using Type = TKafkaBool;
@@ -2003,7 +2004,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    AllowAutoTopicCreationMeta::Type allowAutoTopicCreation;
+    AllowAutoTopicCreationMeta::Type AllowAutoTopicCreation;
     
     struct IncludeClusterAuthorizedOperationsMeta {
         using Type = TKafkaBool;
@@ -2022,7 +2023,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    IncludeClusterAuthorizedOperationsMeta::Type includeClusterAuthorizedOperations;
+    IncludeClusterAuthorizedOperationsMeta::Type IncludeClusterAuthorizedOperations;
     
     struct IncludeTopicAuthorizedOperationsMeta {
         using Type = TKafkaBool;
@@ -2041,14 +2042,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    IncludeTopicAuthorizedOperationsMeta::Type includeTopicAuthorizedOperations;
+    IncludeTopicAuthorizedOperationsMeta::Type IncludeTopicAuthorizedOperations;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return METADATA; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TMetadataRequestData& other) const = default;
@@ -2096,7 +2096,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NodeIdMeta::Type nodeId;
+        NodeIdMeta::Type NodeId;
         
         struct HostMeta {
             using Type = TKafkaString;
@@ -2115,7 +2115,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        HostMeta::Type host;
+        HostMeta::Type Host;
         
         struct PortMeta {
             using Type = TKafkaInt32;
@@ -2134,7 +2134,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PortMeta::Type port;
+        PortMeta::Type Port;
         
         struct RackMeta {
             using Type = TKafkaString;
@@ -2148,20 +2148,17 @@ public:
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 1;
+            static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        RackMeta::Type rack;
+        RackMeta::Type Rack;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TMetadataResponseBroker& other) const = default;
@@ -2208,7 +2205,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            ErrorCodeMeta::Type errorCode;
+            ErrorCodeMeta::Type ErrorCode;
             
             struct PartitionIndexMeta {
                 using Type = TKafkaInt32;
@@ -2227,7 +2224,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            PartitionIndexMeta::Type partitionIndex;
+            PartitionIndexMeta::Type PartitionIndex;
             
             struct LeaderIdMeta {
                 using Type = TKafkaInt32;
@@ -2246,7 +2243,7 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LeaderIdMeta::Type leaderId;
+            LeaderIdMeta::Type LeaderId;
             
             struct LeaderEpochMeta {
                 using Type = TKafkaInt32;
@@ -2265,9 +2262,11 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            LeaderEpochMeta::Type leaderEpoch;
+            LeaderEpochMeta::Type LeaderEpoch;
             
             struct ReplicaNodesMeta {
+                using ItemType = TKafkaInt32;
+                using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
                 using Type = std::vector<TKafkaInt32>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
@@ -2283,9 +2282,11 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            ReplicaNodesMeta::Type replicaNodes;
+            ReplicaNodesMeta::Type ReplicaNodes;
             
             struct IsrNodesMeta {
+                using ItemType = TKafkaInt32;
+                using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
                 using Type = std::vector<TKafkaInt32>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
@@ -2301,9 +2302,11 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            IsrNodesMeta::Type isrNodes;
+            IsrNodesMeta::Type IsrNodes;
             
             struct OfflineReplicasMeta {
+                using ItemType = TKafkaInt32;
+                using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
                 using Type = std::vector<TKafkaInt32>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
@@ -2319,13 +2322,12 @@ public:
                 static constexpr TKafkaVersion FlexibleVersionMin = 9;
                 static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
             };
-            OfflineReplicasMeta::Type offlineReplicas;
+            OfflineReplicasMeta::Type OfflineReplicas;
             
+            class TReadContext;
             
-            TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-            TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
             i32 Size(TKafkaVersion version) const override;
-            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TMetadataResponsePartition& other) const = default;
@@ -2348,7 +2350,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        ErrorCodeMeta::Type errorCode;
+        ErrorCodeMeta::Type ErrorCode;
         
         struct NameMeta {
             using Type = TKafkaString;
@@ -2367,7 +2369,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NameMeta::Type name;
+        NameMeta::Type Name;
         
         struct TopicIdMeta {
             using Type = TKafkaUuid;
@@ -2383,10 +2385,10 @@ public:
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicIdMeta::Type topicId;
+        TopicIdMeta::Type TopicId;
         
         struct IsInternalMeta {
             using Type = TKafkaBool;
@@ -2405,9 +2407,11 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        IsInternalMeta::Type isInternal;
+        IsInternalMeta::Type IsInternal;
         
         struct PartitionsMeta {
+            using ItemType = TMetadataResponsePartition;
+            using ItemTypeDesc = NPrivate::TKafkaStructDesc;
             using Type = std::vector<TMetadataResponsePartition>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
@@ -2423,7 +2427,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        PartitionsMeta::Type partitions;
+        PartitionsMeta::Type Partitions;
         
         struct TopicAuthorizedOperationsMeta {
             using Type = TKafkaInt32;
@@ -2442,15 +2446,12 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 9;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        TopicAuthorizedOperationsMeta::Type topicAuthorizedOperations;
+        TopicAuthorizedOperationsMeta::Type TopicAuthorizedOperations;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TMetadataResponseTopic& other) const = default;
@@ -2473,9 +2474,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ThrottleTimeMsMeta::Type throttleTimeMs;
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
     struct BrokersMeta {
+        using ItemType = TMetadataResponseBroker;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TMetadataResponseBroker>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -2491,7 +2494,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    BrokersMeta::Type brokers;
+    BrokersMeta::Type Brokers;
     
     struct ClusterIdMeta {
         using Type = TKafkaString;
@@ -2505,12 +2508,12 @@ public:
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 2;
+        static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ClusterIdMeta::Type clusterId;
+    ClusterIdMeta::Type ClusterId;
     
     struct ControllerIdMeta {
         using Type = TKafkaInt32;
@@ -2529,9 +2532,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ControllerIdMeta::Type controllerId;
+    ControllerIdMeta::Type ControllerId;
     
     struct TopicsMeta {
+        using ItemType = TMetadataResponseTopic;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TMetadataResponseTopic>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -2547,7 +2552,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TopicsMeta::Type topics;
+    TopicsMeta::Type Topics;
     
     struct ClusterAuthorizedOperationsMeta {
         using Type = TKafkaInt32;
@@ -2566,14 +2571,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 9;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ClusterAuthorizedOperationsMeta::Type clusterAuthorizedOperations;
+    ClusterAuthorizedOperationsMeta::Type ClusterAuthorizedOperations;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return METADATA; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TMetadataResponseData& other) const = default;
@@ -2606,10 +2610,10 @@ public:
         static constexpr TKafkaVersion TaggedVersionMax = -1;
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ClientSoftwareNameMeta::Type clientSoftwareName;
+    ClientSoftwareNameMeta::Type ClientSoftwareName;
     
     struct ClientSoftwareVersionMeta {
         using Type = TKafkaString;
@@ -2625,17 +2629,16 @@ public:
         static constexpr TKafkaVersion TaggedVersionMax = -1;
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ClientSoftwareVersionMeta::Type clientSoftwareVersion;
+    ClientSoftwareVersionMeta::Type ClientSoftwareVersion;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return API_VERSIONS; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TApiVersionsRequestData& other) const = default;
@@ -2683,7 +2686,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 3;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        ApiKeyMeta::Type apiKey;
+        ApiKeyMeta::Type ApiKey;
         
         struct MinVersionMeta {
             using Type = TKafkaInt16;
@@ -2702,7 +2705,7 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 3;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        MinVersionMeta::Type minVersion;
+        MinVersionMeta::Type MinVersion;
         
         struct MaxVersionMeta {
             using Type = TKafkaInt16;
@@ -2721,15 +2724,12 @@ public:
             static constexpr TKafkaVersion FlexibleVersionMin = 3;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        MaxVersionMeta::Type maxVersion;
+        MaxVersionMeta::Type MaxVersion;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TApiVersion& other) const = default;
@@ -2740,7 +2740,7 @@ public:
         struct MessageMeta {
             static constexpr TKafkaVersion PresentVersionMin = 3;
             static constexpr TKafkaVersion PresentVersionMax = 3;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
         
@@ -2755,16 +2755,16 @@ public:
             static constexpr const char* About = "The name of the feature.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 3;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NameMeta::Type name;
+        NameMeta::Type Name;
         
         struct MinVersionMeta {
             using Type = TKafkaInt16;
@@ -2774,16 +2774,16 @@ public:
             static constexpr const char* About = "The minimum supported version for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 3;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        MinVersionMeta::Type minVersion;
+        MinVersionMeta::Type MinVersion;
         
         struct MaxVersionMeta {
             using Type = TKafkaInt16;
@@ -2793,24 +2793,21 @@ public:
             static constexpr const char* About = "The maximum supported version for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 3;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        MaxVersionMeta::Type maxVersion;
+        MaxVersionMeta::Type MaxVersion;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TSupportedFeatureKey& other) const = default;
@@ -2821,7 +2818,7 @@ public:
         struct MessageMeta {
             static constexpr TKafkaVersion PresentVersionMin = 3;
             static constexpr TKafkaVersion PresentVersionMax = 3;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
         
@@ -2836,16 +2833,16 @@ public:
             static constexpr const char* About = "The name of the feature.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 3;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        NameMeta::Type name;
+        NameMeta::Type Name;
         
         struct MaxVersionLevelMeta {
             using Type = TKafkaInt16;
@@ -2855,16 +2852,16 @@ public:
             static constexpr const char* About = "The cluster-wide finalized max version level for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 3;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        MaxVersionLevelMeta::Type maxVersionLevel;
+        MaxVersionLevelMeta::Type MaxVersionLevel;
         
         struct MinVersionLevelMeta {
             using Type = TKafkaInt16;
@@ -2874,24 +2871,21 @@ public:
             static constexpr const char* About = "The cluster-wide finalized min version level for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 3;
+            static constexpr TKafkaVersion PresentVersionMin = 0;
             static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
             static constexpr TKafkaVersion TaggedVersionMin = 0;
             static constexpr TKafkaVersion TaggedVersionMax = -1;
             static constexpr TKafkaVersion NullableVersionMin = 0;
             static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
+            static constexpr TKafkaVersion FlexibleVersionMin = 0;
             static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
         };
-        MinVersionLevelMeta::Type minVersionLevel;
+        MinVersionLevelMeta::Type MinVersionLevel;
         
-        i32 next;
-        i32 prev;
+        class TReadContext;
         
-        TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-        TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
         i32 Size(TKafkaVersion version) const override;
-        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TFinalizedFeatureKey& other) const = default;
@@ -2914,9 +2908,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 3;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ErrorCodeMeta::Type errorCode;
+    ErrorCodeMeta::Type ErrorCode;
     
     struct ApiKeysMeta {
+        using ItemType = TApiVersion;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TApiVersion>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -2932,7 +2928,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 3;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ApiKeysMeta::Type apiKeys;
+    ApiKeysMeta::Type ApiKeys;
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
@@ -2951,9 +2947,11 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 3;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ThrottleTimeMsMeta::Type throttleTimeMs;
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
     struct SupportedFeaturesMeta {
+        using ItemType = TSupportedFeatureKey;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TSupportedFeatureKey>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -2963,14 +2961,14 @@ public:
         
         static constexpr TKafkaVersion PresentVersionMin = 3;
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 3;
+        static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    SupportedFeaturesMeta::Type supportedFeatures;
+    SupportedFeaturesMeta::Type SupportedFeatures;
     
     struct FinalizedFeaturesEpochMeta {
         using Type = TKafkaInt64;
@@ -2983,16 +2981,18 @@ public:
         
         static constexpr TKafkaVersion PresentVersionMin = 3;
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 3;
+        static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    FinalizedFeaturesEpochMeta::Type finalizedFeaturesEpoch;
+    FinalizedFeaturesEpochMeta::Type FinalizedFeaturesEpoch;
     
     struct FinalizedFeaturesMeta {
+        using ItemType = TFinalizedFeatureKey;
+        using ItemTypeDesc = NPrivate::TKafkaStructDesc;
         using Type = std::vector<TFinalizedFeatureKey>;
         using TypeDesc = NPrivate::TKafkaArrayDesc;
         
@@ -3002,14 +3002,14 @@ public:
         
         static constexpr TKafkaVersion PresentVersionMin = 3;
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 3;
+        static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    FinalizedFeaturesMeta::Type finalizedFeatures;
+    FinalizedFeaturesMeta::Type FinalizedFeatures;
     
     struct ZkMigrationReadyMeta {
         using Type = TKafkaBool;
@@ -3022,21 +3022,20 @@ public:
         
         static constexpr TKafkaVersion PresentVersionMin = 3;
         static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 3;
+        static constexpr TKafkaVersion TaggedVersionMin = 0;
         static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ZkMigrationReadyMeta::Type zkMigrationReady;
+    ZkMigrationReadyMeta::Type ZkMigrationReady;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return API_VERSIONS; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TApiVersionsResponseData& other) const = default;
@@ -3072,7 +3071,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TransactionalIdMeta::Type transactionalId;
+    TransactionalIdMeta::Type TransactionalId;
     
     struct TransactionTimeoutMsMeta {
         using Type = TKafkaInt32;
@@ -3091,7 +3090,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    TransactionTimeoutMsMeta::Type transactionTimeoutMs;
+    TransactionTimeoutMsMeta::Type TransactionTimeoutMs;
     
     struct ProducerIdMeta {
         using Type = TKafkaInt64;
@@ -3107,10 +3106,10 @@ public:
         static constexpr TKafkaVersion TaggedVersionMax = -1;
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ProducerIdMeta::Type producerId;
+    ProducerIdMeta::Type ProducerId;
     
     struct ProducerEpochMeta {
         using Type = TKafkaInt16;
@@ -3126,17 +3125,16 @@ public:
         static constexpr TKafkaVersion TaggedVersionMax = -1;
         static constexpr TKafkaVersion NullableVersionMin = 0;
         static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
+        static constexpr TKafkaVersion FlexibleVersionMin = 0;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ProducerEpochMeta::Type producerEpoch;
+    ProducerEpochMeta::Type ProducerEpoch;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return INIT_PRODUCER_ID; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TInitProducerIdRequestData& other) const = default;
@@ -3172,7 +3170,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ThrottleTimeMsMeta::Type throttleTimeMs;
+    ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
     struct ErrorCodeMeta {
         using Type = TKafkaInt16;
@@ -3191,7 +3189,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ErrorCodeMeta::Type errorCode;
+    ErrorCodeMeta::Type ErrorCode;
     
     struct ProducerIdMeta {
         using Type = TKafkaInt64;
@@ -3210,7 +3208,7 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ProducerIdMeta::Type producerId;
+    ProducerIdMeta::Type ProducerId;
     
     struct ProducerEpochMeta {
         using Type = TKafkaInt16;
@@ -3229,14 +3227,13 @@ public:
         static constexpr TKafkaVersion FlexibleVersionMin = 2;
         static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
     };
-    ProducerEpochMeta::Type producerEpoch;
+    ProducerEpochMeta::Type ProducerEpoch;
     
+    class TReadContext;
     
     i16 ApiKey() const override { return INIT_PRODUCER_ID; };
-    TKafkaVersion LowestSupportedVersion() const override { return MessageMeta::PresentVersionMin; };
-    TKafkaVersion HighestSupportedVersion() const override { return MessageMeta::PresentVersionMax; };
     i32 Size(TKafkaVersion version) const override;
-    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TInitProducerIdResponseData& other) const = default;

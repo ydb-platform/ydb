@@ -22,7 +22,6 @@ namespace NYql::NDqs {
 
     struct TLocalWorkerManagerOptions {
         TWorkerManagerCounters Counters;
-        ::NMonitoring::TDynamicCounterPtr DqTaskCounters;
         NTaskRunnerProxy::IProxyFactory::TPtr Factory;
         NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
@@ -39,6 +38,7 @@ namespace NYql::NDqs {
         bool CanUseComputeActor = true;
         NActors::TActorId QuoterServiceActorId;
         bool ComputeActorOwnsCounters = false;
+        bool DropTaskCountersOnFinish = true;
     };
 
     NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options);

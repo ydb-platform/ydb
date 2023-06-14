@@ -116,6 +116,7 @@ private:
             HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
+
             HFunc(NPQ::TEvPartitionWriter::TEvDisconnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
@@ -164,8 +165,10 @@ private:
     void StartSession(const NActors::TActorContext& ctx);
     void SendSelectPartitionRequest(const TString& topic, const NActors::TActorContext& ctx);
 
+    void UpdateOrProceedPartition(const NActors::TActorContext& ctx);
     void UpdatePartition(const NActors::TActorContext& ctx);
     void RequestNextPartition(const NActors::TActorContext& ctx);
+    void GetOrProcessPartition(const NActors::TActorContext& ctx);
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
 
@@ -175,7 +178,10 @@ private:
     //void InitCheckACL(const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
+    void MakeAndSentInitResponse(const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx);
+
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
+    void ProcessWriteResponse(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
@@ -225,6 +231,7 @@ private:
     bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
+    bool UseDeduplication = true;
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
 
     TString OwnerCookie;
@@ -281,7 +288,9 @@ private:
     TInstant LogSessionDeadline;
 
     ui64 BalancerTabletId;
+    ui64 PartitionTabletId;
     TActorId PipeToBalancer;
+    TActorId PipeToPartition;
 
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
@@ -309,6 +318,8 @@ private:
 
     TInitRequest InitRequest;
     NPQ::ESourceIdTableGeneration SrcIdTableGeneration;
+
+    TDeque<ui64> SeqNoInflight;
 
 };
 

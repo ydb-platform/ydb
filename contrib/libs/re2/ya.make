@@ -9,9 +9,17 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-03-01)
+VERSION(2023-06-02)
 
-ORIGINAL_SOURCE(https://github.com/google/re2/archive/2023-03-01.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/re2/archive/2023-06-02.tar.gz)
+
+PEERDIR(
+    contrib/restricted/abseil-cpp/absl/base
+    contrib/restricted/abseil-cpp/absl/container
+    contrib/restricted/abseil-cpp/absl/hash
+    contrib/restricted/abseil-cpp/absl/strings
+    contrib/restricted/abseil-cpp/absl/synchronization
+)
 
 ADDINCL(
     GLOBAL contrib/libs/re2/include
@@ -44,7 +52,6 @@ SRCS(
     re2/regexp.cc
     re2/set.cc
     re2/simplify.cc
-    re2/stringpiece.cc
     re2/tostring.cc
     re2/unicode_casefold.cc
     re2/unicode_groups.cc

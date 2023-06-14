@@ -19,7 +19,7 @@ ADDINCL(
     GLOBAL contrib/restricted/abseil-cpp-tstring
 )
 
-IF (OS_DARWIN)
+IF (OS_DARWIN OR OS_IOS)
     EXTRALIBS("-framework CoreFoundation")
 ENDIF()
 

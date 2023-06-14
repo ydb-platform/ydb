@@ -6191,6 +6191,116 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    THolder<NYdb::TDriver> SetupTestAndGetDriver(
+            NPersQueue::TTestServer& server, const TString& topicName, ui64 partsCount = 1
+    ) {
+        NYdb::TDriverConfig driverCfg;
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+        auto driver = MakeHolder<NYdb::TDriver>(driverCfg);
+
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY});
+        server.EnableLogs({ NKikimrServices::KQP_PROXY}, NActors::NLog::PRI_EMERG);
+
+        server.AnnoyingClient->CreateTopic(topicName, partsCount);
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+        auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+        alterSettings.BeginAddConsumer("debug");
+        auto alterRes = topicClient.AlterTopic(TString("/Root/PQ/") + topicName, alterSettings).GetValueSync();
+        UNIT_ASSERT(alterRes.IsSuccess());
+        return std::move(driver);
+    }
+
+    Y_UNIT_TEST(MessageMetadata) {
+        return; //No supported;
+        NPersQueue::TTestServer server;
+        server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessageMeta(true);
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        std::unordered_map<TString, TString> metadata = {{"key1", "val1"}, {"key2", "val2"}};
+/*        writer->Write("Somedata", Nothing(), Nothing(), TDuration::Max(), metadata);
+        metadata = {{"key3", "val3"}};
+        writer->Write("Somedata2", Nothing(), Nothing(), TDuration::Max(), metadata);
+        writer->Write("Somedata3");
+*/
+        writer->Close();
+        NYdb::NTopic::TReadSessionSettings rSettings;
+        rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+        auto readSession = topicClient.CreateReadSession(rSettings);
+
+        auto ev = readSession->GetEvent(true);
+        UNIT_ASSERT(ev.Defined());
+        auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+        UNIT_ASSERT(spsEv);
+        spsEv->Confirm();
+        ev = readSession->GetEvent(true);
+        auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+        UNIT_ASSERT(dataEv);
+        const auto& messages = dataEv->GetMessages();
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+        auto metadataSizeExpected = 2;
+        for (const auto& msg : dataEv->GetMessages()) {
+            auto meta = msg.GetMessageMeta();
+            UNIT_ASSERT_VALUES_EQUAL(meta->Fields.size(), metadataSizeExpected);
+            metadataSizeExpected--;
+        }
+    }
+
+    Y_UNIT_TEST(DisableDeduplication) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName, 3);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+        NYdb::NTopic::TWriteSessionSettings wSettings;
+        wSettings.Path(topicFullName).DeduplicationEnabled(false);
+
+        TVector<std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession>> writers;
+        for (auto i = 0u; i < 3; i++) {
+            auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+            for (auto j = 0u; j < 3; j++) {
+                writer->Write(TString("MyData") + ToString(i) + ToString(j));
+            }
+            writers.push_back(writer);
+        }
+
+        for (auto& w : writers) {
+            w->Close();
+        }
+        NYdb::NTopic::TReadSessionSettings rSettings;
+        rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+        auto readSession = topicClient.CreateReadSession(rSettings);
+
+        THashSet<ui64> partitions;
+        ui64 totalMessages = 0;
+        Cerr << "Start reads\n";
+        while(totalMessages < 9) {
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.Defined());
+
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            if (spsEv) {
+                spsEv->Confirm();
+                Cerr << "Got start stream event\n";
+                continue;
+            }
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            totalMessages += messages.size();
+            Cerr << "Got data event with total " << messages.size() << " messages, current total messages: " << totalMessages << Endl;
+            for (const auto& msg: dataEv->GetMessages()) {
+                auto session = msg.GetPartitionSession();
+                partitions.insert(session->GetPartitionId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3);
+    }
+
     Y_UNIT_TEST(LOGBROKER_7820) {
         //
         // 700 messages of 2000 characters are sent in the test

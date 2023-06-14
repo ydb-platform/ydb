@@ -35,11 +35,13 @@ bool TPKSortingWithLimit::DoWakeup(const TGranule& granule, TGranulesFillingCont
             ++CountProcessedBatches;
             MergeStream.AddPoolSource(b.GetPoolId(), b->GetFetchedInfo().GetFilterBatch(), b->GetFetchedInfo().GetNotAppliedEarlyFilter());
             OnBatchFilterInitialized(*b, context);
+            const bool currentHasFrom = !!batches.front().GetFrom();
             batches.pop_front();
             if (batches.size()) {
-                if (!batches.front().GetFrom()) {
+                if (!batches.front().GetFrom() || !currentHasFrom) {
                     continue;
                 }
+                Y_VERIFY(b.GetFrom()->Compare(*batches.front().GetFrom()) != std::partial_ordering::greater);
                 MergeStream.PutControlPoint(batches.front().GetFrom());
             }
             while (CurrentItemsLimit && MergeStream.DrainCurrent()) {

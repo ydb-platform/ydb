@@ -572,7 +572,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
     for (const auto& msg: ev->Get()->Msgs) {
         //this is checked in pq_impl when forming EvWrite request
-        Y_VERIFY(!msg.SourceId.empty() || ev->Get()->IsDirectWrite);
+        Y_VERIFY(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication);
         Y_VERIFY(!msg.Data.empty());
 
         if (msg.SeqNo > (ui64)Max<i64>()) {

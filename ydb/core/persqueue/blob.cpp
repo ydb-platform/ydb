@@ -8,36 +8,28 @@
 namespace NKikimr {
 namespace NPQ {
 
-    TBlobIterator::TBlobIterator(const TKey& key, const TString& blob, bool createBatch)
-        : CreateBatch(createBatch)
-        , Batch()
-        , Key(key)
-        , Data(blob.c_str())
-        , End(Data + blob.size())
-        , Offset(key.GetOffset())
-        , Count(0)
-        , InternalPartsCount(0)
-    {
-        Y_VERIFY(Data != End);
-        ParseBatch(true);
-    }
+TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
+    : Key(key)
+    , Data(blob.c_str())
+    , End(Data + blob.size())
+    , Offset(key.GetOffset())
+    , Count(0)
+    , InternalPartsCount(0)
+{
+    Y_VERIFY(Data != End);
+    ParseBatch();
+    Y_VERIFY(Header.GetPartNo() == Key.GetPartNo());
+}
 
-void TBlobIterator::ParseBatch(bool isFirst) {
+void TBlobIterator::ParseBatch() {
     Y_VERIFY(Data < End);
-    auto header = ExtractHeader(Data, End - Data);
-    Y_VERIFY(header.GetOffset() == Offset);
-    if (isFirst)
-        Y_VERIFY(header.GetPartNo() == Key.GetPartNo());
-    Count += header.GetCount();
-    Offset += header.GetCount();
-    InternalPartsCount += header.GetInternalPartsCount();
+    Header = ExtractHeader(Data, End - Data);
+    Y_VERIFY(Header.GetOffset() == Offset);
+    Count += Header.GetCount();
+    Offset += Header.GetCount();
+    InternalPartsCount += Header.GetInternalPartsCount();
     Y_VERIFY(Count <= Key.GetCount());
     Y_VERIFY(InternalPartsCount <= Key.GetInternalPartsCount());
-
-    if(CreateBatch)
-        Batch = TBatch(header, Data + sizeof(ui16) + header.ByteSize());
-    else
-        Header = std::move(header);
 }
 
 bool TBlobIterator::IsValid()
@@ -48,27 +40,26 @@ bool TBlobIterator::IsValid()
 bool TBlobIterator::Next()
 {
     Y_VERIFY(IsValid());
-    NKikimrPQ::TBatchHeader& header = CreateBatch ? Batch.Header : Header;
-    Data += header.GetPayloadSize() + sizeof(ui16) + header.ByteSize();
+    Data += Header.GetPayloadSize() + sizeof(ui16) + Header.ByteSize();
     if (Data == End) { //this was last batch
         Y_VERIFY(Count == Key.GetCount());
         Y_VERIFY(InternalPartsCount == Key.GetInternalPartsCount());
         return false;
     }
-    ParseBatch(false);
+    ParseBatch();
     return true;
 }
 
-const TBatch& TBlobIterator::GetBatch()
+TBatch TBlobIterator::GetBatch()
 {
-    Y_VERIFY(CreateBatch);
     Y_VERIFY(IsValid());
-    return Batch;
+
+    return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
 }
 
 void TClientBlob::CheckBlob(const TKey& key, const TString& blob)
 {
-    for (TBlobIterator it(key, blob, false); it.IsValid(); it.Next());
+    for (TBlobIterator it(key, blob); it.IsValid(); it.Next());
 }
 
 void TClientBlob::SerializeTo(TBuffer& res) const

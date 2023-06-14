@@ -33,6 +33,33 @@
 
 namespace NLocalPgWire {
 
+struct TTransactionState {
+    char Status = 0;
+    TString Id;
+};
+
+struct TConnectionState {
+    TString SessionId;
+    TTransactionState Transaction;
+};
+
+struct TEvEvents {
+    enum EEv {
+        EvProxyCompleted = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "ES_PRIVATE event space is too small.");
+
+    struct TEvProxyCompleted : NActors::TEventLocal<TEvProxyCompleted, EvProxyCompleted> {
+        TConnectionState Connection;
+
+        TEvProxyCompleted(const TConnectionState& connection = {})
+            : Connection(connection)
+        {}
+    };
+};
+
 struct TParsedStatement {
     NPG::TPGParse::TQueryData QueryData;
     NPG::TPGBind::TBindData BindData;
@@ -140,9 +167,9 @@ inline uint32_t GetPgOidFromYdbType(NYdb::TType type) {
     }
 }
 
-inline TString ToPgSyntax(TStringBuf query, const std::unordered_map<TString, TString>& ConnectionParams) {
-    auto itOptions = ConnectionParams.find("options");
-    if (itOptions == ConnectionParams.end()) {
+inline TString ToPgSyntax(TStringBuf query, const std::unordered_map<TString, TString>& connectionParams) {
+    auto itOptions = connectionParams.find("options");
+    if (itOptions == connectionParams.end()) {
         return TStringBuilder() << "--!syntax_pg\n" << query; // default
     }
     return TStringBuilder() << "--!" << itOptions->second << "\n" << query;
@@ -169,6 +196,10 @@ struct TConvertedQuery {
     TString Query;
     NYdb::TParams Params;
 };
+
+inline TString ToPgSyntax(TConvertedQuery query, const std::unordered_map<TString, TString>& connectionParams) {
+    return ToPgSyntax(query.Query, connectionParams);
+}
 
 inline TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
     auto& bindData = statement.BindData;

@@ -27,6 +27,8 @@ target_link_options(ydb-library-yql-public-udf-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-yql-public-udf-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter_ut.cpp

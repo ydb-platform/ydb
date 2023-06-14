@@ -91,9 +91,11 @@ struct TEvPGEvents {
 
     struct TEvQuery : NActors::TEventLocal<TEvQuery, EvQuery> {
         std::unique_ptr<TPGQuery> Message;
+        char TransactionStatus;
 
-        TEvQuery(std::unique_ptr<TPGQuery> message)
+        TEvQuery(std::unique_ptr<TPGQuery> message, char transactionStatus)
             : Message(std::move(message))
+            , TransactionStatus(transactionStatus)
         {}
     };
 
@@ -192,9 +194,11 @@ struct TEvPGEvents {
 
     struct TEvExecute : NActors::TEventLocal<TEvExecute, EvExecute> {
         std::unique_ptr<TPGExecute> Message;
+        char TransactionStatus;
 
-        TEvExecute(std::unique_ptr<TPGExecute> message)
+        TEvExecute(std::unique_ptr<TPGExecute> message, char transactionStatus)
             : Message(std::move(message))
+            , TransactionStatus(transactionStatus)
         {}
     };
 
@@ -203,6 +207,8 @@ struct TEvPGEvents {
         std::vector<std::pair<char, TString>> ErrorFields;
         TString Tag;
         bool EmptyQuery = false;
+        bool CommandCompleted = true;
+        char TransactionStatus = 0;
     };
 
     struct TEvCloseResponse : NActors::TEventLocal<TEvCloseResponse, EvCloseResponse> {

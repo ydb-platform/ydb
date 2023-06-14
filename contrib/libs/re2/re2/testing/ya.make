@@ -8,6 +8,9 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/libs/re2
+    contrib/restricted/abseil-cpp/absl/base
+    contrib/restricted/abseil-cpp/absl/flags
+    contrib/restricted/abseil-cpp/absl/strings
 )
 
 ADDINCL(
@@ -20,12 +23,17 @@ NO_UTIL()
 
 EXPLICIT_DATA()
 
+CFLAGS(
+    -DGTEST_LINKED_AS_SHARED_LIBRARY=1
+)
+
 SRCDIR(contrib/libs/re2)
 
 SRCS(
     re2/testing/backtrack.cc
     re2/testing/charclass_test.cc
     re2/testing/compile_test.cc
+    re2/testing/dfa_test.cc
     re2/testing/dump.cc
     re2/testing/exhaustive_tester.cc
     re2/testing/filtered_re2_test.cc

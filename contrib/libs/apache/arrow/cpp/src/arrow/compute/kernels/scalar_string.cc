@@ -2725,7 +2725,7 @@ struct ExtractRegex : public ExtractRegexBase {
         result->value.reserve(group_count);
         for (int i = 0; i < group_count; i++) {
           result->value.push_back(
-              std::make_shared<ScalarType>(found_values[i].as_string()));
+              std::make_shared<ScalarType>(std::string{found_values[i]}));
         }
         result->is_valid = true;
       } else {

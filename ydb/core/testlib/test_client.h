@@ -274,6 +274,7 @@ namespace Tests {
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
         const NYdb::TDriver& GetDriver() const;
+        const NGrpc::TGRpcServer& GetGRpcServer() const;
 
         ui32 StaticNodes() const {
             return Settings->NodeCount;

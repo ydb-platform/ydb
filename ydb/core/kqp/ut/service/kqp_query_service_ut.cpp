@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -359,6 +360,44 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         // Check cancel for completed query
         auto cancelStatus = opClient.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
         UNIT_ASSERT_C(cancelStatus.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED, cancelStatus.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CloseConnection) {
+        auto kikimr = DefaultKikimrRunner();
+
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        int maxTimeoutMs = 100;
+
+        for (int i = 1; i < maxTimeoutMs; i++) {
+            auto it = kikimr.GetQueryClient().StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Text = "Value1" ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(i))).GetValueSync();
+
+            if (it.IsSuccess()) {
+                try {
+                    for (;;) {
+                        auto streamPart = it.ReadNext().GetValueSync();
+                        if (!streamPart.IsSuccess()) {
+                            break;
+                        }
+                    }
+                } catch (const TStreamReadError& ex) {
+                    UNIT_ASSERT_VALUES_EQUAL(ex.Status, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+                } catch (const std::exception& ex) {
+                    UNIT_ASSERT_C(false, "unknown exception during the test");
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED);
+            }
+        }
+
+        WaitForZeroSessions(counters);
+
+        for (const auto& service: kikimr.GetTestServer().GetGRpcServer().GetServices()) {
+            UNIT_ASSERT_VALUES_EQUAL(service->RequestsInProgress(), 0);
+            UNIT_ASSERT(!service->IsUnsafeToShutdown());
+        }
     }
 }
 

@@ -1074,6 +1074,11 @@ namespace Tests {
         return *Driver;
     }
 
+    const NGrpc::TGRpcServer& TServer::GetGRpcServer() const {
+        Y_VERIFY(GRpcServer);
+        return *GRpcServer;
+    }
+
     TServer::~TServer() {
         if (GRpcServer) {
             GRpcServer->Stop();

@@ -389,8 +389,14 @@ private:
 
 private:
     void HandleClientLost(const TActorContext& ctx) {
-        // TODO: Abort query execution.
-        Y_UNUSED(ctx);
+        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
+
+        // We must try to finish stream otherwise grpc will not free allocated memory
+        // If stream already scheduled to be finished (ReplyFinishStream already called)
+        // this call do nothing but Die will be called after reply to grpc
+        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+            "Client should not see this message, if so... may the force be with you");
+        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue) {

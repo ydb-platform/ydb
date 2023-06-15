@@ -387,6 +387,8 @@ public:
     ui16 GetPort() const;
     TString GetHost() const;
 
+    const TVector<IGRpcServicePtr>& GetServices() const;
+
 private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 

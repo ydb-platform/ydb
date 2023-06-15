@@ -244,4 +244,8 @@ TString TGRpcServer::GetHost() const {
     return Options_.Host;
 }
 
+const TVector<TGRpcServer::IGRpcServicePtr>& TGRpcServer::GetServices() const {
+    return Services_;
+}
+
 } // namespace NGrpc

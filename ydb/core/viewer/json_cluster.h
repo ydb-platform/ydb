@@ -20,9 +20,6 @@ class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     using TThis = TJsonCluster;
     using TBase = TViewerPipeClient<TJsonCluster>;
     IViewer* Viewer;
-    TActorId Initiator;
-    ui32 Requested;
-    ui32 Received;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> SystemInfo;
@@ -44,9 +41,6 @@ public:
 
     TJsonCluster(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
-        , Initiator(ev->Sender)
-        , Requested(0)
-        , Received(0)
         , Event(ev)
     {
         const auto& params(Event->Get()->Request.GetParams());
@@ -57,47 +51,23 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
     }
 
-    void Bootstrap(const TActorContext& ctx) {
-        const TActorId nameserviceId = GetNameserviceActorId();
-        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+    void Bootstrap(const TActorContext& ) {
+        SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         RequestConsoleListTenants();
-        TBase::Become(&TThis::StateRequestedBrowse);
-        ctx.Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateRequested, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
-    void Die(const TActorContext& ctx) override {
+    void PassAway() override {
         if (NodesInfo != nullptr) {
             for (const auto& ni : NodesInfo->Nodes) {
-                ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe());
+                Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe);
             }
         }
-        TBase::Die(ctx);
+        TBase::PassAway();
     }
 
-    void SendRequest(ui32 nodeId, const TActorContext& ctx) {
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++Requested;
-        ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++Requested;
-        ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++Requested;
-        ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++Requested;
-    }
-
-    void SendTabletStateRequest(ui32 nodeId, const TActorContext& ctx, THashSet<TTabletId>& filterTablets) {
-        auto request = new TEvWhiteboard::TEvTabletStateRequest();
-        for (TTabletId id: filterTablets) {
-            request->Record.AddFilterTabletId(id);
-        }
-        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
-        ctx.Send(whiteboardServiceId, request, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++Requested;
-    }
-
-    void SendTabletStateRequest(const TActorContext& ctx) {
-        TIntrusivePtr<TDomainsInfo> domains = AppData(ctx)->DomainsInfo;
+    void SendWhiteboardTabletStateRequest() {
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         THashSet<TTabletId> filterTablets;
         for (TTabletId id : domain->Coordinators) {
@@ -128,18 +98,36 @@ public:
         TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
         for (const auto& ni : NodesInfo->Nodes) {
             if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
-                SendTabletStateRequest(ni.NodeId, ctx, filterTablets);
+                TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(ni.NodeId);
+                auto request = new TEvWhiteboard::TEvTabletStateRequest();
+                for (TTabletId id: filterTablets) {
+                    request->Record.AddFilterTabletId(id);
+                }
+                SendRequest(whiteboardServiceId, request, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
             }
         }
     }
 
-    void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
+    void SendWhiteboardRequests() {
+        for (const auto& ni : NodesInfo->Nodes) {
+            TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(ni.NodeId);
+            SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+            SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+            SendRequest(whiteboardServiceId,new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+            SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId); 
+        }
+        if (Tablets) {
+            SendWhiteboardTabletStateRequest();
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         if (Tablets) {
             THolder<TEvTxUserProxy::TEvNavigate> request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }
-            TIntrusivePtr<TDomainsInfo> domains = AppData(ctx)->DomainsInfo;
+            TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
             TString domainPath = "/" + domain->Name;
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
@@ -147,160 +135,136 @@ public:
             record->MutableOptions()->SetReturnPartitioningInfo(false);
             record->MutableOptions()->SetReturnPartitionConfig(false);
             record->MutableOptions()->SetReturnChildren(false);
-            TActorId txproxy = MakeTxProxyID();
-            ctx.Send(txproxy, request.Release());
-            ++Requested;
+            SendRequest(MakeTxProxyID(), request.Release());
         }
 
         NodesInfo = ev->Release();
-        for (const auto& ni : NodesInfo->Nodes) {
-            SendRequest(ni.NodeId, ctx);
-        }
-        if (Requested > 0) {
-            TBase::Become(&TThis::StateRequestedNodeInfo);
-        } else {
-            ReplyAndDie(ctx);
-        }
+        RequestDone();
     }
 
-    void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
         ui32 nodeId = ev.Get()->Cookie;
         switch (ev->Get()->SourceType) {
         case TEvWhiteboard::EvSystemStateRequest:
             if (SystemInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
-                RequestDone(ctx);
+                RequestDone();
             }
             break;
         case TEvWhiteboard::EvVDiskStateRequest:
             if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
-                RequestDone(ctx);
+                RequestDone();
             }
             break;
         case TEvWhiteboard::EvPDiskStateRequest:
             if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
-                RequestDone(ctx);
+                RequestDone();
             }
             break;
         case TEvWhiteboard::EvBSGroupStateRequest:
             if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
-                RequestDone(ctx);
+                RequestDone();
             }
             break;
         case TEvWhiteboard::EvTabletStateRequest:
             if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
-                RequestDone(ctx);
+                RequestDone();
             }
             break;
         }
     }
 
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         ui32 nodeId = ev->Get()->NodeId;
         if (SystemInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
-            RequestDone(ctx);
+            RequestDone();
         }
         if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
-            RequestDone(ctx);
+            RequestDone();
         }
         if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
-            RequestDone(ctx);
+            RequestDone();
         }
         if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
-            RequestDone(ctx);
+            RequestDone();
         }
-        if (Tablets) {
+        TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
+        if (Tablets && nodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
             if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
-                RequestDone(ctx);
+                RequestDone();
             }
         }
     }
 
-    void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         SystemInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         VDiskInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         PDiskInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         BSGroupInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         TabletInfo[nodeId] = std::move(ev->Get()->Record);
         NodesAlive.insert(nodeId);
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
         Ydb::Cms::ListDatabasesResult listTenantsResult;
         ev->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
         TenantsNumber = listTenantsResult.paths().size();
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext &ctx) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
             DescribeResult = ev->Release();
-
-            if (Tablets) {
-                SendTabletStateRequest(ctx);
-            }
+            SendWhiteboardRequests();
         }
-        RequestDone(ctx);
+        RequestDone();
     }
 
-    void RequestDone(const TActorContext& ctx) {
-        ++Received;
-        if (Received == Requested) {
-            ReplyAndDie(ctx);
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            RequestDone(ctx);
+            RequestDone();
         }
     }
 
-    STFUNC(StateRequestedBrowse) {
+    STATEFN(StateRequested) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-        }
-    }
-
-    STFUNC(StateRequestedNodeInfo) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
-            HFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
-            HFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
-            HFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
-            HFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
-            HFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            HFunc(TEvents::TEvUndelivered, Undelivered);
-            HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvVDiskStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvBSGroupStateResponse, Handle);
+            hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
@@ -311,7 +275,7 @@ public:
     TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
     TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
 
-    void ReplyAndDie(const TActorContext& ctx) {
+    void ReplyAndPassAway() {
         TStringStream json;
         MergeWhiteboardResponses(MergedBSGroupInfo, BSGroupInfo);
         MergeWhiteboardResponses(MergedVDiskInfo, VDiskInfo);
@@ -321,7 +285,7 @@ public:
 
         if (Tablets) {
             MergeWhiteboardResponses(MergedTabletInfo, TabletInfo);
-            TIntrusivePtr<TDomainsInfo> domains = AppData(ctx)->DomainsInfo;
+            TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
             TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
             ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
             ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
@@ -444,12 +408,12 @@ public:
             pbCluster.SetName(itMax->first);
         }
         TProtoToJson::ProtoToJson(json, pbCluster, JsonSettings);
-        ctx.Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 
-    void HandleTimeout(const TActorContext& ctx) {
-        ReplyAndDie(ctx);
+    void HandleTimeout() {
+        ReplyAndPassAway();
     }
 };
 

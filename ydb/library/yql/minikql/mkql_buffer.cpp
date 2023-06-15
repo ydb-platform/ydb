@@ -41,6 +41,46 @@ void TPagedBuffer::AppendPage() {
     Tail_ = page->Data();
 }
 
+namespace {
+class TPagedBufferChunk : public IContiguousChunk {
+public:
+    TPagedBufferChunk(const TPagedBuffer::TConstPtr& buffer, const char* data, size_t size)
+        : Buffer_(buffer)
+        , Data_(data)
+        , Size_(size)
+    {
+    }
+
+private:
+    TContiguousSpan GetData() const override {
+        return {Data_, Size_};
+    }
+
+    TMutableContiguousSpan GetDataMut() override {
+        MKQL_ENSURE(false, "Modification of TPagedBuffer is not supported");
+    }
+
+    size_t GetOccupiedMemorySize() const override {
+        return TBufferPage::PageAllocSize;
+    }
+
+    const TPagedBuffer::TConstPtr Buffer_;
+    const char* const Data_;
+    const size_t Size_;
+};
+
+} // namespace
+
+TRope TPagedBuffer::AsRope(const TConstPtr& buffer) {
+    TRope result;
+    buffer->ForEachPage([&](const char* data, size_t size) {
+        TPagedBufferChunk::TPtr chunk(new TPagedBufferChunk(buffer, data, size));
+        result.Insert(result.End(), chunk);
+    });
+
+    return result;
+}
+
 } // NMiniKQL
 
 } // NKikimr

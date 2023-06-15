@@ -1,5 +1,6 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <ydb/library/yql/minikql/mkql_buffer.h>
 
 namespace NSQLTranslationPG {
@@ -175,6 +176,12 @@ void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& 
 }
 
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
+   Y_UNUSED(type);
+   Y_UNUSED(buf);
+   throw yexception() << "PG types are not supported";
+}
+
+NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, NDetails::TChunkedInputBuffer& buf) {
    Y_UNUSED(type);
    Y_UNUSED(buf);
    throw yexception() << "PG types are not supported";

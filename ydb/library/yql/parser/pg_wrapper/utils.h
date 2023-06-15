@@ -105,16 +105,26 @@ inline void UpdateCleanVarSize(text* s, ui32 cleanSize) {
     SET_VARSIZE(s, cleanSize + VARHDRSZ);
 }
 
+inline char* MakeCStringNotFilled(size_t size) {
+    char* ret = (char*)palloc(size + 1);
+    ret[size] = '\0';
+    return ret;
+}
+
 inline char* MakeCString(TStringBuf s) {
-    char* ret = (char*)palloc(s.Size() + 1);
+    char* ret = MakeCStringNotFilled(s.Size());
     memcpy(ret, s.Data(), s.Size());
-    ret[s.Size()] = '\0';
+    return ret;
+}
+
+inline text* MakeVarNotFilled(size_t size) {
+    text* ret = (text*)palloc(size + VARHDRSZ);
+    UpdateCleanVarSize(ret, size);
     return ret;
 }
 
 inline text* MakeVar(TStringBuf s) {
-    text* ret = (text*)palloc(s.Size() + VARHDRSZ);
-    UpdateCleanVarSize(ret, s.Size());
+    text* ret = MakeVarNotFilled(s.Size());
     memcpy(GetMutableVarData(ret), s.Data(), s.Size());
     return ret;
 }

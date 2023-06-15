@@ -27,8 +27,8 @@ NDqProto::TData SerializeValuePickleV1(const TType* type, const NUdf::TUnboxedVa
 
     NDqProto::TData data;
     data.SetTransportVersion(Fast ? NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-    data.MutableRaw()->reserve(packResult.Size());
-    packResult.CopyTo(*data.MutableRaw());
+    data.MutableRaw()->reserve(packResult->Size());
+    packResult->CopyTo(*data.MutableRaw());
     data.SetRows(1);
 
     return data;
@@ -52,8 +52,8 @@ NDqProto::TData SerializeBufferPickleV1(const TType* type, const TUnboxedValueBa
 
     NDqProto::TData data;
     data.SetTransportVersion(Fast ? NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 : NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-    data.MutableRaw()->reserve(packResult.Size());
-    packResult.CopyTo(*data.MutableRaw());
+    data.MutableRaw()->reserve(packResult->Size());
+    packResult->CopyTo(*data.MutableRaw());
     data.SetRows(buffer.RowCount());
 
     return data;

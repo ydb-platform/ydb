@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <library/cpp/actors/util/rope.h>
+
 #include <util/generic/noncopyable.h>
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
@@ -14,10 +16,11 @@ class TPagedBuffer;
 
 class TBufferPage : private TNonCopyable {
     friend class TPagedBuffer;
-    static const size_t PageAllocSize = 128 * 1024;
     static const size_t PageCapacity;
 
 public:
+    static const size_t PageAllocSize = 128 * 1024;
+
     TBufferPage() = default;
     ~TBufferPage() = default;
 
@@ -63,28 +66,22 @@ private:
     }
 };
 
-class TPagedBuffer : private TMoveOnly {
-public:
+class TPagedBuffer : private TNonCopyable {
+  public:
+    using TPtr = std::shared_ptr<TPagedBuffer>;
+    using TConstPtr = std::shared_ptr<const TPagedBuffer>;
+
     TPagedBuffer() = default;
-    TPagedBuffer(TPagedBuffer&& other)
-        : Head_(other.Head_)
-        , Tail_(other.Tail_)
-        , TailSize_(other.TailSize_)
-        , HeadReserve_(other.HeadReserve_)
-        , ClosedPagesSize_(other.ClosedPagesSize_)
-    {
-        other.Reset();
-    }
 
     ~TPagedBuffer() {
-        Deallocate();
-    }
-
-    TPagedBuffer& operator=(TPagedBuffer&& other) noexcept {
-        Deallocate();
-        std::memcpy(this, &other, sizeof(TPagedBuffer));
-        other.Reset();
-        return *this;
+        if (Head_) {
+            TBufferPage* curr = TBufferPage::GetPage(Head_);
+            while (curr) {
+                auto drop = curr;
+                curr = curr->Next_;
+                TBufferPage::Free(drop);
+            }
+        }
     }
 
     template<typename TFunc>
@@ -217,25 +214,9 @@ public:
         }
     }
 
+    static TRope AsRope(const TConstPtr& buf);
 private:
     void AppendPage();
-
-    inline void Reset() noexcept {
-        Head_ = Tail_ = nullptr;
-        TailSize_ = TBufferPage::PageCapacity;
-        ClosedPagesSize_ = HeadReserve_ = 0;
-    }
-
-    void Deallocate() noexcept {
-        if (Head_) {
-            TBufferPage *curr = TBufferPage::GetPage(Head_);
-            while (curr) {
-                auto drop = curr;
-                curr = curr->Next_;
-                TBufferPage::Free(drop);
-            }
-        }
-    }
 
     char* Head_ = nullptr;
     char* Tail_ = nullptr;

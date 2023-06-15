@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/pack_num.h>
+#include "mkql_computation_node_pack_impl.h"
+
 #include <util/generic/bitmap.h>
 #include <util/generic/buffer.h>
 
@@ -20,15 +21,12 @@ public:
         Mask.Clear();
     }
 
-    void Reset(TStringBuf& buf) {
+    void Reset(TChunkedInputBuffer& buf) {
         Reset();
-        ui64 bytes = 0ULL;
-        buf.Skip(Unpack64(buf.data(), buf.size(), bytes));
+        ui64 bytes = UnpackUInt64(buf);
         if (bytes) {
-            Y_VERIFY_DEBUG(bytes <= buf.size());
             Mask.Reserve(bytes << 3ULL);
-            std::memcpy(const_cast<ui8*>(Mask.GetChunks()), buf.data(), bytes);
-            buf.Skip(bytes);
+            buf.CopyTo(reinterpret_cast<char*>(const_cast<ui8*>(Mask.GetChunks())), bytes);
         }
     }
 

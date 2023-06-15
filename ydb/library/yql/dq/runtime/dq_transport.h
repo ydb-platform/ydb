@@ -79,8 +79,8 @@ private:
         const auto& packed = packer.Finish();
         NDqProto::TData data;
         data.SetTransportVersion(TransportVersion);
-        data.MutableRaw()->reserve(packed.Size());
-        packed.CopyTo(*data.MutableRaw());
+        data.MutableRaw()->reserve(packed->Size());
+        packed->CopyTo(*data.MutableRaw());
         data.SetRows(count);
         return data;
     }

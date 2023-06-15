@@ -124,9 +124,9 @@ public:
         size_t packerSize = Packer.PackedSizeEstimate();
         if (packerSize >= MaxChunkBytes) {
             Data.emplace_back();
-            Data.back().Buffer = Packer.FinishAndPull();
-            BasicStats.Bytes += Data.back().Buffer.Size();
-            PackedDataSize += Data.back().Buffer.Size();
+            Data.back().Buffer = Packer.Finish();
+            BasicStats.Bytes += Data.back().Buffer->Size();
+            PackedDataSize += Data.back().Buffer->Size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
             ChunkRowCount = 0;
@@ -135,13 +135,13 @@ public:
 
         while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes) {
             auto& head = Data.front();
-            size_t bufSize = head.Buffer.Size();
+            size_t bufSize = head.Buffer->Size();
             YQL_ENSURE(PackedDataSize >= bufSize);
 
             TBuffer blob;
             blob.Reserve(bufSize + sizeof(head.RowCount));
             blob.Append((const char*)&head.RowCount, sizeof(head.RowCount));
-            head.Buffer.ForEachPage([&blob](const char *data, size_t len) {
+            head.Buffer->ForEachPage([&blob](const char *data, size_t len) {
                 blob.Append(data, len);
             });
 
@@ -211,16 +211,16 @@ public:
         } else if (!Data.empty()) {
             auto& packed = Data.front();
             data.SetRows(packed.RowCount);
-            data.MutableRaw()->reserve(packed.Buffer.Size());
-            packed.Buffer.CopyTo(*data.MutableRaw());
+            data.MutableRaw()->reserve(packed.Buffer->Size());
+            packed.Buffer->CopyTo(*data.MutableRaw());
             PackedRowCount -= packed.RowCount;
-            PackedDataSize -= packed.Buffer.Size();
+            PackedDataSize -= packed.Buffer->Size();
             Data.pop_front();
         } else {
             data.SetRows(ChunkRowCount);
-            auto buffer = Packer.FinishAndPull();
-            data.MutableRaw()->reserve(buffer.Size());
-            buffer.CopyTo(*data.MutableRaw());
+            auto buffer = Packer.Finish();
+            data.MutableRaw()->reserve(buffer->Size());
+            buffer->CopyTo(*data.MutableRaw());
             ChunkRowCount = 0;
         }
 
@@ -266,9 +266,9 @@ public:
         data.ClearRaw();
         if (SpilledRowCount == 0 && PackedRowCount == 0) {
             data.SetRows(ChunkRowCount);
-            auto buffer = Packer.FinishAndPull();
-            data.MutableRaw()->reserve(buffer.Size());
-            buffer.CopyTo(*data.MutableRaw());
+            auto buffer = Packer.Finish();
+            data.MutableRaw()->reserve(buffer->Size());
+            buffer->CopyTo(*data.MutableRaw());
             ChunkRowCount = 0;
             return true;
         }
@@ -276,9 +276,9 @@ public:
         // Repack all - thats why PopAll should never be used
         if (ChunkRowCount) {
             Data.emplace_back();
-            Data.back().Buffer = Packer.FinishAndPull();
-            BasicStats.Bytes += Data.back().Buffer.Size();
-            PackedDataSize += Data.back().Buffer.Size();
+            Data.back().Buffer = Packer.Finish();
+            BasicStats.Bytes += Data.back().Buffer->Size();
+            PackedDataSize += Data.back().Buffer->Size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
             ChunkRowCount = 0;
@@ -305,9 +305,9 @@ public:
         }
 
         data.SetRows(rows.RowCount());
-        auto buffer = Packer.FinishAndPull();
-        data.MutableRaw()->reserve(buffer.Size());
-        buffer.CopyTo(*data.MutableRaw());
+        auto buffer = Packer.Finish();
+        data.MutableRaw()->reserve(buffer->Size());
+        buffer->CopyTo(*data.MutableRaw());
         YQL_ENSURE(!HasData());
         return true;
     }
@@ -365,7 +365,7 @@ private:
     TLogFunc LogFunc;
 
     struct TSerializedBatch {
-        NKikimr::NMiniKQL::TPagedBuffer Buffer;
+        NKikimr::NMiniKQL::TPagedBuffer::TPtr Buffer;
         ui64 RowCount = 0;
     };
     std::deque<TSerializedBatch> Data;

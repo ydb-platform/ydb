@@ -2653,6 +2653,11 @@ void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& 
 }
 
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
+    NDetails::TChunkedInputBuffer chunked(buf);
+    return PGUnpackImpl(type, chunked);
+}
+
+NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, NDetails::TChunkedInputBuffer& buf) {
     switch (type->GetTypeId()) {
     case BOOLOID: {
         const auto x = NDetails::GetRawData<bool>(buf);
@@ -2682,26 +2687,24 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
     case VARCHAROID:
     case TEXTOID: {
         auto size = NDetails::UnpackUInt32(buf);
-        MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
-        const char* ptr = buf.data();
-        buf.Skip(size);
-        auto ret = MakeVar(TStringBuf(ptr, size));
-        return PointerDatumToPod((Datum)ret);
+        auto deleter = [](text* ptr) { pfree(ptr); };
+        std::unique_ptr<text, decltype(deleter)> ret(MakeVarNotFilled(size));
+        buf.CopyTo(GetMutableVarData(ret.get()), size);
+        return PointerDatumToPod((Datum)ret.release());
     }
     case CSTRINGOID: {
         auto size = NDetails::UnpackUInt32(buf);
-        MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
-        const char* ptr = buf.data();
-        buf.Skip(size);
-        auto ret = MakeCString(TStringBuf(ptr, size));
-        return PointerDatumToPod((Datum)ret);
+        auto deleter = [](char* ptr) { pfree(ptr); };
+        std::unique_ptr<char, decltype(deleter)> ret(MakeCStringNotFilled(size));
+        buf.CopyTo(ret.get(), size);
+        return PointerDatumToPod((Datum)ret.release());
     }
     default:
         TPAllocScope call;
         auto size = NDetails::UnpackUInt32(buf);
-        MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
-        TStringBuf s = buf.Head(size);
-        buf.Skip(size);
+        std::unique_ptr<char[]> tmpBuf(new char[size]);
+        buf.CopyTo(tmpBuf.get(), size);
+        TStringBuf s{tmpBuf.get(), size};
         return NYql::NCommon::PgValueFromNativeBinary(s, type->GetTypeId());
     }
 }

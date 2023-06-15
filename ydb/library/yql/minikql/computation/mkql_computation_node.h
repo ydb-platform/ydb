@@ -64,7 +64,7 @@ struct TComputationOptsFull: public TComputationOpts {
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
-    {}
+    {}    
 
     TAllocState& AllocState;
     TTypeEnvironment* TypeEnv = nullptr;
@@ -120,10 +120,11 @@ struct TComputationContext : public TComputationContextLLVM {
     arrow::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
     TTypeEnvironment* TypeEnv = nullptr;
+    const TComputationMutables Mutables;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,
-        TComputationOptsFull& opts,
+        const TComputationOptsFull& opts,
         const TComputationMutables& mutables,
         arrow::MemoryPool& arrowMemoryPool);
 

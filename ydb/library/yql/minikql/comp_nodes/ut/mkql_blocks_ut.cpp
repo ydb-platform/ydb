@@ -681,6 +681,56 @@ Y_UNIT_TEST(Udf) {
     }
 }
 
+Y_UNIT_TEST(ScalarApply) {
+    TSetup<false> setup;
+    auto& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto ui64BlocksType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
+    const auto arg1 = pb.Arg(ui64BlocksType);
+    const auto arg2 = pb.Arg(ui64BlocksType);
+    const auto scalarApply = pb.ScalarApply({arg1,arg2}, [&](auto args){
+        return pb.Add(args[0], args[1]);
+    });
+
+    const auto graph = setup.BuildGraph(scalarApply, {arg1.GetNode(), arg2.GetNode()});
+    const auto topology = graph->GetKernelsTopology();
+    UNIT_ASSERT(topology);
+    UNIT_ASSERT_VALUES_EQUAL(topology->InputArgsCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Node->GetKernelName(), "ScalarApply");
+    const std::vector<ui32> expectedInputs1{{0, 1}};
+    UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
+
+    arrow::compute::ExecContext execContext;
+    const size_t blockSize = 100000;
+    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    {
+        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        ARROW_OK(builder1.Reserve(blockSize));
+        ARROW_OK(builder2.Reserve(blockSize));
+        for (size_t i = 0; i < blockSize; ++i) {
+            builder1.UnsafeAppend(i);
+            builder2.UnsafeAppend(2 * i);
+        }
+
+        std::shared_ptr<arrow::ArrayData> data1;
+        ARROW_OK(builder1.FinishInternal(&data1));
+        std::shared_ptr<arrow::ArrayData> data2;
+        ARROW_OK(builder2.FinishInternal(&data2));
+        datums[0] = data1;
+        datums[1] = data2;
+    }
+
+    ExecuteAllKernels(datums, topology, execContext);
+
+    auto res = datums.back().array()->GetValues<ui64>(1);
+    for (size_t i = 0; i < blockSize; ++i) {
+        auto expected = 3 * i;
+        UNIT_ASSERT_VALUES_EQUAL(res[i], expected);
+    }
+}
+
 }
 
 }

@@ -77,6 +77,7 @@
 #include "mkql_replicate.h"
 #include "mkql_reverse.h"
 #include "mkql_round.h"
+#include "mkql_scalar_apply.h"
 #include "mkql_seq.h"
 #include "mkql_size.h"
 #include "mkql_skip.h"
@@ -299,6 +300,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockCombineHashed", &WrapBlockCombineHashed},
         {"BlockMergeFinalizeHashed", &WrapBlockMergeFinalizeHashed},
         {"BlockMergeManyFinalizeHashed", &WrapBlockMergeManyFinalizeHashed},
+        {"ScalarApply", &WrapScalarApply},
         {"MakeHeap", &WrapMakeHeap},
         {"PushHeap", &WrapPushHeap},
         {"PopHeap", &WrapPopHeap},

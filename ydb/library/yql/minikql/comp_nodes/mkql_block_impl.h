@@ -12,6 +12,7 @@
 
 namespace NKikimr::NMiniKQL {
 
+arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool);
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool);
 
 arrow::ValueDescr ToValueDescr(TType* type);

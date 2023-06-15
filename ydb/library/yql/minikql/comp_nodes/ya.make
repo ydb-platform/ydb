@@ -185,6 +185,8 @@ SRCS(
     mkql_safe_circular_buffer.cpp
     mkql_safe_circular_buffer.h
     mkql_saveload.h
+    mkql_scalar_apply.h
+    mkql_scalar_apply.cpp
     mkql_seq.cpp
     mkql_seq.h
     mkql_size.cpp

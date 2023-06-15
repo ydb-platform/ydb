@@ -4,12 +4,88 @@
 
 #include <ydb/library/yql/minikql/arrow/mkql_functions.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+
+#include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
 
 #include <arrow/compute/exec_internal.h>
 
 namespace NKikimr::NMiniKQL {
+
+arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    if (!value) {
+        std::shared_ptr<arrow::DataType> arrowType;
+        MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
+        return arrow::MakeNullScalar(arrowType);
+    }
+
+    if (type->IsOptional()) {
+        type = AS_TYPE(TOptionalType, type)->GetItemType();
+    }
+
+    if (type->IsTuple()) {
+        auto tupleType = AS_TYPE(TTupleType, type);
+        std::shared_ptr<arrow::DataType> arrowType;
+        MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
+
+        std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            arrowValue.emplace_back(ConvertScalar(tupleType->GetElementType(i), value.GetElement(i), pool).scalar());
+        }
+
+        return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
+    }
+
+    if (type->IsData()) {
+        auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
+        switch (slot) {
+        case NUdf::EDataSlot::Int8:
+            return arrow::Datum(static_cast<int8_t>(value.Get<i8>()));
+        case NUdf::EDataSlot::Bool:
+        case NUdf::EDataSlot::Uint8:
+            return arrow::Datum(static_cast<uint8_t>(value.Get<ui8>()));
+        case NUdf::EDataSlot::Int16:
+            return arrow::Datum(static_cast<int16_t>(value.Get<i16>()));
+        case NUdf::EDataSlot::Uint16:
+        case NUdf::EDataSlot::Date:
+            return arrow::Datum(static_cast<uint16_t>(value.Get<ui16>()));
+        case NUdf::EDataSlot::Int32:
+            return arrow::Datum(static_cast<int32_t>(value.Get<i32>()));
+        case NUdf::EDataSlot::Uint32:
+        case NUdf::EDataSlot::Datetime:
+            return arrow::Datum(static_cast<uint32_t>(value.Get<ui32>()));
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+            return arrow::Datum(static_cast<int64_t>(value.Get<i64>()));
+        case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
+            return arrow::Datum(static_cast<uint64_t>(value.Get<ui64>()));
+        case NUdf::EDataSlot::Float:
+            return arrow::Datum(static_cast<float>(value.Get<float>()));
+        case NUdf::EDataSlot::Double:
+            return arrow::Datum(static_cast<double>(value.Get<double>()));
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8: {
+            const auto& str = value.AsStringRef();
+            std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
+            std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
+            auto type = (slot == NUdf::EDataSlot::String) ? arrow::binary() : arrow::utf8();
+            std::shared_ptr<arrow::Scalar> scalar = std::make_shared<arrow::BinaryScalar>(buffer, type);
+            return arrow::Datum(scalar);
+        }
+        default:
+            MKQL_ENSURE(false, "Unsupported data slot");
+        }
+    }
+
+    if (type->IsPg()) {
+        return NYql::MakePgScalar(AS_TYPE(TPgType, type), value, pool);
+    }
+
+    MKQL_ENSURE(false, "Unsupported type");
+}
 
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {
     MKQL_ENSURE(len > 0, "Invalid block size");

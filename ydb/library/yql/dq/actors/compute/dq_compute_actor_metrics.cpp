@@ -39,6 +39,7 @@ TDqComputeActorMetrics::TDqComputeActorMetrics(
         ADD_COUNTER(Undelivered);
         ADD_COUNTER(ChannelData);
         ADD_COUNTER(ChannelDataAck);
+        ADD_COUNTER(Run);
         ADD_COUNTER(StateRequest);
         ADD_COUNTER(CheckpointCoordinator);
         ADD_COUNTER(InjectCheckpoint);

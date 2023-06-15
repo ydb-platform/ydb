@@ -20,6 +20,15 @@ TDqComputeActorMetrics::TDqComputeActorMetrics(
             "watermark_collect_ms",
             NMonitoring::ExplicitHistogram({0, 15, 50, 100, 250, 500, 1000, 10'000, 100'000}));
 
+        InputRows = ComputeActorSubgroup->GetHistogram(
+            "input_rows",
+            NMonitoring::ExponentialHistogram(12, 2)
+        );
+        InputBytes = ComputeActorSubgroup->GetHistogram(
+            "input_bytes",
+            NMonitoring::ExponentialHistogram(12, 10)
+        );
+
 #define ADD_COUNTER(name) \
         name = ComputeActorSubgroup->GetCounter(#name)
 
@@ -73,13 +82,16 @@ void TDqComputeActorMetrics::ReportEvent(ui32 type)
     }
 }
 
-void TDqComputeActorMetrics::ReportAsyncInputData(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark) {
+void TDqComputeActorMetrics::ReportAsyncInputData(ui32 id, ui64 rows, ui64 bytes, TMaybe<TInstant> watermark) {
     if (!Enable) {
         return;
     }
 
     auto counters = GetAsyncInputCounters(id);
-    counters->GetCounter("rows", true)->Add(dataSize);
+    counters->GetCounter("rows", true)->Add(rows);
+
+    InputRows->Collect(rows);
+    InputBytes->Collect(bytes);
 
     if (!watermark) {
         return;

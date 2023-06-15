@@ -11,7 +11,7 @@ public:
     TDqComputeActorMetrics(const NMonitoring::TDynamicCounterPtr& counters);
 
     void ReportEvent(ui32 type);
-    void ReportAsyncInputData(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
+    void ReportAsyncInputData(ui32 id, ui64 rows, ui64 bytes, TMaybe<TInstant> watermark);
     void ReportInputChannelWatermark(ui32 id, ui64 dataSize, TMaybe<TInstant> watermark);
     void ReportInjectedToTaskRunnerWatermark(TInstant watermark);
     void ReportInjectedToOutputsWatermark(TInstant watermark);
@@ -30,6 +30,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr InjectedToTaskRunnerWatermark;
     NMonitoring::TDynamicCounters::TCounterPtr InjectedToOutputsWatermark;
     NMonitoring::THistogramPtr WatermarkCollectLatency;
+    NMonitoring::THistogramPtr InputRows;
+    NMonitoring::THistogramPtr InputBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr ResumeExecution;
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsInfo;

@@ -1685,7 +1685,7 @@ protected:
                 ContinueExecute();
             }
 
-            MetricsReporter.ReportAsyncInputData(inputIndex, batch.RowCount(), watermark);
+            MetricsReporter.ReportAsyncInputData(inputIndex, batch.RowCount(), space, watermark);
 
             if (watermark) {
                 const auto inputWatermarkChanged = WatermarksTracker.NotifyAsyncInputWatermarkReceived(

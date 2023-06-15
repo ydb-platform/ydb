@@ -855,7 +855,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     THashSet<ui64> excludedPortions;
     for (const auto& portionInfo : changes->PortionsToDrop) {
         ui64 portionId = portionInfo.Records.front().Portion;
-        // Exclude portions that are used by in-flght reads/scans
+        // Exclude portions that are used by in-flight reads/scans
         if (!InFlightReadsTracker.IsPortionUsed(portionId)) {
             portionsCanBedropped.push_back(portionInfo);
         } else {

@@ -7,15 +7,15 @@ namespace NKikimr::NOlap::NIndexedReader {
 
 class TBatchAddress {
 private:
-    ui32 GranuleIdx = 0;
+    ui32 GranuleId = 0;
     ui32 BatchGranuleIdx = 0;
 public:
     TString ToString() const;
 
-    TBatchAddress(const ui32 granuleIdx, const ui32 batchGranuleIdx);
+    TBatchAddress(const ui32 granuleId, const ui32 batchGranuleIdx);
 
-    ui32 GetGranuleIdx() const {
-        return GranuleIdx;
+    ui32 GetGranuleId() const {
+        return GranuleId;
     }
 
     ui32 GetBatchGranuleIdx() const {

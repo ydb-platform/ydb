@@ -37,7 +37,7 @@ NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const TPortionInfo& p
     Y_VERIFY(!ReadyFlag);
     ui32 batchGranuleIdx = Batches.size();
     WaitBatches.emplace(batchGranuleIdx);
-    Batches.emplace_back(TBatch(TBatchAddress(GranuleIdx, batchGranuleIdx), *this, portionInfo));
+    Batches.emplace_back(TBatch(TBatchAddress(GranuleId, batchGranuleIdx), *this, portionInfo));
     Y_VERIFY(GranuleBatchNumbers.emplace(batchGranuleIdx).second);
     Owner->OnNewBatch(Batches.back());
     return Batches.back();
@@ -117,7 +117,7 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
 void TGranule::CheckReady() {
     if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
         ReadyFlag = true;
-        Owner->OnGranuleReady(*this);
+        Owner->OnGranuleReady(GranuleId);
     }
 }
 

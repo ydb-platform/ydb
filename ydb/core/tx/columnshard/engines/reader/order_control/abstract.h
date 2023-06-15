@@ -22,7 +22,7 @@ protected:
     virtual bool DoWakeup(const TGranule& /*granule*/, TGranulesFillingContext& /*context*/) {
         return true;
     }
-    virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) = 0;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, TGranule::TPtr>& granulesToOut) = 0;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& /*granule*/, TGranulesFillingContext& context) {
         OnBatchFilterInitialized(batchInfo, context);
         return true;
@@ -67,7 +67,7 @@ public:
 
     virtual bool ReadyForAddNotIndexedToEnd() const = 0;
 
-    std::vector<TGranule*> DetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) {
+    std::vector<TGranule::TPtr> DetachReadyGranules(THashMap<ui64, TGranule::TPtr>& granulesToOut) {
         return DoDetachReadyGranules(granulesToOut);
     }
 

@@ -23,8 +23,10 @@ bool TAssembleBatch::DoExecuteImpl() {
 }
 
 bool TAssembleBatch::DoApply(TGranulesFillingContext& owner) const {
-    TBatch& batch = owner.GetBatchInfo(BatchAddress);
-    batch.InitBatch(FullBatch);
+    TBatch* batch = owner.GetBatchInfo(BatchAddress);
+    if (batch) {
+        batch->InitBatch(FullBatch);
+    }
     return true;
 }
 

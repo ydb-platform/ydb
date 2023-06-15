@@ -45,10 +45,13 @@ void TGranulesFillingContext::OnBatchReady(const NIndexedReader::TBatch& batchIn
     return Owner.OnBatchReady(batchInfo, batch);
 }
 
-NKikimr::NOlap::NIndexedReader::TBatch& TGranulesFillingContext::GetBatchInfo(const TBatchAddress& address) {
-    Y_VERIFY(address.GetGranuleIdx() < GranulesStorage.size());
-    auto& g = GranulesStorage[address.GetGranuleIdx()];
-    return g.GetBatchInfo(address.GetBatchGranuleIdx());
+NIndexedReader::TBatch* TGranulesFillingContext::GetBatchInfo(const TBatchAddress& address) {
+    auto it = GranulesWaiting.find(address.GetGranuleId());
+    if (it == GranulesWaiting.end()) {
+        return nullptr;
+    } else {
+        return &it->second->GetBatchInfo(address.GetBatchGranuleIdx());
+    }
 }
 
 NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::GetTasksProcessor() const {
@@ -56,15 +59,15 @@ NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::Get
 }
 
 void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches) {
-    for (auto&& g : GranulesStorage) {
+    for (auto&& [_, gPtr] : GranulesWaiting) {
         if (!batches) {
-            g.AddNotIndexedBatch(nullptr);
+            gPtr->AddNotIndexedBatch(nullptr);
         } else {
-            auto it = batches->find(g.GetGranuleId());
+            auto it = batches->find(gPtr->GetGranuleId());
             if (it == batches->end()) {
-                g.AddNotIndexedBatch(nullptr);
+                gPtr->AddNotIndexedBatch(nullptr);
             } else {
-                g.AddNotIndexedBatch(it->second);
+                gPtr->AddNotIndexedBatch(it->second);
             }
             batches->erase(it);
         }

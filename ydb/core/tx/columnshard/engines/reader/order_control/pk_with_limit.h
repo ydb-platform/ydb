@@ -8,7 +8,7 @@ class TGranuleOrdered {
 private:
     bool StartedFlag = false;
     std::deque<TGranule::TBatchForMerge> OrderedBatches;
-    TGranule* Granule = nullptr;
+    TGranule::TPtr Granule;
 public:
     bool Start() {
         if (!StartedFlag) {
@@ -20,7 +20,7 @@ public:
 
     }
 
-    TGranuleOrdered(std::deque<TGranule::TBatchForMerge>&& orderedBatches, TGranule* granule)
+    TGranuleOrdered(std::deque<TGranule::TBatchForMerge>&& orderedBatches, TGranule::TPtr granule)
         : OrderedBatches(std::move(orderedBatches))
         , Granule(granule)
     {
@@ -30,7 +30,7 @@ public:
         return OrderedBatches;
     }
 
-    TGranule* GetGranule() const noexcept {
+    TGranule::TPtr GetGranule() const noexcept {
         return Granule;
     }
 };
@@ -38,7 +38,7 @@ public:
 class TPKSortingWithLimit: public IOrderPolicy {
 private:
     using TBase = IOrderPolicy;
-    std::deque<TGranule*> GranulesOutOrder;
+    std::deque<TGranule::TPtr> GranulesOutOrder;
     std::deque<TGranuleOrdered> GranulesOutOrderForPortions;
     ui32 CurrentItemsLimit = 0;
     THashMap<ui32, ui32> CountBatchesByPools;
@@ -51,7 +51,7 @@ private:
 protected:
     virtual bool DoWakeup(const TGranule& granule, TGranulesFillingContext& context) override;
     virtual void DoFill(TGranulesFillingContext& context) override;
-    virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) override;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) override;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) override;
     virtual TFeatures DoGetFeatures() const override {
         return (TFeatures)EFeatures::CanInterrupt & (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;

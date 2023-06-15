@@ -51,11 +51,13 @@ bool TAssembleFilter::DoExecuteImpl() {
 }
 
 bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
-    TBatch& batch = owner.GetBatchInfo(BatchAddress);
     Y_VERIFY(OriginalCount);
     owner.GetCounters().OriginalRowsCount->Add(OriginalCount);
     owner.GetCounters().AssembleFilterCount->Add(1);
-    batch.InitFilter(Filter, FilteredBatch, OriginalCount, EarlyFilter);
+    TBatch* batch = owner.GetBatchInfo(BatchAddress);
+    if (batch) {
+        batch->InitFilter(Filter, FilteredBatch, OriginalCount, EarlyFilter);
+    }
     return true;
 }
 

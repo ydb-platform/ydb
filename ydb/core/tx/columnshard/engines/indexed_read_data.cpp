@@ -143,8 +143,8 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
-        NIndexedReader::TGranule& granule = GranulesContext->UpsertGranule(portionInfo.Records[0].Granule);
-        granule.AddBatch(portionInfo);
+        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.Records[0].Granule);
+        granule->AddBatch(portionInfo);
     }
     GranulesContext->PrepareForStart();
 
@@ -265,7 +265,7 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
     Y_VERIFY(GranulesContext);
 
     auto& indexInfo = ReadMetadata->GetIndexInfo();
-    std::vector<NIndexedReader::TGranule*> ready = GranulesContext->DetachReadyInOrder();
+    std::vector<NIndexedReader::TGranule::TPtr> ready = GranulesContext->DetachReadyInOrder();
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> out;
     out.reserve(ready.size() + 1);
 

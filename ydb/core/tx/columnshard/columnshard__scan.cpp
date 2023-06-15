@@ -142,25 +142,26 @@ private:
             InFlightReadBytes += blobRange.Size;
             ranges[blobRange.BlobId].emplace_back(blobRange);
         }
-        if (ranges.size()) {
-            auto& externBlobs = ReadMetadataRanges[ReadMetadataIndex]->ExternBlobs;
-            for (auto&& i : ranges) {
-                bool fallback = externBlobs && externBlobs->contains(i.first);
-                NBlobCache::TReadBlobRangeOptions readOpts{
-                    .CacheAfterRead = true,
-                    .ForceFallback = fallback,
-                    .IsBackgroud = false
-                };
-                ui32 size = 0;
-                for (auto&& s : i.second) {
-                    size += s.Size;
-                }
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-                    "Scan " << ScanActorId << " blobs request:" << i.first << "/" << i.second.size() << "/" << size
-                    << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
-                Stats.RequestSent(i.second);
-                Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(i.second), std::move(readOpts)));
+        if (!ranges.size()) {
+            return true;
+        }
+        auto& externBlobs = ReadMetadataRanges[ReadMetadataIndex]->ExternBlobs;
+        for (auto&& i : ranges) {
+            bool fallback = externBlobs && externBlobs->contains(i.first);
+            NBlobCache::TReadBlobRangeOptions readOpts{
+                .CacheAfterRead = true,
+                .ForceFallback = fallback,
+                .IsBackgroud = false
+            };
+            ui32 size = 0;
+            for (auto&& s : i.second) {
+                size += s.Size;
             }
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " blobs request:" << i.first << "/" << i.second.size() << "/" << size
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+            Stats.RequestSent(i.second);
+            Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(i.second), std::move(readOpts)));
         }
         return true;
     }

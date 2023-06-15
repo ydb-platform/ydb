@@ -12,9 +12,10 @@ namespace NKikimr::NOlap::NIndexedReader {
 class TGranulesFillingContext;
 
 class TGranule {
+public:
+    using TPtr = std::shared_ptr<TGranule>;
 private:
     ui64 GranuleId = 0;
-    YDB_READONLY(ui64, GranuleIdx, 0);
 
     bool NotIndexedBatchReadyFlag = false;
     std::shared_ptr<arrow::RecordBatch> NotIndexedBatch;
@@ -31,9 +32,8 @@ private:
     ui64 BlobsDataSize = 0;
     void CheckReady();
 public:
-    TGranule(const ui64 granuleId, const ui64 granuleIdx, TGranulesFillingContext& owner)
+    TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
         : GranuleId(granuleId)
-        , GranuleIdx(granuleIdx)
         , Owner(&owner) {
     }
 

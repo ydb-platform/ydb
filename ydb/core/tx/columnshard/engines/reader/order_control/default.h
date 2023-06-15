@@ -6,10 +6,10 @@ namespace NKikimr::NOlap::NIndexedReader {
 class TAnySorting: public IOrderPolicy {
 private:
     using TBase = IOrderPolicy;
-    std::deque<TGranule*> GranulesOutOrder;
+    std::deque<TGranule::TPtr> GranulesOutOrder;
 protected:
     virtual void DoFill(TGranulesFillingContext& context) override;
-    virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) override;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "type=AnySorting;granules_count=" << GranulesOutOrder.size() << ";";
     }

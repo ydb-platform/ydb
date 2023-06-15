@@ -4,11 +4,11 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 TString TBatchAddress::ToString() const {
-    return TStringBuilder() << GranuleIdx << "," << BatchGranuleIdx;
+    return TStringBuilder() << GranuleId << "," << BatchGranuleIdx;
 }
 
-TBatchAddress::TBatchAddress(const ui32 granuleIdx, const ui32 batchGranuleIdx)
-    : GranuleIdx(granuleIdx)
+TBatchAddress::TBatchAddress(const ui32 granuleId, const ui32 batchGranuleIdx)
+    : GranuleId(granuleId)
     , BatchGranuleIdx(batchGranuleIdx)
 {
 

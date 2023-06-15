@@ -17,10 +17,9 @@ private:
     TReadMetadata::TConstPtr ReadMetadata;
     const bool InternalReading = false;
     TIndexedReadData& Owner;
-    THashMap<ui64, NIndexedReader::TGranule*> GranulesToOut;
+    THashMap<ui64, NIndexedReader::TGranule::TPtr> GranulesToOut;
     std::set<ui64> ReadyGranulesAccumulator;
-    std::deque<NIndexedReader::TGranule> GranulesStorage;
-    THashMap<ui64, NIndexedReader::TGranule*> GranulesUpserted;
+    THashMap<ui64, NIndexedReader::TGranule::TPtr> GranulesWaiting;
     std::set<ui32> EarlyFilterColumns;
     std::set<ui32> PostFilterColumns;
     std::set<ui32> FilterStageColumns;
@@ -67,18 +66,18 @@ public:
     NColumnShard::TDataTasksProcessorContainer GetTasksProcessor() const;
 
     void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
-    TBatch& GetBatchInfo(const TBatchAddress& address);
+    NIndexedReader::TBatch* GetBatchInfo(const TBatchAddress& address);
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
     void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
 
-    NIndexedReader::TGranule& GetGranuleVerified(const ui64 granuleId) {
-        auto it = GranulesUpserted.find(granuleId);
-        Y_VERIFY(it != GranulesUpserted.end());
-        return *it->second;
+    TGranule::TPtr GetGranuleVerified(const ui64 granuleId) {
+        auto it = GranulesWaiting.find(granuleId);
+        Y_VERIFY(it != GranulesWaiting.end());
+        return it->second;
     }
 
-    bool IsInProgress() const { return GranulesStorage.size() > ReadyGranulesAccumulator.size(); }
+    bool IsInProgress() const { return GranulesWaiting.size(); }
 
     void OnNewBatch(TBatch& batch) {
         if (!InternalReading && PredictEmptyAfterFilter(batch.GetPortionInfo())) {
@@ -88,35 +87,33 @@ public:
         }
     }
 
-    std::vector<TGranule*> DetachReadyInOrder() {
+    std::vector<TGranule::TPtr> DetachReadyInOrder() {
         Y_VERIFY(SortingPolicy);
         return SortingPolicy->DetachReadyGranules(GranulesToOut);
     }
 
     void Abort() {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "abort");
-        for (auto&& i : GranulesStorage) {
-            ReadyGranulesAccumulator.emplace(i.GetGranuleId());
-        }
+        GranulesWaiting.clear();
         AbortedFlag = true;
-        Y_VERIFY(ReadyGranulesAccumulator.size() == GranulesStorage.size());
         Y_VERIFY(!IsInProgress());
     }
 
-    TGranule& UpsertGranule(const ui64 granuleId) {
-        auto itGranule = GranulesUpserted.find(granuleId);
-        if (itGranule == GranulesUpserted.end()) {
-            GranulesStorage.emplace_back(NIndexedReader::TGranule(granuleId, GranulesStorage.size(), *this));
-            itGranule = GranulesUpserted.emplace(granuleId, &GranulesStorage.back()).first;
+    TGranule::TPtr UpsertGranule(const ui64 granuleId) {
+        auto itGranule = GranulesWaiting.find(granuleId);
+        if (itGranule == GranulesWaiting.end()) {
+            itGranule = GranulesWaiting.emplace(granuleId, std::make_shared<TGranule>(granuleId, *this)).first;
         }
-        return *itGranule->second;
+        return itGranule->second;
     }
 
-    void OnGranuleReady(TGranule& granule) {
-        Y_VERIFY(GranulesToOut.emplace(granule.GetGranuleId(), &granule).second);
-        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule.GetGranuleId()).second || AbortedFlag);
-        GranulesInProcessing.erase(granule.GetGranuleId());
-        BlobsSizeInProcessing -= granule.GetBlobsDataSize();
+    void OnGranuleReady(const ui64 granuleId) {
+        auto granule = GetGranuleVerified(granuleId);
+        Y_VERIFY(GranulesToOut.emplace(granule->GetGranuleId(), granule).second);
+        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule->GetGranuleId()).second || AbortedFlag);
+        Y_VERIFY(GranulesWaiting.erase(granuleId));
+        GranulesInProcessing.erase(granule->GetGranuleId());
+        BlobsSizeInProcessing -= granule->GetBlobsDataSize();
         Y_VERIFY(BlobsSizeInProcessing >= 0);
     }
 

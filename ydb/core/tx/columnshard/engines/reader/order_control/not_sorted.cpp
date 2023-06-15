@@ -2,8 +2,8 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-std::vector<TGranule*> TNonSorting::DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) {
-    std::vector<TGranule*> result;
+std::vector<TGranule::TPtr> TNonSorting::DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) {
+    std::vector<TGranule::TPtr> result;
     result.reserve(granulesToOut.size());
     for (auto&& i : granulesToOut) {
         result.emplace_back(i.second);

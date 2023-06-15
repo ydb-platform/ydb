@@ -14,7 +14,7 @@ protected:
     virtual void DoFill(TGranulesFillingContext& /*context*/) override {
     }
 
-    virtual std::vector<TGranule*> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule*>& granulesToOut) override;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) override;
 public:
     TNonSorting(TReadMetadata::TConstPtr readMetadata)
         :TBase(readMetadata)

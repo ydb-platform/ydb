@@ -1071,7 +1071,7 @@ partitioning_settings {
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(ShouldCheckQuotas) {
+    void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -1082,9 +1082,7 @@ partitioning_settings {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().SystemBackupSIDs({userSID}));
 
-        TSchemeLimits lowLimits;
-        lowLimits.MaxExports = 0;
-        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        SetSchemeshardSchemaLimits(runtime, limits);
 
         const TVector<TString> tables = {
             R"(
@@ -1105,7 +1103,12 @@ partitioning_settings {
             }
         )", port);
 
-        Run(runtime, env, tables, request, Ydb::StatusIds::PRECONDITION_FAILED);
+        Run(runtime, env, tables, request, expectedFailStatus);
         Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
+    }
+
+    Y_UNIT_TEST(ShouldCheckQuotas) {
+        ShouldCheckQuotas(TSchemeLimits{.MaxExports = 0}, Ydb::StatusIds::PRECONDITION_FAILED);
+        ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 1}, Ydb::StatusIds::CANCELLED);
     }
 }

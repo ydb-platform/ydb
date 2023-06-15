@@ -2339,9 +2339,10 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
         (ctx.AnsiQuotedIdentifiers && input.StartsWith('"'))? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr)
+TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit)
     : ColumnName(columnName)
     , Expr(expr)
+    , ColumnUnit(columnUnit)
 {
 }
 

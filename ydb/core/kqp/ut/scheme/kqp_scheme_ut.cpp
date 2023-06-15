@@ -1562,6 +1562,45 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateTableWithTtlSettings(true);
     }
 
+    void CreateTableWithTtlOnIntColumn(TValueSinceUnixEpochModeSettings::EUnit unit) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithTtlSettings";
+
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                IntColumn Uint64,
+                PRIMARY KEY (Key)
+            ) WITH (
+                TTL = Interval("P1D") ON IntColumn AS )" << unit << R"(
+            ))";
+        {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetTtlSettings()->GetValueSinceUnixEpoch().GetColumnUnit(), unit);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithTtlOnIntColumn) {
+        const auto cases = TVector<TValueSinceUnixEpochModeSettings::EUnit>{
+            TValueSinceUnixEpochModeSettings::EUnit::Seconds,
+            TValueSinceUnixEpochModeSettings::EUnit::MilliSeconds,
+            TValueSinceUnixEpochModeSettings::EUnit::MicroSeconds,
+            TValueSinceUnixEpochModeSettings::EUnit::NanoSeconds,
+        };
+
+        for (auto unit : cases) {
+            CreateTableWithTtlOnIntColumn(unit);
+        }
+    }
+
     void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

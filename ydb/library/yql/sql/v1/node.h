@@ -1125,10 +1125,18 @@ namespace NSQLTranslationV1 {
     TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, const TString& input);
 
     struct TTtlSettings {
+        enum class EUnit {
+            Seconds /* "seconds" */,
+            Milliseconds /* "milliseconds" */,
+            Microseconds /* "microseconds" */,
+            Nanoseconds /* "nanoseconds" */,
+        };
+
         TIdentifier ColumnName;
         TNodePtr Expr;
+        TMaybe<EUnit> ColumnUnit;
 
-        TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr);
+        TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit = {});
     };
 
     struct TTableSettings {

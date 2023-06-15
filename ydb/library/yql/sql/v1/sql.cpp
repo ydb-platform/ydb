@@ -2233,7 +2233,17 @@ namespace {
                 return false;
             }
 
-            to.Set(TTtlSettings(columnName, exprNode));
+            TMaybe<TTtlSettings::EUnit> columnUnit;
+            if (from.GetAlt_table_setting_value5().HasBlock4()) {
+                const TString unit = to_lower(ctx.Token(from.GetAlt_table_setting_value5().GetBlock4().GetToken2()));
+                columnUnit.ConstructInPlace();
+                if (!TryFromString<TTtlSettings::EUnit>(unit, *columnUnit)) {
+                    ctx.Error() << "Invalid unit: " << unit;
+                    return false;
+                }
+            }
+
+            to.Set(TTtlSettings(columnName, exprNode, columnUnit));
             break;
         }
         default:

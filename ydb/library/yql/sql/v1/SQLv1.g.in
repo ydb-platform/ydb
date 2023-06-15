@@ -594,7 +594,7 @@ table_setting_value:
     | STRING_VALUE
     | integer
     | split_boundaries
-    | expr ON an_id
+    | expr ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
 ;
 
 family_entry: FAMILY an_id family_settings;
@@ -1004,7 +1004,10 @@ keyword_as_compat:
   | GRANT
   | LEGACY
   | MANAGE
+  | MICROSECONDS
+  | MILLISECONDS
   | MODIFY
+  | NANOSECONDS
   | OPTION
   | QUEUE
   | PRIVILEGES
@@ -1012,6 +1015,7 @@ keyword_as_compat:
   | REMOVE
   | REPLICATION
   | REVOKE
+  | SECONDS
   | SOURCE
   | TABLES
   | TOPIC
@@ -1120,8 +1124,11 @@ keyword_compat: (
   | LIKE
   | MANAGE
   | MATCH
+  | MICROSECONDS
+  | MILLISECONDS
   | MODIFY
   | NATURAL
+  | NANOSECONDS
   | NO
   | NOTNULL
   | NULLS
@@ -1170,6 +1177,7 @@ keyword_compat: (
   | ROW
   | SAMPLE
   | SAVEPOINT
+  | SECONDS
   | SEMI
   | SETS
   | SOURCE
@@ -1441,8 +1449,11 @@ LIST: L I S T;
 LOCAL: L O C A L;
 MANAGE: M A N A G E;
 MATCH: M A T C H;
+MICROSECONDS: M I C R O S E C O N D S;
+MILLISECONDS: M I L L I S E C O N D S;
 MODIFY: M O D I F Y;
 NATURAL: N A T U R A L;
+NANOSECONDS: N A N O S E C O N D S;
 NO: N O;
 NOT: N O T;
 NOTNULL: N O T N U L L;
@@ -1503,6 +1514,7 @@ ROWS: R O W S;
 SAMPLE: S A M P L E;
 SAVEPOINT: S A V E P O I N T;
 SCHEMA: S C H E M A;
+SECONDS: S E C O N D S;
 SELECT: S E L E C T;
 SEMI: S E M I;
 SET: S E T;

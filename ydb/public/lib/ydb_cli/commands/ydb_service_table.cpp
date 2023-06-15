@@ -465,10 +465,9 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
                     return static_cast<TStatus>(result.GetValue());
                 });
             };
-            auto retryResult = client.RetryOperation(std::move(operation));
-            retryResult.GetValueSync();
+            auto status = client.RetryOperation(std::move(operation)).GetValueSync();
+            ThrowOnError(status);
             auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
             PrintDataQueryResponse(result);
         }
     } else {
@@ -485,10 +484,9 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
                 return static_cast<TStatus>(result.GetValue());
             });
         };
-        auto retryResult = client.RetryOperation(std::move(operation));
-        retryResult.GetValueSync();
+        auto status = client.RetryOperation(std::move(operation)).GetValueSync();
+        ThrowOnError(status);
         auto result = asyncResult.GetValueSync();
-        ThrowOnError(result);
         PrintDataQueryResponse(result);
     }
     return EXIT_SUCCESS;
@@ -549,10 +547,9 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
                     return static_cast<TStatus>(result.GetValue());
                 });
             };
-            auto retryResult = client.RetryOperation(std::move(operation));
-            retryResult.GetValueSync();
+            auto status = client.RetryOperation(std::move(operation)).GetValueSync();
+            ThrowOnError(status);
             auto result = asyncResult.GetValueSync();
-            ThrowOnError(result);
             if (!PrintScanQueryResponse(result)) {
                 return EXIT_FAILURE;
             }
@@ -570,10 +567,9 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
                 return static_cast<TStatus>(result.GetValue());
             });
         };
-        auto retryResult = client.RetryOperation(std::move(operation));
-        retryResult.GetValueSync();
+        auto status = client.RetryOperation(std::move(operation)).GetValueSync();
+        ThrowOnError(status);
         auto result = asyncResult.GetValueSync();
-        ThrowOnError(result);
         if (!PrintScanQueryResponse(result)) {
             return EXIT_FAILURE;
         }

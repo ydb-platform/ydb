@@ -26,7 +26,6 @@ target_include_directories(contrib-libs-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/address_sorting/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb
-  ${CMAKE_SOURCE_DIR}/contrib/libs/re2
   ${CMAKE_SOURCE_DIR}/contrib/libs/xxhash
 )
 target_link_libraries(contrib-libs-grpc PUBLIC

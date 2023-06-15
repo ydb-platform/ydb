@@ -40,7 +40,6 @@ target_include_directories(libs-apache-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/flatbuffers/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/lz4
   ${CMAKE_SOURCE_DIR}/contrib/libs/rapidjson/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/re2
   ${CMAKE_SOURCE_DIR}/contrib/libs/utf8proc
   ${CMAKE_SOURCE_DIR}/contrib/libs/zstd/include
 )

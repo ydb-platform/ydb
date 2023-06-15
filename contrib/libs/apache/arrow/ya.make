@@ -48,7 +48,6 @@ ADDINCL(
     contrib/libs/flatbuffers/include
     contrib/libs/lz4
     contrib/libs/rapidjson/include
-    contrib/libs/re2
     contrib/libs/utf8proc
     contrib/libs/zstd/include
 )

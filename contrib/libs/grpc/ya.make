@@ -48,7 +48,6 @@ ADDINCL(
     contrib/libs/grpc/src/core/ext/upbdefs-generated
     contrib/libs/grpc/third_party/address_sorting/include
     contrib/libs/grpc/third_party/upb
-    contrib/libs/re2
     contrib/libs/xxhash
 )
 

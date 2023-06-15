@@ -210,7 +210,7 @@ public:
         auto taskRunner = CreateKqpTaskRunner(context, settings, log);
         TaskRunners.emplace_back(taskRunner);
 
-        auto taskSettings = NDq::TDqTaskSettings(std::move(protoTask));
+        auto taskSettings = NDq::TDqTaskSettings(&protoTask);
         taskSettings.SetParamsProvider(std::move(TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params)));
         taskRunner->Prepare(taskSettings, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext());
 

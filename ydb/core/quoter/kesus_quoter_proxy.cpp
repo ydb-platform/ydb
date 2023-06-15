@@ -395,11 +395,11 @@ private:
     void InitiateNewSessionToResource(const TString& resourcePath) {
         if (Connected) {
             KESUS_PROXY_LOG_DEBUG("Subscribe on resource \"" << resourcePath << "\"");
-            NKikimrKesus::TEvSubscribeOnResources req;
-            ActorIdToProto(SelfId(), req.MutableActorID());
-            auto* res = req.AddResources();
+            auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
+            ActorIdToProto(SelfId(), ev->Record.MutableActorID());
+            auto* res = ev->Record.AddResources();
             res->SetResourcePath(resourcePath);
-            NTabletPipe::SendData(SelfId(), KesusPipeClient, new TEvKesus::TEvSubscribeOnResources(std::move(req)), NewCookieForRequest(resourcePath));
+            NTabletPipe::SendData(SelfId(), KesusPipeClient, ev.release(), NewCookieForRequest(resourcePath));
         }
     }
 
@@ -410,10 +410,10 @@ private:
         }
         std::vector<TString> resourcePaths;
         resourcePaths.reserve(Resources.size());
-        NKikimrKesus::TEvSubscribeOnResources req;
-        ActorIdToProto(SelfId(), req.MutableActorID());
+        auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
+        ActorIdToProto(SelfId(), ev->Record.MutableActorID());
         for (auto&& [resourcePath, resInfo] : Resources) {
-            auto* res = req.AddResources();
+            auto* res = ev->Record.AddResources();
             res->SetResourcePath(resourcePath);
             if (resInfo->SessionIsActive) {
                 res->SetStartConsuming(true);
@@ -421,7 +421,7 @@ private:
             }
             resourcePaths.push_back(resourcePath);
         }
-        NTabletPipe::SendData(SelfId(), KesusPipeClient, new TEvKesus::TEvSubscribeOnResources(std::move(req)), NewCookieForRequest(std::move(resourcePaths)));
+        NTabletPipe::SendData(SelfId(), KesusPipeClient, ev.release(), NewCookieForRequest(std::move(resourcePaths)));
     }
 
     TEvQuota::TEvProxyUpdate& GetProxyUpdateEv() {

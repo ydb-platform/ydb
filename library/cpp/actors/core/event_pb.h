@@ -121,6 +121,24 @@ namespace NActors {
         bool Finished = false;
     };
 
+    struct TProtoArenaHolder : public TAtomicRefCount<TProtoArenaHolder> {
+        google::protobuf::Arena Arena;
+        TProtoArenaHolder() = default;
+
+        explicit TProtoArenaHolder(const google::protobuf::ArenaOptions& arenaOptions)
+            : Arena(arenaOptions)
+        {};
+
+        google::protobuf::Arena* Get() {
+            return &Arena;
+        }
+
+        template<typename TRecord>
+        TRecord* Allocate() {
+            return google::protobuf::Arena::CreateMessage<TRecord>(&Arena);
+        }
+    };
+
     static const size_t EventMaxByteSize = 140 << 20; // (140MB)
 
     template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
@@ -137,14 +155,16 @@ namespace NActors {
         TEventPBBase() = default;
 
         explicit TEventPBBase(const TRecord& rec)
-        {
-            Record = rec;
-        }
+            : TRecHolder(rec)
+        {}
 
         explicit TEventPBBase(TRecord&& rec)
-        {
-            Record = std::move(rec);
-        }
+            : TRecHolder(rec)
+        {}
+
+        explicit TEventPBBase(TIntrusivePtr<TProtoArenaHolder> arena)
+            : TRecHolder(std::move(arena))
+        {}
 
         TString ToStringHeader() const override {
             return Record.GetTypeName();
@@ -412,12 +432,21 @@ namespace NActors {
     template <typename TRecord>
     struct TRecordHolder {
         TRecord Record;
+
+        TRecordHolder() = default;
+        TRecordHolder(const TRecord& rec)
+            : Record(rec)
+        {}
+
+        TRecordHolder(TRecord&& rec)
+            : Record(std::move(rec))
+        {}
     };
 
     // Protobuf arena and a record allocated on it
     template <typename TRecord, size_t InitialBlockSize, size_t MaxBlockSize>
     struct TArenaRecordHolder {
-        google::protobuf::Arena PbArena;
+        TIntrusivePtr<TProtoArenaHolder> Arena;
         TRecord& Record;
 
         static const google::protobuf::ArenaOptions GetArenaOptions() {
@@ -428,9 +457,23 @@ namespace NActors {
         }
 
         TArenaRecordHolder()
-            : PbArena(GetArenaOptions())
-            , Record(*google::protobuf::Arena::CreateMessage<TRecord>(&PbArena))
-        {}
+            : Arena(MakeIntrusive<TProtoArenaHolder>(GetArenaOptions()))
+            , Record(*Arena->Allocate<TRecord>())
+        {};
+
+        TArenaRecordHolder(const TRecord& rec)
+            : TArenaRecordHolder()
+        {
+            Record.CopyFrom(rec);
+        }
+
+        // not allowed to move from another protobuf, it's a potenial copying
+        TArenaRecordHolder(TRecord&& rec) = delete;
+
+        TArenaRecordHolder(TIntrusivePtr<TProtoArenaHolder> arena)
+            : Arena(std::move(arena))
+            , Record(*Arena->Allocate<TRecord>())
+        {};
     };
 
     template <typename TEv, typename TRecord, ui32 TEventType>

@@ -69,11 +69,11 @@ void TCheckpointCoordinator::Handle(NYql::NDqs::TEvReadyState::TPtr& ev) {
 
     CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
 
-    const auto& tasks = ev->Get()->Record.GetTask();
+    int tasksSize = GetTasksSize();
     const auto& actorIds = ev->Get()->Record.GetActorId();
-    Y_VERIFY(tasks.size() == actorIds.size());
+    Y_VERIFY(tasksSize == actorIds.size());
 
-    for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
+    for (int i = 0; i < tasksSize; ++i) {
         const auto& task = GetTask(i);
         auto& actorId = TaskIdToActor[task.GetId()];
         if (actorId) {

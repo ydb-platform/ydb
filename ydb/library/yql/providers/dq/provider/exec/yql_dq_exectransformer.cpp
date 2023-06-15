@@ -140,7 +140,7 @@ public:
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
         auto runner = NDq::MakeDqTaskRunner(executionContext, settings, {});
-        auto runnerSettings = NDq::TDqTaskSettings(std::move(task));
+        auto runnerSettings = NDq::TDqTaskSettings(&task);
 
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));

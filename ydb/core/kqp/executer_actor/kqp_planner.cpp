@@ -52,7 +52,7 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
 constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
 
-TKqpPlanner::TKqpPlanner(const TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, TVector<ui64>&& computeTasks,
+TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, TVector<ui64>&& computeTasks,
     THashMap<ui64, TVector<ui64>>&& tasksPerNode, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,
@@ -134,8 +134,8 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     return true;
 }
 
-std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeRequest(const TRequestData& requestData) const {
-    auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>();
+std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeRequest(const TRequestData& requestData) {
+    auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
@@ -147,8 +147,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto serializedTask = SerializeTaskToProto(TasksGraph, task);
-        request.AddTasks()->Swap(&serializedTask);
+        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task);
+        request.AddTasks()->Swap(serializedTask);
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
@@ -348,7 +348,7 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<TKqpPlanner> CreateKqpPlanner(const TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
+std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
     THashMap<ui64, TVector<ui64>>&& tasksPerNode, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,

@@ -19,7 +19,7 @@ IActor* CreateComputeActor(
     NDq::IMemoryQuotaManager::TPtr memoryQuotaManager,
     const TActorId& executerId,
     const TString& operationId,
-    NYql::NDqProto::TDqTask&& task,
+    NYql::NDqProto::TDqTask* task,
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters)
@@ -41,13 +41,13 @@ IActor* CreateComputeActor(
     computeRuntimeSettings.StatsMode = NDqProto::DQ_STATS_MODE_PROFILE;
 
     // clear fake actorids
-    for (auto& input : *task.MutableInputs()) {
+    for (auto& input : *task->MutableInputs()) {
         for (auto& channel : *input.MutableChannels()) {
             channel.MutableSrcEndpoint()->ClearActorId();
             channel.MutableDstEndpoint()->ClearActorId();
         }
     }
-    for (auto& output : *task.MutableOutputs()) {
+    for (auto& output : *task->MutableOutputs()) {
         for (auto& channel : *output.MutableChannels()) {
             channel.MutableSrcEndpoint()->ClearActorId();
             channel.MutableDstEndpoint()->ClearActorId();
@@ -63,7 +63,7 @@ IActor* CreateComputeActor(
         return NYql::NDq::CreateDqComputeActor(
             executerId,
             operationId,
-            std::move(task),
+            task,
             options.AsyncIoFactory,
             options.FunctionRegistry,
             computeRuntimeSettings,
@@ -74,7 +74,7 @@ IActor* CreateComputeActor(
         return NYql::NDq::CreateDqAsyncComputeActor(
             executerId,
             operationId,
-            std::move(task),
+            task,
             options.AsyncIoFactory,
             options.FunctionRegistry,
             computeRuntimeSettings,

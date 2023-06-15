@@ -450,7 +450,7 @@ private:
         ParentId = ev->Sender;
 
         try {
-            NDq::TDqTaskSettings settings(std::move(ev->Get()->Task));
+            NDq::TDqTaskSettings settings(&ev->Get()->Task);
             TaskRunner = Factory->GetOld(settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();

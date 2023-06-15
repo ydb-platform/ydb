@@ -515,7 +515,7 @@ public:
                 NDqProto::TDqTask task;
                 request.MutableTask()->Swap(&task);
                 task.GetMeta().UnpackTo(&taskMeta);
-                NDq::TDqTaskSettings settings(std::move(task));
+                NDq::TDqTaskSettings settings(&task);
                 try {
                     Prepare(settings, taskMeta, output);
                 } catch (const NKikimr::TMemoryLimitExceededException& ex) {

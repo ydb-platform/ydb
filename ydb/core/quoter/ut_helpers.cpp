@@ -328,13 +328,13 @@ void TKesusProxyTestSetup::SendCloseSession(const TString& resource, ui64 resour
 }
 
 void TKesusProxyTestSetup::SendResourcesAllocated(TTestTabletPipeFactory::TTestTabletPipe* pipe, ui64 resId, double amount, Ydb::StatusIds::StatusCode status) {
-    NKikimrKesus::TEvResourcesAllocated ev;
-    auto* resInfo = ev.AddResourcesInfo();
+    auto ev = std::make_unique<NKesus::TEvKesus::TEvResourcesAllocated>();
+    auto* resInfo = ev->Record.AddResourcesInfo();
     resInfo->SetResourceId(resId);
     resInfo->SetAmount(amount);
     resInfo->MutableStateNotification()->SetStatus(status);
 
-    Runtime->Send(new IEventHandle(KesusProxyId, pipe->GetSelfID(), new NKesus::TEvKesus::TEvResourcesAllocated(std::move(ev))), 0, true);
+    Runtime->Send(new IEventHandle(KesusProxyId, pipe->GetSelfID(), ev.release(), 0, true));
 }
 
 bool TKesusProxyTestSetup::ConsumeResource(ui64 resId, double amount, TDuration tickSize, std::function<void()> afterStat, const size_t maxUpdates) {
@@ -489,12 +489,14 @@ void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendDestroye
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendSubscribeOnResourceResult(const NKikimrKesus::TEvSubscribeOnResourcesResult& record, ui64 cookie) {
-    Send(Parent->Parent->KesusProxyId, new NKesus::TEvKesus::TEvSubscribeOnResourcesResult(record), 0, cookie);
+    auto ev = std::make_unique<NKesus::TEvKesus::TEvSubscribeOnResourcesResult>();
+    ev->Record.CopyFrom(record);
+    Send(Parent->Parent->KesusProxyId, ev.release(), 0, cookie);
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendUpdateConsumptionStateAck() {
-    NKikimrKesus::TEvUpdateConsumptionStateAck ack;
-    Send(Parent->Parent->KesusProxyId, new NKesus::TEvKesus::TEvUpdateConsumptionStateAck(ack));
+    auto ev = std::make_unique<NKesus::TEvKesus::TEvUpdateConsumptionStateAck>();
+    Send(Parent->Parent->KesusProxyId, ev.release());
 }
 
 THolder<IEventHandle> TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::GetDestroyedEventHandle() {

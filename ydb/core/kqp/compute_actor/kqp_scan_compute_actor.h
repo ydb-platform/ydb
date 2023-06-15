@@ -27,9 +27,10 @@ private:
     }
 public:
     TKqpScanComputeActor(const TActorId& executerId, ui64 txId,
-        NYql::NDqProto::TDqTask&& task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+        NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId);
+        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena);
 
     STFUNC(StateFunc) {
         try {

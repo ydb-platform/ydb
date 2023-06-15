@@ -463,19 +463,19 @@ private:
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 auto& info = computesByStage.UpsertTaskWithScan(dqTask, meta, !AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead());
-                computeActor = CreateKqpScanComputeActor(request.Executer, txId, std::move(dqTask),
+                computeActor = CreateKqpScanComputeActor(request.Executer, txId, &dqTask,
                     AsyncIoFactory, AppData()->FunctionRegistry, runtimeSettings, memoryLimits,
-                    NWilson::TTraceId(ev->TraceId));
+                    NWilson::TTraceId(ev->TraceId), ev->Get()->Arena);
                 taskCtx.ComputeActorId = Register(computeActor);
                 info.MutableActorIds().emplace_back(taskCtx.ComputeActorId);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
-                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), AsyncIoFactory,
-                        AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId));
+                    computeActor = CreateKqpComputeActor(request.Executer, txId, &dqTask, AsyncIoFactory,
+                        AppData()->FunctionRegistry, runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena);
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {
-                    computeActor = CaFactory->CreateKqpComputeActor(request.Executer, txId, std::move(dqTask),
-                                                                    runtimeSettings, memoryLimits);
+                    computeActor = CaFactory->CreateKqpComputeActor(request.Executer, txId, &dqTask,
+                        runtimeSettings, memoryLimits, NWilson::TTraceId(ev->TraceId), ev->Get()->Arena);
                     taskCtx.ComputeActorId = computeActor->SelfId();
                 }
             }

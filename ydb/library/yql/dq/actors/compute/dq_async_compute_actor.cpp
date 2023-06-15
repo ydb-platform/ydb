@@ -33,7 +33,7 @@ public:
 
     static constexpr bool HasAsyncTaskRunner = true;
 
-    TDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
+    TDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
@@ -41,7 +41,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& taskCounters,
         const TActorId& quoterServiceActorId,
         bool ownCounters)
-        : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false, false, taskCounters)
+        : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false, false, taskCounters)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , ReadyToCheckpointFlag(false)
         , SentStatsRequest(false)
@@ -941,7 +941,7 @@ private:
 };
 
 
-IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
+IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
@@ -950,7 +950,7 @@ IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId,
     const TActorId& quoterServiceActorId,
     bool ownCounters)
 {
-    return new TDqAsyncComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
+    return new TDqAsyncComputeActor(executerId, txId, task, std::move(asyncIoFactory),
         functionRegistry, settings, memoryLimits, taskRunnerActorFactory, taskCounters, quoterServiceActorId, ownCounters);
 }
 

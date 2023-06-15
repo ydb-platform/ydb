@@ -106,11 +106,12 @@ using namespace NYql::NDq;
 using namespace NYql::NDqProto;
 
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
-    TDqTask&& task, IDqAsyncIoFactory::TPtr asyncIoFactory,
+    TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId) {
-    return new NScanPrivate::TKqpScanComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, std::move(traceId));
+    const NYql::NDq::TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena) {
+    return new NScanPrivate::TKqpScanComputeActor(executerId, txId, task, std::move(asyncIoFactory),
+        functionRegistry, settings, memoryLimits, std::move(traceId), std::move(arena));
 }
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,

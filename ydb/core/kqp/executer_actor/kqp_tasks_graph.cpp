@@ -259,18 +259,20 @@ void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
 void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
     const TStageInfo& inputStageInfo, ui32 outputIndex, const TKqpTableKeys& tableKeys,
-    const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const TChannelLogFunc& logFunc) {
+    const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const TChannelLogFunc& logFunc)
+{
     YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
 
-    NKikimrKqp::TKqpStreamLookupSettings settings;
-    settings.MutableTable()->CopyFrom(streamLookup.GetTable());
+    NKikimrKqp::TKqpStreamLookupSettings* settings = graph.GetMeta().Allocate<NKikimrKqp::TKqpStreamLookupSettings>();
+
+    settings->MutableTable()->CopyFrom(streamLookup.GetTable());
 
     auto table = tableKeys.GetTable(MakeTableId(streamLookup.GetTable()));
     for (const auto& keyColumn : table.KeyColumns) {
         auto columnIt = table.Columns.find(keyColumn);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << keyColumn);
 
-        auto* keyColumnProto = settings.AddKeyColumns();
+        auto* keyColumnProto = settings->AddKeyColumns();
         keyColumnProto->SetName(keyColumn);
         keyColumnProto->SetId(columnIt->second.Id);
         keyColumnProto->SetTypeId(columnIt->second.Type.GetTypeId());
@@ -279,14 +281,14 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
         auto columnIt = table.Columns.find(keyColumn);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << keyColumn);
-        settings.AddLookupKeyColumns(keyColumn);
+        settings->AddLookupKeyColumns(keyColumn);
     }
 
     for (const auto& column : streamLookup.GetColumns()) {
         auto columnIt = table.Columns.find(column);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << column);
 
-        auto* columnProto = settings.AddColumns();
+        auto* columnProto = settings->AddColumns();
         columnProto->SetName(column);
         columnProto->SetId(columnIt->second.Id);
         columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
@@ -296,7 +298,6 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     streamLookupTransform.Type = "StreamLookupInputTransformer";
     streamLookupTransform.InputType = streamLookup.GetLookupKeysType();
     streamLookupTransform.OutputType = streamLookup.GetResultType();
-    streamLookupTransform.Settings.PackFrom(settings);
 
     for (ui32 taskId = 0; taskId < inputStageInfo.Tasks.size(); ++taskId) {
         auto& originTask = graph.GetTask(inputStageInfo.Tasks[taskId]);
@@ -310,6 +311,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
 
         auto& taskInput = targetTask.Inputs[inputIndex];
+        taskInput.Meta.StreamLookupSettings = settings;
         taskInput.Transform = streamLookupTransform;
         taskInput.Channels.push_back(channel.Id);
 
@@ -637,54 +639,6 @@ std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() con
     return !lastRange.Point ? std::make_pair(&lastRange.To, lastRange.ToInclusive) : std::make_pair(&lastRange.From, true);
 }
 
-void AddSnapshotInfoToTaskInputs(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TDqTask& task) {
-    const auto& snapshot = tasksGraph.GetMeta().Snapshot;
-    for (auto& input : *task.MutableInputs()) {
-        if (input.HasTransform()) {
-            YQL_ENSURE(snapshot.IsValid());
-            auto transform = input.MutableTransform();
-            YQL_ENSURE(transform->GetType() == "StreamLookupInputTransformer",
-                "Unexpected input transform type: " << transform->GetType());
-
-            const google::protobuf::Any& settingsAny = transform->GetSettings();
-            YQL_ENSURE(settingsAny.Is<NKikimrKqp::TKqpStreamLookupSettings>(), "Expected settings type: "
-                << NKikimrKqp::TKqpStreamLookupSettings::descriptor()->full_name()
-                << " , but got: " << settingsAny.type_url());
-
-            NKikimrKqp::TKqpStreamLookupSettings settings;
-            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
-
-            settings.MutableSnapshot()->SetStep(snapshot.Step);
-            settings.MutableSnapshot()->SetTxId(snapshot.TxId);
-
-            transform->MutableSettings()->PackFrom(settings);
-        }
-        if (input.HasSource() && input.GetSource().GetType() == NYql::KqpReadRangesSourceName) {
-            auto source = input.MutableSource();
-            const google::protobuf::Any& settingsAny = source->GetSettings();
-
-            YQL_ENSURE(settingsAny.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(), "Expected settings type: "
-                << NKikimrTxDataShard::TKqpReadRangesSourceSettings::descriptor()->full_name()
-                << " , but got: " << settingsAny.type_url());
-
-            NKikimrTxDataShard::TKqpReadRangesSourceSettings settings;
-            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
-
-
-            if (snapshot.IsValid()) {
-                settings.MutableSnapshot()->SetStep(snapshot.Step);
-                settings.MutableSnapshot()->SetTxId(snapshot.TxId);
-            }
-
-            if (tasksGraph.GetMeta().UseFollowers) {
-                settings.SetUseFollowers(tasksGraph.GetMeta().UseFollowers);
-            }
-
-            source->MutableSettings()->PackFrom(settings);
-        }
-    }
-}
-
 void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
     if (task.ComputeActorId) {
         ActorIdToProto(task.ComputeActorId, endpoint.MutableActorId());
@@ -932,11 +886,28 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
 }
 
 void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
+    const auto& snapshot = tasksGraph.GetMeta().Snapshot;
+    
     switch (input.Type()) {
         case NYql::NDq::TTaskInputType::Source:
             inputDesc.MutableSource()->SetType(input.SourceType);
             inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
-            inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
+            if (Y_LIKELY(input.Meta.SourceSettings)) {
+                if (snapshot.IsValid()) {
+                    input.Meta.SourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
+                    input.Meta.SourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+                }
+
+                if (tasksGraph.GetMeta().UseFollowers) {
+                    input.Meta.SourceSettings->SetUseFollowers(tasksGraph.GetMeta().UseFollowers);
+                }
+
+                inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
+            } else {
+                YQL_ENSURE(input.SourceSettings);
+                inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
+            }
+
             break;
         case NYql::NDq::TTaskInputType::UnionAll: {
             inputDesc.MutableUnionAll();
@@ -967,42 +938,44 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         transformProto->SetType(input.Transform->Type);
         transformProto->SetInputType(input.Transform->InputType);
         transformProto->SetOutputType(input.Transform->OutputType);
-        *transformProto->MutableSettings() = input.Transform->Settings;
+        YQL_ENSURE(input.Meta.StreamLookupSettings);
+        YQL_ENSURE(snapshot.IsValid(), "stream lookup cannot be performed without the snapshot.");
+        input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
+        input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+        transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
     }
 }
 
-NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task)
-{
+void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, NYql::NDqProto::TDqTask* result) {
     auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
-    NYql::NDqProto::TDqTask result;
-    ActorIdToProto(task.Meta.ExecuterId, result.MutableExecuter()->MutableActorId());
-    result.SetId(task.Id);
-    result.SetStageId(stageInfo.Id.StageId);
-    result.SetUseLlvm(task.GetUseLlvm());
+    ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
+    result->SetId(task.Id);
+    result->SetStageId(stageInfo.Id.StageId);
+    result->SetUseLlvm(task.GetUseLlvm());
     if (task.HasMetaId()) {
-        result.SetMetaId(task.GetMetaIdUnsafe());
+        result->SetMetaId(task.GetMetaIdUnsafe());
     }
 
     for (const auto& [paramName, paramValue] : task.Meta.DqTaskParams) {
-        (*result.MutableTaskParams())[paramName] = paramValue;
+        (*result->MutableTaskParams())[paramName] = paramValue;
     }
 
     for (const auto& [paramName, paramValue] : task.Meta.DqSecureParams) {
-        (*result.MutableSecureParams())[paramName] = paramValue;
+        (*result->MutableSecureParams())[paramName] = paramValue;
     }
 
     for (const auto& input : task.Inputs) {
-        FillInputDesc(tasksGraph, *result.AddInputs(), input);
+        FillInputDesc(tasksGraph, *result->AddInputs(), input);
     }
 
     for (const auto& output : task.Outputs) {
-        FillOutputDesc(tasksGraph, *result.AddOutputs(), output);
+        FillOutputDesc(tasksGraph, *result->AddOutputs(), output);
     }
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-    result.MutableProgram()->CopyFrom(stage.GetProgram());
+    result->MutableProgram()->CopyFrom(stage.GetProgram());
     for (auto& paramName : stage.GetProgramParameters()) {
-        auto& dqParams = *result.MutableParameters();
+        auto& dqParams = *result->MutableParameters();
         if (task.Meta.ShardId) {
             dqParams[paramName] = stageInfo.Meta.Tx.Params->GetShardParam(task.Meta.ShardId, paramName);
         } else {
@@ -1010,9 +983,12 @@ NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, c
         }
     }
 
-    AddSnapshotInfoToTaskInputs(tasksGraph, result);
-    FillTaskMeta(stageInfo, task, tasksGraph.GetMeta().TableKeys, result);
+    FillTaskMeta(stageInfo, task, tasksGraph.GetMeta().TableKeys, *result);
+}
 
+NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task) {
+    NYql::NDqProto::TDqTask* result = tasksGraph.GetMeta().Allocate<NYql::NDqProto::TDqTask>();
+    SerializeTaskToProto(tasksGraph, task, result);
     return result;
 }
 

@@ -34,7 +34,7 @@ class TKqpPlanner {
     };
 
 public:
-    TKqpPlanner(const TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
+    TKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
         THashMap<ui64, TVector<ui64>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
         const Ydb::Table::QueryStatsCollection::Mode& statsMode,
@@ -53,7 +53,7 @@ private:
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
-    std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData) const;
+    std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
 private:
@@ -75,11 +75,11 @@ private:
     ui64 LocalRunMemoryEst;
     TVector<TTaskResourceEstimation> ResourceEstimations;
     TVector<TRequestData> Requests;
-    const TKqpTasksGraph& TasksGraph;
+    TKqpTasksGraph& TasksGraph;
     const bool IsDataQuery;
 };
 
-std::unique_ptr<TKqpPlanner> CreateKqpPlanner(const TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
+std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
     THashMap<ui64, TVector<ui64>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,

@@ -90,13 +90,27 @@ struct TGraphMeta {
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
+    TIntrusivePtr<TProtoArenaHolder> Arena;
+
+    const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
+        return Arena; 
+    }
+
+    template<typename TMessage>
+    TMessage* Allocate() {
+        return Arena->Allocate<TMessage>();
+    }
 
     void SetSnapshot(ui64 step, ui64 txId) {
         Snapshot = IKqpGateway::TKqpSnapshot(step, txId);
     }
 };
 
-struct TTaskInputMeta {};
+struct TTaskInputMeta {
+    // these message are allocated using the protubuf arena.
+    NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings;
+    NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings;
+};
 
 struct TTaskOutputMeta {
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
@@ -218,7 +232,8 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling);
 
-NYql::NDqProto::TDqTask SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task);
+NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task);
+void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, NYql::NDqProto::TDqTask* message);
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel);
 

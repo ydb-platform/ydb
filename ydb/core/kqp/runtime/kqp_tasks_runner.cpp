@@ -95,7 +95,7 @@ TKqpTasksRunner::TKqpTasksRunner(google::protobuf::RepeatedPtrField<NDqProto::TD
                 Stats.emplace(taskId, stats);
             }
             TaskRunners.emplace(taskId, std::move(runner));
-            Tasks.emplace(taskId, std::move(task));
+            Tasks.emplace(taskId, &task);
         }
     } catch (const TMemoryLimitExceededException&) {
         TaskRunners.clear();

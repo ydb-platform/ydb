@@ -408,7 +408,7 @@ private:
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
         ParentId = ev->Sender;
-        auto settings = NDq::TDqTaskSettings(std::move(ev->Get()->Task));
+        auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
         TaskRunner = Factory(settings, [this](const TString& message) {
             LOG_D(message);
         });

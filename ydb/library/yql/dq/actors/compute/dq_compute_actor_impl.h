@@ -173,16 +173,17 @@ public:
     }
 
 protected:
-    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
+    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
         const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
-        NWilson::TTraceId traceId = {})
+        NWilson::TTraceId traceId = {},
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
-        , Task(std::move(task))
+        , Task(task, std::move(arena))
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
@@ -205,36 +206,6 @@ protected:
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
         }
-        InitializeWatermarks();
-    }
-
-    TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, const NDqProto::TDqTask& task,
-        IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
-        NWilson::TTraceId traceId = {})
-        : ExecuterId(executerId)
-        , TxId(txId)
-        , Task(task)
-        , RuntimeSettings(settings)
-        , MemoryLimits(memoryLimits)
-        , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0)
-        , AsyncIoFactory(std::move(asyncIoFactory))
-        , FunctionRegistry(functionRegistry)
-        , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
-        , WatermarksTracker(this->SelfId(), TxId, Task.GetId())
-        , TaskCounters(taskCounters)
-        , MetricsReporter(taskCounters)
-        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
-        , Running(!Task.GetCreateSuspended())
-    {
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            BasicStats = std::make_unique<TBasicStats>();
-        }
-        InitMonCounters(taskCounters);
-        InitializeTask();
-        MemoryQuota = InitMemoryQuota();
         InitializeWatermarks();
     }
 

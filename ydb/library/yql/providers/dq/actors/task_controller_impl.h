@@ -535,7 +535,7 @@ public:
 
         TaskStat.AddCounters(ev->Get()->Record);
 
-        const auto& tasks = ev->Get()->Record.GetTask();
+        auto& tasks = *ev->Get()->Record.MutableTask();
         const auto& actorIds = ev->Get()->Record.GetActorId();
         Y_VERIFY(tasks.size() == actorIds.size());
 
@@ -543,8 +543,8 @@ public:
 
         for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
             auto actorId = ActorIdFromProto(actorIds[i]);
-            auto& task = tasks[i];
-            Tasks.emplace_back(NDq::TDqTaskSettings(std::move(task)), actorId);
+            NYql::NDqProto::TDqTask& task = tasks[i];
+            Tasks.emplace_back(NDq::TDqTaskSettings(&task), actorId);
             ActorIds.emplace(task.GetId(), actorId);
             TaskIds.emplace(actorId, task.GetId());
             Yql::DqsProto::TTaskMeta taskMeta;
@@ -566,6 +566,10 @@ public:
 
     const NDq::TDqTaskSettings GetTask(size_t idx) const {
         return Tasks.at(idx).first;
+    }
+
+    int GetTasksSize() const {
+        return Tasks.size();
     }
 
 private:

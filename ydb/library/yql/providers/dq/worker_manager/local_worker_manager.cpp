@@ -286,13 +286,13 @@ private:
 
                 if (createComputeActor) {
                     YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
-
+                    NYql::NDqProto::TDqTask* taskPtr = &(tasks[i]);
                     actor.Reset(NYql::CreateComputeActor(
                         Options,
                         std::make_shared<TMemoryQuotaManager>(MemoryQuoter, allocationInfo.TxId, quotas[i]),
                         resultId,
                         traceId,
-                        std::move(tasks[i]),
+                        taskPtr,
                         computeActorType,
                         Options.TaskRunnerActorFactory,
                         taskCounters));

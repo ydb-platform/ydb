@@ -282,47 +282,69 @@ using TDqTaskRunnerParameterProvider = std::function<
          const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
 >;
 
+
+/// TDqTaskSettings class that holds all the settings of the DqTask.
+/// It accepts pointer and accepts ownership.
 class TDqTaskSettings {
 public:
-    explicit TDqTaskSettings(NDqProto::TDqTask&& task)
-        : Task_(std::move(task))
-    {}
+    explicit TDqTaskSettings(NDqProto::TDqTask* task, TIntrusivePtr<NActors::TProtoArenaHolder> arena = nullptr)
+        : Task_(nullptr)
+        , Arena(std::move(arena))
+    {
+        if (!task->GetArena()) {
+            HeapTask_ = std::make_unique<NDqProto::TDqTask>();
+            HeapTask_->Swap(task);
+            Task_ = HeapTask_.get();
+            Y_VERIFY(!Arena);
+        } else {
+            Task_ = task;
+            Y_VERIFY(Arena);
+            Y_VERIFY(task->GetArena() == Arena->Get());
+        }
+    }
 
-    explicit TDqTaskSettings(const NDqProto::TDqTask& task)
-        : Task_(task)
-    {}
+    TDqTaskSettings(const TDqTaskSettings& task) {
+        if (Y_LIKELY(task.HeapTask_)) {
+            HeapTask_ = std::make_unique<NDqProto::TDqTask>();
+            HeapTask_->CopyFrom(*task.Task_);
+            Task_ = HeapTask_.get();
+            Y_VERIFY(!task.Arena);
+        } else {
+            Y_FAIL("not allowed to copy dq settings for arena allocated messages.");
+        }
+    }
 
     ui64 GetId() const {
-        return Task_.GetId();
+        return Task_->GetId();
     }
 
     bool GetCreateSuspended() const {
-        return Task_.GetCreateSuspended();
+        return Task_->GetCreateSuspended();
     }
 
     const NDqProto::TDqTask& GetSerializedTask() const {
         Y_VERIFY(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
-        return Task_;
+        return *Task_;
     }
 
     const ::NYql::NDqProto::TTaskInput& GetInputs(size_t index) const {
-        return Task_.GetInputs(index);
+        return Task_->GetInputs(index);
     }
 
     const ::NYql::NDqProto::TTaskOutput& GetOutputs(size_t index) const {
-        return Task_.GetOutputs(index);
+        return Task_->GetOutputs(index);
     }
 
-    const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TTaskInput> GetInputs() const {
-        return Task_.GetInputs();
+    const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TTaskInput>& GetInputs() const {
+        return Task_->GetInputs();
     }
 
     size_t InputsSize() const {
-        return Task_.InputsSize();
+        return Task_->InputsSize();
     }
 
     size_t OutputsSize() const {
-        return Task_.OutputsSize();
+        return Task_->OutputsSize();
     }
 
     void SetParamsProvider(TDqTaskRunnerParameterProvider&& provider) {
@@ -334,11 +356,11 @@ public:
     {
         if (ParamProvider && ParamProvider(name, type, typeEnv, holderFactory, value)) {
 #ifndef NDEBUG
-            YQL_ENSURE(!Task_.GetParameters().contains(name), "param: " << name);
+            YQL_ENSURE(!Task_->GetParameters().contains(name), "param: " << name);
 #endif
         } else {
-            auto it = Task_.GetParameters().find(name);
-            YQL_ENSURE(it != Task_.GetParameters().end());
+            auto it = Task_->GetParameters().find(name);
+            YQL_ENSURE(it != Task_->GetParameters().end());
 
             auto guard = typeEnv.BindAllocator();
             TDqDataSerializer::DeserializeParam(it->second, type, holderFactory, value);
@@ -346,53 +368,56 @@ public:
     }
 
     ui64 GetStageId() const {
-        return Task_.GetStageId();
+        return Task_->GetStageId();
     }
 
     const ::NYql::NDqProto::TProgram& GetProgram() const {
-        return Task_.GetProgram();
+        return Task_->GetProgram();
     }
 
     const TProtoStringType & GetRateLimiterResource() const {
-        return Task_.GetRateLimiterResource();
+        return Task_->GetRateLimiterResource();
     }
 
     const TProtoStringType& GetRateLimiter() const {
-        return Task_.GetRateLimiter();
+        return Task_->GetRateLimiter();
     }
 
     const ::google::protobuf::Map<TProtoStringType, ::NYql::NDqProto::TData>& GetParameters() const {
-        return Task_.GetParameters();
+        return Task_->GetParameters();
     }
 
     const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& GetTaskParams() const {
-        return Task_.GetTaskParams();
+        return Task_->GetTaskParams();
     }
 
     const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& GetSecureParams() const {
-        return Task_.GetSecureParams();
+        return Task_->GetSecureParams();
     }
 
     const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TTaskOutput>& GetOutputs() const {
-        return Task_.GetOutputs();
+        return Task_->GetOutputs();
     }
 
     const ::google::protobuf::Any& GetMeta() const {
-        return Task_.GetMeta();
+        return Task_->GetMeta();
     }
 
     bool GetUseLlvm() const {
-        return Task_.GetUseLlvm();
+        return Task_->GetUseLlvm();
     }
 
     bool HasUseLlvm() const {
-        return Task_.HasUseLlvm();
+        return Task_->HasUseLlvm();
     }
 
 private:
+
     // external callback to retrieve parameter value.
     TDqTaskRunnerParameterProvider ParamProvider;
-    NDqProto::TDqTask Task_;
+    NDqProto::TDqTask* Task_ = nullptr;
+    std::unique_ptr<NDqProto::TDqTask> HeapTask_;
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
 };
 
 class IDqTaskRunner : public TSimpleRefCount<IDqTaskRunner>, private TNonCopyable {

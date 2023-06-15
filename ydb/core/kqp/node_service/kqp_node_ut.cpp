@@ -120,15 +120,16 @@ struct TMockKqpComputeActorFactory : public IKqpNodeComputeActorFactory {
     TMockKqpComputeActorFactory(TTestBasicRuntime& runtime)
         : Runtime(runtime) {}
 
-    IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask&& task,
-        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits) override
+    IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
+        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits,
+        NWilson::TTraceId, TIntrusivePtr<NActors::TProtoArenaHolder>) override
     {
         auto actorId = Runtime.AllocateEdgeActor();
-        auto& mock = Task2Actor[task.GetId()];
+        auto& mock = Task2Actor[task->GetId()];
         mock.ActorId = actorId;
         mock.ExecuterId = executerId;
         mock.TxId = txId;
-        mock.Task.Swap(&task);
+        mock.Task.Swap(task);
         mock.Settings = settings;
         mock.MemoryLimits = memoryLimits;
         UNIT_ASSERT(mock.MemoryLimits.MemoryQuotaManager->AllocateQuota(mock.MemoryLimits.MkqlLightProgramMemoryLimit));

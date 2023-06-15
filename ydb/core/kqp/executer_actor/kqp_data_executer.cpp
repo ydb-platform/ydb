@@ -1615,7 +1615,7 @@ private:
 
     void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox) {
         auto& task = TasksGraph.GetTask(taskId);
-        auto taskDesc = SerializeTaskToProto(TasksGraph, task);
+        NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task);
 
         TComputeRuntimeSettings settings;
         if (Deadline) {
@@ -1632,15 +1632,15 @@ private:
         limits.MkqlLightProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(500_MB, Request.MkqlMemoryLimit) : 500_MB;
         limits.MkqlHeavyProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(2_GB, Request.MkqlMemoryLimit) : 2_GB;
 
-        auto& taskOpts = taskDesc.GetProgram().GetSettings();
+        auto& taskOpts = taskDesc->GetProgram().GetSettings();
         auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
             ? limits.MkqlHeavyProgramMemoryLimit
             : limits.MkqlLightProgramMemoryLimit;
 
         limits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(limit, limit);
 
-        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), AsyncIoFactory,
-            AppData()->FunctionRegistry, settings, limits);
+        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, taskDesc, AsyncIoFactory,
+            AppData()->FunctionRegistry, settings, limits, NWilson::TTraceId(), TasksGraph.GetMeta().GetArenaIntrusivePtr());
 
         auto computeActorId = shareMailbox ? RegisterWithSameMailbox(computeActor) : Register(computeActor);
         task.ComputeActorId = computeActorId;
@@ -1737,7 +1737,7 @@ private:
             return;
         }
 
-        THashMap<ui64, TVector<NDqProto::TDqTask>> datashardTasks;  // shardId -> [task]
+        THashMap<ui64, TVector<NDqProto::TDqTask*>> datashardTasks;  // shardId -> [task]
         THashMap<ui64, TVector<ui64>> remoteComputeTasks;  // shardId -> [task]
         TVector<ui64> computeTasks;
 
@@ -1748,8 +1748,8 @@ private:
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
-                auto protoTask = SerializeTaskToProto(TasksGraph, task);
-                datashardTasks[task.Meta.ShardId].emplace_back(std::move(protoTask));
+                NYql::NDqProto::TDqTask* protoTask = ArenaSerializeTaskToProto(TasksGraph, task);
+                datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);
             } else {
@@ -1827,8 +1827,8 @@ private:
         }
 
         ComputeTasks = std::move(computeTasks);
-        DatashardTxs = std::move(datashardTxs);
         TopicTxs = std::move(topicTxs);
+        DatashardTxs = std::move(datashardTxs);
         RemoteComputeTasks = std::move(remoteComputeTasks);
 
         if (prepareTasksSpan) {
@@ -1910,7 +1910,7 @@ private:
         ContinueExecute();
     }
 
-    using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction>;
+    using TDatashardTxs = THashMap<ui64, NKikimrTxDataShard::TKqpTransaction*>;
     using TTopicTabletTxs = THashMap<ui64, NKikimrPQ::TDataTransaction>;
 
     void ContinueExecute() {
@@ -1941,14 +1941,24 @@ private:
         }
     }
 
-    TDatashardTxs BuildDatashardTxs(const THashMap<ui64, TVector<NDqProto::TDqTask>>& datashardTasks,
+    TDatashardTxs BuildDatashardTxs(THashMap<ui64, TVector<NDqProto::TDqTask*>>& datashardTasks,
                                     TTopicTabletTxs& topicTxs) {
         TDatashardTxs datashardTxs;
 
+        std::vector<ui64> affectedShardsSet;
+        affectedShardsSet.reserve(datashardTasks.size());
+
         for (auto& [shardId, tasks]: datashardTasks) {
-            auto& dsTxs = datashardTxs[shardId];
+            auto [it, success] = datashardTxs.emplace(
+                shardId,
+                TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpTransaction>());
+
+            YQL_ENSURE(success, "unexpected duplicates in datashard transactions");
+            affectedShardsSet.emplace_back(shardId);
+            NKikimrTxDataShard::TKqpTransaction* dsTxs = it->second;
+            dsTxs->MutableTasks()->Reserve(tasks.size());
             for (auto& task: tasks) {
-                dsTxs.AddTasks()->CopyFrom(task);
+                dsTxs->AddTasks()->Swap(task);
             }
         }
 
@@ -1971,7 +1981,7 @@ private:
             // TODO: add support in the future
             topicTxs.empty() &&
             // We only want to use volatile transactions for multiple shards
-            (datashardTasks.size() + topicTxs.size()) > 1 &&
+            (affectedShardsSet.size() + topicTxs.size()) > 1 &&
             // We cannot use volatile transactions with persistent channels
             // Note: currently persistent channels are never used
             !HasPersistentChannels);
@@ -2004,7 +2014,7 @@ private:
 
             // Gather shards that need to send/receive readsets (shards with effects)
             if (needCommit) {
-                for (auto& [shardId, _] : datashardTasks) {
+                for (auto& shardId: affectedShardsSet) {
                     if (ShardsWithEffects.contains(shardId)) {
                         // Volatile transactions may abort effects, so they send readsets
                         if (VolatileTx) {
@@ -2026,11 +2036,21 @@ private:
 
             // Gather locks that need to be committed or erased
             for (auto& [shardId, locksList] : locksMap) {
-                auto& tx = datashardTxs[shardId];
-                tx.MutableLocks()->SetOp(locksOp);
+                NKikimrTxDataShard::TKqpTransaction* tx = nullptr;
+                auto it = datashardTxs.find(shardId);
+                if (it != datashardTxs.end()) {
+                    tx = it->second;
+                } else {
+                    auto [eIt, success] = datashardTxs.emplace(
+                        shardId,
+                        TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpTransaction>());
+                    tx = eIt->second;
+                }
+
+                tx->MutableLocks()->SetOp(locksOp);
 
                 if (!locksList.empty()) {
-                    auto* protoLocks = tx.MutableLocks()->MutableLocks();
+                    auto* protoLocks = tx->MutableLocks()->MutableLocks();
                     protoLocks->Reserve(locksList.size());
                     bool hasWrites = false;
                     for (auto& lock : locksList) {
@@ -2060,9 +2080,9 @@ private:
                 std::sort(receivingShards.begin(), receivingShards.end());
 
                 for (auto& [shardId, shardTx] : datashardTxs) {
-                    shardTx.MutableLocks()->SetOp(locksOp);
-                    *shardTx.MutableLocks()->MutableSendingShards() = sendingShards;
-                    *shardTx.MutableLocks()->MutableReceivingShards() = receivingShards;
+                    shardTx->MutableLocks()->SetOp(locksOp);
+                    *shardTx->MutableLocks()->MutableSendingShards() = sendingShards;
+                    *shardTx->MutableLocks()->MutableReceivingShards() = receivingShards;
                 }
 
                 for (auto& [_, tx] : topicTxs) {
@@ -2086,7 +2106,7 @@ private:
         if (useGenericReadSets) {
             // Make sure datashards use generic readsets
             for (auto& pr : datashardTxs) {
-                pr.second.SetUseGenericReadSets(true);
+                pr.second->SetUseGenericReadSets(true);
             }
         }
 
@@ -2144,9 +2164,9 @@ private:
 
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
-            shardTx.SetType(NKikimrTxDataShard::KQP_TX_TYPE_DATA);
+            shardTx->SetType(NKikimrTxDataShard::KQP_TX_TYPE_DATA);
             std::optional<bool> isOlap;
-            for (auto& protoTask : *shardTx.MutableTasks()) {
+            for (auto& protoTask : *shardTx->MutableTasks()) {
                 ui64 taskId = protoTask.GetId();
                 auto& task = TasksGraph.GetTask(taskId);
                 auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
@@ -2191,7 +2211,7 @@ private:
                 LOG_D("datashard task: " << taskId << ", proto: " << protoTask.ShortDebugString());
             }
 
-            ExecuteDatashardTransaction(shardId, shardTx, LockTxId, isOlap.value_or(false));
+            ExecuteDatashardTransaction(shardId, *shardTx, LockTxId, isOlap.value_or(false));
         }
 
         ExecuteTopicTabletTransactions(TopicTxs);

@@ -20,11 +20,12 @@ static constexpr TDuration RL_MAX_BATCH_DELAY = TDuration::Seconds(50);
 
 } // anonymous namespace
 
-TKqpScanComputeActor::TKqpScanComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
+TKqpScanComputeActor::TKqpScanComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
     IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId)
-    : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings,
-        memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId))
+    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+    : TBase(executerId, txId, task, std::move(asyncIoFactory), functionRegistry, settings,
+        memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
 {
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());

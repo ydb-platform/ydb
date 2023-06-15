@@ -32,8 +32,15 @@ struct TKqpNodeEvents {
 };
 
 struct TEvKqpNode {
-    struct TEvStartKqpTasksRequest : public TEventPB<TEvStartKqpTasksRequest,
-        NKikimrKqp::TEvStartKqpTasksRequest, TKqpNodeEvents::EvStartKqpTasksRequest> {};
+    struct TEvStartKqpTasksRequest : public TEventPBWithArena<TEvStartKqpTasksRequest, NKikimrKqp::TEvStartKqpTasksRequest, TKqpNodeEvents::EvStartKqpTasksRequest> {
+        using TBaseEv = TEventPBWithArena<TEvStartKqpTasksRequest, NKikimrKqp::TEvStartKqpTasksRequest, TKqpNodeEvents::EvStartKqpTasksRequest>;
+        using TBaseEv::TEventPBBase;
+
+        TEvStartKqpTasksRequest() = default;
+        explicit TEvStartKqpTasksRequest(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
+            : TEventPBBase(std::move(arena))
+        {}
+    };
 
     struct TEvStartKqpTasksResponse : public TEventPB<TEvStartKqpTasksResponse,
         NKikimrKqp::TEvStartKqpTasksResponse, TKqpNodeEvents::EvStartKqpTasksResponse> {};
@@ -61,8 +68,9 @@ struct TEvKqpNode {
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
-    virtual IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask&& task,
-        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits) = 0;
+    virtual IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
+        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits,
+        NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena) = 0;
 };
 
 NActors::IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,

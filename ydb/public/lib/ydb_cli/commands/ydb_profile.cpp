@@ -1043,7 +1043,7 @@ int TCommandUpdateProfile::Run(TConfig& config) {
 }
 
 TCommandReplaceProfile::TCommandReplaceProfile()
-            : TCommandProfileCommon("replace", {}, "Deletes profile and creates a new one with the same name and new property values from provided options")
+            : TCommandProfileCommon("replace", {}, "Deletes profile and creates a new one with the same name and new property values from provided options or an stdin")
 {}
 
 void TCommandReplaceProfile::Config(TConfig& config) {

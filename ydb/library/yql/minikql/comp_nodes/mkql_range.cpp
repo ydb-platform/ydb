@@ -86,11 +86,11 @@ struct TExpandedRange {
     TExpandedRangeBoundary Right;
 };
 
-TExpandedRangeBoundary Max(TExpandedRangeBoundary a, TExpandedRangeBoundary b, ICompare::TPtr cmp) {
+TExpandedRangeBoundary Max(TExpandedRangeBoundary a, TExpandedRangeBoundary b, ICompare* cmp) {
     return cmp->Less(a.Value, b.Value) ? b : a;
 }
 
-TExpandedRangeBoundary Min(TExpandedRangeBoundary a, TExpandedRangeBoundary b, ICompare::TPtr cmp) {
+TExpandedRangeBoundary Min(TExpandedRangeBoundary a, TExpandedRangeBoundary b, ICompare* cmp) {
     return cmp->Less(a.Value, b.Value) ? a : b;
 }
 
@@ -256,8 +256,8 @@ bool RangeCanMerge(const TExpandedRange& a, const TExpandedRange& b, const TRang
     bool rightIncluded = rights.back().Get<i32>() != 0;
 
     for (size_t i = 0; i < lefts.size() - 1; i += 2) {
-        auto infCmp = typeInfo.ComponentsCompare[i];
-        auto compCmp = typeInfo.ComponentsCompare[i + 1];
+        auto infCmp = typeInfo.ComponentsCompare[i].Get();
+        auto compCmp = typeInfo.ComponentsCompare[i + 1].Get();
 
         auto infCompareRes = infCmp->Compare(lefts[i], rights[i]);
         Y_ENSURE(infCompareRes <= 0);
@@ -383,7 +383,7 @@ public:
             for (size_t i = 1; i < mergedLists.size(); ++i) {
                 auto toUnion = ExpandRange(mergedLists[i]);
                 if (RangeCanMerge(current, toUnion, TypeInfos.front())) {
-                    current = { current.Left, Max(current.Right, toUnion.Right, TypeInfos.front().BoundaryCompare) };
+                    current = { current.Left, Max(current.Right, toUnion.Right, TypeInfos.front().BoundaryCompare.Get()) };
                     TUnboxedValueVector newValue = { current.Left.Value, current.Right.Value };
                     unionList.back() = ctx.HolderFactory.VectorAsArray(newValue);
                 } else {
@@ -437,8 +437,8 @@ private:
 
     void DoIntersect(TComputationContext& ctx, TUnboxedValueQueue& current, TUnboxedValueQueue&& next) const {
         TUnboxedValueQueue result;
-        auto cmp = TypeInfos.front().RangeCompare;
-        auto boundaryCmp = TypeInfos.front().BoundaryCompare;
+        auto cmp = TypeInfos.front().RangeCompare.Get();
+        auto boundaryCmp = TypeInfos.front().BoundaryCompare.Get();
         while (!current.empty() && !next.empty()) {
             TUnboxedValueQueue* minInput;
             TUnboxedValueQueue* maxInput;
@@ -455,7 +455,7 @@ private:
 
             TExpandedRange intersected;
             intersected.Left = maxRange.Left;
-            intersected.Right = Min(minRange.Right, maxRange.Right, TypeInfos.front().BoundaryCompare);
+            intersected.Right = Min(minRange.Right, maxRange.Right, TypeInfos.front().BoundaryCompare.Get());
             if (!RangeIsEmpty(intersected, TypeInfos.front())) {
                 TUnboxedValueVector newValue = { intersected.Left.Value, intersected.Right.Value };
                 result.push_back(ctx.HolderFactory.VectorAsArray(newValue));
@@ -492,7 +492,11 @@ public:
         }
 
         TUnboxedValueQueue current = std::move(expandedLists.front());
-        std::vector<ICompare::TPtr> currentComponentsCompare = TypeInfos.front().ComponentsCompare;
+        std::vector<ICompare*> currentComponentsCompare;
+        currentComponentsCompare.reserve(TypeInfos.front().ComponentsCompare.size());
+        for (const auto& comp : TypeInfos.front().ComponentsCompare) {
+            currentComponentsCompare.push_back(comp.Get());
+        }
         for (size_t i = 1; i < expandedLists.size(); ++i) {
             if (expandedLists[i].empty()) {
                 return ctx.HolderFactory.GetEmptyContainer();
@@ -516,7 +520,7 @@ private:
     }
 
     bool DoMultiply(TComputationContext& ctx, ui64 limit, TUnboxedValueQueue& current, const TUnboxedValueQueue& next,
-        std::vector<ICompare::TPtr>& currentCmps, const TRangeTypeInfo& nextTypeInfo) const
+        std::vector<ICompare*>& currentCmps, const TRangeTypeInfo& nextTypeInfo) const
     {
         TUnboxedValueQueue result;
         Y_ENSURE(currentCmps.size() >= 3 && currentCmps.size() % 2 == 1);
@@ -538,15 +542,16 @@ private:
             }
         }
 
-        ICompare::TPtr currentLast = currentCmps.back();
         currentCmps.pop_back();
-        currentCmps.insert(currentCmps.end(), nextTypeInfo.ComponentsCompare.begin(), nextTypeInfo.ComponentsCompare.end());
+        for (const auto& comp : nextTypeInfo.ComponentsCompare) {
+            currentCmps.push_back(comp.Get());
+        }
 
         std::swap(current, result);
         return true;
     }
 
-    static bool RangeIsPoint(const TExpandedRange& range, const std::vector<ICompare::TPtr>& cmps) {
+    static bool RangeIsPoint(const TExpandedRange& range, const std::vector<ICompare*>& cmps) {
         Y_ENSURE(range.Left.Components.size() == cmps.size());
         TUnboxedValue leftIncluded = range.Left.Components.back();
         TUnboxedValue rightIncluded = range.Right.Components.back();

@@ -83,7 +83,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
-#include <ydb/services/console/grpc_service.h>
+#include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
@@ -811,7 +811,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcCmsService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
 
-            server.AddService(new NGRpcService::TGRpcConsoleService(ActorSystem.Get(), Counters,
+            server.AddService(new NGRpcService::TGRpcDynamicConfigService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasCms.IsRlAllowed()));
         }
 
@@ -1102,6 +1102,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasSharedCacheConfig()) {
         AppData->SharedCacheConfig = runConfig.AppConfig.GetSharedCacheConfig();
+    }
+
+    if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
+        AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
     // setup resource profiles

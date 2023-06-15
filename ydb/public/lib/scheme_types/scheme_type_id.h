@@ -47,6 +47,7 @@ static constexpr TTypeId Text = Utf8;
 static constexpr TTypeId Yson = NYql::NProto::Yson;
 static constexpr TTypeId Json = NYql::NProto::Json;
 
+static constexpr TTypeId Uuid = NYql::NProto::Uuid;
 static constexpr TTypeId JsonDocument = NYql::NProto::JsonDocument;
 
 static constexpr TTypeId DyNumber = NYql::NProto::DyNumber;

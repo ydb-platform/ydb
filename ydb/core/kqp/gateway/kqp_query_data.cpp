@@ -131,8 +131,8 @@ TQueryData::TQueryData(TTxAllocatorState::TPtr allocatorState)
 TQueryData::~TQueryData() {
     {
         auto g = TypeEnv().BindAllocator();
-        TVector<TVector<TKqpExecuterTxResult>> emptyVector;
-        TxResults.swap(emptyVector);
+        THashMap<ui32, TVector<TKqpExecuterTxResult>> emptyResultMap;
+        TxResults.swap(emptyResultMap);
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
     }
@@ -164,8 +164,8 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(ui32 txIndex, ui32 resultIn
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
 
-void TQueryData::AddTxResults(TVector<TKqpExecuterTxResult>&& results) {
-    TxResults.emplace_back(std::move(results));
+void TQueryData::AddTxResults(ui32 txIndex, TVector<TKqpExecuterTxResult>&& results) {
+    TxResults.emplace(std::make_pair(txIndex, std::move(results)));
 }
 
 void TQueryData::AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders) {
@@ -280,8 +280,8 @@ void TQueryData::Clear() {
         Params.clear();
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
-        TVector<TVector<TKqpExecuterTxResult>> emptyVector;
-        TxResults.swap(emptyVector);
+        THashMap<ui32, TVector<TKqpExecuterTxResult>> emptyResultMap;
+        TxResults.swap(emptyResultMap);
         AllocState->Reset();
     }
 }

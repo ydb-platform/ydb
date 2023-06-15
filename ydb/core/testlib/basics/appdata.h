@@ -80,6 +80,7 @@ namespace NKikimr {
         void SetEnableProtoSourceIdInfo(std::optional<bool> value);
         void SetEnablePqBilling(std::optional<bool> value);
         void SetEnableDbCounters(bool value);
+        void SetAwsRegion(const TString& value);
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
@@ -93,6 +94,7 @@ namespace NKikimr {
         NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;
+        NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
 
     private:
         TAutoPtr<TMine> Mine;

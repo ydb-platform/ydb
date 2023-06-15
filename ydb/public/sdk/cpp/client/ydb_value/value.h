@@ -244,6 +244,7 @@ struct TPgValue {
 
 struct TUuidValue {
     TString ToString() const;
+    TUuidValue(ui64 low_128, ui64 high_128);
     TUuidValue(const Ydb::Value& uuidValueProto);
     TUuidValue(const TString& uuidString);
 

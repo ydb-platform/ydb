@@ -128,6 +128,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .NotUnderDeleting();
 
@@ -173,10 +174,16 @@ public:
 
         switch (streamDesc.GetMode()) {
         case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
-        case NKikimrSchemeOp::ECdcStreamModeUpdate:
         case NKikimrSchemeOp::ECdcStreamModeNewImage:
         case NKikimrSchemeOp::ECdcStreamModeOldImage:
         case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
+            break;
+        case NKikimrSchemeOp::ECdcStreamModeUpdate:
+            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
@@ -187,6 +194,23 @@ public:
         switch (streamDesc.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
+            if (!streamDesc.GetAwsRegion().empty()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "AWS_REGION option incompatible with specified stream format");
+                return result;
+            }
+            break;
+        case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+            if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "DYNAMODB_STREAMS_JSON format is not supported yet");
+                return result;
+            }
+            if (tablePath.Base()->DocumentApiVersion < 1) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DYNAMODB_STREAMS_JSON format incompatible with non-document table");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
@@ -197,6 +221,14 @@ public:
         TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+
+        TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
+        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateChangefeed, streamDesc.GetUserAttributes(), errStr) ||
+            !userAttrs->CheckLimits(errStr))
+        {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -213,6 +245,7 @@ public:
 
         context.DbChanges.PersistPath(pathId);
         context.DbChanges.PersistPath(tablePath.Base()->PathId);
+        context.DbChanges.PersistApplyUserAttrs(pathId);
         context.DbChanges.PersistAlterCdcStream(pathId);
         context.DbChanges.PersistTxState(OperationId);
 
@@ -227,6 +260,7 @@ public:
         streamPath.Base()->CreateTxId = OperationId.GetTxId();
         streamPath.Base()->LastTxId = OperationId.GetTxId();
         streamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
+        streamPath.Base()->UserAttrs->AlterData = userAttrs;
 
         context.SS->CdcStreams[pathId] = stream;
         context.SS->IncrementPathDbRefCount(pathId);
@@ -467,6 +501,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .NotUnderDeleting();
 
@@ -598,6 +633,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             .IsResolved()
             .NotDeleted()
             .IsTable()
+            .NotAsyncReplicaTable()
             .IsCommonSensePath()
             .NotUnderDeleting()
             .NotUnderOperation();

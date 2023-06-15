@@ -7,7 +7,7 @@ namespace NKikimr {
         CurrentState = TStringBuilder() << "waiting for Hull snapshot";
         auto res = WaitForSpecificEvent<TEvTakeHullSnapshotResult>();
         Snap.emplace(std::move(res->Get()->Snap));
-        Snap->BarriersSnap.Destroy(); // barriers are not needed for operation
+        Snap->BlocksSnap.Destroy(); // blocks are not needed for operation
     }
 
     void TScrubCoroImpl::ReleaseSnapshot() {

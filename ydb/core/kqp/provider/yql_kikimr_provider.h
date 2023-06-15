@@ -220,12 +220,9 @@ bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
-    THashMap<TString, TYdbOperations> TableOperations;
-    THashMap<TKikimrPathId, TString> TableByIdMap;
-    TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
-    bool Readonly = false;
-    bool Invalidated = false;
-    bool Closed = false;
+    explicit TKikimrTransactionContextBase(bool enableImmediateEffects)
+        : EnableImmediateEffects(enableImmediateEffects) {
+    }
 
     bool HasStarted() const {
         return EffectiveIsolationLevel.Defined();
@@ -256,12 +253,13 @@ public:
         Invalidated = false;
         Readonly = false;
         Closed = false;
+        HasUncommittedChangesRead = false;
     }
 
     template<class IterableKqpTableOps, class IterableKqpTableInfos>
     bool ApplyTableOperations(const IterableKqpTableOps& operations,
         const IterableKqpTableInfos& tableInfos, NKikimrKqp::EIsolationLevel isolationLevel,
-        bool enableImmediateEffects, EKikimrQueryType queryType, TExprContext& ctx)
+        EKikimrQueryType queryType, TExprContext& ctx)
     {
         if (IsClosed()) {
             TString message = TStringBuilder() << "Cannot perform operations on closed transaction.";
@@ -346,19 +344,28 @@ public:
 
             auto& currentOps = TableOperations[table];
             bool currentModify = currentOps & KikimrModifyOps();
-            if (currentModify && !enableImmediateEffects) {
+            if (currentModify) {
                 if (KikimrReadOps() & newOp) {
-                    TString message = TStringBuilder() << "Data modifications previously made to table '" << table
-                        << "' in current transaction won't be seen by operation: '" << newOp << "'";
-                    if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message), ctx)) {
-                        return false;
+                    if (!EnableImmediateEffects) {
+                        TString message = TStringBuilder() << "Data modifications previously made to table '" << table
+                            << "' in current transaction won't be seen by operation: '" << newOp << "'";
+                            if (!AddDmlIssue(YqlIssue(pos, TIssuesIds::KIKIMR_READ_MODIFIED_TABLE, message), ctx)) {
+                                return false;
+                            }
                     }
+
+                    HasUncommittedChangesRead = true;
                 }
 
                 if (info->GetHasIndexTables()) {
-                    TString message = TStringBuilder() << "Multiple modification of table with secondary indexes is not supported yet";
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                    return false;
+                    if (!EnableImmediateEffects) {
+                        TString message = TStringBuilder()
+                            << "Multiple modification of table with secondary indexes is not supported yet";
+                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                        return false;
+                    }
+
+                    HasUncommittedChangesRead = true;
                 }
             }
 
@@ -370,6 +377,15 @@ public:
 
     virtual ~TKikimrTransactionContextBase() = default;
 
+public:
+    THashMap<TString, TYdbOperations> TableOperations;
+    bool HasUncommittedChangesRead = false;
+    const bool EnableImmediateEffects;
+    THashMap<TKikimrPathId, TString> TableByIdMap;
+    TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
+    bool Readonly = false;
+    bool Invalidated = false;
+    bool Closed = false;
 };
 
 class TKikimrSessionContext : public TThrRefBase {

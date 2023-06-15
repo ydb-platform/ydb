@@ -654,9 +654,27 @@ NKikimrConsole::TConfigItem ITEM_DOMAIN_TENANT_POOL_2;
 
 const TString YAML_CONFIG_1 = R"(
 ---
-cluster: ""
-version: 1
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: cluster1
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+const TString YAML_CONFIG_1_UPDATED = R"(
 ---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
 config:
   log_config:
     cluster_name: cluster1
@@ -671,9 +689,27 @@ selector_config: []
 
 const TString YAML_CONFIG_2 = R"(
 ---
-cluster: ""
-version: 2
+metadata:
+  cluster: ""
+  version: 1
+config:
+  log_config:
+    cluster_name: cluster2
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+const TString YAML_CONFIG_2_UPDATED = R"(
 ---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 2
 config:
   log_config:
     cluster_name: cluster2
@@ -687,6 +723,23 @@ selector_config: []
 )";
 
 const TString VOLATILE_YAML_CONFIG_1_1 = R"(
+- description: test 4
+  selector:
+    tenant: /slice
+  config:
+    yaml_config_enabled: true
+    cms_config:
+      sentinel_config:
+        enable: false
+)";
+
+const TString EXTENDED_VOLATILE_YAML_CONFIG_1_1 = R"(metadata:
+  kind: VolatileConfig
+  cluster: ""
+  version: 1
+  id: 0
+selector_config:
+
 - description: test 4
   selector:
     tenant: /slice
@@ -3848,7 +3901,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
 
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-2");
 
@@ -3883,7 +3936,8 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
             NKikimrConfig::TAppConfig(),
             0,
-            true);
+            true,
+            1);
         runtime.Register(subscriber, 1);
 
         TDispatchOptions options1;
@@ -3903,23 +3957,32 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
 
         notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
         notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        runtime.SendToConsole(new TEvConsole::TEvGetAllConfigsRequest());
+        TAutoPtr<IEventHandle> handle;
+        auto configs = runtime.GrabEdgeEventRethrow<TEvConsole::TEvGetAllConfigsResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity().cluster(), "");
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().identity().version(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().config(), YAML_CONFIG_1_UPDATED);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().volatile_configs_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(configs->Record.GetResponse().volatile_configs(0).config(), EXTENDED_VOLATILE_YAML_CONFIG_1_1);
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
 
         ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster-2");
@@ -3937,7 +4000,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
 
@@ -3946,7 +4009,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
@@ -3956,16 +4019,16 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_2);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_2);
         notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), 1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_2);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_2_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 0);
     }
 
@@ -3984,12 +4047,13 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.MutableOptions()->SetTenant("tenant-1");
         event->Record.MutableOptions()->SetNodeType("type1");
         event->Record.SetServeYaml(true);
+        event->Record.SetYamlApiVersion(1);
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
 
         runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId); // initial update
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
         auto notification = runtime.GrabEdgeEventRethrow<TEvConsole::TEvConfigSubscriptionNotification>(edgeId);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
@@ -4032,7 +4096,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         ui32 generation = 1;
         TActorId edgeId = runtime.Sender;
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
 
@@ -4058,6 +4122,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         event->Record.MutableOptions()->SetTenant("tenant-1");
         event->Record.MutableOptions()->SetNodeType("type1");
         event->Record.SetServeYaml(true);
+        event->Record.SetYamlApiVersion(1);
         event->Record.AddConfigItemKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         runtime.SendToPipe(MakeConsoleID(0), edgeId, event, 0, GetPipeConfigWithRetries());
 
@@ -4065,7 +4130,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetGeneration(), generation);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetConfig().ShortDebugString(), config1.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1);
+        UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetYamlConfig(), YAML_CONFIG_1_UPDATED);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.VolatileConfigsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[0].GetConfig(), VOLATILE_YAML_CONFIG_1_1);
         UNIT_ASSERT_VALUES_EQUAL(notification->Get()->Record.GetVolatileConfigs()[1].GetConfig(), VOLATILE_YAML_CONFIG_1_2);
@@ -4079,7 +4144,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         ui32 generation = 1;
         TActorId edgeId = runtime.Sender;
 
-        CheckApplyConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, YAML_CONFIG_1);
 
         CheckAddVolatileConfig(runtime, Ydb::StatusIds::SUCCESS, "", 1, 0, VOLATILE_YAML_CONFIG_1_1);
 
@@ -4106,6 +4171,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
             event->Record.MutableOptions()->SetTenant("tenant-1");
             event->Record.MutableOptions()->SetNodeType("type1");
             event->Record.SetServeYaml(true);
+            event->Record.SetYamlApiVersion(1);
             event->Record.SetYamlVersion(1);
             event->Record.MutableKnownVersion()->CopyFrom(config1.GetVersion());
             return event;

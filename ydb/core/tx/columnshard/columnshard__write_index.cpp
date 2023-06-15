@@ -36,6 +36,7 @@ private:
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
     THashSet<NOlap::TEvictedBlob> BlobsToForget;
     ui64 ExportNo = 0;
+    TBackgroundActivity TriggerActivity = TBackgroundActivity::All();
 };
 
 
@@ -274,12 +275,14 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->IncCounter(COUNTER_COMPACTION_TIME, Ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCleanup()) {
         Self->ActiveCleanup = false;
+        TriggerActivity = changes->NeedRepeat ? TBackgroundActivity::Cleanup() : TBackgroundActivity::None();
 
         Self->BlobManager->GetCleanupBlobs(BlobsToForget);
 
         Self->IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
         Self->ActiveTtl = false;
+        //TriggerActivity = changes->NeedRepeat ? TBackgroundActivity::Ttl() : TBackgroundActivity::None();
 
         // Do not start new TTL till we evict current PortionsToEvict. We could evict them twice otherwise
         Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
@@ -301,7 +304,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     if (Ev->Get()->PutStatus == NKikimrProto::TRYLATER) {
         ctx.Schedule(Self->FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
     } else {
-        Self->EnqueueBackgroundActivities();
+        Self->EnqueueBackgroundActivities(false, TriggerActivity);
     }
 
     for (auto& [tierName, pathBlobs] : ExportTierBlobs) {

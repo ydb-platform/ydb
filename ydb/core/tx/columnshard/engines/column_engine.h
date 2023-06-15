@@ -36,20 +36,6 @@ struct TCompactionInfo {
     bool Empty() const { return Granules.empty(); }
     bool Good() const { return Granules.size() == 1; }
 
-    ui64 ChooseOneGranule(ui64 lastGranule) {
-        Y_VERIFY(Granules.size());
-
-        auto it = Granules.upper_bound(lastGranule);
-        if (it == Granules.end()) {
-            it = Granules.begin();
-        }
-
-        ui64 granule = *it;
-        Granules.clear();
-        Granules.insert(granule);
-        return granule;
-    }
-
     friend IOutputStream& operator << (IOutputStream& out, const TCompactionInfo& info) {
         if (info.Good() == 1) {
             ui64 granule = *info.Granules.begin();
@@ -258,19 +244,19 @@ struct TSelectInfo {
 
 struct TColumnEngineStats {
     struct TPortionsStats {
-        ui64 Portions{};
-        ui64 Blobs{};
-        ui64 Rows{};
-        ui64 Bytes{};
-        ui64 RawBytes{};
+        i64 Portions{};
+        i64 Blobs{};
+        i64 Rows{};
+        i64 Bytes{};
+        i64 RawBytes{};
     };
 
-    ui64 Tables{};
-    ui64 Granules{};
-    ui64 EmptyGranules{};
-    ui64 OverloadedGranules{};
-    ui64 ColumnRecords{};
-    ui64 ColumnMetadataBytes{};
+    i64 Tables{};
+    i64 Granules{};
+    i64 EmptyGranules{};
+    i64 OverloadedGranules{};
+    i64 ColumnRecords{};
+    i64 ColumnMetadataBytes{};
     TPortionsStats Inserted{};
     TPortionsStats Compacted{};
     TPortionsStats SplitCompacted{};
@@ -287,11 +273,11 @@ struct TColumnEngineStats {
         };
     }
 
-    ui64 ActivePortions() const { return Inserted.Portions + Compacted.Portions + SplitCompacted.Portions; }
-    ui64 ActiveBlobs() const { return Inserted.Blobs + Compacted.Blobs + SplitCompacted.Blobs; }
-    ui64 ActiveRows() const { return Inserted.Rows + Compacted.Rows + SplitCompacted.Rows; }
-    ui64 ActiveBytes() const { return Inserted.Bytes + Compacted.Bytes + SplitCompacted.Bytes; }
-    ui64 ActiveRawBytes() const { return Inserted.RawBytes + Compacted.RawBytes + SplitCompacted.RawBytes; }
+    i64 ActivePortions() const { return Inserted.Portions + Compacted.Portions + SplitCompacted.Portions; }
+    i64 ActiveBlobs() const { return Inserted.Blobs + Compacted.Blobs + SplitCompacted.Blobs; }
+    i64 ActiveRows() const { return Inserted.Rows + Compacted.Rows + SplitCompacted.Rows; }
+    i64 ActiveBytes() const { return Inserted.Bytes + Compacted.Bytes + SplitCompacted.Bytes; }
+    i64 ActiveRawBytes() const { return Inserted.RawBytes + Compacted.RawBytes + SplitCompacted.RawBytes; }
 
     void Clear() {
         *this = {};
@@ -318,7 +304,7 @@ public:
                                                 const THashSet<ui32>& columnIds,
                                                 std::shared_ptr<TPredicate> from,
                                                 std::shared_ptr<TPredicate> to) const = 0;
-    virtual std::unique_ptr<TCompactionInfo> Compact() = 0;
+    virtual std::unique_ptr<TCompactionInfo> Compact(ui64& lastCompactedGranule) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
                                                                   const TSnapshot& outdatedSnapshot) = 0;

@@ -333,6 +333,7 @@ class TDataShard
             EvCdcStreamScanProgress,
             EvCdcStreamScanContinue,
             EvRestartOperation, // used to restart after an aborted scan (e.g. backup)
+            EvChangeExchangeExecuteHandshakes,
             EvEnd
         };
 
@@ -513,6 +514,8 @@ class TDataShard
 
             const ui64 TxId;
         };
+
+        struct TEvChangeExchangeExecuteHandshakes : public TEventLocal<TEvChangeExchangeExecuteHandshakes, EvChangeExchangeExecuteHandshakes> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1224,6 +1227,7 @@ class TDataShard
     void Handle(TEvPrivate::TEvRemoveChangeRecords::TPtr& ev, const TActorContext& ctx);
     // change receiving
     void Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvChangeExchangeExecuteHandshakes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx);
     // activation
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev, const TActorContext& ctx);
@@ -1403,6 +1407,14 @@ public:
         return State == TShardState::Frozen;
     }
 
+    bool IsReplicated() const {
+        for (const auto& [_, info] : TableInfos) {
+            if (info->IsReplicated()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     ui32 Generation() const { return Executor()->Generation(); }
     bool IsFollower() const { return Executor()->GetStats().IsFollower; }
@@ -2570,6 +2582,13 @@ private:
 
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
+    TList<std::pair<TActorId, NKikimrChangeExchange::TEvHandshake>> PendingChangeExchangeHandshakes;
+    bool ChangeExchangeHandshakesCollecting = false;
+    bool ChangeExchangeHandshakeTxScheduled = false;
+
+    void StartCollectingChangeExchangeHandshakes(const TActorContext& ctx);
+    void RunChangeExchangeHandshakeTx();
+    void ChangeExchangeHandshakeExecuted();
 
     // compactionId, actorId
     using TCompactionWaiter = std::tuple<ui64, TActorId>;
@@ -2768,6 +2787,7 @@ protected:
             HFunc(TEvPrivate::TEvRequestChangeRecords, Handle);
             HFunc(TEvPrivate::TEvRemoveChangeRecords, Handle);
             HFunc(TEvChangeExchange::TEvHandshake, Handle);
+            HFunc(TEvPrivate::TEvChangeExchangeExecuteHandshakes, Handle);
             HFunc(TEvChangeExchange::TEvApplyRecords, Handle);
             HFunc(TEvChangeExchange::TEvActivateSender, Handle);
             HFunc(TEvChangeExchange::TEvActivateSenderAck, Handle);

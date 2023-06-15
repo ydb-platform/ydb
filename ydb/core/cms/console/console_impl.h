@@ -92,6 +92,7 @@ private:
             FFunc(TEvConsole::EvConfigNotificationResponse, ForwardToConfigsManager);
             FFunc(TEvConsole::EvConfigureRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetAllConfigsRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvGetAllMetadataRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvAddVolatileConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvRemoveVolatileConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetLogTailRequest, ForwardToConfigsManager);
@@ -99,7 +100,10 @@ private:
             FFunc(TEvConsole::EvDescribeTenantOptionsRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvGetConfigRequest, Handle);
-            FFunc(TEvConsole::EvApplyConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvReplaceYamlConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvGetNodeLabelsRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvSetYamlConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);

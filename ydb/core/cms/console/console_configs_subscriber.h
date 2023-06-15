@@ -14,6 +14,7 @@ IActor *CreateConfigsSubscriber(
     const NKikimrConfig::TAppConfig &currentConfig,
     ui64 cookie = 0,
     bool processYaml = false,
+    ui64 version = 0,
     const TString &yamlConfig = {},
     const TMap<ui64, TString> &volatileYamlConfigs = {});
 

@@ -138,7 +138,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable();
+                .IsTable()
+                .NotAsyncReplicaTable();
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 checks

@@ -395,6 +395,11 @@ enum class EShadowDataMode {
     Enabled,
 };
 
+enum class EReplicationConsistency: int {
+    Strong = 1,
+    Weak = 2,
+};
+
 struct TShardedTableOptions {
     using TSelf = TShardedTableOptions;
 
@@ -430,7 +435,10 @@ struct TShardedTableOptions {
         EFormat Format;
         TMaybe<EState> InitialState;
         bool VirtualTimestamps = false;
+        TMaybe<TString> AwsRegion;
     };
+
+    using TAttributes = THashMap<TString, TString>;
 
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \
     TSelf& name(type value) {\
@@ -451,6 +459,9 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);
     TABLE_OPTION(std::optional<ui64>, ExecutorCacheSize, std::nullopt);
+    TABLE_OPTION(bool, Replicated, false);
+    TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
+    TABLE_OPTION(TAttributes, Attributes, {});
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL

@@ -129,7 +129,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         return;
     }
 
-    if (LastBackActivation < TInstant::Now() - ActivationPeriod) {
+    if (LastPeriodicBackActivation < TInstant::Now() - ActivationPeriod) {
         SendWaitPlanStep(GetOutdatedStep());
     }
 
@@ -333,6 +333,14 @@ void TColumnShard::SendPeriodicStats() {
             const auto& indexStats = PrimaryIndex->GetTotalStats();
             NOlap::TSnapshot lastIndexUpdate = PrimaryIndex->LastUpdate();
             auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
+
+            if (activeIndexStats.Rows < 0 || activeIndexStats.Bytes < 0) {
+                LOG_S_WARN("Negative stats counter. Rows: " << activeIndexStats.Rows
+                    << " Bytes: " << activeIndexStats.Bytes << TabletID());
+
+                activeIndexStats.Rows = (activeIndexStats.Rows < 0) ? 0 : activeIndexStats.Rows;
+                activeIndexStats.Bytes = (activeIndexStats.Bytes < 0) ? 0 : activeIndexStats.Bytes;
+            }
 
             tabletStats->SetRowCount(activeIndexStats.Rows);
             tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());

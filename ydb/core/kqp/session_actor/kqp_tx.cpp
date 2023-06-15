@@ -41,13 +41,14 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
 
     YQL_ENSURE(locksListType.GetItem().GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
     auto lockType = locksListType.GetItem().GetStruct();
-    YQL_ENSURE(lockType.MemberSize() == 6);
+    YQL_ENSURE(lockType.MemberSize() == 7);
     YQL_ENSURE(lockType.GetMember(0).GetName() == "Counter");
     YQL_ENSURE(lockType.GetMember(1).GetName() == "DataShard");
     YQL_ENSURE(lockType.GetMember(2).GetName() == "Generation");
     YQL_ENSURE(lockType.GetMember(3).GetName() == "LockId");
     YQL_ENSURE(lockType.GetMember(4).GetName() == "PathId");
     YQL_ENSURE(lockType.GetMember(5).GetName() == "SchemeShard");
+    YQL_ENSURE(lockType.GetMember(6).GetName() == "HasWrites");
 
     res.first = true;
     for (auto& lockValue : value.GetList()) {
@@ -65,6 +66,10 @@ std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& typ
             res.first = false;
 
         } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
+            if (txLock.HasWrites()) {
+                curTxLock->SetHasWrites();
+            }
+
             if (curTxLock->Invalidated(txLock)) {
                 res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
                 res.first = false;
@@ -171,7 +176,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
     }
 
-    if (config.FeatureFlags.GetEnableKqpImmediateEffects() && physicalQuery.GetHasUncommittedChangesRead()) {
+    if (txCtx.HasUncommittedChangesRead) {
+        YQL_ENSURE(txCtx.EnableImmediateEffects);
         return true;
     }
 

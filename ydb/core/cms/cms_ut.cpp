@@ -1476,6 +1476,37 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(env.ProcessQueueCount, RequestsCount);
     }
+
+    Y_UNIT_TEST(TestLogOperationsRollback)
+    {
+        TCmsTestEnv env(24);
+
+        const ui32 requestsCount = 8;
+
+        env.SetLimits(0, 0, 3, 0);
+        env.CreateDefaultCmsPipe();
+        for (ui32 i = 0; i < requestsCount; ++i) {
+            auto req = MakePermissionRequest("user", false, true, false,
+                            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(i), 60000000, "storage"),
+                            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(i + 8), 60000000, "storage"),
+                            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(i + 16), 60000000, "storage"));
+            req->Record.SetDuration(60000000);
+            req->Record.SetAvailabilityMode(MODE_KEEP_AVAILABLE);
+
+            env.SendToCms(req.Release());
+        }
+        env.DestroyDefaultCmsPipe();
+
+        // Check responses order
+        for (ui32 i = 0; i < requestsCount; ++i) {
+            TAutoPtr<IEventHandle> handle;
+            auto reply = env.GrabEdgeEventRethrow<TEvCms::TEvPermissionResponse>(handle);
+            const auto &rec = reply->Record;
+
+            UNIT_ASSERT_VALUES_EQUAL(rec.permissions_size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(rec.status().code(), TStatus::ALLOW);
+        }
+    }
 }
 } // NCmsTest
 } // NKikimr

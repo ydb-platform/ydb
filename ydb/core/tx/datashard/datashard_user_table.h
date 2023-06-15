@@ -293,6 +293,7 @@ struct TUserTable : public TThrRefBase {
         EFormat Format;
         EState State;
         bool VirtualTimestamps = false;
+        TMaybe<TString> AwsRegion;
 
         TCdcStream() = default;
 
@@ -303,6 +304,34 @@ struct TUserTable : public TThrRefBase {
             , State(streamDesc.GetState())
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
         {
+            if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
+                AwsRegion = awsRegion;
+            }
+        }
+    };
+
+    struct TReplicationConfig {
+        NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode Mode;
+        NKikimrSchemeOp::TTableReplicationConfig::EConsistency Consistency;
+
+        TReplicationConfig()
+            : Mode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE)
+            , Consistency(NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_UNKNOWN)
+        {
+        }
+
+        TReplicationConfig(const NKikimrSchemeOp::TTableReplicationConfig& config)
+            : Mode(config.GetMode())
+            , Consistency(config.GetConsistency())
+        {
+        }
+
+        bool HasWeakConsistency() const {
+            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_WEAK;
+        }
+
+        bool HasStrongConsistency() const {
+            return Consistency == NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_STRONG;
         }
     };
 
@@ -356,6 +385,7 @@ struct TUserTable : public TThrRefBase {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
+    TReplicationConfig ReplicationConfig;
     bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
@@ -417,6 +447,8 @@ struct TUserTable : public TThrRefBase {
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
     bool NeedSchemaSnapshots() const;
+
+    bool IsReplicated() const;
 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,

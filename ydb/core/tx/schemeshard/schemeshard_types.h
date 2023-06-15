@@ -35,9 +35,11 @@ struct TSchemeLimits {
     // pq group
     ui64 MaxPQPartitions = 1000000;
 
-    TSchemeLimits() = default;
-    explicit TSchemeLimits(const NKikimrScheme::TSchemeLimits& proto);
+    // export & import
+    ui64 MaxExports = 10;
+    ui64 MaxImports = 10;
 
+    static TSchemeLimits FromProto(const NKikimrScheme::TSchemeLimits& proto);
     NKikimrScheme::TSchemeLimits AsProto() const;
 };
 

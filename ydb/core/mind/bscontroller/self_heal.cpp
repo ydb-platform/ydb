@@ -631,7 +631,7 @@ namespace NKikimr::NBsController {
         THashSet<TGroupInfo*> groups;
         const TInstant now = TActivationContext::Now();
         const TMonotonic mono = TActivationContext::Monotonic();
-        std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
+        std::vector<TVDiskAvailabilityTiming> timingQ;
 
         std::unique_ptr<TEvPrivate::TEvDropDonor> dropDonorEv;
 
@@ -644,14 +644,15 @@ namespace NKikimr::NBsController {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    slot->SetStatus(m.GetStatus(), mono);
-                    if (slot->IsReady != wasReady) {
-                        ScrubState.UpdateVDiskState(slot);
-                        if (wasReady) {
-                            slot->LastSeenReady = now;
-                            lastSeenReadyQ.emplace_back(slot->VSlotId, now);
-                            NotReadyVSlotIds.insert(slot->VSlotId);
+                    if (slot->Status != m.GetStatus()) {
+                        slot->SetStatus(m.GetStatus(), mono, now);
+                        if (slot->IsReady != wasReady) {
+                            ScrubState.UpdateVDiskState(slot);
+                            if (wasReady) {
+                                NotReadyVSlotIds.insert(slot->VSlotId);
+                            }
                         }
+                        timingQ.emplace_back(*slot);
                     }
                     ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus());
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
@@ -695,8 +696,8 @@ namespace NKikimr::NBsController {
             Execute(CreateTxUpdateSeenOperational(std::move(groupIds)));
         }
 
-        if (!lastSeenReadyQ.empty()) {
-            Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
+        if (!timingQ.empty()) {
+            Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
         }
 
         ScheduleVSlotReadyUpdate();

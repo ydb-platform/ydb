@@ -1,9 +1,9 @@
-#include "config_index.h"
 #include "console_impl.h"
 #include "console_configs_manager.h"
 #include "console_tenants_manager.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/cms/console/validators/registry.h>
 
 namespace NKikimr::NConsole {

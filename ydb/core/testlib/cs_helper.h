@@ -179,6 +179,7 @@ public:
         Columns { Name: "id" Type: "Int32" NotNull: true }
         Columns { Name: "resource_id" Type: "Utf8" }
         Columns { Name: "level" Type: "Int32" }
+        Columns { Name: "binary_str" Type: "String" }
         KeyColumnNames: "id"
     )";
 

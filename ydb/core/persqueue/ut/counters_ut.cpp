@@ -147,6 +147,9 @@ void CompareJsons(const TString& inputStr, const TString& referenceStr) {
     NJson::TJsonValue inputJson;
     UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(inputStr), &inputJson));
 
+    Cerr << "Expected: " << referenceStr << Endl;
+    Cerr << "Result: " << inputStr << Endl;
+
     // Run time of test differs as well as counters below.
     // We  set it to 5000 and then compare with reference string.
     auto getByPath = [](const NJson::TJsonValue& msg, TStringBuf path) {
@@ -254,7 +257,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
             return TTestActorRuntime::DefaultObserverFunc(runtime, event);
         });
 
-        PQTabletPrepare({}, {{"client", true}}, tc);
+        PQTabletPrepare({.deleteTime=3600, .meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS}, {{"client", true}}, tc);
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 325;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);

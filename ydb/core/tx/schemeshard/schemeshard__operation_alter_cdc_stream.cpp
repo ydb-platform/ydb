@@ -138,6 +138,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .NotUnderOperation();
 
@@ -364,6 +365,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
@@ -508,6 +510,7 @@ TVector<ISubOperationBase::TPtr> CreateAlterCdcStream(TOperationId opId, const T
             .IsResolved()
             .NotDeleted()
             .IsTable()
+            .NotAsyncReplicaTable()
             .IsCommonSensePath()
             .NotUnderOperation();
 

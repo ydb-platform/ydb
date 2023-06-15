@@ -38,14 +38,14 @@ bool CheckKeyTuple(const TKqlKeyTuple& tuple, const TKikimrTableDescription& tab
         auto expectedType = tableDesc.GetColumnType(meta->KeyColumnNames[i]);
         YQL_ENSURE(expectedType);
 
-        if (IsSameAnnotation(*expectedType, *actualType)) {
-            continue;
-        }
+        auto expectedItemType = expectedType->GetKind() == ETypeAnnotationKind::Optional ?
+            expectedType->Cast<TOptionalExprType>()->GetItemType() : expectedType;
 
-        if (expectedType->GetKind() == ETypeAnnotationKind::Optional) {
-            if (IsSameAnnotation(*expectedType->Cast<TOptionalExprType>()->GetItemType(), *actualType)) {
-                continue;
-            }
+        auto actualItemType = actualType->GetKind() == ETypeAnnotationKind::Optional ?
+            actualType->Cast<TOptionalExprType>()->GetItemType() : actualType;
+
+        if (IsSameAnnotation(*expectedItemType, *actualItemType)) {
+            continue;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(tuple.Pos()), TStringBuilder()

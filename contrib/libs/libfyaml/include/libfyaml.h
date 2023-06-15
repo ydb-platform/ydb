@@ -2772,6 +2772,20 @@ fy_node_get_style(struct fy_node *fyn)
 	FY_EXPORT;
 
 /**
+ * fy_node_set_style() - Set the node style
+ *
+ * Set the node rendering style.
+ * If current node style is alias it won't be changed
+ * to save document structure
+ *
+ * @fyn: The node
+ * @style: The node style
+ */
+void
+fy_node_set_style(struct fy_node *fyn, enum fy_node_style style)
+       FY_EXPORT;
+
+/**
  * fy_node_is_scalar() - Check whether the node is a scalar
  *
  * Convenience method for checking whether a node is a scalar.

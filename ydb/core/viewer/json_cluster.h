@@ -80,9 +80,52 @@ public:
         ++Requested;
         ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
         ++Requested;
-        if (Tablets) {
-            ctx.Send(whiteboardServiceId, new TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-            ++Requested;
+    }
+
+    void SendTabletStateRequest(ui32 nodeId, const TActorContext& ctx, THashSet<TTabletId>& filterTablets) {
+        auto request = new TEvWhiteboard::TEvTabletStateRequest();
+        for (TTabletId id: filterTablets) {
+            request->Record.AddFilterTabletId(id);
+        }
+        TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
+        ctx.Send(whiteboardServiceId, request, IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+        ++Requested;
+    }
+
+    void SendTabletStateRequest(const TActorContext& ctx) {
+        TIntrusivePtr<TDomainsInfo> domains = AppData(ctx)->DomainsInfo;
+        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+        THashSet<TTabletId> filterTablets;
+        for (TTabletId id : domain->Coordinators) {
+            filterTablets.emplace(id);
+        }
+        for (TTabletId id : domain->Mediators) {
+            filterTablets.emplace(id);
+        }
+        for (TTabletId id : domain->TxAllocators) {
+            filterTablets.emplace(id);
+        }
+        const NKikimrSchemeOp::TPathDescription& pathDescription(DescribeResult->GetRecord().GetPathDescription());
+        if (pathDescription.HasDomainDescription()) {
+            const NKikimrSubDomains::TDomainDescription& domainDescription(pathDescription.GetDomainDescription());
+            for (TTabletId tabletId : domainDescription.GetProcessingParams().GetCoordinators()) {
+                filterTablets.emplace(tabletId);
+            }
+            for (TTabletId tabletId : domainDescription.GetProcessingParams().GetMediators()) {
+                filterTablets.emplace(tabletId);
+            }
+            if (domainDescription.HasDomainKey()) {
+                if (domainDescription.GetDomainKey().HasSchemeShard()) {
+                    filterTablets.emplace(domainDescription.GetDomainKey().GetSchemeShard());
+                }
+            }
+        }
+
+        TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
+        for (const auto& ni : NodesInfo->Nodes) {
+            if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
+                SendTabletStateRequest(ni.NodeId, ctx, filterTablets);
+            }
         }
     }
 
@@ -206,6 +249,10 @@ public:
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext &ctx) {
         if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess) {
             DescribeResult = ev->Release();
+
+            if (Tablets) {
+                SendTabletStateRequest(ctx);
+            }
         }
         RequestDone(ctx);
     }

@@ -5,13 +5,14 @@
 #include "schemeshard_user_attr_limits.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/util/yverify_stream.h>
 #include <ydb/library/aclib/aclib.h>
+
+#include <library/cpp/json/json_reader.h>
 
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/string/cast.h>
-
-#include <ydb/core/util/yverify_stream.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -26,6 +27,7 @@ constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD_NONREPL = "__volume_space_limit
 constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD_SYSTEM = "__volume_space_limit_ssd_system";
 constexpr TStringBuf ATTR_EXTRA_PATH_SYMBOLS_ALLOWED = "__extra_path_symbols_allowed";
 constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version";
+constexpr TStringBuf ATTR_ASYNC_REPLICATION = "__async_replication";
 
 inline bool WeakCheck(char c) {
     // 33: ! " # $ % & ' ( ) * + , - . /
@@ -58,6 +60,7 @@ enum class EAttribute {
     VOLUME_SPACE_LIMIT_SSD_NONREPL,
     DOCUMENT_API_VERSION,
     VOLUME_SPACE_LIMIT_SSD_SYSTEM,
+    ASYNC_REPLICATION,
 };
 
 struct TVolumeSpace {
@@ -81,6 +84,7 @@ enum class EUserAttributesOp {
     CreateSubDomain,
     CreateExtSubDomain,
     SyncUpdateTenants,
+    CreateChangefeed,
 };
 
 struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
@@ -116,6 +120,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(EXTRA_PATH_SYMBOLS_ALLOWED);
                 HANDLE_ATTR(DOCUMENT_API_VERSION);
+                HANDLE_ATTR(ASYNC_REPLICATION);
             #undef HANDLE_ATTR
             return EAttribute::UNKNOWN;
         }
@@ -218,6 +223,12 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
                     return false;
                 }
                 return CheckAttributeUint64(name, value, errStr, /* minValue = */ 1);
+            case EAttribute::ASYNC_REPLICATION:
+                if (op != EUserAttributesOp::CreateChangefeed) {
+                    errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateChangefeed", name.c_str());
+                    return false;
+                }
+                return CheckAttributeJson(name, value, errStr);
         }
 
         Y_UNREACHABLE();
@@ -248,6 +259,12 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
                     return false;
                 }
                 return true;
+            case EAttribute::ASYNC_REPLICATION:
+                if (op != EUserAttributesOp::CreateChangefeed) {
+                    errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateChangefeed", name.c_str());
+                    return false;
+                }
+                return true;
         }
 
         Y_UNREACHABLE();
@@ -267,7 +284,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
         if (!TryFromString(value, parsed)) {
             errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s'",
                 name.c_str(), value.c_str());
-             return false;
+            return false;
         }
         if (parsed < minValue) {
             errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s' < %" PRIu64,
@@ -286,6 +303,16 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
         Y_UNUSED(item);
         ok = false;
         errStr = Sprintf("UserAttributes::CheckLimits: unsupported attribute '%s'", item.first.c_str());
+        return true;
+    }
+
+    static bool CheckAttributeJson(const TString& name, const TString& value, TString& errStr) {
+        NJson::TJsonValue unused;
+        if (!NJson::ReadJsonTree(value, &unused)) {
+            errStr = Sprintf("UserAttributes: attribute '%s' has invalid value '%s'",
+                name.c_str(), value.c_str());
+            return false;
+        }
         return true;
     }
 };
@@ -334,6 +361,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TVolumeSpaceLimits VolumeSpaceSSDNonrepl;
     TVolumeSpaceLimits VolumeSpaceSSDSystem;
     ui64 DocumentApiVersion = 0;
+    NJson::TJsonValue AsyncReplication;
 
     // Number of references to this path element in the database
     size_t DbRefCount = 0;
@@ -397,6 +425,7 @@ public:
     void ApplySpecialAttributes();
     void HandleAttributeValue(const TString& value, TString& target);
     void HandleAttributeValue(const TString& value, ui64& target);
+    void HandleAttributeValue(const TString& value, NJson::TJsonValue& target);
     void ChangeVolumeSpaceBegin(TVolumeSpace newSpace, TVolumeSpace oldSpace);
     void ChangeVolumeSpaceCommit(TVolumeSpace newSpace, TVolumeSpace oldSpace);
     bool CheckVolumeSpaceChange(TVolumeSpace newSpace, TVolumeSpace oldSpace, TString& errStr);

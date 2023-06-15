@@ -309,14 +309,9 @@ public:
     }
 
     ui64 MeteringDataSize(const TActorContext& ctx) const;
-
-    ui64 UsedReserveSize(const TActorContext& ctx) const {
-         return std::min<ui64>(MeteringDataSize(ctx), ReserveSize());
-    }
-
-    ui64 ReserveSize() const {
-        return TopicPartitionReserveSize(Config);
-    }
+    ui64 ReserveSize() const;
+    ui64 StorageSize(const TActorContext& ctx) const;
+    ui64 UsedReserveSize(const TActorContext& ctx) const;
 
 
     //Bootstrap sends kvRead

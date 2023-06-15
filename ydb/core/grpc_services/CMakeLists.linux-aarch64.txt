@@ -73,7 +73,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_cancel_operation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_cms.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_commit_transaction.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_console.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_dynamic_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_copy_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_copy_tables.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_export.cpp

@@ -142,7 +142,10 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistency(EReplicationConsistency::Strong)
+        );
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);

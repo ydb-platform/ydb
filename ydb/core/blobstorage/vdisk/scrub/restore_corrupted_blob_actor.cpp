@@ -235,7 +235,7 @@ namespace NKikimr {
             }
             for (const auto& item : Items) {
                 if (item.Status == NKikimrProto::UNKNOWN) {
-                    return Schedule(TDuration::Seconds(1), new TEvIssueQuery);
+                    return Schedule(TDuration::Seconds(5), new TEvIssueQuery);
                 }
             }
             IssueQuery();

@@ -970,17 +970,17 @@ public:
             .Build();
     }
 
-    IAsyncQueryResultPtr ExecuteSchemeQuery(const TString& query, bool isSql) override {
+    IAsyncQueryResultPtr ExecuteSchemeQuery(const TString& query, bool isSql, const TExecSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, isSql] (TExprContext& ctx) {
-                return ExecuteSchemeQueryInternal(query, isSql, ctx);
+            [this, &query, isSql, settings] (TExprContext& ctx) {
+                return ExecuteSchemeQueryInternal(query, isSql, settings, ctx);
             });
     }
 
-    TQueryResult SyncExecuteSchemeQuery(const TString& query, bool isSql) override {
+    TQueryResult SyncExecuteSchemeQuery(const TString& query, bool isSql, const TExecSettings& settings) override {
         return CheckedSyncProcessQuery(
-            [this, &query, isSql] () {
-                return ExecuteSchemeQuery(query, isSql);
+            [this, &query, isSql, settings] () {
+                return ExecuteSchemeQuery(query, isSql, settings);
             });
     }
 
@@ -1133,13 +1133,13 @@ private:
             }
             settings.EndOfQueryCommit = sqlAutoCommit;
             settings.Flags.insert("FlexibleTypes");
+            settings.Flags.insert("AnsiLike");
             if (SessionCtx->Query().Type == EKikimrQueryType::Scan
                 || SessionCtx->Query().Type == EKikimrQueryType::YqlScript
                 || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming)
             {
-                // We enable EmitAggApply and AnsiLike for filter and aggregate pushdowns to Column Shards
+                // We enable EmitAggApply for filter and aggregate pushdowns to Column Shards
                 settings.Flags.insert("EmitAggApply");
-                settings.Flags.insert("AnsiLike");
             } else {
                 settings.Flags.insert("DisableEmitStartsWith");
             }
@@ -1239,10 +1239,13 @@ private:
         return true;
     }
 
-    IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TString& query, bool isSql, TExprContext& ctx) {
+    IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TString& query, bool isSql, const TExecSettings& settings, TExprContext& ctx) {
         SetupYqlTransformer();
 
         SessionCtx->Query().Type = EKikimrQueryType::Ddl;
+        if (settings.DocumentApiRestricted) {
+            SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion);

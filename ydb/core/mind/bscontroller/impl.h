@@ -99,6 +99,8 @@ public:
         TIndirectReferable<TGroupInfo>::TPtr Group; // group to which this VSlot belongs (or nullptr if it doesn't belong to any)
         THashSet<TVSlotId> Donors; // a set of alive donors for this disk (which are not being deleted)
         TInstant LastSeenReady;
+        TInstant LastGotReplicating;
+        TDuration ReplicationTime;
 
         // volatile state
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
@@ -127,8 +129,22 @@ public:
         bool IsReady = false;
 
     public:
-        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now) {
+        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant) {
             if (status != Status) {
+                if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
+                    LastGotReplicating = instant;
+                } else if (Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
+                    Y_VERIFY_DEBUG(LastGotReplicating != TInstant::Zero());
+                    ReplicationTime += instant - LastGotReplicating;
+                    LastGotReplicating = {};
+                }
+                if (status == NKikimrBlobStorage::EVDiskStatus::READY) {
+                    ReplicationTime = TDuration::Zero();
+                }
+                if (IsReady) {
+                    LastSeenReady = instant;
+                }
+
                 Status = status;
                 IsReady = false;
                 if (status == NKikimrBlobStorage::EVDiskStatus::READY) {
@@ -176,7 +192,9 @@ public:
                     Table::VDiskIdx,
                     Table::GroupPrevGeneration,
                     Table::Mood,
-                    Table::LastSeenReady
+                    Table::LastSeenReady,
+                    Table::LastGotReplicating,
+                    Table::ReplicationTime
                 > adapter(
                     &TVSlotInfo::Kind,
                     &TVSlotInfo::GroupId,
@@ -186,7 +204,9 @@ public:
                     &TVSlotInfo::VDiskIdx,
                     &TVSlotInfo::GroupPrevGeneration,
                     &TVSlotInfo::Mood,
-                    &TVSlotInfo::LastSeenReady
+                    &TVSlotInfo::LastSeenReady,
+                    &TVSlotInfo::LastGotReplicating,
+                    &TVSlotInfo::ReplicationTime
                 );
             callback(&adapter);
         }
@@ -196,7 +216,8 @@ public:
         TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdisk, TGroupId groupId, Table::GroupGeneration::Type groupPrevGeneration,
                 Table::GroupGeneration::Type groupGeneration, Table::Category::Type kind, Table::RingIdx::Type ringIdx,
                 Table::FailDomainIdx::Type failDomainIdx, Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood,
-                TGroupInfo *group, TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady); // implemented in bsc.cpp
+                TGroupInfo *group, TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady,
+                TDuration replicationTime); // implemented in bsc.cpp
 
         // is the slot being deleted (marked as deleted)
         bool IsBeingDeleted() const {
@@ -1796,7 +1817,24 @@ private:
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
-    ITransaction* CreateTxUpdateLastSeenReady(std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ);
+
+    struct TVDiskAvailabilityTiming {
+        TVSlotId VSlotId;
+        TInstant LastSeenReady;
+        TInstant LastGotReplicating;
+        TDuration ReplicationTime;
+
+        TVDiskAvailabilityTiming() = default;
+        TVDiskAvailabilityTiming(const TVDiskAvailabilityTiming&) = default;
+
+        TVDiskAvailabilityTiming(const TVSlotInfo& vslot)
+            : VSlotId(vslot.VSlotId)
+            , LastSeenReady(vslot.LastSeenReady)
+            , LastGotReplicating(vslot.LastGotReplicating)
+            , ReplicationTime(vslot.ReplicationTime)
+        {}
+    };
+    ITransaction* CreateTxUpdateLastSeenReady(std::vector<TVDiskAvailabilityTiming> timingQ);
 
     void Handle(TEvPrivate::TEvDropDonor::TPtr ev);
 
@@ -2040,7 +2078,7 @@ public:
     bool VSlotReadyUpdateScheduled = false;
 
     void VSlotReadyUpdate() {
-        std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
+        std::vector<TVDiskAvailabilityTiming> timingQ;
 
         Y_VERIFY(VSlotReadyUpdateScheduled);
         VSlotReadyUpdateScheduled = false;
@@ -2054,7 +2092,7 @@ public:
             if (const TGroupInfo *group = it->second->Group) {
                 groups.insert(const_cast<TGroupInfo*>(group));
                 it->second->LastSeenReady = TInstant::Zero();
-                lastSeenReadyQ.emplace_back(it->second->VSlotId, it->second->LastSeenReady);
+                timingQ.emplace_back(*it->second);
                 NotReadyVSlotIds.erase(it->second->VSlotId);
             }
             ScrubState.UpdateVDiskState(&*it->second);
@@ -2063,8 +2101,8 @@ public:
             group->CalculateGroupStatus();
         }
         ScheduleVSlotReadyUpdate();
-        if (!lastSeenReadyQ.empty()) {
-            Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
+        if (!timingQ.empty()) {
+            Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
         }
     }
 
@@ -2077,12 +2115,28 @@ public:
     void VSlotNotReadyHistogramUpdate() {
         const TInstant now = TActivationContext::Now();
         auto& histo = TabletCounters->Percentile()[NBlobStorageController::COUNTER_NUM_NOT_READY_VDISKS];
+        auto& histoReplROT = TabletCounters->Percentile()[NBlobStorageController::COUNTER_NUM_REPLICATING_VDISKS_ROT];
+        auto& histoReplOther = TabletCounters->Percentile()[NBlobStorageController::COUNTER_NUM_REPLICATING_VDISKS_OTHER];
         histo.Clear();
+        histoReplROT.Clear();
+        histoReplOther.Clear();
         for (const TVSlotId vslotId : NotReadyVSlotIds) {
             if (const TVSlotInfo *slot = FindVSlot(vslotId)) {
                 Y_VERIFY(slot->LastSeenReady != TInstant::Zero());
                 const TDuration passed = now - slot->LastSeenReady;
                 histo.IncrementFor(passed.Seconds());
+
+                TDuration timeBeingReplicating = slot->ReplicationTime;
+                if (slot->Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                    timeBeingReplicating += now - slot->LastGotReplicating;
+                }
+
+                if (timeBeingReplicating != TDuration::Zero()) {
+                    auto& hist = slot->PDisk->Kind.Type() == NPDisk::DEVICE_TYPE_ROT
+                        ? histoReplROT
+                        : histoReplOther;
+                    hist.IncrementFor(timeBeingReplicating.Seconds());
+                }
             } else {
                 Y_VERIFY_DEBUG(false);
             }

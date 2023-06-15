@@ -1477,8 +1477,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env,
             THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false) {
-
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "")
+    {
         ui64 id = 100;
 
         TPortManager portManager;
@@ -1557,18 +1557,25 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port));
+        const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
+            ? expectedStatus
+            : Ydb::StatusIds::SUCCESS;
+        TestImport(runtime, schemeshardId, ++id, dbName, Sprintf(request.data(), port), userSID, initialStatus);
         env.TestWaitNotification(runtime, id, schemeshardId);
+
+        if (initialStatus != Ydb::StatusIds::SUCCESS) {
+            return;
+        }
 
         TestGetImport(runtime, schemeshardId, id, dbName, expectedStatus);
     }
 
     void Run(TTestBasicRuntime& runtime, THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false) {
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
 
         TTestEnv env(runtime, TTestEnvOptions());
-        Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless);
+        Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless, userSID);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
@@ -2321,6 +2328,42 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpApplyIndexBuild;
         });
+    }
+
+    Y_UNIT_TEST(ShouldCheckQuotas) {
+        const TString userSID = "user@builtin";
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().SystemBackupSIDs({userSID}));
+
+        TSchemeLimits lowLimits;
+        lowLimits.MaxImports = 0;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {{"a", 1}});
+
+        const TString request = R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )";
+
+        Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::PRECONDITION_FAILED);
+        Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
     }
 }
 

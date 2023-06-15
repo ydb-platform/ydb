@@ -160,7 +160,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             } else {
                 errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
             }
-            --WritesInFly; // write failed
+            --WritesInFlight; // write failed
+            WritesSizeInFlight -= ev->Get()->ResourceUsage.SourceMemorySize;
         }
 
         auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
@@ -171,7 +172,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         LOG_S_DEBUG("Write (record) " << data.size() << " bytes into pathId " << tableId
             << (writeId? (" writeId " + ToString(writeId)).c_str() : "") << " at tablet " << TabletID());
 
-        --WritesInFly; // write successed
+        --WritesInFlight; // write successed
+        WritesSizeInFlight -= ev->Get()->ResourceUsage.SourceMemorySize;
         Y_VERIFY(putStatus == NKikimrProto::OK);
         Execute(new TTxWrite(this, ev), ctx);
     } else if (isOutOfSpace || InsertTable->IsOverloaded(tableId) || ShardOverloaded()) {
@@ -190,6 +192,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
             LOG_S_INFO("Write (overload) " << data.size() << " bytes into pathId " << tableId
                 << (ShardOverloaded()? " [shard]" : "") << (tableOverload? " [table]" : "")
+                << " inflight " << WritesInFlight << " (" << WritesSizeInFlight << " bytes)"
                 << " at tablet " << TabletID());
         }
 
@@ -214,18 +217,22 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             }
         }
 
+        ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
+        ev->Get()->ResourceUsage.SourceMemorySize = data.size();
+
+        ++WritesInFlight; // write started
+        WritesSizeInFlight += ev->Get()->ResourceUsage.SourceMemorySize;
+
         LOG_S_DEBUG("Write (blob) " << data.size() << " bytes into pathId " << tableId
             << (writeId? (" writeId " + ToString(writeId)).c_str() : "")
+            << " inflight " << WritesInFlight << " (" << WritesSizeInFlight << " bytes)"
             << " at tablet " << TabletID());
 
-        ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
-
-        ++WritesInFly; // write started
         ctx.Register(CreateWriteActor(TabletID(), PrimaryIndex->GetIndexInfo(), ctx.SelfID,
             BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
     }
 
-    SetCounter(COUNTER_WRITES_IN_FLY, WritesInFly);
+    SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);
 }
 
 }

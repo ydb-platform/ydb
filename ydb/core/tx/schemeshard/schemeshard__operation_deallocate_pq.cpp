@@ -119,6 +119,7 @@ public:
         domainInfo->DecPQReservedStorage(reserve.Storage);
         domainInfo->AggrDiskSpaceUsage({}, pqGroup->Stats);
 
+        context.SS->ChangeDiskSpaceTopicsTotalBytes(domainInfo->GetPQAccountStorage());
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(reserve.Throughput);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(reserve.Storage);
 

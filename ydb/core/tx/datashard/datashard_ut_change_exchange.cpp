@@ -2,6 +2,7 @@
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -715,7 +716,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
                 .SetDomainName(root)
-                .SetGrpcPort(PortManager.GetPort(2135));
+                .SetGrpcPort(PortManager.GetPort(2135))
+                .SetEnableChangefeedDynamoDBStreamsFormat(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -828,6 +830,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return streamDesc;
     }
 
+    TCdcStream WithAwsRegion(const TString& awsRegion, TCdcStream streamDesc) {
+        streamDesc.AwsRegion = awsRegion;
+        return streamDesc;
+    }
+
     TString CalcPartitionKey(const TString& data) {
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(data, &json));
@@ -839,9 +846,51 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return MD5::Calc(root.at("key").GetStringRobust());
     }
 
+    static bool AreJsonsEqual(const TString& actual, const TString& expected) {
+        NJson::TJsonValue actualJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(actual, &actualJson));
+        NJson::TJsonValue expectedJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(expected, &expectedJson));
+
+        class TScanner: public NJson::IScanCallback {
+            NJson::TJsonValue& Actual;
+            bool Success = true;
+
+        public:
+            explicit TScanner(NJson::TJsonValue& actual)
+                : Actual(actual)
+            {}
+
+            bool Do(const TString& path, NJson::TJsonValue*, NJson::TJsonValue& expectedValue) override {
+                if (expectedValue.GetStringRobust() != "***") {
+                    return true;
+                }
+
+                NJson::TJsonValue actualValue;
+                if (!Actual.GetValueByPath(path, actualValue)) {
+                    Success = false;
+                    return false;
+                }
+
+                expectedValue = actualValue;
+                return true;
+            }
+
+            bool IsSuccess() const {
+                return Success;
+            }
+        };
+
+        TScanner scanner(actualJson);
+        expectedJson.Scan(scanner);
+
+        UNIT_ASSERT(scanner.IsSuccess());
+        return actualJson == expectedJson;
+    }
+
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool strict = true)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -875,11 +924,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        if (strict) {
-                            UNIT_ASSERT_VALUES_EQUAL(item.GetData(), record);
+                        UNIT_ASSERT(AreJsonsEqual(item.GetData(), record));
+                        if (checkKey) {
                             UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(record));
-                        } else {
-                            UNIT_ASSERT_STRING_CONTAINS(item.GetData(), record);
                         }
                     }
                 } else if (auto* create = std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
@@ -930,7 +977,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool strict = true)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
@@ -981,11 +1028,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 for (ui32 i = 0; i < records.size(); ++i) {
                     const auto& actual = res.GetResult().records().at(i);
                     const auto& expected = records.at(i);
-                    if (strict) {
-                        UNIT_ASSERT_VALUES_EQUAL(actual.data(), expected);
+                    UNIT_ASSERT(AreJsonsEqual(actual.data(), expected));
+                    if (checkKey) {
                         UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), CalcPartitionKey(expected));
-                    } else {
-                        UNIT_ASSERT_STRING_CONTAINS(actual.data(), expected);
                     }
                 }
             }
@@ -1014,7 +1059,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct TopicRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool strict = true)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1047,12 +1092,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        if (strict) {
-                            UNIT_ASSERT_VALUES_EQUAL(item.GetData(), record);
-                            // TODO: check here partition key
-                        } else {
-                            UNIT_ASSERT_STRING_CONTAINS(item.GetData(), record);
-                        }
+                        UNIT_ASSERT(AreJsonsEqual(item.GetData(), record));
+                        Y_UNUSED(checkKey);
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
                     pStream = create->GetPartitionSession();
@@ -1175,10 +1216,138 @@ Y_UNIT_TEST_SUITE(Cdc) {
             (2, 20),
             (3, 30);
         )"}, { 
-            R"({"update":{},"key":[1],"ts":[)",
-            R"({"update":{},"key":[2],"ts":[)",
-            R"({"update":{},"key":[3],"ts":[)",
-        }, false /* non-strict because of variadic timestamps */);
+            R"({"update":{},"key":[1],"ts":"***"})",
+            R"({"update":{},"key":[2],"ts":"***"})",
+            R"({"update":{},"key":[3],"ts":"***"})",
+        });
+    }
+
+    TShardedTableOptions DocApiTable() {
+        return TShardedTableOptions()
+            .Columns({
+                {"__Hash", "Uint64", true, false},
+                {"id_shard", "Utf8", true, false},
+                {"id_sort", "Utf8", true, false},
+                {"__RowData", "JsonDocument", false, false},
+                {"extra", "Bool", false, false},
+            })
+            .Attributes({
+                {"__document_api_version", "1"},
+            });
+    }
+
+    Y_UNIT_TEST_TRIPLET(DocApi, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )"}, { 
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000001"},
+                    {"StreamViewType", "KEYS_ONLY"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "MODIFY"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+            }), false),
+        }, false /* do not check key */);
+
+        TRunner::Read(DocApiTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData, extra) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}'), true
+            );
+        )", R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData, extra) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"yellow"},"weight":{"N":"5.4"}}}'), false
+            );
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE __Hash = 1;
+        )"}, { 
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"NewImage", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                        {"color", NJson::TJsonMap({{"S", "pink"}})},
+                        {"weight", NJson::TJsonMap({{"N", "4.5"}})},
+                        {"extra", NJson::TJsonMap({{"BOOL", true}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000001"},
+                    {"StreamViewType", "NEW_AND_OLD_IMAGES"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "INSERT"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+            }), false),
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"OldImage", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                        {"color", NJson::TJsonMap({{"S", "pink"}})},
+                        {"weight", NJson::TJsonMap({{"N", "4.5"}})},
+                        {"extra", NJson::TJsonMap({{"BOOL", true}})},
+                    })},
+                    {"NewImage", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                        {"color", NJson::TJsonMap({{"S", "yellow"}})},
+                        {"weight", NJson::TJsonMap({{"N", "5.4"}})},
+                        {"extra", NJson::TJsonMap({{"BOOL", false}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000002"},
+                    {"StreamViewType", "NEW_AND_OLD_IMAGES"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "MODIFY"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+            }), false),
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"OldImage", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                        {"color", NJson::TJsonMap({{"S", "yellow"}})},
+                        {"weight", NJson::TJsonMap({{"N", "5.4"}})},
+                        {"extra", NJson::TJsonMap({{"BOOL", false}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000003"},
+                    {"StreamViewType", "NEW_AND_OLD_IMAGES"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "REMOVE"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+            }), false),
+        }, false /* do not check key */);
     }
 
     Y_UNIT_TEST_TRIPLET(NaN, PqRunner, YdsRunner, TopicRunner) {
@@ -2195,6 +2364,52 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"erase":{},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
         });
+    }
+
+    Y_UNIT_TEST(AwsRegion) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetAwsRegion("defaultRegion")
+            .SetEnableChangefeedDynamoDBStreamsFormat(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", DocApiTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream1")));
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithAwsRegion("customRegion", KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream2"))));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )");
+
+        auto checkAwsRegion = [&](const TString& path, const char* awsRegion) {
+            while (true) {
+                const auto records = GetRecords(runtime, edgeActor, path, 0);
+                if (records.size() >= 1) {
+                    for (const auto& [_, record] : records) {
+                        UNIT_ASSERT_STRING_CONTAINS(record, Sprintf(R"("awsRegion":"%s")", awsRegion));
+                    }
+
+                    break;
+                }
+
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+        };
+
+        checkAwsRegion("/Root/Table/Stream1", "defaultRegion");
+        checkAwsRegion("/Root/Table/Stream2", "customRegion");
     }
 
 } // Cdc

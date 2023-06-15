@@ -1627,8 +1627,9 @@ void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& c
         RequestNotChecked = false;
         InitCheckSchema(ctx);
     }
+    const auto& pqConfig = AppData(ctx)->PQConfig;
     // ToDo[migration] - separate flag for having config tables
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+    if ((!pqConfig.GetTopicsAreFirstClassCitizen() || pqConfig.GetUseSrcIdMetaMappingInFirstClass())
                                 && !SourceIdUpdatesInflight
                                 && ctx.Now() - LastSourceIdUpdate > SOURCEID_UPDATE_PERIOD
     ) {

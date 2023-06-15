@@ -366,6 +366,23 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Base()->IsTable()) {
+        return *this;
+    }
+
+    if (!Path.IsAsyncReplicaTable()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is an async replica table"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsBlockStoreVolume(EStatus status) const {
     if (Failed) {
         return *this;
@@ -773,6 +790,38 @@ const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus stat
     return Fail(status, TStringBuilder() << "shards count limit exceeded (in dir)"
         << ", limit: " << domainInfo->GetSchemeLimits().MaxShardsInPath
         << ", shards: " << shardInPath
+        << ", delta: " << delta);
+}
+
+const TPath::TChecker& TPath::TChecker::ExportsLimit(ui64 delta, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+    if (Path.SS->Exports.size() + delta <= domainInfo->GetSchemeLimits().MaxExports) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "exports count limit exceeded"
+        << ", limit: " << domainInfo->GetSchemeLimits().MaxExports
+        << ", exports: " << Path.SS->Exports.size()
+        << ", delta: " << delta);
+}
+
+const TPath::TChecker& TPath::TChecker::ImportsLimit(ui64 delta, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+    if (Path.SS->Imports.size() + delta <= domainInfo->GetSchemeLimits().MaxImports) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "imports count limit exceeded"
+        << ", limit: " << domainInfo->GetSchemeLimits().MaxImports
+        << ", exports: " << Path.SS->Imports.size()
         << ", delta: " << delta);
 }
 
@@ -1388,6 +1437,18 @@ bool TPath::IsBackupTable() const {
     TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
 
     return tableInfo->IsBackup;
+}
+
+bool TPath::IsAsyncReplicaTable() const {
+    Y_VERIFY(IsResolved());
+
+    if (!Base()->IsTable() || !SS->Tables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    TTableInfo::TCPtr tableInfo = SS->Tables.at(Base()->PathId);
+
+    return tableInfo->IsAsyncReplica();
 }
 
 bool TPath::IsCdcStream() const {

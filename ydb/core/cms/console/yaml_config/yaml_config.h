@@ -164,12 +164,89 @@ void ValidateVolatileConfig(NFyaml::TDocument& doc);
 
 /**
  * Appends volatile configs to the end of selectors list
+ * **Important**: Document should be a list with selectors
  */
 void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TDocument& volatileConfig);
+
+/**
+ * Appends volatile configs to the end of selectors list
+ * **Important**: Node should be a list with selectors
+ */
+void AppendVolatileConfigs(NFyaml::TDocument& config, NFyaml::TNodeRef& volatileConfig);
 
 /**
  * Parses config version
  */
 ui64 GetVersion(const TString& config);
+
+/**
+ * Resolves config for given labels and stores result to appConfig
+ * Stores intermediate resolve data in resolvedYamlConfig and resolvedJsonConfig if given
+ */
+void ResolveAndParseYamlConfig(
+    const TString& yamlConfig,
+    const TMap<ui64, TString>& volatileYamlConfigs,
+    const TMap<TString, TString>& labels,
+    NKikimrConfig::TAppConfig& appConfig,
+    TString* resolvedYamlConfig = nullptr,
+    TString* resolvedJsonConfig = nullptr);
+
+/**
+ * Replaces kinds not managed by yaml config (e.g. NetClassifierConfig) from config 'from' in config 'to'
+ * if corresponding configs are presenet in 'from'
+ */
+void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to);
+
+/**
+ * Represents config metadata
+ */
+struct TMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+};
+
+/**
+ * Parses config metadata
+ */
+TMetadata GetMetadata(const TString& config);
+
+/**
+ * Represents volatile config metadata
+ */
+struct TVolatileMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+    std::optional<ui64> Id;
+};
+
+/**
+ * Parses volatile config metadata
+ */
+TVolatileMetadata GetVolatileMetadata(const TString& config);
+
+/**
+ * Replaces metadata in config
+ */
+TString ReplaceMetadata(const TString& config, const TMetadata& metadata);
+
+/**
+ * Replaces volatile metadata in config
+ */
+TString ReplaceMetadata(const TString& config, const TVolatileMetadata& metadata);
+
+/**
+ * Checks whether string is volatile config or not
+ */
+bool IsVolatileConfig(const TString& config);
+
+/**
+ * Checks whether string is main config or not
+ */
+bool IsMainConfig(const TString& config);
+
+/**
+ * Strips metadata from config
+ */
+TString StripMetadata(const TString& config);
 
 } // namespace NYamlConfig

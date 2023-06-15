@@ -235,6 +235,7 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         auto settings = InitLogSettingsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         ConfigureAndWaitUpdate(runtime,
@@ -246,6 +247,7 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         auto settings = InitLogSettingsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         AddEntry(ITEM_DOMAIN_LOG_1, "CMS_CLUSTER", 5, Max<ui32>(), Max<ui32>());
@@ -263,6 +265,7 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         auto settings = InitLogSettingsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         AddEntry(ITEM_TENANT1_LOG_1, "CMS_CLUSTER", 5, Max<ui32>(), Max<ui32>());
@@ -291,6 +294,7 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         auto settings = InitLogSettingsConfigurator(runtime);
+        WaitForUpdate(runtime); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         SetDefaults(ITEM_TENANT1_LOG_1, PRI_ALERT, PRI_ALERT, 10);

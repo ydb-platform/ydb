@@ -121,9 +121,25 @@ struct Schema : NIceDb::Schema {
         struct GroupPrevGeneration : Column<10, Group::Generation::ColumnType> { static constexpr ui32 Default = 0; };
         struct Mood : Column<11, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
         struct LastSeenReady : Column<12, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
+        struct LastGotReplicating : Column<13, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
+        struct ReplicationTime : Column<14, NScheme::NTypeIds::Uint64> { using Type = TDuration; static constexpr Type Default = TDuration::Zero(); };
 
         using TKey = TableKey<NodeID, PDiskID, VSlotID>; // order is important
-        using TColumns = TableColumns<NodeID, PDiskID, VSlotID, Category, GroupID, GroupGeneration, RingIdx, FailDomainIdx, VDiskIdx, GroupPrevGeneration, Mood, LastSeenReady>;
+        using TColumns = TableColumns<
+            NodeID,
+            PDiskID,
+            VSlotID,
+            Category,
+            GroupID,
+            GroupGeneration,
+            RingIdx,
+            FailDomainIdx,
+            VDiskIdx,
+            GroupPrevGeneration,
+            Mood,
+            LastSeenReady,
+            LastGotReplicating,
+            ReplicationTime>;
     };
 
     struct VDiskMetrics : Table<6> {

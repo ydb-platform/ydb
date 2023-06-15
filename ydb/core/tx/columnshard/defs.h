@@ -78,10 +78,12 @@ struct TCompactionLimits {
 struct TUsage {
     ui64 CPUExecTime{};
     ui64 Network{};
+    ui64 SourceMemorySize{};
 
     void Add(const TUsage& other) {
         CPUExecTime += other.CPUExecTime;
         Network += other.Network;
+        SourceMemorySize += other.SourceMemorySize;
     }
 };
 

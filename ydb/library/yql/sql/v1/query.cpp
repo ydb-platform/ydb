@@ -133,6 +133,9 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
     }
+    if (desc.Settings.AwsRegion) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("aws_region"), desc.Settings.AwsRegion)));
+    }
     if (const auto& sink = desc.Settings.SinkSettings) {
         switch (sink->index()) {
             case 0: // local

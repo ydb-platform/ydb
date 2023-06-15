@@ -1,0 +1,221 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.DynamicConfig;
+option java_package = "com.yandex.ydb.dynamic_console";
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+message ConfigIdentity {
+    // Current main config version
+    uint64 version = 1;
+    // Cluster name (should be set on node with console tablet, unknown by default)
+    string cluster = 2;
+}
+
+message SetConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Config in YAML format. metadata will be ignored
+    string config = 2;
+    bool dry_run = 3;
+}
+
+message SetConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReplaceConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Config in YAML format
+    string config = 2;
+    bool dry_run = 3;
+}
+
+message ReplaceConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DropConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    ConfigIdentity identity = 2;
+}
+
+message DropConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AddVolatileConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Config id must strictly be set to the current max config id increment by one.
+    string config = 2;
+}
+
+message AddVolatileConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message VolatileConfig {
+    // Config id
+    uint64 id = 1;
+    // Volatile config YAML document
+    string config = 2;
+}
+
+message GetConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetConfigResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetConfigResult {
+    // Main dynamic config with metadata in YAML format
+    string config = 1;
+    // All volatile configs
+    repeated VolatileConfig volatile_configs = 2;
+
+    ConfigIdentity identity = 3;
+}
+
+message VolatileConfigMetadata {
+    // Config id
+    uint64 id = 1;
+    // Volatile config YAML document
+    string metadata = 2;
+}
+
+message GetMetadataRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetMetadataResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetMetadataResult {
+    // Main dynamic config metadata in YAML format
+    string metadata = 1;
+    // All volatile configs
+    repeated VolatileConfigMetadata volatile_configs = 2;
+}
+
+message RemoveVolatileConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    message IdsToDelete {
+        repeated uint64 ids = 1;
+    }
+
+    oneof consistency_check {
+        ConfigIdentity identity = 2;
+        // Ignore version and cluster checks
+        bool force = 3;
+    }
+
+    // Ids to delete
+    oneof selector {
+        // Explicit list of ids
+        IdsToDelete ids = 4;
+        // Delete all
+        bool all = 5;
+    }
+}
+
+message RemoveVolatileConfigResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetNodeLabelsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    uint32 node_id = 2;
+}
+
+message YamlLabel {
+    // Name of the label
+    string label = 1;
+    // Value of the label
+    string value = 2;
+}
+
+message GetNodeLabelsResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetNodeLabelsResult {
+    // Labels of a node
+    repeated YamlLabel labels = 1;
+}
+
+message ResolveConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Config to resolve
+    string config = 2;
+    // Additional configs which will be apended to selectors
+    repeated VolatileConfig volatile_configs = 3;
+    repeated YamlLabel labels = 4;
+}
+
+message ResolveConfigResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ResolveConfigResult {
+    // YAML document with resolved config
+    string config = 1;
+}
+
+message ResolveAllConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Config to resolve
+    string config = 2;
+    // Additional configs which will be apended to selectors
+    repeated VolatileConfig volatile_configs = 3;
+    // Either send YAML stream in config field or separate configs in configs field
+    bool verbose_response = 4;
+}
+
+message YamlLabelExt {
+    enum LabelType {
+        UNSPECIFIED = 0;
+        COMMON = 1;
+        NOT_SET = 2;
+        EMPTY = 3;
+    }
+    // Name of the label
+    string label = 1;
+    // Type of label value
+    LabelType type = 2;
+    // Value of the label
+    optional string value = 3;
+}
+
+message LabelSet {
+    // labels for which the config are applicable
+    repeated YamlLabelExt labels = 1;
+}
+
+message ResolvedConfig {
+    // label sets for which the config are applicable
+    repeated LabelSet label_sets = 1;
+    // resolved YAML config
+    string config = 2;
+}
+
+message ResolveAllConfigResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ResolveAllConfigResult {
+    // YAML stream with resolved configs
+    // Label combinations shown in comments
+    string config = 1;
+    // Verbose resolved configs
+    repeated ResolvedConfig configs = 2;
+}

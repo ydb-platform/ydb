@@ -446,6 +446,9 @@ public:
             schema.ClearTTLSettings();
         }
 
+        // replication config is not copied
+        schema.ClearReplicationConfig();
+
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {

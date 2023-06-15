@@ -1,7 +1,8 @@
 #pragma once
 
-#include "config_index.h"
 #include "configs_config.h"
+
+#include <ydb/core/cms/console/util/config_index.h>
 
 namespace NKikimr::NConsole {
 

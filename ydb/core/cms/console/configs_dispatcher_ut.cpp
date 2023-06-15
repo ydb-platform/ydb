@@ -55,6 +55,9 @@ TTenantTestConfig DefaultConsoleTestConfig()
 
 NKikimrConsole::TConfigItem ITEM_DOMAIN_LOG_1;
 NKikimrConsole::TConfigItem ITEM_DOMAIN_LOG_2;
+NKikimrConsole::TConfigItem ITEM_NET_CLASSIFIER_1;
+NKikimrConsole::TConfigItem ITEM_NET_CLASSIFIER_2;
+NKikimrConsole::TConfigItem ITEM_NET_CLASSIFIER_3;
 
 TActorId InitConfigsDispatcher(TTenantTestRuntime &runtime)
 {
@@ -65,6 +68,19 @@ TActorId InitConfigsDispatcher(TTenantTestRuntime &runtime)
     ITEM_DOMAIN_LOG_2
         = MakeConfigItem(NKikimrConsole::TConfigItem::LogConfigItem,
                          NKikimrConfig::TAppConfig(), {}, {}, "", "", 2,
+                         NKikimrConsole::TConfigItem::MERGE, "");
+
+    ITEM_NET_CLASSIFIER_1
+        = MakeConfigItem(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
+                         NKikimrConfig::TAppConfig(), {}, {}, "", "", 3,
+                         NKikimrConsole::TConfigItem::MERGE, "");
+    ITEM_NET_CLASSIFIER_2
+        = MakeConfigItem(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
+                         NKikimrConfig::TAppConfig(), {}, {}, "", "", 4,
+                         NKikimrConsole::TConfigItem::MERGE, "");
+    ITEM_NET_CLASSIFIER_3
+        = MakeConfigItem(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
+                         NKikimrConfig::TAppConfig(), {}, {}, "", "", 5,
                          NKikimrConsole::TConfigItem::MERGE, "");
 
     return MakeConfigsDispatcherID(runtime.GetNodeId(0));
@@ -131,6 +147,7 @@ struct TEvPrivate {
 
     struct TEvGotNotification : public TEventLocal<TEvGotNotification, EvGotNotification> {
         TConfigId ConfigId;
+        NKikimrConfig::TAppConfig Config;
     };
 
     struct TEvComplete : public TEventLocal<TEvComplete, EvComplete> {};
@@ -187,6 +204,7 @@ public:
         if (Sink) {
             auto *event = new TEvPrivate::TEvGotNotification;
             event->ConfigId.Load(rec.GetConfigId());
+            event->Config = rec.GetConfig();
             ctx.Send(Sink, event);
         }
 
@@ -242,15 +260,6 @@ TActorId AddSubscriber(TTenantTestRuntime &runtime, TVector<ui32> kinds, bool ho
     return aid;
 }
 
-NKikimrConfig::TAppConfig GetConfig(TTenantTestRuntime &runtime, TVector<ui32> kinds, bool cache = true)
-{
-    TAutoPtr<IEventHandle> handle;
-    runtime.Send(new IEventHandle(MakeConfigsDispatcherID(runtime.GetNodeId(0)),
-                                  runtime.Sender,
-                                  new TEvConfigsDispatcher::TEvGetConfigRequest(kinds, cache)));
-    return *runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetConfigResponse>(handle)->Config;
-}
-
 void HoldSubscriber(TTenantTestRuntime &runtime, TActorId aid)
 {
     TAutoPtr<IEventHandle> handle;
@@ -271,21 +280,6 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
-    Y_UNIT_TEST(TestSelfSubscription) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        auto serviceId = InitConfigsDispatcher(runtime);
-
-        ui64 id;
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(CatchReplaceConfigResult(id), 1);
-        runtime.DispatchEvents(options);
-
-        CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, serviceId,
-                                     id, runtime.GetNodeId(0), FQDNHostName(), TENANT1_1_NAME, "type1",
-                                     0, serviceId,
-                                     TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ConfigsDispatcherConfigItem}));
-    }
-
     Y_UNIT_TEST(TestSubscriptionNotification) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TAutoPtr<IEventHandle> handle;
@@ -300,11 +294,11 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_1));
 
-        // Expect two responses from subscribers and one from dispatcher.
+        // Expect two responses from subscribers and zero from dispatcher
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 3);
+        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 2);
         runtime.DispatchEvents(options);
-   }
+    }
 
     Y_UNIT_TEST(TestSubscriptionNotificationForNewSubscriberAfterUpdate) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
@@ -323,9 +317,9 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         UnholdSubscriber(runtime, s1);
 
-        // Expect response from subscriber and from dispatcher.
+        // Expect response from subscriber
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 2);
+        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options);
 
         // New subscriber should get notification.
@@ -359,9 +353,9 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
 
         UnholdSubscriber(runtime, s1);
 
-        // Expect response from unhold subscriber and from dispatcher.
+        // Expect response from unhold subscriber
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 2);
+        options.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options);
     }
 
@@ -377,7 +371,6 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         SetSubscriptions(runtime, s1, {});
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvConsole::EvRemoveConfigSubscriptionResponse, 1);
         runtime.DispatchEvents(options);
 
         runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
@@ -401,71 +394,11 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         options1.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options1);
 
-        // Subscriber removal should cause config notification response.
+        // We don't track acks from config dispatcher with InMemory subscriptions
         SetSubscriptions(runtime, s1, {});
 
         TDispatchOptions options2;
-        options2.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options2);
-    }
-
-    Y_UNIT_TEST(TestGetCachedConfig) {
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        TAutoPtr<IEventHandle> handle;
-        InitConfigsDispatcher(runtime);
-
-        ui64 nodeConfigRequests = 0;
-        auto observer = [&nodeConfigRequests](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
-            switch (ev->GetTypeRewrite()) {
-            case TEvConsole::EvGetNodeConfigRequest:
-                ++nodeConfigRequests;
-                break;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-
-        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster1");
-        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster2");
-
-        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
-                       MakeAddAction(ITEM_DOMAIN_LOG_1));
-
-        NKikimrConfig::TAppConfig config;
-        config.MutableLogConfig()->SetClusterName("cluster1");
-
-        runtime.SetObserverFunc(observer);
-
-        // Config should be requested from CMS.
-        auto config1 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, false);
-        CheckEqualsIgnoringVersion(config, config1);
-        UNIT_ASSERT(nodeConfigRequests > 0);
-
-        // We didn't ask to cache, so config should still be requested from CMS.
-        // This time ask to cache config.
-        nodeConfigRequests = 0;
-        auto config2 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, true);
-        CheckEqualsIgnoringVersion(config, config2);
-        UNIT_ASSERT(nodeConfigRequests > 0);
-
-        // Make sure subscription is online by using it with another subscriber.
-        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
-        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
-
-        // This time we should get config with no requests to CMS.
-        nodeConfigRequests = 0;
-        auto config3 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, true);
-        CheckEqualsIgnoringVersion(config, config3);
-        UNIT_ASSERT_VALUES_EQUAL(nodeConfigRequests, 0);
-
-        // Change config and expect dispatcher to process notification.
-        SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_2));
-        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
-
-        // Now we should get new config with no requests to CMS.
-        config.MutableLogConfig()->SetClusterName("cluster2");
-        auto config4 = GetConfig(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem}, true);
-        CheckEqualsIgnoringVersion(config, config4);
-        UNIT_ASSERT_VALUES_EQUAL(nodeConfigRequests, 0);
     }
 
     Y_UNIT_TEST(TestEmptyChangeCausesNoNotification) {
@@ -504,9 +437,452 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
         SendConfigure(runtime, MakeAddAction(ITEM_DOMAIN_LOG_2));
         notifications = 0;
         TDispatchOptions options1;
-        options1.FinalEvents.emplace_back(TEvConsole::EvConfigNotificationResponse, 1);
         runtime.DispatchEvents(options1);
         UNIT_ASSERT_VALUES_EQUAL(notifications, 0);
+    }
+
+    Y_UNIT_TEST(TestYamlAndNonYamlCoexist) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TTestActorRuntimeBase&,
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                switch (ev->GetTypeRewrite()) {
+                case TEvPrivate::EvGotNotification:
+                    ++notifications;
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster1");
+        ITEM_NET_CLASSIFIER_1.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(1);
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1),
+                       MakeAddAction(ITEM_NET_CLASSIFIER_1));
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem});
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        NKikimrConfig::TAppConfig expectedConfig;
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        auto *ncdConfig = expectedConfig.MutableNetClassifierDistributableConfig();
+        ncdConfig->SetLastUpdateTimestamp(1);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster2
+  net_classifier_distributable_config:
+    last_update_timestamp: 3
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+
+        UNIT_ASSERT(notifications == 0);
+
+        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster3");
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_2));
+
+        UNIT_ASSERT(notifications == 0);
+
+        ITEM_NET_CLASSIFIER_2.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(3);
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_NET_CLASSIFIER_2));
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        ncdConfig->SetLastUpdateTimestamp(3);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig2 = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config: {yaml_config_enabled: false}
+allowed_labels: {}
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
+
+        UNIT_ASSERT(notifications == 0);
+
+        ITEM_NET_CLASSIFIER_3.MutableConfig()->MutableNetClassifierDistributableConfig()->SetLastUpdateTimestamp(5);
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_NET_CLASSIFIER_3));
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        ncdConfig->SetLastUpdateTimestamp(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(TestYamlEndToEnd) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        ui64 notifications = 0;
+        TActorId subscriber;
+        auto observer = [&notifications, &subscriber, recipient = runtime.Sender](
+            TTestActorRuntimeBase&,
+            TAutoPtr<IEventHandle> &ev) -> TTenantTestRuntime::EEventAction {
+            if (ev->Recipient == recipient && ev->Sender == subscriber) {
+                switch (ev->GetTypeRewrite()) {
+                case TEvPrivate::EvGotNotification:
+                    ++notifications;
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetClusterName("cluster1");
+        ITEM_DOMAIN_LOG_1.MutableConfig()->MutableLogConfig()->SetDefaultLevel(5);
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_1));
+
+        subscriber = AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::LogConfigItem});
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        NKikimrConfig::TAppConfig expectedConfig;
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        auto *logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster1");
+        logConfig->SetDefaultLevel(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+
+config:
+  log_config:
+    cluster_name: cluster1
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+        UNIT_ASSERT(notifications == 0);
+
+        TString yamlConfig2 = R"(
+---
+metadata:
+  cluster: ""
+  version: 1
+
+config:
+  log_config:
+    cluster_name: cluster1
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig2);
+
+        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetClusterName("cluster2");
+        ITEM_DOMAIN_LOG_2.MutableConfig()->MutableLogConfig()->SetDefaultLevel(5);
+
+        CheckConfigure(runtime, Ydb::StatusIds::SUCCESS,
+                       MakeAddAction(ITEM_DOMAIN_LOG_2));
+
+        TString yamlConfig3 = R"(
+---
+metadata:
+  cluster: ""
+  version: 2
+
+config:
+  log_config:
+    cluster_name: cluster3
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig3);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig4 = R"(
+---
+metadata:
+  cluster: ""
+  version: 3
+
+config:
+  log_config:
+    cluster_name: cluster3
+  cms_config:
+    sentinel_config:
+      enable: true
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig4);
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig4);
+        UNIT_ASSERT(notifications == 0);
+
+        TString yamlConfig5 = R"(
+---
+metadata:
+  cluster: ""
+  version: 4
+
+config:
+  log_config:
+    cluster_name: cluster3
+  cms_config:
+    sentinel_config:
+      enable: true
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config:
+- description: Test
+  selector:
+    test: true
+  config:
+    log_config: !inherit
+      entry:
+      - component: AUDIT_LOG_WRITER
+        level: 7
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig5);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
+        auto *entry = logConfig->AddEntry();
+        entry->SetComponent("AUDIT_LOG_WRITER");
+        entry->SetLevel(7);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig6 = R"(
+---
+metadata:
+  cluster: ""
+  version: 5
+
+config:
+  log_config:
+    cluster_name: cluster3
+  cms_config:
+    sentinel_config:
+      enable: true
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config:
+- description: Test
+  selector:
+    test: true
+  config:
+    log_config: !inherit
+      entry:
+      - component: AUDIT_LOG_WRITER
+        level: 6
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig6);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
+        entry = logConfig->AddEntry();
+        entry->SetComponent("AUDIT_LOG_WRITER");
+        entry->SetLevel(6);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig7 = R"(
+---
+metadata:
+  cluster: ""
+  version: 6
+config:
+  log_config:
+    cluster_name: cluster3
+  cms_config:
+    sentinel_config:
+      enable: true
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config:
+- description: Test
+  selector:
+    test:
+      not_in:
+      - true
+  config:
+    log_config: !inherit
+      entry:
+      - component: AUDIT_LOG_WRITER
+        level: 7
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig7);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster3");
+        logConfig->SetDefaultLevel(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+        notifications = 0;
+
+        TString yamlConfig8 = R"(
+---
+metadata:
+  cluster: ""
+  version: 7
+
+config:
+  log_config:
+    cluster_name: cluster3
+  yaml_config_enabled: true
+
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+
+selector_config:
+- description: Test
+  selector:
+    test: true
+  config:
+    yaml_config_enabled: false
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig8);
+
+        reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        expectedConfig = {};
+        label = expectedConfig.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+        logConfig = expectedConfig.MutableLogConfig();
+        logConfig->SetClusterName("cluster2");
+        logConfig->SetDefaultLevel(5);
+        UNIT_ASSERT(notifications > 0);
+        UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
     }
 }
 

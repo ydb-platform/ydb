@@ -13,12 +13,15 @@ add_library(cms-console-yaml_config)
 target_link_libraries(cms-console-yaml_config PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-yaml-fyamlcpp
   OpenSSL::OpenSSL
-  ydb-core-protos
   cpp-actors-core
   cpp-protobuf-json
+  cpp-yaml-fyamlcpp
+  cms-console-util
+  ydb-core-protos
+  ydb-library-yaml_config
 )
 target_sources(cms-console-yaml_config PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/console_dumper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config.cpp
 )

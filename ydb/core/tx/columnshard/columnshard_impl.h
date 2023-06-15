@@ -48,16 +48,15 @@ struct TSettings {
     TControlWrapper CacheDataAfterIndexing;
     TControlWrapper CacheDataAfterCompaction;
     TControlWrapper MaxSmallBlobSize;
-    TControlWrapper OverloadTxInFly;
-    TControlWrapper OverloadWritesInFly;
+    static constexpr ui64 OverloadTxInFlight = 1000;
+    static constexpr ui64 OverloadWritesInFlight = 1000;
+    static constexpr ui64 OverloadWritesSizeInFlight = 128 * 1024 * 1024;
 
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
         , CacheDataAfterCompaction(1, 0, 1)
         , MaxSmallBlobSize(0, 0, 8000000)
-        , OverloadTxInFly(1000, 0, 10000)
-        , OverloadWritesInFly(1000, 0, 10000)
     {}
 
     void RegisterControls(TControlBoard& icb) {
@@ -65,9 +64,42 @@ struct TSettings {
         icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing");
         icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
         icb.RegisterSharedControl(MaxSmallBlobSize, "ColumnShardControls.MaxSmallBlobSize");
-        icb.RegisterSharedControl(OverloadTxInFly, "ColumnShardControls.OverloadTxInFly");
-        icb.RegisterSharedControl(OverloadWritesInFly, "ColumnShardControls.OverloadWritesInFly");
     }
+};
+
+class TBackgroundActivity {
+public:
+    enum EBackActivity : ui32 {
+        NONE = 0x00,
+        INDEX = 0x01,
+        COMPACT = 0x02,
+        CLEAN  = 0x04,
+        TTL = 0x08,
+        ALL = 0xffff
+    };
+
+    static TBackgroundActivity Indexation() { return TBackgroundActivity(INDEX); }
+    static TBackgroundActivity Compaction() { return TBackgroundActivity(COMPACT); }
+    static TBackgroundActivity Cleanup() { return TBackgroundActivity(CLEAN); }
+    static TBackgroundActivity Ttl() { return TBackgroundActivity(TTL); }
+    static TBackgroundActivity All() { return TBackgroundActivity(ALL); }
+    static TBackgroundActivity None() { return TBackgroundActivity(NONE); }
+
+    TBackgroundActivity() = default;
+
+    bool HasIndexation() const { return Activity & INDEX; }
+    bool HasCompaction() const { return Activity & COMPACT; }
+    bool HasCleanup() const { return Activity & CLEAN; }
+    bool HasTtl() const { return Activity & TTL; }
+    bool HasAll() const { return Activity == ALL; }
+    bool IndexationOnly() const { return Activity == INDEX; }
+
+private:
+    EBackActivity Activity = NONE;
+
+    TBackgroundActivity(EBackActivity activity)
+        : Activity(activity)
+    {}
 };
 
 using ITransaction = NTabletFlatExecutor::ITransaction;
@@ -336,7 +368,8 @@ private:
     ui64 LastPlannedTxId = 0;
     ui64 LastCompactedGranule = 0;
     ui64 LastExportNo = 0;
-    ui64 WritesInFly = 0;
+    ui64 WritesInFlight = 0;
+    ui64 WritesSizeInFlight = 0;
     ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
     ui64 BackgroundActivation = 0;
@@ -352,7 +385,7 @@ private:
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TDuration StatsReportInterval = TDuration::Seconds(10);
     TInstant LastAccessTime;
-    TInstant LastBackActivation;
+    TInstant LastPeriodicBackActivation;
     TInstant LastStatsReport;
 
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
@@ -407,10 +440,12 @@ private:
     bool HaveOutdatedTxs() const;
 
     bool ShardOverloaded() const {
-        ui64 txLimit = Settings.OverloadTxInFly;
-        ui64 writesLimit = Settings.OverloadWritesInFly;
+        ui64 txLimit = Settings.OverloadTxInFlight;
+        ui64 writesLimit = Settings.OverloadWritesInFlight;
+        ui64 writesSizeLimit = Settings.OverloadWritesSizeInFlight;
         return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
-           (writesLimit && WritesInFly > writesLimit);
+           (writesLimit && WritesInFlight > writesLimit) ||
+           (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
     }
 
     bool InsertTableOverloaded() const {
@@ -430,7 +465,7 @@ private:
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 
     void EnqueueProgressTx(const TActorContext& ctx);
-    void EnqueueBackgroundActivities(bool periodic = false, bool insertOnly = false);
+    void EnqueueBackgroundActivities(bool periodic = false, TBackgroundActivity activity = TBackgroundActivity::All());
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);
@@ -474,6 +509,7 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
     void SendPeriodicStats();
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_ACTOR;

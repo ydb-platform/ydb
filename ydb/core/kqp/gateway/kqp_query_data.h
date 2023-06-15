@@ -160,7 +160,7 @@ private:
 
     TParamMap Params;
     TUnboxedParamsMap UnboxedData;
-    TVector<TVector<TKqpExecuterTxResult>> TxResults;
+    THashMap<ui32, TVector<TKqpExecuterTxResult>> TxResults;
     TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
 
@@ -183,11 +183,11 @@ public:
     bool AddTypedValueParam(const TString& name, const Ydb::TypedValue& p);
 
     bool MaterializeParamValue(bool ensure, const NKqpProto::TKqpPhyParamBinding& paramBinding);
-    void AddTxResults(TVector<NKikimr::NKqp::TKqpExecuterTxResult>&& results);
+    void AddTxResults(ui32 txIndex, TVector<NKikimr::NKqp::TKqpExecuterTxResult>&& results);
     void AddTxHolders(TVector<TKqpPhyTxHolder::TConstPtr>&& holders);
 
     bool HasResult(ui32 txIndex, ui32 resultIndex) {
-        if (txIndex >= TxResults.size())
+        if (!TxResults.contains(txIndex))
             return false;
 
         return resultIndex < TxResults[txIndex].size();

@@ -366,13 +366,16 @@ private:
         bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
         bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
 
+        bool defaultSyntaxVersion = Config.GetSqlVersion();
+
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
-        if (Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
+        if (Config.GetSqlVersion() != defaultSyntaxVersion ||
+            Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
             Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
             Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||

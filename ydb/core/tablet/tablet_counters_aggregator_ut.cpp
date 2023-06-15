@@ -918,6 +918,12 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
             UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().GetLabeledCounter(0).value(), 63);
             UNIT_ASSERT_VALUES_EQUAL(pqCounters->GetAggregatedPerTablets().GetLabeledCounter(1).value(), 11);
 
+            auto additional = pqCounters->MutableAggregatedPerTablets()->AddLabeledCounter();
+            additional->SetNameId(1000);
+            additional->SetValue(13);
+            additional->SetType(TLabeledCounterOptions::CT_SIMPLE);
+            additional->SetAggregateFunc(TLabeledCounterOptions::EAF_SUM);
+
             PQCounters.FromProto(counters);
         }
     }

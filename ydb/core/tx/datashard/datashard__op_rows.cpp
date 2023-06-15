@@ -80,6 +80,10 @@ static void WrongShardState(NKikimrTxDataShard::TEvUploadRowsResponse& response)
     response.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
 }
 
+static void ReadOnly(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
+    response.SetStatus(NKikimrTxDataShard::TError::READONLY);
+}
+
 static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     // NOTE: this function is never called, because erase is allowed when out of space
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
@@ -87,6 +91,28 @@ static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
 
 static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+}
+
+static void ExecError(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
+    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::EXEC_ERROR);
+}
+
+template <typename TEvResponse>
+using TSetStatusFunc = void(*)(typename TEvResponse::ProtoRecordType&);
+
+template <typename TEvResponse, typename TEvRequest>
+static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc, const TString& reason,
+        TSetStatusFunc<TEvResponse> setStatusFunc, const TActorContext& ctx)
+{
+    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
+        << ": tablet# " << self->TabletID()
+        << ", error# " << reason);
+
+    auto response = MakeHolder<TEvResponse>();
+    setStatusFunc(response->Record);
+    response->Record.SetTabletID(self->TabletID());
+    response->Record.SetErrorDescription(reason);
+    ctx.Send(ev->Sender, std::move(response));
 }
 
 template <typename TEvResponse, typename TEvRequest>
@@ -114,19 +140,11 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
         return false;
     }
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
-        << ": tablet# " << self->TabletID()
-        << ", error# " << rejectReason);
-
-    auto response = MakeHolder<TEvResponse>();
-    response->Record.SetTabletID(self->TabletID());
     if (outOfSpace) {
-        OutOfSpace(response->Record);
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &OutOfSpace, ctx);
     } else {
-        WrongShardState(response->Record);
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &WrongShardState, ctx);
     }
-    response->Record.SetErrorDescription(rejectReason);
-    ctx.Send(ev->Sender, std::move(response));
 
     return true;
 }
@@ -136,6 +154,10 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
         return;
+    }
+    if (IsReplicated()) {
+        return Reject<TEvDataShard::TEvUploadRowsResponse>(this, ev, "bulk upsert",
+            "Can't execute bulk upsert at replicated table", &ReadOnly, ctx);
     }
     if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
@@ -149,6 +171,10 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
         MediatorStateWaitingMsgs.emplace_back(ev.Release());
         UpdateProposeQueueSize();
         return;
+    }
+    if (IsReplicated()) {
+        return Reject<TEvDataShard::TEvEraseRowsResponse>(this, ev, "erase",
+            "Can't execute erase at replicated table", &ExecError, ctx);
     }
     if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);

@@ -742,36 +742,62 @@ config:
 allowed_labels:
   tenant:
     type: string
-selector_config: [
-  {
-    description: test 4,
-    selector: {
-      tenant: /dev_global
-    },
-    config: {
-      actor_system_config: {},
-      cms_config: {
-        sentinel_config: {
-          enable: false
-        }
-      }
-    }
-  },
-  {
-    description: test 5,
-    selector: {
-      canary: true
-    },
-    config: {
-      actor_system_config: {},
-      cms_config: {
-        sentinel_config: {
-          enable: true
-        }
-      }
-    }
-  }
-  ]
+selector_config:
+- description: test 4
+  selector:
+    tenant: /dev_global
+  config:
+    actor_system_config: {}
+    cms_config:
+      sentinel_config:
+        enable: false
+- description: test 5
+  selector:
+    canary: true
+  config:
+    actor_system_config: {}
+    cms_config:
+      sentinel_config:
+        enable: true
+)";
+
+const char *UnresolvedSimpleConfigAppend = R"(---
+cluster: test
+version: 12.1
+config:
+  num:
+  - 0
+allowed_labels:
+  tenant:
+    type: string
+
+selector_config:
+- description: 1
+  selector:
+    tenant: abc
+  config: !inherit
+    num: !append
+    - 0
+- description: 2
+  selector:
+    tenant: ""
+  config: !inherit
+    num: !append
+    - 1
+)";
+
+const char *ResolvedSimpleConfigAppendAbc = R"(---
+config:
+  num:
+  - 0
+  - 0
+)";
+
+const char *ResolvedSimpleConfigAppendEmpty = R"(---
+config:
+  num:
+  - 0
+  - 1
 )";
 
 using EType = NYamlConfig::TLabel::EType;
@@ -1364,6 +1390,31 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
             UNIT_ASSERT_UNEQUAL(secondIt, resolved.Configs.end());
             UNIT_ASSERT(secondIt->second.second.DeepEqual(abc.Root().Map()["config"]));
         }
+
+        {
+            auto doc = NFyaml::TDocument::Parse(UnresolvedSimpleConfigAppend);
+            auto resolved = NYamlConfig::ResolveAll(doc);
+            UNIT_ASSERT_VALUES_EQUAL(resolved.Labels, expectedLabels);
+
+            auto empty = NFyaml::TDocument::Parse(ResolvedSimpleConfigAppendEmpty);
+            auto abc = NFyaml::TDocument::Parse(ResolvedSimpleConfigAppendAbc);
+
+            TSet<TVector<NYamlConfig::TLabel>> first = {
+                {NYamlConfig::TLabel{EType::Empty, ""}},
+            };
+
+            auto firstIt = resolved.Configs.find(first);
+            UNIT_ASSERT_UNEQUAL(firstIt, resolved.Configs.end());
+            UNIT_ASSERT(firstIt->second.second.DeepEqual(empty.Root().Map()["config"]));
+
+            TSet<TVector<NYamlConfig::TLabel>> second = {
+                {NYamlConfig::TLabel{EType::Common, "abc"}},
+            };
+
+            auto secondIt = resolved.Configs.find(second);
+            UNIT_ASSERT_UNEQUAL(secondIt, resolved.Configs.end());
+            UNIT_ASSERT(secondIt->second.second.DeepEqual(abc.Root().Map()["config"]));
+        }
     }
 
     Y_UNIT_TEST(MaterializeAllConfigs) {
@@ -1414,5 +1465,304 @@ Y_UNIT_TEST_SUITE(YamlConfig) {
         }
         TStringStream stream;
         stream << cfg;
+    }
+
+    Y_UNIT_TEST(GetMetadata) {
+        {
+            TString str = R"(
+metadata:
+  version: 10
+  cluster: foo
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
+        }
+
+        {
+            TString str = R"(
+metadata:
+  version: 10
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
+            UNIT_ASSERT(!metadata.Cluster);
+        }
+
+        {
+            TString str = R"(
+metadata:
+  cluster: foo
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT(!metadata.Version);
+            UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
+        }
+
+        {
+            TString str = R"(
+metadata: {}
+)";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT(!metadata.Version);
+            UNIT_ASSERT(!metadata.Cluster);
+        }
+
+        {
+            TString str = "foo: bar";
+            auto metadata = NYamlConfig::GetMetadata(str);
+            UNIT_ASSERT(!metadata.Version);
+            UNIT_ASSERT(!metadata.Cluster);
+        }
+    }
+
+    Y_UNIT_TEST(ReplaceMetadata) {
+        NYamlConfig::TMetadata metadata;
+        metadata.Version = 1;
+        metadata.Cluster = "test";
+
+        {
+            TString str = R"(
+# comment1
+{value: 1, array: [{test: "1"}], obj: {value: 2}} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+value: 1
+array:
+- test: "1"
+obj:
+  value: 2
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+# comment1
+{value: 1, metadata: {version: 1, cluster: "test"}, array: [{test: "1"}], obj: {value: 2}} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+value: 1
+array:
+- test: "1"
+obj:
+  value: 2
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(metadata: {version: 0, cluster: tes}
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(metadata:
+  version: 0
+  cluster: tes
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(metadata:
+  version: 0
+  cool: {foo: bar}
+  cluster: tes
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+
+---
+metadata:
+  cluster: tes
+  version: 0
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+
+---
+metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+---
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        metadata.Cluster = "";
+
+        {
+            TString str = R"(
+---
+metadata:
+  version: 1
+  cluster:
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+# comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
     }
 }

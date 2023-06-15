@@ -171,6 +171,7 @@ namespace Tests {
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
         app.SetChangesQueueBytesLimit(Settings->ChangesQueueBytesLimit);
+        app.SetAwsRegion(Settings->AwsRegion);
         app.CompactionConfig = Settings->CompactionConfig;
         app.FeatureFlags = Settings->FeatureFlags;
 
@@ -233,7 +234,7 @@ namespace Tests {
         });
 
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams);
+        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams, Settings->EnableForceFollowers);
 
         // WARNING: must be careful about modifying app data after actor system starts
 
@@ -697,7 +698,12 @@ namespace Tests {
                                         TMailboxType::Revolving, 0);
         Runtime->RegisterService(MakeTenantPoolRootID(), poolId, nodeIdx);
         if (Settings->EnableConfigsDispatcher) {
-            auto *dispatcher = NConsole::CreateConfigsDispatcher(Settings->AppConfig, {});
+            // We overwrite icb settings here to save behavior when configs dispatcher are enabled
+            NKikimrConfig::TAppConfig initial = Settings->AppConfig;
+            if (!initial.HasImmediateControlsConfig()) {
+                initial.MutableImmediateControlsConfig()->CopyFrom(Settings->Controls);
+            }
+            auto *dispatcher = NConsole::CreateConfigsDispatcher(initial, {});
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid);
         }

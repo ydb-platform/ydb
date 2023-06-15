@@ -1,10 +1,10 @@
 #include "console_configs_subscriber.h"
 #include "console.h"
-#include "config_index.h"
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/mind/tenant_pool.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -45,6 +45,7 @@ public:
             const TVector<ui32> &kinds,
             const NKikimrConfig::TAppConfig &currentConfig,
             bool processYaml,
+            ui64 version,
             const TString &yamlConfig,
             const TMap<ui64, TString> &volatileYamlConfigs)
         : OwnerId(ownerId)
@@ -55,6 +56,7 @@ public:
         , LastOrder(0)
         , CurrentConfig(currentConfig)
         , ServeYaml(processYaml)
+        , Version(version)
         , YamlConfig(yamlConfig)
         , VolatileYamlConfigs(volatileYamlConfigs)
     {
@@ -93,6 +95,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPrivate::TEvRetryPoolStatus, Handle);
             HFuncTraced(TEvTenantPool::TEvTenantPoolStatus, Handle);
+            HFuncTraced(TEvConsole::TEvGetNodeConfigResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
@@ -149,6 +152,32 @@ public:
             Generation = 0;
             Die(ctx);
         }
+
+        if (!FirstUpdateSent) {
+            auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
+            request->Record.MutableNode()->SetNodeId(SelfId().NodeId());
+            request->Record.MutableNode()->SetHost(FQDNHostName());
+            request->Record.MutableNode()->SetTenant(Tenant);
+            request->Record.MutableNode()->SetNodeType(NodeType);
+            for (auto &kind : Kinds) {
+                request->Record.AddItemKinds(kind);
+            }
+
+            NTabletPipe::SendData(ctx, Pipe, request.Release(), Cookie);
+        }
+    }
+
+    void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
+        if (!FirstUpdateSent) {
+            ctx.ExecutorThread.Send(
+                new NActors::IEventHandle(
+                    SelfId(),
+                    ev->Sender,
+                    new NConsole::TEvConsole::TEvConfigSubscriptionNotification(
+                        Generation,
+                        ev->Get()->Record.GetConfig(),
+                        THashSet<ui32>(Kinds.begin(), Kinds.end()))));
+        }
     }
 
     void Handle(TEvConsole::TEvConfigSubscriptionError::TPtr &ev, const TActorContext &ctx) {
@@ -185,6 +214,7 @@ public:
                     YamlConfig = rec.GetYamlConfig();
                     YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
                 }
+
                 notChanged = false;
             }
 
@@ -309,6 +339,7 @@ private:
         request->Record.MutableOptions()->SetNodeType(NodeType);
         request->Record.MutableOptions()->SetHost(FQDNHostName());
         request->Record.SetServeYaml(ServeYaml);
+        request->Record.SetYamlApiVersion(Version);
 
         for (auto &kind : Kinds)
             request->Record.AddConfigItemKinds(kind);
@@ -358,6 +389,7 @@ private:
     NKikimrConfig::TAppConfig CurrentConfig;
 
     bool ServeYaml = false;
+    ui64 Version;
     TString YamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     ui64 YamlConfigVersion = 0;
@@ -378,10 +410,11 @@ IActor *CreateConfigsSubscriber(
     const NKikimrConfig::TAppConfig &currentConfig,
     ui64 cookie,
     bool processYaml,
+    ui64 version,
     const TString &yamlConfig,
     const TMap<ui64, TString> &volatileYamlConfigs)
 {
-    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, yamlConfig, volatileYamlConfigs);
+    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, version, yamlConfig, volatileYamlConfigs);
 }
 
 } // namespace NKikimr::NConsole

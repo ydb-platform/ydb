@@ -36,11 +36,12 @@ public:
     }
 
 public:
-    TKqpShardsResolver(const TActorId& owner, ui64 txId, TSet<ui64>&& shardIds)
+    TKqpShardsResolver(const TActorId& owner, ui64 txId, bool useFollowers, TSet<ui64>&& shardIds)
         : Owner(owner)
         , TxId(txId)
         , ShardIds(std::move(shardIds))
-        , TabletResolver(MakePipePeNodeCacheID(false))
+        , UseFollowers(useFollowers)
+        , TabletResolver(MakePipePeNodeCacheID(UseFollowers))
     {}
 
     void Bootstrap() {
@@ -112,6 +113,7 @@ private:
     const TActorId Owner;
     const ui64 TxId;
     const TSet<ui64> ShardIds;
+    const bool UseFollowers;
     const TActorId TabletResolver;
     TMap<ui64, ui32> RetryCount;
     TMap<ui64, ui64> Result;
@@ -119,8 +121,8 @@ private:
 
 } // anonymous namespace
 
-IActor* CreateKqpShardsResolver(const TActorId& owner, ui64 txId, TSet<ui64>&& shardIds) {
-    return new TKqpShardsResolver(owner, txId, std::move(shardIds));
+IActor* CreateKqpShardsResolver(const TActorId& owner, ui64 txId, bool useFollowers, TSet<ui64>&& shardIds) {
+    return new TKqpShardsResolver(owner, txId, useFollowers, std::move(shardIds));
 }
 
 } // namespace NKikimr::NKqp

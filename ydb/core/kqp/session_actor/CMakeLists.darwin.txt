@@ -14,6 +14,7 @@ target_compile_options(core-kqp-session_actor PRIVATE
 target_link_libraries(core-kqp-session_actor PUBLIC
   contrib-libs-cxxsupp
   yutil
+  ydb-core-docapi
   core-kqp-common
 )
 target_sources(core-kqp-session_actor PRIVATE

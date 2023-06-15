@@ -26,7 +26,7 @@ namespace NKikimr {
     void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false);
     void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0);
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
-                             NFake::TStorage storage = {}, NFake::TCaches caches = {});
+                             NFake::TStorage storage = {}, NFake::TCaches caches = {}, bool forceFollowers = false);
 
     const TString DEFAULT_STORAGE_POOL = "Storage Pool with id: 1";
 

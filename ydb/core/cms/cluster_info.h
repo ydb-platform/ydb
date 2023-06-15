@@ -619,13 +619,12 @@ public:
     }
 
     void RollbackOperations() {
-        for (auto operation : Log) {
-            if (operation->Type == OPERATION_TYPE_ROLLBACK_POINT) {
-                Log.pop_back();
-                break;
-            }
+        while (!Log.empty() && Log.back()->Type != OPERATION_TYPE_ROLLBACK_POINT) {
+            Log.back()->Undo();
+            Log.pop_back();
+        }
 
-            operation->Undo();
+        if (!Log.empty() && Log.back()->Type == OPERATION_TYPE_ROLLBACK_POINT) {
             Log.pop_back();
         }
     }

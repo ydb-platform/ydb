@@ -117,6 +117,7 @@ public:
                 db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::Binding>(BoundChannels[channelId]);
                 db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update<Schema::TabletChannel::NeedNewGroup>(true);
                 newChannels.set(channelId);
+                tablet.ReleaseAllocationUnit(channelId);
             }
         }
 

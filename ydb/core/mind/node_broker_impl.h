@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/tx_processor.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -179,6 +180,8 @@ private:
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, ctx)) {

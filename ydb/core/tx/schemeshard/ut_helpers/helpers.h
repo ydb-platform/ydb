@@ -8,6 +8,7 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -61,7 +62,6 @@ namespace NSchemeShardUT_Private {
     ////////// tablet
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err);
     NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query);
-    NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun, NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
 
     bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue);
 
@@ -362,11 +362,11 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// import
-    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr);
-    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr);
-    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr,
+    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID = "");
+    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID = "");
+    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID = "",
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
-    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr,
+    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID = "",
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrImport::TEvGetImportResponse TestGetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
             const TVector<Ydb::StatusIds::StatusCode>& expectedStatuses);
@@ -390,7 +390,6 @@ namespace NSchemeShardUT_Private {
     ui64 GetTxReadSizeLimit(TTestActorRuntime& runtime, ui64 tabletId);
     ui64 GetStatDisabled(TTestActorRuntime& runtime, ui64 tabletId);
 
-    ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId);
     bool GetFastLogPolicy(TTestActorRuntime& runtime, ui64 tabletId);
     bool GetByKeyFilterEnabled(TTestActorRuntime& runtime, ui64 tabletId, ui32 table);
     bool GetEraseCacheEnabled(TTestActorRuntime& runtime, ui64 tabletId, ui32 table);

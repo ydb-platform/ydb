@@ -198,7 +198,7 @@ public:
     TDataShardEngineHost(TDataShard* self, TEngineBay& engineBay, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, ui32& lockNodeId, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
-                (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
+                (self->State == TShardState::Readonly || self->State == TShardState::Frozen || self->IsReplicated()),
                 self->ByKeyFilterDisabled(),
                 self->GetKeyAccessSampler()))
         , Self(self)

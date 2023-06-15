@@ -1048,6 +1048,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
     }
+    request->Record.SetRequestType("_document_api_request");
     request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     request->Record.MutableRequest()->SetType(dml
                                               ? NKikimrKqp::QUERY_TYPE_SQL_DML
@@ -1143,6 +1144,12 @@ void CreateShardedTable(
         }
     }
 
+    for (const auto& [k, v] : opts.Attributes_) {
+        auto* attr = tx.MutableAlterUserAttributes()->AddUserAttributes();
+        attr->SetKey(k);
+        attr->SetValue(v);
+    }
+
     desc->SetUniformPartitionsCount(opts.Shards_);
 
     if (!opts.EnableOutOfOrder_)
@@ -1173,6 +1180,15 @@ void CreateShardedTable(
 
     if (opts.ExecutorCacheSize_) {
         desc->MutablePartitionConfig()->SetExecutorCacheSize(*opts.ExecutorCacheSize_);
+    }
+
+    if (opts.Replicated_) {
+        desc->MutableReplicationConfig()->SetMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+    }
+
+    if (opts.ReplicationConsistency_) {
+        desc->MutableReplicationConfig()->SetConsistency(
+            static_cast<NKikimrSchemeOp::TTableReplicationConfig::EConsistency>(*opts.ReplicationConsistency_));
     }
 
     WaitTxNotification(server, sender, RunSchemeTx(*server->GetRuntime(), std::move(request), sender));
@@ -1647,6 +1663,8 @@ ui64 AsyncAlterAddStream(
         const TShardedTableOptions::TCdcStream& streamDesc)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateCdcStream, workingDir);
+    request->Record.SetRequestType("_document_api_request");
+
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateCdcStream();
     desc.SetTableName(tableName);
     desc.MutableStreamDescription()->SetName(streamDesc.Name);
@@ -1655,6 +1673,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
     if (streamDesc.InitialState) {
         desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
+    }
+    if (streamDesc.AwsRegion) {
+        desc.MutableStreamDescription()->SetAwsRegion(*streamDesc.AwsRegion);
     }
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));

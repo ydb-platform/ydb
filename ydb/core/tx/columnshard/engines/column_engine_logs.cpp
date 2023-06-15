@@ -489,6 +489,7 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
             srcStats = &engineStats.SplitCompacted;
             break;
         case NOlap::TPortionMeta::INACTIVE:
+            Y_VERIFY_DEBUG(false); // Stale portions are not set INACTIVE. They have IsActive() property instead.
             srcStats = &engineStats.Inactive;
             break;
         case NOlap::TPortionMeta::EVICTED:
@@ -779,6 +780,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
         }
 
         if (affectedRecords > maxRecords) {
+            changes->NeedRepeat = true;
             break;
         }
     }
@@ -818,6 +820,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
         }
 
         if (affectedRecords > maxRecords) {
+            changes->NeedRepeat = true;
             break;
         }
     }
@@ -1093,8 +1096,9 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             Y_VERIFY(!portionInfo.IsActive());
 
             ui64 granule = portionInfo.Granule();
-            if (!Granules.count(granule)) {
-                LOG_S_ERROR("Cannot update portion " << portionInfo << " with unknown granule at tablet " << TabletId);
+            ui64 portion = portionInfo.Portion();
+            if (!Granules.contains(granule) || !Granules[granule]->Portions.contains(portion)) {
+                LOG_S_ERROR("Cannot update unknown portion " << portionInfo << " at tablet " << TabletId);
                 return false;
             }
 
@@ -1332,7 +1336,8 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
     ui64 portion = portionInfo.Portion();
 
     if (!apply) {
-        if (!Granules.count(granule)) {
+        if (!Granules.contains(granule) || !Granules[granule]->Portions.contains(portion)) {
+            LOG_S_ERROR("Cannot erase unknown portion " << portionInfo << " at tablet " << TabletId);
             return false;
         }
         return true;
@@ -1340,14 +1345,13 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
 
     auto& spg = Granules[granule];
     Y_VERIFY(spg);
-    if (spg->Portions.count(portion)) {
-        if (updateStats) {
-            UpdatePortionStats(spg->Portions[portion], EStatsUpdateType::ERASE);
-        }
-        spg->Portions.erase(portion);
-    } else {
-        LOG_S_ERROR("Erase for unknown portion " << portionInfo << " at tablet " << TabletId);
+    Y_VERIFY(spg->Portions.contains(portion));
+
+    if (updateStats) {
+        UpdatePortionStats(spg->Portions[portion], EStatsUpdateType::ERASE);
     }
+    spg->Portions.erase(portion);
+
     return true; // It must return true if (apply == true)
 }
 
@@ -1523,44 +1527,50 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
         || sumSize >= limits.GranuleOverloadSize);
 }
 
-std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact() {
-    auto info = std::make_unique<TCompactionInfo>();
-    info->InGranule = true;
-    auto& out = info->Granules;
+std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {
+    if (CompactionGranules.empty()) {
+        return {};
+    }
 
-    std::vector<ui64> goodGranules;
-    for (ui64 granule : CompactionGranules) {
+    std::optional<ui64> outGranule;
+    bool inGranule = true;
+
+    auto it = CompactionGranules.upper_bound(lastCompactedGranule);
+    while (!CompactionGranules.empty()) {
+        if (it == CompactionGranules.end()) {
+            it = CompactionGranules.begin();
+        }
+
+        ui64 granule = *it;
         auto spg = Granules.find(granule)->second;
         Y_VERIFY(spg);
 
         // We need only actual portions here (with empty XPlanStep:XTxId)
         auto actualPortions = GetActualPortions(spg->Portions);
         if (actualPortions.empty()) {
+            it = CompactionGranules.erase(it);
             continue;
         }
 
         ui32 inserted = 0;
         bool needSplit = NeedSplit(actualPortions, Limits, inserted);
         if (needSplit) {
-            if (info->InGranule) {
-                info->InGranule = false;
-                out.clear(); // clear in-granule candidates, we have a splitting one
-            }
-            out.insert(granule);
+            inGranule = false;
+            outGranule = granule;
+            break;
         } else if (inserted) {
-            if (info->InGranule) {
-                out.insert(granule);
-            }
-        } else {
-            goodGranules.push_back(granule);
+            outGranule = granule;
+            break;
         }
+
+        it = CompactionGranules.erase(it);
     }
 
-    for (ui64 granule : goodGranules) {
-        CompactionGranules.erase(granule);
-    }
-
-    if (!out.empty()) {
+    if (outGranule) {
+        auto info = std::make_unique<TCompactionInfo>();
+        info->Granules.insert(*outGranule);
+        info->InGranule = inGranule;
+        lastCompactedGranule = *outGranule;
         return info;
     }
     return {};
@@ -1713,8 +1723,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
     Y_VERIFY(minTs >= ts0);
 
     // It's an estimation of needed count cause numRows calculated before key replaces
-    ui32 numSplitInto = changes.NumSplitInto(numRows);
-    ui32 rowsInGranule = numRows / numSplitInto;
+    const ui32 rowsInGranule = numRows / changes.NumSplitInto(numRows);
     Y_VERIFY(rowsInGranule);
 
     // Cannot split in case of one unique key
@@ -1760,6 +1769,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
         for (auto& border : borders) {
             int offset = NArrow::LowerBound(keyColumn, *border.Border, batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
+            Y_VERIFY(offset <= batch->num_rows());
             batchOffsets.push_back(offset);
         }
 
@@ -1770,6 +1780,7 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
     for (ui32 granuleNo = 0; granuleNo < borders.size() + 1; ++granuleNo) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> granuleBatches;
         granuleBatches.reserve(batches.size());
+        const bool lastGranule = (granuleNo == borders.size());
 
         // Extract granule: slice source batches with offsets
         i64 granuleNumRows = 0;
@@ -1778,14 +1789,12 @@ SliceGranuleBatches(const TIndexInfo& indexInfo,
             auto& batchOffsets = offsets[i];
 
             int offset = batchOffsets[granuleNo];
-            int end = batch->num_rows();
-            if (granuleNo < borders.size()) {
-                end = batchOffsets[granuleNo + 1];
-            }
+            int end = lastGranule ? batch->num_rows() : batchOffsets[granuleNo + 1];
             int size = end - offset;
             Y_VERIFY(size >= 0);
 
             if (size) {
+                Y_VERIFY(offset < batch->num_rows());
                 auto slice = batch->Slice(offset, size);
                 Y_VERIFY(slice->num_rows());
                 granuleNumRows += slice->num_rows();

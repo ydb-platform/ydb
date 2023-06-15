@@ -1,5 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/docapi/traits.h>
+
 #include <ydb/library/yql/core/type_ann/type_ann_impl.h>
 #include <ydb/library/yql/core/type_ann/type_ann_list.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -12,8 +14,6 @@ namespace {
 
 using namespace NCommon;
 using namespace NNodes;
-
-const TString DocApiTableVersionAttribute = "__document_api_version";
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
@@ -1288,7 +1288,7 @@ private:
             return true;
         }
 
-        if (!meta.Attributes.FindPtr(DocApiTableVersionAttribute)) {
+        if (!meta.Attributes.FindPtr(NKikimr::NDocApi::VersionAttribute)) {
             return true;
         }
 

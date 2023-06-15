@@ -30,7 +30,7 @@ class TestQueueAttributesInCompatibilityMode(KikimrSqsTestBase):
         assert_that(self._sqs_api.get_queue_attributes(queue_url)['MaximumMessageSize'], equal_to('1024'))
         try:
             queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True, attributes={'MaximumMessageSize': 'troll'}, retries=1)
-        except:
+        except Exception:
             pass
         else:
             raise Exception('only parseable attributes are valid')
@@ -56,13 +56,13 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             val = int(attributes[attr])
             # change attributes slightly
             attributes_to_set_and_check[attr] = str(val - 1 if val > 0 else val + 1)
-            assert(attributes_to_set_and_check[attr] != attributes[attr])
+            assert attributes_to_set_and_check[attr] != attributes[attr]
 
         content_based_dedup_key = 'ContentBasedDeduplication'
         if is_fifo:
             val = attributes[content_based_dedup_key]
             attributes_to_set_and_check[content_based_dedup_key] = 'true' if val == 'false' else 'false'
-            assert(attributes_to_set_and_check[content_based_dedup_key] != attributes[content_based_dedup_key])
+            assert attributes_to_set_and_check[content_based_dedup_key] != attributes[content_based_dedup_key]
 
         self._sqs_api.set_queue_attributes(queue_url, attributes_to_set_and_check)
         # match set attributes
@@ -75,23 +75,23 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {attr: '2.5'})
             except Exception as e:
-                assert('InvalidAttributeValue' in str(e))
-                assert(attr in str(e))
+                assert 'InvalidAttributeValue' in str(e)
+                assert attr in str(e)
             else:
                 assert_that(False)  # expected InvalidAttributeValue exception
 
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {attr: '2147483647'})
             except Exception as e:
-                assert('InvalidAttributeValue' in str(e))
-                assert(attr in str(e))
+                assert 'InvalidAttributeValue' in str(e)
+                assert attr in str(e)
             else:
                 assert_that(False)  # expected InvalidAttributeValue exception
 
         try:
             self._sqs_api.set_queue_attributes(queue_url, {'trololo': 'ololo'})
         except Exception as e:
-            assert('InvalidAttributeName' in str(e))
+            assert 'InvalidAttributeName' in str(e)
         else:
             assert_that(False)  # expected InvalidAttributeName exception
 
@@ -101,8 +101,8 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'omg'})
             except Exception as e:
-                assert('InvalidAttributeValue' in str(e))
-                assert('FifoQueue' in str(e))
+                assert 'InvalidAttributeValue' in str(e)
+                assert 'FifoQueue' in str(e)
             else:
                 assert_that(False)  # expected InvalidAttributeValue exception
 
@@ -110,15 +110,15 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'false'})
             except Exception as e:
-                assert('InvalidAttributeValue' in str(e))
-                assert('Modifying queue type is not supported' in str(e))
+                assert 'InvalidAttributeValue' in str(e)
+                assert 'Modifying queue type is not supported' in str(e)
             else:
                 assert_that(False)  # expected InvalidAttributeValue exception
         else:
             try:
                 self._sqs_api.set_queue_attributes(queue_url, {'FifoQueue': 'false'})
             except Exception as e:
-                assert('InvalidAttributeName' in str(e))
+                assert 'InvalidAttributeName' in str(e)
             else:
                 assert_that(False)  # expected InvalidAttributeName exception
 
@@ -176,13 +176,13 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             try:
                 queue_url = self._sqs_api.create_queue('new_' + self.queue_name, is_fifo=is_fifo, attributes={attr: '2147483647'})
             except Exception as e:
-                assert(attr in str(e))
+                assert attr in str(e)
             else:
                 assert_that(False)  # expected some exception
 
             try:
                 queue_url = self._sqs_api.create_queue('new2_' + self.queue_name, is_fifo=is_fifo, attributes={attr: '2.5'})
             except Exception as e:
-                assert(attr in str(e))
+                assert attr in str(e)
             else:
                 assert_that(False)  # expected some exception

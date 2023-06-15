@@ -385,6 +385,7 @@ public:
                 .NotUnderDeleting()
                 .IsCommonSensePath()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
 
             if (!checks) {

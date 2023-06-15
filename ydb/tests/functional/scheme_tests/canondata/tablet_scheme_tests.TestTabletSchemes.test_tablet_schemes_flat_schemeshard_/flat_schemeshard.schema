@@ -341,6 +341,11 @@
                 "ColumnId": 9,
                 "ColumnName": "IsBackup",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "ReplicationConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -355,7 +360,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1235,6 +1241,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "ImportsLimit",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -1368,12 +1379,18 @@
                 "ColumnId": 27,
                 "ColumnName": "TableCdcStreamsLimit",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ExportsLimit",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     3,
@@ -1400,7 +1417,8 @@
                     24,
                     25,
                     26,
-                    27
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3450,6 +3468,11 @@
                 "ColumnId": 10,
                 "ColumnName": "IsBackup",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "ReplicationConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3465,7 +3488,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6104,11 +6128,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "VirtualTimestamps",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -6137,19 +6156,30 @@
                 "ColumnId": 6,
                 "ColumnName": "Format",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "VirtualTimestamps",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "AwsRegion",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6176,11 +6206,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "VirtualTimestamps",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -6209,19 +6234,30 @@
                 "ColumnId": 6,
                 "ColumnName": "Format",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "VirtualTimestamps",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "AwsRegion",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

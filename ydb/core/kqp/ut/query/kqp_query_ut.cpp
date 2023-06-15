@@ -309,8 +309,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST_TWIN(QueryClientTimeout, EnableImmediateEffects) {
         NKikimrConfig::TAppConfig app;
         app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
+        app.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(EnableImmediateEffects);
         auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(EnableImmediateEffects)
             .SetAppConfig(app);
 
         TKikimrRunner kikimr(serverSettings);

@@ -102,12 +102,9 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
 
-    if (settings.FeatureFlags.GetEnableKqpImmediateEffects()) {
+    if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpImmediateEffects()) {
         Tests::TServerSettings::TControls controls;
-        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
-        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
         controls.MutableDataShardControls()->SetEnableLockedWrites(1);
-
         ServerSettings->SetControls(controls);
     }
 

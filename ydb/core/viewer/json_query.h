@@ -98,7 +98,7 @@ public:
             }
         }
         if (query.empty()) {
-            ReplyAndPassAway(HTTPBADREQUEST);
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
             return;
         }
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
@@ -111,7 +111,11 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
             request.SetKeepSession(false);
-        } else if (Action == "explain" || Action == "explain-ast") {
+        } else if (Action == "execute-data") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            request.SetKeepSession(false);
+        } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         } else if (Action == "explain-scan") {
@@ -189,7 +193,7 @@ private:
             case NYdb::EPrimitiveType::DyNumber:
                 return valueParser.GetDyNumber();
             case NYdb::EPrimitiveType::Uuid:
-                return "<uuid not implemented>";
+                return valueParser.GetUuid().ToString();
         }
     }
 
@@ -268,7 +272,7 @@ private:
     }
 
     void HandleTimeout() {
-        ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT());
+        ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()));
     }
 
     void ReplyAndPassAway(TString data) {
@@ -278,7 +282,7 @@ private:
 
 private:
     void MakeErrorReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
-        out << "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n";
+        out << Viewer->GetHTTPBADREQUEST(Event->Get(), "application/json");
         NJson::TJsonValue& jsonIssues = jsonResponse["issues"];
 
         // find first deepest error

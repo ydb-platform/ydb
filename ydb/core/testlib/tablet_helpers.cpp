@@ -618,13 +618,13 @@ namespace NKikimr {
     }
 
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
-                            NFake::TCaches caches) {
+                            NFake::TCaches caches, bool forceFollowers) {
         TAutoPtr<TAppPrepare> dummy;
         if (app == nullptr) {
             dummy = app = new TAppPrepare;
         }
         TUltimateNodes nodes(runtime, app);
-        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches);
+        SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches, forceFollowers);
     }
 
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count) {

@@ -550,7 +550,7 @@ public:
                 if (With == EWith::SpaceProblems) {
                     auto itSystemState = SysInfo.find(nodeId);
                     if (itSystemState != SysInfo.end() && itSystemState->second.SystemStateInfoSize() > 0) {
-                        if (itSystemState->second.GetSystemStateInfo(0).GetMaxDiskUsage() < 85) {
+                        if (itSystemState->second.GetSystemStateInfo(0).GetMaxDiskUsage() < 0.85) {
                             continue;
                         }
                     }

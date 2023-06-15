@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/scheme_board/cache.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -13,15 +14,19 @@ namespace NViewer {
 
 using namespace NActors;
 using NSchemeShard::TEvSchemeShard;
+using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
     using TBase = TViewerPipeClient<TJsonDescribe>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
+    TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> SchemeShardResult;
+    TAutoPtr<TEvTxProxySchemeCache::TEvNavigateKeySetResult> CacheResult;
+    TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> DescribeResult;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     bool ExpandSubElements = true;
+    int Requests = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -71,30 +76,167 @@ public:
             request->Record.SetUserToken(Event->Get()->UserToken);
             SendRequest(MakeTxProxyID(), request.Release());
         }
+        ++Requests;
+
+        if (params.Has("path")) {
+            TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+            entry.SyncVersion = false;
+            entry.Path = SplitPath(params.Get("path"));
+            request->ResultSet.emplace_back(entry);
+            SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+            ++Requests;
+        }
+
         Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
     STATEFN(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        DescribeResult = ev->Release();
-        RequestDone();
+        SchemeShardResult = ev->Release();
+        if (SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+            ReplyAndPassAway();
+        } else {
+            RequestDone("TEvDescribeSchemeResult");
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
+        CacheResult = ev->Release();
+        RequestDone("TEvNavigateKeySetResult");
+    }
+
+    void RequestDone(const char* name) {
+        --Requests;
+        if (Requests == 0) {
+            ReplyAndPassAway();
+        }
+        if (Requests < 0) {
+            BLOG_CRIT("Requests < 0 in RequestDone(" << name << ")");
+        }
+    }
+
+    void FillDescription(NKikimrSchemeOp::TDirEntry* descr, ui64 schemeShardId) {
+        descr->SetSchemeshardId(schemeShardId);
+        descr->SetPathId(InvalidLocalPathId);
+        descr->SetParentPathId(InvalidLocalPathId);
+        descr->SetCreateFinished(true);
+        descr->SetCreateTxId(0);
+        descr->SetCreateStep(0);
+    }
+
+    NKikimrSchemeOp::EPathType ConvertType(TNavigate::EKind navigate) {
+        switch (navigate) {
+            case TNavigate::KindSubdomain:
+                return NKikimrSchemeOp::EPathTypeSubDomain;
+            case TNavigate::KindPath:
+                return NKikimrSchemeOp::EPathTypeDir;
+            case TNavigate::KindExtSubdomain:
+                return NKikimrSchemeOp::EPathTypeExtSubDomain;
+            case TNavigate::KindTable:
+                return NKikimrSchemeOp::EPathTypeTable;
+            case TNavigate::KindOlapStore:
+                return NKikimrSchemeOp::EPathTypeColumnStore;
+            case TNavigate::KindColumnTable:
+                return NKikimrSchemeOp::EPathTypeColumnTable;
+            case TNavigate::KindRtmr:
+                return NKikimrSchemeOp::EPathTypeRtmrVolume;
+            case TNavigate::KindKesus:
+                return NKikimrSchemeOp::EPathTypeKesus;
+            case TNavigate::KindSolomon:
+                return NKikimrSchemeOp::EPathTypeSolomonVolume;
+            case TNavigate::KindTopic:
+                return NKikimrSchemeOp::EPathTypePersQueueGroup;
+            case TNavigate::KindCdcStream:
+                return NKikimrSchemeOp::EPathTypeCdcStream;
+            case TNavigate::KindSequence:
+                return NKikimrSchemeOp::EPathTypeSequence;
+            case TNavigate::KindReplication:
+                return NKikimrSchemeOp::EPathTypeReplication;
+            case TNavigate::KindBlobDepot:
+                return NKikimrSchemeOp::EPathTypeBlobDepot;
+            default:
+                return NKikimrSchemeOp::EPathTypeDir;
+        }
+    }
+
+    TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> GetSchemeShardDescribeSchemeInfo() {
+        TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
+        auto& record = SchemeShardResult->GetRecord();
+        const auto *descriptor = NKikimrScheme::EStatus_descriptor();
+        result->SetStatus(descriptor->FindValueByNumber(record.GetStatus())->name());
+        result->SetReason(record.GetReason());
+        result->SetPath(record.GetPath());
+        result->MutablePathDescription()->CopyFrom(record.GetPathDescription());
+        result->SetPathOwner(record.GetPathOwner());
+        result->SetPathId(record.GetPathId());
+        result->SetLastExistedPrefixPath(record.GetLastExistedPrefixPath());
+        result->SetLastExistedPrefixPathId(record.GetLastExistedPrefixPathId());
+        result->MutableLastExistedPrefixDescription()->CopyFrom(record.GetLastExistedPrefixDescription());
+        result->SetPathOwnerId(record.GetPathOwnerId());
+        result->SetSource(NKikimrViewer::TEvDescribeSchemeInfo::SchemeShard);
+
+        return result;
+    }
+
+    TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> GetCacheDescribeSchemeInfo() {
+        const auto& entry = CacheResult->Request.Get()->ResultSet.front();
+        const auto& path = Event->Get()->Request.GetParams().Get("path");
+        const auto& pathId = TPathId();
+        const auto& schemeShardId = entry.DomainInfo->DomainKey.OwnerId;
+
+        TAutoPtr<NKikimrViewer::TEvDescribeSchemeInfo> result(new NKikimrViewer::TEvDescribeSchemeInfo());
+        result->SetPath(path);
+        result->SetPathOwner(schemeShardId);
+        result->SetPathId(pathId.LocalPathId);
+        result->SetPathOwnerId(pathId.OwnerId);
+
+        auto* pathDescription = result->MutablePathDescription();
+        auto* self = pathDescription->MutableSelf();
+
+        self->CopyFrom(entry.Self->Info);
+        FillDescription(self, schemeShardId);
+
+        if (entry.ListNodeEntry) {
+            for (const auto& child : entry.ListNodeEntry->Children) {
+                auto descr = pathDescription->AddChildren();
+                descr->SetName(child.Name);
+                descr->SetPathType(ConvertType(child.Kind));
+                FillDescription(descr, schemeShardId);
+            }
+        };
+        const auto *descriptor = NKikimrScheme::EStatus_descriptor();
+        auto status = descriptor->FindValueByNumber(NKikimrScheme::StatusSuccess)->name();
+        result->SetStatus(status);
+        result->SetSource(NKikimrViewer::TEvDescribeSchemeInfo::Cache);
+        return result;
     }
 
     void ReplyAndPassAway() {
         TStringStream json;
         TString headers = Viewer->GetHTTPOKJSON(Event->Get());
+        if (SchemeShardResult != nullptr && SchemeShardResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
+            DescribeResult = GetSchemeShardDescribeSchemeInfo();
+        } else if (CacheResult != nullptr) {
+            NSchemeCache::TSchemeCacheNavigate *navigate = CacheResult->Request.Get();
+            Y_VERIFY(navigate->ResultSet.size() == 1);
+            if (navigate->ErrorCount == 0) {
+                DescribeResult = GetCacheDescribeSchemeInfo();
+            }
+        }
         if (DescribeResult != nullptr) {
             if (ExpandSubElements) {
-                NKikimrScheme::TEvDescribeSchemeResult& describe = *(DescribeResult->MutableRecord());
-                if (describe.HasPathDescription()) {
-                    auto& pathDescription = *describe.MutablePathDescription();
+                if (DescribeResult->HasPathDescription()) {
+                    auto& pathDescription = *DescribeResult->MutablePathDescription();
                     if (pathDescription.HasTable()) {
                         auto& table = *pathDescription.MutableTable();
                         for (auto& tableIndex : table.GetTableIndexes()) {
@@ -110,14 +252,12 @@ public:
                     }
                 }
             }
-            TProtoToJson::ProtoToJson(json, DescribeResult->GetRecord(), JsonSettings);
-            switch (DescribeResult->GetRecord().GetStatus()) {
-            case NKikimrScheme::StatusAccessDenied:
+            const auto *descriptor = NKikimrScheme::EStatus_descriptor();
+            auto accessDeniedStatus = descriptor->FindValueByNumber(NKikimrScheme::StatusAccessDenied)->name();
+            if (DescribeResult->GetStatus() == accessDeniedStatus) {
                 headers = HTTPFORBIDDENJSON;
-                break;
-            default:
-                break;
             }
+            TProtoToJson::ProtoToJson(json, *DescribeResult, JsonSettings);
         } else {
             json << "null";
         }
@@ -127,7 +267,7 @@ public:
     }
 
     void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 };

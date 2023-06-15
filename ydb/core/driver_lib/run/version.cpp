@@ -3,13 +3,13 @@
 
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary
-    "stable-23-1",
+    "stable-23-2",
 
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
         "stable-23-1",
-        "stable-22-5"
+        "stable-23-2"
     }
 };
 

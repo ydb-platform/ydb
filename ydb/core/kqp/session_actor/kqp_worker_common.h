@@ -1,5 +1,6 @@
 #include "kqp_session_actor.h"
 
+#include <ydb/core/docapi/traits.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -129,7 +130,7 @@ void SlowLogQuery(const TActorContext &ctx, const NYql::TKikimrConfiguration* co
 NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
 inline bool IsDocumentApiRestricted(const TString& requestType) {
-    return requestType != "_document_api_request"sv;
+    return requestType != NDocApi::RequestType;
 }
 
 TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const NYql::TIssue& issue);

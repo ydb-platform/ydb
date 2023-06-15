@@ -414,6 +414,19 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
+    bool HasReplicationConfig() { return TableDescription.HasReplicationConfig(); }
+    const NKikimrSchemeOp::TTableReplicationConfig& ReplicationConfig() { return TableDescription.GetReplicationConfig(); }
+    NKikimrSchemeOp::TTableReplicationConfig& MutableReplicationConfig() { return *TableDescription.MutableReplicationConfig(); }
+
+    bool IsAsyncReplica() const {
+        switch (TableDescription.GetReplicationConfig().GetMode()) {
+            case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     bool HasTTLSettings() const { return TableDescription.HasTTLSettings(); }
     const NKikimrSchemeOp::TTTLSettings& TTLSettings() const { return TableDescription.GetTTLSettings(); }
     bool IsTTLEnabled() const { return HasTTLSettings() && TTLSettings().HasEnabled(); }
@@ -1323,6 +1336,7 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceTablesDataBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesIndexBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceTablesTotalBytes(i64 delta) = 0;
+    virtual void ChangeDiskSpaceTopicsTotalBytes(ui64 value) = 0;
     virtual void ChangeDiskSpaceQuotaExceeded(i64 delta) = 0;
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
@@ -2374,11 +2388,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
 
     static constexpr ui32 MaxInProgressShards = 10;
 
-    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, EState state)
+    TCdcStreamInfo(ui64 version, EMode mode, EFormat format, bool vt, const TString& awsRegion, EState state)
         : AlterVersion(version)
         , Mode(mode)
         , Format(format)
         , VirtualTimestamps(vt)
+        , AwsRegion(awsRegion)
         , State(state)
     {}
 
@@ -2392,12 +2407,12 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
         return result;
     }
 
-    static TPtr New(EMode mode, EFormat format, bool vt) {
-        return new TCdcStreamInfo(0, mode, format, vt, EState::ECdcStreamStateInvalid);
+    static TPtr New(EMode mode, EFormat format, bool vt, const TString& awsRegion) {
+        return new TCdcStreamInfo(0, mode, format, vt, awsRegion, EState::ECdcStreamStateInvalid);
     }
 
     static TPtr Create(const NKikimrSchemeOp::TCdcStreamDescription& desc) {
-        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps());
+        TPtr result = New(desc.GetMode(), desc.GetFormat(), desc.GetVirtualTimestamps(), desc.GetAwsRegion());
         TPtr alterData = result->CreateNextVersion();
         alterData->State = EState::ECdcStreamStateReady;
         if (desc.HasState()) {
@@ -2411,6 +2426,7 @@ struct TCdcStreamInfo : public TSimpleRefCount<TCdcStreamInfo> {
     EMode Mode;
     EFormat Format;
     bool VirtualTimestamps;
+    TString AwsRegion;
     EState State;
 
     TCdcStreamInfo::TPtr AlterData = nullptr;

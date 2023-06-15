@@ -65,6 +65,7 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
     NIceDb::TNiceDb db(txc.DB);
 
     Self->PersistPersQueueGroupStats(db, pathId, newStats);
+    Self->ChangeDiskSpaceTopicsTotalBytes(subDomainInfo->GetPQAccountStorage());
 
     if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
         auto subDomainId = Self->ResolvePathIdForDomain(pathId);

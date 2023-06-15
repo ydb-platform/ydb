@@ -1,5 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/docapi/traits.h>
+
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
@@ -969,6 +971,8 @@ public:
 
                                     if (to_lower(format) == "json") {
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+                                    } else if (to_lower(format) == "dynamodb_streams_json") {
+                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));
@@ -1001,7 +1005,12 @@ public:
                                     const auto duration = TDuration::FromValue(value);
                                     auto& retention = *add_changefeed->mutable_retention_period();
                                     retention.set_seconds(duration.Seconds());
-                                    retention.set_nanos(duration.NanoSecondsOfSecond());
+                                } else if (name == "aws_region") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_aws_region(value);
                                 } else if (name == "local") {
                                     // nop
                                 } else {
@@ -1063,7 +1072,11 @@ public:
                 } else if (isColumn) {
                     future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
                 } else {
-                    future = Gateway->AlterTable(std::move(alterTableRequest), cluster);
+                    TMaybe<TString> requestType;
+                    if (!SessionCtx->Query().DocumentApiRestricted) {
+                        requestType = NKikimr::NDocApi::RequestType;
+                    }
+                    future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType);
                 }
             }
 
@@ -1349,7 +1362,6 @@ private:
     bool ApplyTableOperations(const TString& cluster, const TVector<NKqpProto::TKqpTableOp>& tableOps,
         NKikimrKqp::EIsolationLevel isolationLevel, TExprContext& ctx)
     {
-        bool enableImmediateEffects = SessionCtx->Config().FeatureFlags.GetEnableKqpImmediateEffects();
         auto queryType = SessionCtx->Query().Type;
         TVector<NKqpProto::TKqpTableInfo> tableInfo;
 
@@ -1362,13 +1374,11 @@ private:
         }
 
         if (!SessionCtx->HasTx()) {
-            TKikimrTransactionContextBase emptyCtx;
-            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, enableImmediateEffects,
-                queryType, ctx);
+            TKikimrTransactionContextBase emptyCtx(SessionCtx->Config().EnableKqpImmediateEffects);
+            return emptyCtx.ApplyTableOperations(tableOps, tableInfo, isolationLevel, queryType, ctx);
         }
 
-        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel,
-            enableImmediateEffects, queryType, ctx);
+        return SessionCtx->Tx().ApplyTableOperations(tableOps, tableInfo, isolationLevel, queryType, ctx);
     }
 
     bool ApplyDdlOperation(const TString& cluster, TPositionHandle pos, const TString& table,

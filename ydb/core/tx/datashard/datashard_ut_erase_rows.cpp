@@ -94,8 +94,8 @@ TVector<TString> SerializeKeys(const TVector<ui32>& keys, TKeyCellsMaker makeKey
 TProto::TEvEraseRequest MakeEraseRowsRequest(
         const TTableId& tableId,
         const TVector<ui32>& keyTags,
-        const TVector<TString>& keys) {
-
+        const TVector<TString>& keys)
+{
     TProto::TEvEraseRequest request;
 
     request.SetTableId(tableId.PathId.LocalPathId);
@@ -180,7 +180,8 @@ private:
 void EraseRows(
         TServer::TPtr server, const TActorId& sender, const TString& path,
         const TTableId& tableId, TVector<ui32> keyTags, TVector<TString> keys,
-        ui32 status = TProto::TEvEraseResponse::OK, const TString& error = "") {
+        ui32 status = TProto::TEvEraseResponse::OK, const TString& error = "")
+{
     using TEvRequest = TEvDataShard::TEvEraseRowsRequest;
     using TEvResponse = TEvDataShard::TEvEraseRowsResponse;
 
@@ -771,6 +772,27 @@ key = 4, value = (empty maybe)
 
         auto content = ReadShardedTable(server, "/Root/table-1");
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2030-04-15T00:00:00.000000Z");
+    }
+
+    Y_UNIT_TEST(EraseRowsFromReplicatedTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        EraseRows(server, sender, "/Root/table-1", tableId, {1}, SerializeKeys({1, 2}),
+            TProto::TEvEraseResponse::EXEC_ERROR, "Can't execute erase at replicated table");
     }
 }
 

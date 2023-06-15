@@ -271,6 +271,9 @@ void TPathElement::ApplySpecialAttributes() {
             case EAttribute::DOCUMENT_API_VERSION:
                 HandleAttributeValue(item.second, DocumentApiVersion);
                 break;
+            case EAttribute::ASYNC_REPLICATION:
+                HandleAttributeValue(item.second, AsyncReplication);
+                break;
             default:
                 break;
         }
@@ -285,6 +288,13 @@ void TPathElement::HandleAttributeValue(const TString& value, ui64& target) {
     ui64 parsed;
     if (TryFromString(value, parsed)) {
         target = parsed;
+    }
+}
+
+void TPathElement::HandleAttributeValue(const TString& value, NJson::TJsonValue& target) {
+    NJson::TJsonValue parsed;
+    if (NJson::ReadJsonTree(value, &parsed)) {
+        target = std::move(parsed);
     }
 }
 

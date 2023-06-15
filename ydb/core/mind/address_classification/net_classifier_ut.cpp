@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(counters->SubscribersCount->GetAtomic(), 1);
             UNIT_ASSERT_VALUES_EQUAL(counters->GoodConfigNotificationsCount->GetAtomic(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(counters->BrokenConfigNotificationsCount->GetAtomic(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BrokenConfigNotificationsCount->GetAtomic(), 2);
             UNIT_ASSERT_VALUES_EQUAL(counters->NetDataSourceType->GetAtomic(), ENetDataSourceType::File);
 
             const auto prevLagSeconds = AtomicGet(counters->NetDataUpdateLagSeconds->GetAtomic());
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
 
             UNIT_ASSERT_VALUES_EQUAL(counters->SubscribersCount->GetAtomic(), 1);
             UNIT_ASSERT_VALUES_EQUAL(counters->GoodConfigNotificationsCount->GetAtomic(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(counters->BrokenConfigNotificationsCount->GetAtomic(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(counters->BrokenConfigNotificationsCount->GetAtomic(), 2);
             UNIT_ASSERT_VALUES_EQUAL(counters->NetDataSourceType->GetAtomic(), ENetDataSourceType::None);
         }
     }

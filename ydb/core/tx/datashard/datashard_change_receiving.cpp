@@ -7,12 +7,11 @@ using namespace NTabletFlatExecutor;
 
 class TDataShard::TTxChangeExchangeHandshake: public TTransactionBase<TDataShard> {
     using Schema = TDataShard::Schema;
+    static constexpr ui64 MaxBatchSize = 1000;
 
 public:
-    explicit TTxChangeExchangeHandshake(TDataShard* self, TEvChangeExchange::TEvHandshake::TPtr ev)
+    explicit TTxChangeExchangeHandshake(TDataShard* self)
         : TTransactionBase(self)
-        , Ev(std::move(ev))
-        , Status(new TEvChangeExchange::TEvStatus)
     {
     }
 
@@ -20,20 +19,59 @@ public:
         return TXTYPE_CHANGE_EXCHANGE_HANDSHAKE;
     }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+    bool Precharge(NIceDb::TNiceDb& db) {
+        bool ok = true;
+
+        ui32 i = 0;
+        for (const auto& [_, req] : Self->PendingChangeExchangeHandshakes) {
+            if (++i > MaxBatchSize) {
+                break;
+            }
+
+            auto it = Self->InChangeSenders.find(req.GetOrigin());
+            if (it == Self->InChangeSenders.end()) {
+                ok = ok && db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Precharge();
+            }
+        }
+
+        return ok;
+    }
+
+    bool Process(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+        Statuses.reserve(Min(Self->PendingChangeExchangeHandshakes.size(), MaxBatchSize));
+
+        ui32 i = 0;
+        while (!Self->PendingChangeExchangeHandshakes.empty()) {
+            if (++i > MaxBatchSize) {
+                break;
+            }
+
+            const auto& [sender, req] = Self->PendingChangeExchangeHandshakes.front();
+            auto& [_, resp] = Statuses.emplace_back(sender, MakeHolder<TEvChangeExchange::TEvStatus>());
+            Y_VERIFY(ExecuteHandshake(db, req, resp->Record));
+            Self->PendingChangeExchangeHandshakes.pop_front();
+        }
+
+        Self->ChangeExchangeHandshakeExecuted();
+        if (Self->PendingChangeExchangeHandshakes.size() < MaxBatchSize) {
+            Self->StartCollectingChangeExchangeHandshakes(ctx);
+        } else {
+            Self->RunChangeExchangeHandshakeTx();
+        }
+
+        return true;
+    }
+
+    bool ExecuteHandshake(NIceDb::TNiceDb& db, const NKikimrChangeExchange::TEvHandshake& req, NKikimrChangeExchange::TEvStatus& resp) {
         if (Self->State != TShardState::Ready) {
-            Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
-            Status->Record.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
+            resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
+            resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;
         }
 
-        const auto& msg = Ev->Get()->Record;
-
-        auto it = Self->InChangeSenders.find(msg.GetOrigin());
+        auto it = Self->InChangeSenders.find(req.GetOrigin());
         if (it == Self->InChangeSenders.end()) {
-            NIceDb::TNiceDb db(txc.DB);
-
-            auto rowset = db.Table<Schema::ChangeSenders>().Key(msg.GetOrigin()).Select();
+            auto rowset = db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Select();
             if (!rowset.IsReady()) {
                 return false;
             }
@@ -41,38 +79,42 @@ public:
             if (rowset.IsValid()) {
                 const auto generation = rowset.GetValue<Schema::ChangeSenders::Generation>();
                 const auto lastRecordOrder = rowset.GetValueOrDefault<Schema::ChangeSenders::LastRecordOrder>(0);
-                it = Self->InChangeSenders.emplace(msg.GetOrigin(), TInChangeSender(generation, lastRecordOrder)).first;
+                it = Self->InChangeSenders.emplace(req.GetOrigin(), TInChangeSender(generation, lastRecordOrder)).first;
             } else {
-                it = Self->InChangeSenders.emplace(msg.GetOrigin(), TInChangeSender(msg.GetGeneration())).first;
+                it = Self->InChangeSenders.emplace(req.GetOrigin(), TInChangeSender(req.GetGeneration())).first;
             }
         }
 
-        if (it->second.Generation > msg.GetGeneration()) {
-            Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
-            Status->Record.SetReason(NKikimrChangeExchange::TEvStatus::REASON_STALE_ORIGIN);
+        if (it->second.Generation > req.GetGeneration()) {
+            resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
+            resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_STALE_ORIGIN);
         } else {
-            it->second.Generation = msg.GetGeneration();
-            Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_OK);
-            Status->Record.SetLastRecordOrder(it->second.LastRecordOrder);
-
-            NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::ChangeSenders>().Key(it->first).Update(
-                NIceDb::TUpdate<Schema::ChangeSenders::Generation>(it->second.Generation),
-                NIceDb::TUpdate<Schema::ChangeSenders::LastSeenAt>(ctx.Now().GetValue())
-            );
+            it->second.Generation = req.GetGeneration();
+            resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_OK);
+            resp.SetLastRecordOrder(it->second.LastRecordOrder);
         }
 
         return true;
     }
 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (!Precharge(db)) {
+            return false;
+        }
+
+        return Process(db, ctx);
+    }
+
     void Complete(const TActorContext& ctx) override {
-        Y_VERIFY(Status);
-        ctx.Send(Ev->Sender, Status.Release());
+        for (auto& [sender, status] : Statuses) {
+            ctx.Send(sender, status.Release());
+        }
     }
 
 private:
-    TEvChangeExchange::TEvHandshake::TPtr Ev;
-    THolder<TEvChangeExchange::TEvStatus> Status;
+    TVector<std::pair<TActorId, THolder<TEvChangeExchange::TEvStatus>>> Statuses;
 
 }; // TTxChangeExchangeHandshake
 
@@ -310,6 +352,12 @@ public:
 
         auto completeEdge = TRowVersion::Min();
         for (const auto& record : msg.GetRecords()) {
+            if (record.GetOrder() <= it->second.LastRecordOrder) {
+                AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
+                    NKikimrChangeExchange::TEvStatus::REASON_ORDER_VIOLATION,
+                    TStringBuilder() << "Last record order: " << it->second.LastRecordOrder);
+                break;
+            }
             if (ProcessRecord(record, txc, ctx)) {
                 completeEdge = Max(completeEdge, TRowVersion(record.GetStep(), record.GetTxId()));
             } else {
@@ -354,8 +402,32 @@ private:
 
 }; // TTxApplyChangeRecords
 
+void TDataShard::StartCollectingChangeExchangeHandshakes(const TActorContext& ctx) {
+    if (!ChangeExchangeHandshakesCollecting) {
+        ChangeExchangeHandshakesCollecting = true;
+        ctx.Schedule(TDuration::MilliSeconds(25), new TEvPrivate::TEvChangeExchangeExecuteHandshakes);
+    }
+}
+
+void TDataShard::Handle(TEvPrivate::TEvChangeExchangeExecuteHandshakes::TPtr&, const TActorContext&) {
+    ChangeExchangeHandshakesCollecting = false;
+    RunChangeExchangeHandshakeTx();
+}
+
+void TDataShard::RunChangeExchangeHandshakeTx() {
+    if (!ChangeExchangeHandshakeTxScheduled && !PendingChangeExchangeHandshakes.empty()) {
+        ChangeExchangeHandshakeTxScheduled = true;
+        EnqueueExecute(new TTxChangeExchangeHandshake(this));
+    }
+}
+
+void TDataShard::ChangeExchangeHandshakeExecuted() {
+    ChangeExchangeHandshakeTxScheduled = false;
+}
+
 void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxChangeExchangeHandshake(this, ev), ctx);
+    PendingChangeExchangeHandshakes.emplace_back(ev->Sender, std::move(ev->Get()->Record));
+    StartCollectingChangeExchangeHandshakes(ctx);
 }
 
 void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx) {

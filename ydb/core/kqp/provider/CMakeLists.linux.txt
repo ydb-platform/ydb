@@ -19,6 +19,7 @@ target_link_libraries(core-kqp-provider PUBLIC
   yutil
   ydb-core-base
   ydb-core-protos
+  ydb-core-docapi
   ydb-library-aclib
   library-aclib-protos
   ydb-library-binary_json

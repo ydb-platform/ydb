@@ -595,7 +595,9 @@ private:
 
         switch (type) {
             case NKikimrKqp::QUERY_TYPE_SQL_DDL: {
-                QueryState->AsyncQueryResult = KqpHost->ExecuteSchemeQuery(query, true);
+                IKqpHost::TExecSettings execSettings;
+                execSettings.DocumentApiRestricted = IsDocumentApiRestricted(QueryState->RequestType);
+                QueryState->AsyncQueryResult = KqpHost->ExecuteSchemeQuery(query, true, execSettings);
                 break;
             }
 

@@ -760,6 +760,8 @@ private:
         TCounterPtr DatashardSizeBytes;
         TCounterPtr ResourcesStorageUsedBytes;
         TCounterPtr ResourcesStorageLimitBytes;
+        TCounterPtr ResourcesStorageTableUsedBytes;
+        TCounterPtr ResourcesStorageTopicUsedBytes;
         TCounterPtr ResourcesStreamUsedShards;
         TCounterPtr ResourcesStreamLimitShards;
         //TCounterPtr ResourcesStreamUsedShardsPercents;
@@ -786,6 +788,7 @@ private:
         THistogramPtr ConsumedCpuHistogram;
 
         TCounterPtr DiskSpaceTablesTotalBytes;
+        TCounterPtr DiskSpaceTopicsTotalBytes;
         TCounterPtr DiskSpaceSoftQuotaBytes;
 
         TCounterPtr StreamShardsCount;
@@ -827,6 +830,10 @@ private:
                 "resources.storage.used_bytes", false);
             ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.limit_bytes", false);
+            ResourcesStorageTableUsedBytes = ydbGroup->GetNamedCounter("name",
+                "resources.storage.table.used_bytes", false);
+            ResourcesStorageTopicUsedBytes = ydbGroup->GetNamedCounter("name",
+                "resources.storage.topic.used_bytes", false);
 
             ResourcesStreamUsedShards = ydbGroup->GetNamedCounter("name",
                 "resources.stream.used_shards", false);
@@ -879,6 +886,7 @@ private:
                 auto appGroup = schemeshardGroup->GetSubgroup("category", "app");
 
                 DiskSpaceTablesTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytes)");
+                DiskSpaceTopicsTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTopicsTotalBytes)");
                 DiskSpaceSoftQuotaBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytes)");
 
                 StreamShardsCount = appGroup->GetCounter("SUM(SchemeShard/StreamShardsCount)");
@@ -886,7 +894,6 @@ private:
                 StreamReservedThroughput = appGroup->GetCounter("SUM(SchemeShard/StreamReservedThroughput)");
                 StreamReservedStorage = appGroup->GetCounter("SUM(SchemeShard/StreamReservedStorage)");
                 StreamReservedStorageLimit = appGroup->GetCounter("SUM(SchemeShard/StreamReservedStorageQuota)");
-
             }
         }
 
@@ -911,8 +918,15 @@ private:
             }
 
             if (DiskSpaceTablesTotalBytes) {
-                ResourcesStorageUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
                 ResourcesStorageLimitBytes->Set(DiskSpaceSoftQuotaBytes->Val());
+                ResourcesStorageTableUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
+                ResourcesStorageTopicUsedBytes->Set(DiskSpaceTopicsTotalBytes->Val());
+
+                if (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota()) {
+                    ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val() + ResourcesStorageTopicUsedBytes->Val());
+                } else {
+                    ResourcesStorageUsedBytes->Set(ResourcesStorageTableUsedBytes->Val());
+                }
 
                 auto quota = StreamShardsQuota->Val();
                 ResourcesStreamUsedShards->Set(StreamShardsCount->Val());

@@ -145,6 +145,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
@@ -326,6 +327,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .NotUnderDeleting()
                 .NotUnderOperation();
@@ -470,6 +472,7 @@ TVector<ISubOperationBase::TPtr> CreateDropCdcStream(TOperationId opId, const TT
             .IsResolved()
             .NotDeleted()
             .IsTable()
+            .NotAsyncReplicaTable()
             .IsCommonSensePath()
             .NotUnderDeleting()
             .NotUnderOperation();

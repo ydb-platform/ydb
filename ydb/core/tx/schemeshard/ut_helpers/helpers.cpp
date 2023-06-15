@@ -1088,29 +1088,34 @@ namespace NSchemeShardUT_Private {
         return TestForgetExport(runtime, TTestTxConfig::SchemeShard, txId, dbName, exportId, expectedStatus);
     }
 
-    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr) {
+    void AsyncImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
         NKikimrImport::TCreateImportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
-        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvImport::TEvCreateImportRequest(id, dbName, request));
+        auto ev = MakeHolder<TEvImport::TEvCreateImportRequest>(id, dbName, request);
+        if (userSID) {
+            ev->Record.SetUserSID(userSID);
+        }
+
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), ev.Release());
     }
 
-    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr) {
-        AsyncImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr);
+    void AsyncImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
+        AsyncImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID);
     }
 
-    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr,
+    void TestImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        AsyncImport(runtime, schemeshardId, id, dbName, requestStr);
+        AsyncImport(runtime, schemeshardId, id, dbName, requestStr, userSID);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvImport::TEvCreateImportResponse>(handle);
         UNIT_ASSERT_EQUAL(ev->Record.GetResponse().GetEntry().GetStatus(), expectedStatus);
     }
 
-    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr,
+    void TestImport(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID,
             Ydb::StatusIds::StatusCode expectedStatus) {
-        TestImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, expectedStatus);
+        TestImport(runtime, TTestTxConfig::SchemeShard, id, dbName, requestStr, userSID, expectedStatus);
     }
 
     NKikimrImport::TEvGetImportResponse TestGetImport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName,
@@ -1249,29 +1254,6 @@ namespace NSchemeShardUT_Private {
         return result.GetValue().GetStruct(0).GetOptional().HasOptional();
     }
 
-    NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
-                       NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
-        TActorId sender = runtime.AllocateEdgeActor();
-
-        auto evTx = new TEvTablet::TEvLocalSchemeTx;
-        evTx->Record.SetDryRun(dryRun);
-        auto schemeChanges = evTx->Record.MutableSchemeChanges();
-        bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, schemeChanges);
-        UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
-
-        ForwardToTablet(runtime, tabletId, sender, evTx);
-
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalSchemeTxResponse>(handle);
-        UNIT_ASSERT(event);
-
-        err = event->Record.GetErrorReason();
-        scheme.CopyFrom(event->Record.GetFullScheme());
-
-        // emulate enum behavior from proto3
-        return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
-    }
-
     ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId) {
         NKikimrMiniKQL::TResult result;
         TString err;
@@ -1331,24 +1313,6 @@ namespace NSchemeShardUT_Private {
     ui64 GetStatDisabled(TTestActorRuntime& runtime, ui64 tabletId) {
         return GetDatashardSysTableValue(runtime, tabletId, 20);
     }
-
-    ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId) {
-        NTabletFlatScheme::TSchemeChanges scheme;
-        TString err;
-        NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
-        //Cdbg << scheme << "\n";
-        // looking for "Delta { DeltaType: UpdateExecutorInfo ExecutorCacheSize: 33554432 }"
-        for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
-            const auto& d = scheme.GetDelta(i);
-            if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::UpdateExecutorInfo) {
-                return d.GetExecutorCacheSize();
-            }
-        }
-        UNIT_ASSERT_C(false, "UpdateExecutorInfo delta record not found");
-        return -1;
-    }
-
 
     bool GetFastLogPolicy(TTestActorRuntime& runtime, ui64 tabletId) {
         NTabletFlatScheme::TSchemeChanges scheme;
@@ -1482,14 +1446,17 @@ namespace NSchemeShardUT_Private {
                                         (let maxPathLength '('PathElementLength (Uint64 '%lu)))
                                         (let extraSymbols '('ExtraPathSymbolsAllowed (Utf8 '"%s")))
                                         (let pqPartitions '('PQPartitionsLimit (Uint64 '%lu)))
-                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices streams shards pathShards consCopy maxPathLength extraSymbols pqPartitions))))
+                                        (let exports '('ExportsLimit (Uint64 '%lu)))
+                                        (let imports '('ImportsLimit (Uint64 '%lu)))
+                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices streams shards pathShards consCopy maxPathLength extraSymbols pqPartitions exports imports))))
                                         (return ret)
                                     )
                                  )", domainId, limits.MaxDepth, limits.MaxPaths, limits.MaxChildrenInDir, limits.MaxAclBytesSize,
                                limits.MaxTableColumns, limits.MaxTableColumnNameLength, limits.MaxTableKeyColumns,
                                limits.MaxTableIndices, limits.MaxTableCdcStreams,
                                limits.MaxShards, limits.MaxShardsInPath, limits.MaxConsistentCopyTargets,
-                               limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions);
+                               limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions,
+                               limits.MaxExports, limits.MaxImports);
         Cdbg << prog << "\n";
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShard, prog, result, err);
         Cdbg << result << "\n";

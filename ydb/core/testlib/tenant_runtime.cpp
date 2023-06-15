@@ -1004,7 +1004,12 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     // Create other local services
     for (size_t i = 0; i < Config.Nodes.size(); ++i) {
         if (Config.CreateConfigsDispatcher) {
-            auto aid = Register(CreateConfigsDispatcher(Extension, {}));
+            TMap<TString, TString> labels;
+            for (const auto &label : Extension.GetLabels()) {
+                labels[label.GetName()] = label.GetValue();
+            }
+            labels.emplace("node_id", ToString(i));
+            auto aid = Register(CreateConfigsDispatcher(Extension, labels));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
         }

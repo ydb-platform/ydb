@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -27,12 +28,38 @@ namespace {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+
+    void CreateShardedTestTable(TSession& session) {
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE TestImmediateEffects (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            ) WITH (
+                PARTITION_AT_KEYS = (100, 200)
+            );
+        )").GetValueSync());
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            INSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (1u, "Value1"),
+                (2u, "Value2"),
+                (100u, "Value100"),
+                (200u, "Value200");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }  // namespase
 
 Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     Y_UNIT_TEST(Upsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -87,8 +114,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertDuplicates) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -120,8 +148,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertExistingKey) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -166,8 +195,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Replace) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -222,8 +252,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ReplaceDuplicates) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -255,8 +286,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(ReplaceExistingKey) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -301,8 +333,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Insert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -357,8 +390,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InsertDuplicates) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -384,8 +418,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(InsertExistingKey) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -410,8 +445,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateOn) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -462,8 +498,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(Delete) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -510,8 +547,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateAfterUpsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -539,8 +577,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteAfterUpsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -577,8 +616,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpdateAfterInsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -606,8 +646,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteAfterInsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -645,8 +686,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertAfterInsert) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -670,8 +712,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(UpsertAfterInsertWithIndex) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -745,8 +788,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(DeleteOnAfterInsertWithIndex) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -806,8 +850,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
     }
 
     Y_UNIT_TEST(MultipleEffectsWithIndex) {
-        auto serverSettings = TKikimrSettings()
-            .SetEnableKqpImmediateEffects(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -844,6 +889,1232 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         CompareYson(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(3)));
         CompareYson(FormatResultSetYson(result.GetResultSet(1)), FormatResultSetYson(result.GetResultSet(2)));
     }
+
+    Y_UNIT_TEST(InsertConflictTxAborted) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101");
+
+                INSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "NewValue3"),
+                    (201u, "Value201");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(UpsertConflictInteractiveTxAborted) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx;
+        {
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+        }
+
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "NewValue3");
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[3u];["Value3"]];
+                [[100u];["Value100"]];
+                [[101u];["Value101"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(MultiShardUpsertAfterRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        TMaybe<TTransaction> tx;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101");
+            )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TxWithReadAtTheEnd) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (3u, "Value3"),
+                (101u, "Value101"),
+                (201u, "Value201");
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (4u, "Value4"),
+                (101u, "NewValue101");
+
+            SELECT * FROM TestImmediateEffects ORDER BY Key;
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];["Value1"]];
+            [[2u];["Value2"]];
+            [[3u];["Value3"]];
+            [[4u];["Value4"]];
+            [[100u];["Value100"]];
+            [[101u];["NewValue101"]];
+            [[200u];["Value200"]];
+            [[201u];["Value201"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // check that last (commit) phase is empty
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
+    }
+
+    Y_UNIT_TEST(InteractiveTxWithReadAtTheEnd) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        TMaybe<TTransaction> tx;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101"),
+                    (201u, "Value201");
+            )", TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (4u, "Value4");
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::Tx(*tx).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[3u];["Value3"]];
+                [[4u];["Value4"]];
+                [[100u];["Value100"]];
+                [[101u];["Value101"]];
+                [[200u];["Value200"]];
+                [[201u];["Value201"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            // check that last (commit) phase is empty
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(TxWithWriteAtTheEnd) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (3u, "Value3"),
+                (101u, "Value101"),
+                (201u, "Value201");
+
+            SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+            UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                (4u, "Value4"),
+                (101u, "NewValue101");
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[1u];["Value1"]];
+            [[2u];["Value2"]];
+            [[3u];["Value3"]];
+            [[100u];["Value100"]];
+            [[101u];["Value101"]];
+            [[200u];["Value200"]];
+            [[201u];["Value201"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        // check that last (commit) phase contains write operation
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 1);
+    }
+
+    Y_UNIT_TEST(InteractiveTxWithWriteAtTheEnd) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        TMaybe<TTransaction> tx;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Value3"),
+                    (101u, "Value101"),
+                    (201u, "Value201");
+            )", TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (4u, "Value4");
+            )", TTxControl::Tx(*tx).CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[3u];["Value3"]];
+                [[100u];["Value100"]];
+                [[101u];["Value101"]];
+                [[200u];["Value200"]];
+                [[201u];["Value201"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            // check that last (commit) phase contains write operation
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(UnobservedUncommittedChangeConflict) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        TMaybe<TTransaction> tx1;
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (2u, "Value2Modified");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        TMaybe<TTransaction> tx2;
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (2u, "Value2MoreModified");
+            )", TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = tx2->Commit().ExtractValueSync();
+            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]];
+                [[2u];["Value2Modified"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlreadyBrokenImmediateEffects) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        TMaybe<TTransaction> tx1;
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 100u;
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "Value1Modified");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        TMaybe<TTransaction> tx2;
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        {
+            // This just establishes a snapshot that is before tx1 commit
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 100u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * From TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "Value1Impossible");
+            )", TTxControl::Tx(*tx2)).ExtractValueSync();
+            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = tx2->Commit().ExtractValueSync();
+            // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects ORDER BY Key;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1Modified"]];
+                [[2u];["Value2"]];
+                [[100u];["Value100"]];
+                [[200u];["Value200"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(WriteThenReadWithCommit) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session);
+
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        TMaybe<TTransaction> tx1;
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "ModifiedValue1");
+            )", TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["ModifiedValue1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyR1WR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // write2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyR1RWR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // read2 + write2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyR1WRR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // write2 + read2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyW1RR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // read2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyW1WR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // write2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue11");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue11"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyW1RWR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // read2 + write2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyW1WRR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // write2 + read2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyRW1RR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1 + write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // read2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyRW1WR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1 + write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // write2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue11");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyRW1RWR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1 + write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // read2 + write2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue11");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConflictingKeyRW1WRR2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        CreateShardedTestTable(session1);
+
+        TMaybe<TTransaction> tx1;
+        TMaybe<TTransaction> tx2;
+
+        {  // read1 + write1
+            auto result = session1.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue1");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["Value1"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+        }
+
+        {  // write2 + read2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (1u, "NewValue11");
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["NewValue11"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+            UNIT_ASSERT(tx2);
+        }
+
+        {  // commit1
+            auto result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // read2 + commit2
+            auto result = session2.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects WHERE Key = 1u;
+            )", TTxControl::Tx(*tx2).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    }
+
 }
 
 } // namespace NKqp

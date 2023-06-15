@@ -85,10 +85,7 @@ void TCms::ProcessInitQueue(const TActorContext &ctx)
 
 void TCms::SubscribeForConfig(const TActorContext &ctx)
 {
-    ctx.Register(NConsole::CreateConfigSubscriber(TabletID(),
-                                                  {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem},
-                                                  "",
-                                                  ctx.SelfID));
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::CmsConfigItem}, ctx.SelfID);
 }
 
 void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
@@ -979,6 +976,8 @@ void TCms::RemoveEmptyWalleTasks(const TActorContext &ctx)
 void TCms::Cleanup(const TActorContext &ctx)
 {
     LOG_DEBUG(ctx, NKikimrServices::CMS, "TCms::Cleanup");
+
+    NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvents::TEvPoisonPill);
@@ -1979,7 +1978,14 @@ void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorCont
 void TCms::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                   const TActorContext &ctx)
 {
-    Execute(CreateTxUpdateConfig(ev), ctx);
+    if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
+        Execute(CreateTxUpdateConfig(ev), ctx);
+    } else {
+        // ignore and immediately ack messages from old persistent console subscriptions
+        auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
+        response->Record.MutableConfigId()->CopyFrom(ev->Get()->Record.GetConfigId());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

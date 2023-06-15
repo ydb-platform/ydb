@@ -266,6 +266,8 @@ message TKqpReadRangesSourceSettings {
 
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
+
+    optional bool UseFollowers = 17 [default = false];
 }
 
 message TKqpTaskInfo {

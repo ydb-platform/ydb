@@ -20,6 +20,7 @@
 #include "browse_pq.h"
 #include "browse_db.h"
 #include "counters_hosts.h"
+#include "json_healthcheck.h"
 
 #include "json_handlers.h"
 
@@ -114,6 +115,12 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
+                .RelPath = "healthcheck",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "VDisk",
                 .RelPath = "vdisk",
                 .ActorSystem = ctx.ExecutorThread.ActorSystem,
@@ -139,8 +146,10 @@ public:
         return KikimrRunConfig;
     }
 
+    TString GetCORS(const NMon::TEvHttpInfo* request) override;
     TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) override;
-    TString GetHTTPGATEWAYTIMEOUT() override;
+    TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString type, TString response) override;
 
     void RegisterVirtualHandler(
             NKikimrViewer::EObjectType parentObjectType,
@@ -345,6 +354,10 @@ private:
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
             return;
         }
+        if (filename.StartsWith("healthcheck")) {
+            ctx.ExecutorThread.RegisterActor(new TJsonHealthCheck(this, ev));
+            return;
+        }
         // TODO: check path validity
         // TODO: cache
         if (msg->Request.GetPathInfo().StartsWith('/')) {
@@ -416,12 +429,9 @@ IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
     return new TViewer(kikimrRunConfig);
 }
 
-TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) {
+TString TViewer::GetCORS(const NMon::TEvHttpInfo* request) {
     TStringBuilder res;
     TString origin;
-    res << "HTTP/1.1 200 Ok\r\n"
-        << "Content-Type: application/json; charset=utf-8\r\n"
-        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
     if (AllowOrigin) {
         origin = AllowOrigin;
     } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
@@ -433,6 +443,15 @@ TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString respons
             << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
             << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
     }
+    return res;
+}
+
+TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) {
+    TStringBuilder res;
+    res << "HTTP/1.1 200 Ok\r\n"
+        << "Content-Type: application/json; charset=utf-8\r\n"
+        << "X-Worker-Name: " << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
     if (response) {
         res << "Content-Length: " << response.size() << "\r\n";
     }
@@ -443,16 +462,37 @@ TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString respons
     return res;
 }
 
-TString TViewer::GetHTTPGATEWAYTIMEOUT() {
-    return TStringBuilder()
-            << "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n"
-            << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentWorkerName << "\r\n"
-            << "\r\nGateway Time-out\r\n";
+TString TViewer::GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) {
+    TStringBuilder res;
+    res << "HTTP/1.1 504 Gateway Time-out\r\n"
+        << "Connection: Close\r\n"
+        << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentWorkerName << "\r\n";
+    res << GetCORS(request);
+    res << "\r\nGateway Time-out\r\n";
+    return res;
+}
+
+TString TViewer::GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType, TString response) {
+    TStringBuilder res;
+    res << "HTTP/1.1 400 Bad Request\r\n"
+        << "Connection: Close\r\n";
+    if (contentType) {
+        res << "Content-Type: " << contentType << "\r\n";
+    }
+    res << GetCORS(request);
+    res << "\r\n";
+    if (response) {
+        res << response;
+    }
+    return res;
 }
 
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state) {
     NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
     switch (state) {
+    case NKikimrWhiteboard::TTabletStateInfo::Dead:
+        flag = NKikimrViewer::EFlag::Red;
+        break;
     case NKikimrWhiteboard::TTabletStateInfo::Created:
     case NKikimrWhiteboard::TTabletStateInfo::ResolveStateStorage:
     case NKikimrWhiteboard::TTabletStateInfo::Candidate:
@@ -461,12 +501,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
     case NKikimrWhiteboard::TTabletStateInfo::Restored:
     case NKikimrWhiteboard::TTabletStateInfo::Discover:
     case NKikimrWhiteboard::TTabletStateInfo::Lock:
-    case NKikimrWhiteboard::TTabletStateInfo::Dead:
-        flag = NKikimrViewer::EFlag::Red;
-        break;
     case NKikimrWhiteboard::TTabletStateInfo::RebuildGraph:
-        flag = NKikimrViewer::EFlag::Orange;
-        break;
     case NKikimrWhiteboard::TTabletStateInfo::ResolveLeader:
         flag = NKikimrViewer::EFlag::Yellow;
         break;

@@ -1009,6 +1009,176 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             UNIT_ASSERT_VALUES_EQUAL_C(mainTableNotNullColumns, indexTableNotNullColumns, "Not null columns mismatch");
         }
     }
+
+    Y_UNIT_TEST(OptionalParametersDataQuery) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key1 Utf8 NOT NULL,
+                    Key2  Int32 NOT NULL,
+                    Value1 Utf8,
+                    Value2 Utf8,
+                    PRIMARY KEY (Key1, Key2));
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key1, Key2, Value1, Value2) VALUES
+                    ('One', 1, NULL, NULL),
+                    ('Two', 2, 'Value2', 'Value20'),
+                    ('Three', 3, NULL, 'Value30');
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // select by full pk
+            const auto query = Q1_(R"(
+                DECLARE $key1 AS Utf8?;
+                DECLARE $key2 AS Int32?;
+
+                SELECT a.Key1, a.Key2, a.Value1, a.Value2
+                    FROM TestTable AS a
+                    WHERE a.Key1 = $key1 AND a.Key2 = $key2;
+            )");
+
+            auto params = TParamsBuilder()
+                .AddParam("$key1").OptionalUtf8("One").Build()
+                .AddParam("$key2").OptionalInt32(1).Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([["One";1;#;#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {  // select by key1
+            const auto query = Q1_(R"(
+                DECLARE $key1 AS Utf8?;
+
+                SELECT a.Key1, a.Key2, a.Value1, a.Value2
+                    FROM TestTable AS a
+                    WHERE a.Key1 = $key1;
+            )");
+
+            auto params = TParamsBuilder()
+                .AddParam("$key1").OptionalUtf8("Two").Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([["Two";2;["Value2"];["Value20"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {  // select by key2
+            const auto query = Q1_(R"(
+                DECLARE $key2 AS Int32?;
+
+                SELECT a.Key1, a.Key2, a.Value1, a.Value2
+                    FROM TestTable AS a
+                    WHERE a.Key2 = $key2;
+            )");
+
+            auto params = TParamsBuilder()
+                .AddParam("$key2").OptionalInt32(3).Build()
+                .Build();
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([["Three";3;#;["Value30"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(OptionalParametersScanQuery) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key1 Utf8 NOT NULL,
+                    Key2  Int32 NOT NULL,
+                    Value1 Utf8,
+                    Value2 Utf8,
+                    PRIMARY KEY (Key1, Key2));
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key1, Key2, Value1, Value2) VALUES
+                    ('One', 1, NULL, NULL),
+                    ('Two', 2, 'Value2', 'Value20'),
+                    ('Three', 3, NULL, 'Value30');
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  // select by full pk
+            const auto query = Q1_(R"(
+                DECLARE $key1 AS Utf8?;
+                DECLARE $key2 AS Int32?;
+
+                SELECT a.Key1, a.Key2, a.Value1, a.Value2
+                    FROM TestTable AS a
+                    WHERE a.Key1 = $key1 AND a.Key2 = $key2;
+            )");
+
+            auto params = TParamsBuilder()
+                .AddParam("$key1").OptionalUtf8("One").Build()
+                .AddParam("$key2").OptionalInt32(1).Build()
+                .Build();
+
+            auto it = client.StreamExecuteScanQuery(query, std::move(params)).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([["One";1;#;#]])", StreamResultToYson(it));
+        }
+
+        {  // select by key1
+            const auto query = Q1_(R"(
+                DECLARE $key1 AS Utf8?;
+
+                SELECT a.Key1, a.Key2, a.Value1, a.Value2
+                    FROM TestTable AS a
+                    WHERE a.Key1 = $key1;
+            )");
+
+            auto params = TParamsBuilder()
+                .AddParam("$key1").OptionalUtf8("Two").Build()
+                .Build();
+
+            auto it = client.StreamExecuteScanQuery(query, std::move(params)).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([["Two";2;["Value2"];["Value20"]]])", StreamResultToYson(it));
+        }
+
+        {  // select by key2
+            const auto query = Q1_(R"(
+                DECLARE $key2 AS Int32?;
+
+                SELECT a.Key1, a.Key2, a.Value1, a.Value2
+                    FROM TestTable AS a
+                    WHERE a.Key2 = $key2;
+            )");
+
+            auto params = TParamsBuilder()
+                .AddParam("$key2").OptionalInt32(3).Build()
+                .Build();
+
+            auto it = client.StreamExecuteScanQuery(query, std::move(params)).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([["Three";3;#;["Value30"]]])", StreamResultToYson(it));
+        }
+    }
 }
 
 } // namespace NKqp

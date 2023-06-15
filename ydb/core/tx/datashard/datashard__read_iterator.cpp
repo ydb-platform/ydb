@@ -446,7 +446,7 @@ public:
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
-                if (RowsRead)
+                if (RowsRead && CanResume())
                     return true;
                 return false;
             }
@@ -475,7 +475,7 @@ public:
             case EReadStatus::StoppedByLimit:
                 return true;
             case EReadStatus::NeedData:
-                if (RowsRead)
+                if (RowsRead && CanResume())
                     return true;
                 return false;
             }
@@ -637,7 +637,7 @@ public:
     }
 
     ui64 GetRowsRead() const { return RowsRead; }
-    ui64 GetBytesRead() const { return BytesInResult > 0 ? BytesInResult :  BlockBuilder.Bytes(); }
+    ui64 GetBytesRead() const { return BytesInResult > 0 ? BytesInResult : BlockBuilder.Bytes(); }
     bool HadInvisibleRowSkips() const { return InvisibleRowSkips > 0; }
     bool HadInconsistentResult() const { return HadInconsistentResult_; }
 
@@ -645,6 +645,16 @@ public:
     bool NeedVolatileWaitForCommit() const { return VolatileWaitForCommit; }
 
 private:
+    bool CanResume() const {
+        if (Self->IsFollower() && State.ReadVersion.IsMax()) {
+            // HEAD reads from follower cannot be resumed
+            return false;
+        }
+
+        // All other reads are assumed to be resumable
+        return true;
+    }
+
     bool OutOfQuota() const {
         return RowsRead >= State.Quota.Rows ||
             BlockBuilder.Bytes() >= State.Quota.Bytes||
@@ -656,6 +666,10 @@ private:
     }
 
     bool ShouldStop() {
+        if (!CanResume()) {
+            return false;
+        }
+
         return OutOfQuota() || HasMaxRowsInResult() || ShouldStopByElapsedTime();
     }
 
@@ -665,11 +679,16 @@ private:
         NTable::TRawVals keyTo,
         bool reverse)
     {
-        Y_ASSERT(RowsRead < State.Quota.Rows);
-        Y_ASSERT(BlockBuilder.Bytes() < State.Quota.Bytes);
+        ui64 rowsLeft = Max<ui64>();
+        ui64 bytesLeft = Max<ui64>();
 
-        ui64 rowsLeft = State.Quota.Rows - RowsRead;
-        ui64 bytesLeft = State.Quota.Bytes - BlockBuilder.Bytes();
+        if (CanResume()) {
+            Y_ASSERT(RowsRead < State.Quota.Rows);
+            Y_ASSERT(BlockBuilder.Bytes() < State.Quota.Bytes);
+
+            rowsLeft = State.Quota.Rows - RowsRead;
+            bytesLeft = State.Quota.Bytes - BlockBuilder.Bytes();
+        }
 
         auto direction = reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward;
         return db.Precharge(TableInfo.LocalTid,
@@ -1007,32 +1026,35 @@ public:
             }
             auto& userTableInfo = it->second;
 
-            const ui64 ownerId = state.PathId.OwnerId;
-            TSnapshotKey snapshotKey(
-                ownerId,
-                tableId,
-                state.ReadVersion.Step,
-                state.ReadVersion.TxId);
+            if (!state.ReadVersion.IsMax()) {
+                bool snapshotFound = false;
+                if (!state.IsHeadRead) {
+                    const ui64 ownerId = state.PathId.OwnerId;
+                    TSnapshotKey snapshotKey(
+                        ownerId,
+                        tableId,
+                        state.ReadVersion.Step,
+                        state.ReadVersion.TxId);
 
-            bool isMvccVersion = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
-            bool allowMvcc = isMvccVersion && !Self->IsFollower();
-            bool snapshotFound = false;
-            if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
-                // TODO: do we need to acquire?
-                snapshotFound = true;
-            } else if (allowMvcc) {
-                snapshotFound = true;
-            }
+                    if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
+                        // TODO: do we need to acquire?
+                        snapshotFound = true;
+                    }
+                }
 
-            if (!snapshotFound) {
-                SetStatusError(
-                    Result->Record,
-                    Ydb::StatusIds::PRECONDITION_FAILED,
-                    TStringBuilder() << "Table id " << tableId << " lost snapshot at "
-                         << state.ReadVersion << " shard " << Self->TabletID()
-                         << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
-                         << (Self->IsFollower() ? " RO replica" : ""));
-                return EExecutionStatus::DelayComplete;
+                if (!snapshotFound) {
+                    bool isMvccReadable = !Self->IsFollower() && state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                    if (!isMvccReadable) {
+                        SetStatusError(
+                            Result->Record,
+                            Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder() << "Table id " << tableId << " lost snapshot at "
+                                << state.ReadVersion << " shard " << Self->TabletID()
+                                << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
+                                << (Self->IsFollower() ? " RO replica" : ""));
+                        return EExecutionStatus::DelayComplete;
+                    }
+                }
             }
 
             if (state.SchemaVersion != userTableInfo->GetTableSchemaVersion()) {
@@ -1094,7 +1116,7 @@ public:
 
         TDataShard::EPromotePostExecuteEdges readType = TDataShard::EPromotePostExecuteEdges::RepeatableRead;
 
-        if (state.IsHeadRead) {
+        if (state.IsHeadRead && !Self->IsFollower()) {
             bool hasError = !Result || Result->Record.HasStatus();
             if (!hasError && Reader->HasUnreadQueries()) {
                 // we failed to read all at once and also there might be dependency
@@ -1228,38 +1250,50 @@ public:
                 return;
             }
 
-            // we must have chosen the version
-            Y_VERIFY(!state.ReadVersion.IsMax());
+            if (!state.ReadVersion.IsMax()) {
+                bool snapshotFound = false;
+                if (!state.IsHeadRead) {
+                    const ui64 ownerId = state.PathId.OwnerId;
+                    TSnapshotKey snapshotKey(
+                        ownerId,
+                        tableId,
+                        state.ReadVersion.Step,
+                        state.ReadVersion.TxId);
 
-            const ui64 ownerId = state.PathId.OwnerId;
-            TSnapshotKey snapshotKey(
-                ownerId,
-                tableId,
-                state.ReadVersion.Step,
-                state.ReadVersion.TxId);
+                    if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
+                        // TODO: do we need to acquire?
+                        SetUsingSnapshotFlag();
+                        snapshotFound = true;
+                    }
+                }
 
-            bool isMvccVersion = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
-            bool allowMvcc = isMvccVersion && !Self->IsFollower();
-            bool snapshotFound = false;
-            if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
-                // TODO: do we need to acquire?
-                snapshotFound = true;
-                SetUsingSnapshotFlag();
-            } else if (allowMvcc) {
-                snapshotFound = true;
-                bool isRepeatable = state.IsHeadRead ? false : true;
-                SetMvccSnapshot(TRowVersion(state.ReadVersion.Step, state.ReadVersion.TxId), isRepeatable);
-            }
+                if (!snapshotFound) {
+                    if (Self->IsFollower()) {
+                        SetStatusError(
+                            Result->Record,
+                            Ydb::StatusIds::UNSUPPORTED,
+                            TStringBuilder() << "Table id " << tableId
+                                << " reading from snapshot "
+                                << state.ReadVersion
+                                << " is not supported on follower shard " << Self->TabletID());
+                        return;
+                    }
 
-            if (!snapshotFound) {
-                SetStatusError(
-                    Result->Record,
-                    Ydb::StatusIds::PRECONDITION_FAILED,
-                    TStringBuilder() << "Table id " << tableId << " has no snapshot at "
-                         << state.ReadVersion << " shard " << Self->TabletID()
-                         << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
-                         << (Self->IsFollower() ? " RO replica" : ""));
-                return;
+                    bool isMvccReadable = !Self->IsFollower() && state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                    if (!isMvccReadable) {
+                        SetStatusError(
+                            Result->Record,
+                            Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder() << "Table id " << tableId << " has no snapshot at "
+                                << state.ReadVersion << " shard " << Self->TabletID()
+                                << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
+                                << (Self->IsFollower() ? " RO replica" : ""));
+                        return;
+                    }
+
+                    bool isRepeatable = state.IsHeadRead ? false : true;
+                    SetMvccSnapshot(TRowVersion(state.ReadVersion.Step, state.ReadVersion.TxId), isRepeatable);
+                }
             }
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
@@ -1490,25 +1524,34 @@ private:
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
         }
 
-        ui64 ownerId = state.PathId.OwnerId;
-        TSnapshotKey snapshotKey(
-            ownerId,
-            tableId,
-            state.ReadVersion.Step,
-            state.ReadVersion.TxId);
+        if (!state.ReadVersion.IsMax()) {
+            bool snapshotFound = false;
+            if (!state.IsHeadRead) {
+                ui64 ownerId = state.PathId.OwnerId;
+                TSnapshotKey snapshotKey(
+                    ownerId,
+                    tableId,
+                    state.ReadVersion.Step,
+                    state.ReadVersion.TxId);
 
-        bool isMvccVersion = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
-        bool allowMvcc = isMvccVersion && !Self->IsFollower();
-        if (!Self->GetSnapshotManager().FindAvailable(snapshotKey) && !allowMvcc) {
-            SetStatusError(
-                Result->Record,
-                Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Table id " << tableId << " lost snapshot at "
-                     << state.ReadVersion << " shard " << Self->TabletID()
-                     << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
-                     << (Self->IsFollower() ? " RO replica" : ""));
+                if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
+                    snapshotFound = true;
+                }
+            }
 
-            return true;
+            if (!snapshotFound) {
+                bool isMvccReadable = !Self->IsFollower() && state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                if (!isMvccReadable) {
+                    SetStatusError(
+                        Result->Record,
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        TStringBuilder() << "Table id " << tableId << " lost snapshot at "
+                            << state.ReadVersion << " shard " << Self->TabletID()
+                            << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
+                            << (Self->IsFollower() ? " RO replica" : ""));
+                    return true;
+                }
+            }
         }
 
         {
@@ -1696,12 +1739,10 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         auto it = Self->ReadIterators.find(ReadId);
-        if (it == Self->ReadIterators.end()) {
-            // iterator aborted
+        if (it == Self->ReadIterators.end() && !Op) {
+            // iterator aborted before we could start operation
             return true;
         }
-
-        auto& state = *it->second;
 
         try {
             // If tablet is in follower mode then we should sync scheme
@@ -1715,13 +1756,18 @@ public:
                 }
 
                 if (status != NKikimrTxDataShard::TError::OK) {
+                    Y_VERIFY_DEBUG(!Op);
+                    if (Y_UNLIKELY(it == Self->ReadIterators.end())) {
+                        // iterator already aborted
+                        return true;
+                    }
                     std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
                     SetStatusError(
                         result->Record,
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage);
                     result->Record.SetReadId(ReadId.ReadId);
-                    SendViaSession(state.SessionId, ReadId.Sender, Self->SelfId(), result.release());
+                    SendViaSession(it->second->SessionId, ReadId.Sender, Self->SelfId(), result.release());
 
                     return true;
                 }
@@ -1886,25 +1932,35 @@ public:
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
         }
 
-        ui64 ownerId = state.PathId.OwnerId;
-        TSnapshotKey snapshotKey(
-            ownerId,
-            tableId,
-            state.ReadVersion.Step,
-            state.ReadVersion.TxId);
+        if (!state.ReadVersion.IsMax()) {
+            bool snapshotFound = false;
+            if (!state.IsHeadRead) {
+                ui64 ownerId = state.PathId.OwnerId;
+                TSnapshotKey snapshotKey(
+                    ownerId,
+                    tableId,
+                    state.ReadVersion.Step,
+                    state.ReadVersion.TxId);
 
-        bool isMvccVersion = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
-        bool allowMvcc = isMvccVersion && !Self->IsFollower();
-        if (!Self->GetSnapshotManager().FindAvailable(snapshotKey) && !allowMvcc) {
-            SetStatusError(
-                Result->Record,
-                Ydb::StatusIds::PRECONDITION_FAILED,
-                TStringBuilder() << "Table id " << tableId << " lost snapshot at "
-                     << state.ReadVersion << " shard " << Self->TabletID()
-                     << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
-                     << (Self->IsFollower() ? " RO replica" : ""));
-            SendResult(ctx);
-            return true;
+                if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
+                    snapshotFound = true;
+                }
+            }
+
+            if (!snapshotFound) {
+                bool isMvccReadable = !Self->IsFollower() && state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                if (!isMvccReadable) {
+                    SetStatusError(
+                        Result->Record,
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        TStringBuilder() << "Table id " << tableId << " lost snapshot at "
+                            << state.ReadVersion << " shard " << Self->TabletID()
+                            << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
+                            << (Self->IsFollower() ? " RO replica" : ""));
+                    SendResult(ctx);
+                    return true;
+                }
+            }
         }
 
         {
@@ -2173,27 +2229,24 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     if (record.HasSnapshot()) {
         readVersion.Step = record.GetSnapshot().GetStep();
         readVersion.TxId = record.GetSnapshot().GetTxId();
-    } else if (record.GetTableId().GetOwnerId() != TabletID() && !IsFollower()) {
-        // sys table reads must be from HEAD,
-        // user tables are allowed to be read from HEAD.
-
-        readVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly, nullptr);
-        ev->Get()->Record.MutableSnapshot()->SetStep(readVersion.Step);
-        ev->Get()->Record.MutableSnapshot()->SetTxId(readVersion.TxId);
-        isHeadRead = true;
-
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " changed head to: " << readVersion.Step);
+        if (readVersion.IsMax()) {
+            replyWithError(
+                Ydb::StatusIds::UNSUPPORTED,
+                "invalid snapshot value specified");
+            return;
+        }
     }
 
     if (!IsFollower()) {
         if (record.GetTableId().GetOwnerId() != TabletID()) {
             // owner is schemeshard, read user table
             if (readVersion.IsMax()) {
-                // currently not supported
-                replyWithError(
-                    Ydb::StatusIds::UNSUPPORTED,
-                    "HEAD version is unsupported");
-                return;
+                // transform a HEAD read into some non-repeatable snapshot
+                readVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly, nullptr);
+                ev->Get()->Record.MutableSnapshot()->SetStep(readVersion.Step);
+                ev->Get()->Record.MutableSnapshot()->SetTxId(readVersion.TxId);
+                isHeadRead = true;
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " changed HEAD read into non-repeatable " << readVersion);
             }
 
             TSnapshotKey snapshotKey(
@@ -2272,20 +2325,17 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             }
         }
     } else {
-        // follower: we can't check snapshot version, because need to sync and to sync
-        // we need transaction
-        if (readVersion.IsMax()) {
-            replyWithError(
-                Ydb::StatusIds::UNSUPPORTED,
-                "HEAD version on followers is unsupported");
-            return;
-        }
-
         if (record.GetTableId().GetOwnerId() == TabletID()) {
             replyWithError(
                 Ydb::StatusIds::UNSUPPORTED,
                 "Systable reads on followers are not supported");
             return;
+        }
+
+        // follower: we can't check snapshot version, because need to sync and to sync
+        // we need transaction
+        if (readVersion.IsMax()) {
+            isHeadRead = true;
         }
     }
 

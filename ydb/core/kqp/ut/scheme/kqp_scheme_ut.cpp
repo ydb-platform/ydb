@@ -2653,6 +2653,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         switch (format) {
         case EChangefeedFormat::Json:
             return "JSON";
+        case EChangefeedFormat::DynamoDBStreamsJson:
+            return "DYNAMODB_STREAMS_JSON";
         case EChangefeedFormat::Unknown:
             UNIT_ASSERT(false);
             return "";
@@ -2660,22 +2662,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     void AddChangefeed(EChangefeedMode mode, EChangefeedFormat format) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedDynamoDBStreamsFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
-            auto query = R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/table` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
 
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            if (format == EChangefeedFormat::DynamoDBStreamsJson) {
+                builder.AddAttribute("__document_api_version", "1");
+            }
+
+            auto result = session.CreateTable("/Root/table", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto execOpts = TExecSchemeQuerySettings();
+        if (format == EChangefeedFormat::DynamoDBStreamsJson) {
+            execOpts.RequestType("_document_api_request");
         }
 
         {
@@ -2686,7 +2695,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", ModeToString(mode), FormatToString(format));
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = session.ExecuteSchemeQuery(query, execOpts).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
@@ -2704,7 +2713,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER TABLE `/Root/table` DROP CHANGEFEED `feed`;
             )";
 
-            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            const auto result = session.ExecuteSchemeQuery(query, execOpts).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -2716,8 +2725,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
 
             for (auto format : GetEnumAllValues<EChangefeedFormat>()) {
-                if (format == EChangefeedFormat::Unknown) {
+                switch (format) {
+                case EChangefeedFormat::Unknown:
                     continue;
+                case EChangefeedFormat::DynamoDBStreamsJson:
+                    if (mode == EChangefeedMode::Updates) {
+                        continue;
+                    }
+                    break;
+                default:
+                    break;
                 }
 
                 AddChangefeed(mode, format);
@@ -2760,7 +2777,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AddChangefeedNegative) {
-        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedDynamoDBStreamsFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2824,6 +2843,67 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.CreateTable("/Root/document-table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddAttribute("__document_api_version", "1")
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/document-table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'DYNAMODB_STREAMS_JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query, TExecSchemeQuerySettings().RequestType("_document_api_request")).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedAwsRegion) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeedDynamoDBStreamsFormat(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.CreateTable("/Root/table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddAttribute("__document_api_version", "1")
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'NEW_AND_OLD_IMAGES', FORMAT = 'DYNAMODB_STREAMS_JSON', AWS_REGION = 'aws:region'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query, TExecSchemeQuerySettings().RequestType("_document_api_request")).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0).GetAwsRegion(), "aws:region");
         }
     }
 
@@ -2943,6 +3023,42 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ChangefeedAttributes) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto result = session.CreateTable("/Root/table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const auto changefeed = TChangefeedDescription("feed", EChangefeedMode::KeysOnly, EChangefeedFormat::Json)
+            .AddAttribute("key", "value");
+
+        {
+            auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .AppendAddChangefeeds(changefeed)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.DescribeTable("/Root/table").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto& changefeeds = result.GetTableDescription().GetChangefeedDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0), changefeed);
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0).GetAttributes(), changefeed.GetAttributes());
         }
     }
 
@@ -3408,12 +3524,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+#if 0 // TODO
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(tiering);
+            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+        }
+#endif
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` SET(TIERING = 'tiering2');)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(tiering);
+            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering2");
+        }
 
         auto query3 = TStringBuilder() << R"(
             --!syntax_v1
@@ -3421,11 +3555,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         result = session.ExecuteSchemeQuery(query3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(!tiering);
+        }
+
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` SET (TIERING = 'tiering1');)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        { // describe table
+            auto desc = session.DescribeTable(tableName).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+            auto tiering = desc.GetTableDescription().GetTiering();
+            UNIT_ASSERT(tiering);
+            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+        }
 
         auto query5 = TStringBuilder() << R"(
             --!syntax_v1

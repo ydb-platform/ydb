@@ -39,7 +39,7 @@
 #include "src/core/lib/security/security_connector/ssl_utils_config.h"
 #include "src/core/tsi/ssl_transport_security.h"
 
-#include "load_arcadia_root_certs.h"
+#include "add_arcadia_root_certs.h"
 
 /* -- Constants. -- */
 
@@ -581,13 +581,11 @@ grpc_slice DefaultSslRootStore::ComputePemRootCerts() {
     }
     gpr_free(pem_root_certs);
   }
-  // Load Arcadia certs.
-  if (GRPC_SLICE_IS_EMPTY(result)) {
-    result = LoadArcadiaRootCerts();
-  }
   // Try loading roots from OS trust store if flag is enabled.
   if (GRPC_SLICE_IS_EMPTY(result) && !not_use_system_roots) {
     result = LoadSystemRootCerts();
+    // Merge with Arcadia certs.
+    result = AddArcadiaRootCerts(result);
   }
   // Fallback to roots manually shipped with gRPC.
   if (GRPC_SLICE_IS_EMPTY(result) &&

@@ -67,6 +67,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             tabletConfig->SetLocalDC(parameters.localDC);
             tabletConfig->AddReadRules("user");
             tabletConfig->AddReadFromTimestampsMs(parameters.readFromTimestampsMs);
+            tabletConfig->SetMeteringMode(parameters.meteringMode);
             auto config = tabletConfig->MutablePartitionConfig();
             config->SetMaxCountInPartition(parameters.maxCountInPartition);
             config->SetMaxSizeInPartition(parameters.maxSizeInPartition);

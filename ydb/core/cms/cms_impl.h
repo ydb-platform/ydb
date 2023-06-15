@@ -12,6 +12,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/counters_cms.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -204,6 +205,8 @@ private:
                                                                             TEvCms::TEvManageNotificationResponse>));
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
@@ -252,6 +255,8 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
         default:
             if (!HandleDefaultEvents(ev, ctx)) {

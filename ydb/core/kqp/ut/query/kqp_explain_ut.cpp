@@ -83,6 +83,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
+        if (!join.IsDefined()) {
+            join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        }
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -112,6 +115,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
+        if (!join.IsDefined()) {
+            join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        }
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -194,6 +200,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto res = CollectStreamResult(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         UNIT_ASSERT(res.PlanJson);
+        Cerr << *res.PlanJson;
 
         Cerr << *res.PlanJson << Endl;
 
@@ -206,6 +213,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             "Node Type",
             "Aggregate-InnerJoin (MapJoin)-Filter"
         );
+        if (!join.IsDefined()) {
+            join = FindPlanNodeByKv(
+                plan,
+                "Node Type",
+                "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
+            );
+        }
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());

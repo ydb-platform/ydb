@@ -489,6 +489,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
+                .NotAsyncReplicaTable()
                 .NotUnderOperation();
 
             if (!context.IsAllowedPrivateTables) {
@@ -527,17 +528,19 @@ public:
             return result;
         }
 
-        if (path.Base()->GetAliveChildren() && alter.HasTTLSettings()) {
+        bool isReplicated = false;
+        if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_VERIFY(context.SS->PathsById.contains(childPathId));
                 auto childPath = context.SS->PathsById.at(childPathId);
 
-                if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                if (!childPath->IsCdcStream() || childPath->Dropped()) {
                     continue;
                 }
 
-                Y_VERIFY(context.SS->Indexes.contains(childPathId));
-                auto indexInfo = context.SS->Indexes.at(childPathId);
+                if (isReplicated = childPath->AsyncReplication.IsDefined()) {
+                    break;
+                }
             }
         }
 
@@ -553,6 +556,19 @@ public:
         if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
+        }
+
+        if (isReplicated) {
+            for (const auto& [id, column] : alterData->Columns) {
+                if (column.CreateVersion == alterData->AlterVersion) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot add columns to replicated table");
+                    return result;
+                }
+                if (column.DeleteVersion == alterData->AlterVersion) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
+                    return result;
+                }
+            }
         }
 
         TBindingsRoomsChanges bindingChanges;

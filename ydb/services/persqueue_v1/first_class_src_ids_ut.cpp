@@ -2,6 +2,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
 
 namespace NKikimr::NPersQueueTests {
 using namespace Tests;
@@ -79,11 +80,42 @@ Y_UNIT_TEST_SUITE(TFstClassSrcIdPQTest) {
             UNIT_ASSERT(res);
             writer->Close();
         };
-            Y_UNUSED(alterAndCheck);
+
         alterAndCheck(2);
         alterAndCheck(4);
         alterAndCheck(12);
 //        ydbDriver = nullptr;
+    }
+
+    Y_UNIT_TEST(ProperPartitionSelected) {
+        TString topic = "/Root/topic-f3";
+        auto [server, ydbDriver] = Setup("/Root/otherTopic", false);
+        //auto& server_ = server;
+        auto& driver = ydbDriver;
+
+        ui32 partCount = 15;
+        TString srcId = "mySrcID";
+        server->AnnoyingClient->CreateTopicNoLegacy(topic, partCount);
+
+        auto pqClient = NYdb::NTopic::TTopicClient(*driver);
+        auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
+        topicSettings.BeginAddConsumer("debug");
+        auto alterRes = pqClient.AlterTopic(topic, topicSettings).GetValueSync();
+        UNIT_ASSERT(alterRes.IsSuccess());
+
+        auto partExpected = NKikimr::NDataStreams::V1::CalculateShardFromSrcId(srcId, partCount);
+        Y_VERIFY(partExpected < partCount);
+        auto writer = CreateSimpleWriter(*driver, topic, srcId);
+        auto res = writer->Write("test-data", writer->GetInitSeqNo() + 1);
+        UNIT_ASSERT(res);
+        writer->Close();
+
+        NYdb::NPersQueue::TReadSessionSettings readerSettings;
+        readerSettings.ConsumerName("debug").AppendTopics(topic);
+        auto reader = CreateReader(*driver, readerSettings);
+        auto mbEv = GetNextMessageSkipAssignment(reader);
+        UNIT_ASSERT(mbEv.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(mbEv->GetPartitionStream()->GetPartitionGroupId(), partExpected + 1);
     }
 }
 

@@ -301,6 +301,11 @@ class TTableDescription::TImpl {
             break;
         }
 
+        // tiering
+        if (proto.tiering().size()) {
+            Tiering_ = proto.tiering();
+        }
+
         // column families
         ColumnFamilies_.reserve(proto.column_families_size());
         for (const auto& family : proto.column_families()) {
@@ -517,6 +522,10 @@ public:
         return TtlSettings_;
     }
 
+    const TMaybe<TString>& GetTiering() const {
+        return Tiering_;
+    }
+
     const TString& GetOwner() const {
         return Owner_;
     }
@@ -593,6 +602,7 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
+    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -655,6 +665,10 @@ TVector<TChangefeedDescription> TTableDescription::GetChangefeedDescriptions() c
 
 TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
     return Impl_->GetTtlSettings();
+}
+
+TMaybe<TString> TTableDescription::GetTiering() const {
+    return Impl_->GetTiering();
 }
 
 const TString& TTableDescription::GetOwner() const {
@@ -835,6 +849,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
         ttl->SerializeTo(*request.mutable_ttl_settings());
+    }
+
+    if (const auto& tiering = Impl_->GetTiering()) {
+        request.set_tiering(*tiering);
     }
 
     if (Impl_->HasStorageSettings()) {
@@ -4412,6 +4430,26 @@ TChangefeedDescription& TChangefeedDescription::WithInitialScan() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::AddAttribute(const TString& key, const TString& value) {
+    Attributes_[key] = value;
+    return *this;
+}
+
+TChangefeedDescription& TChangefeedDescription::SetAttributes(const THashMap<TString, TString>& attrs) {
+    Attributes_ = attrs;
+    return *this;
+}
+
+TChangefeedDescription& TChangefeedDescription::SetAttributes(THashMap<TString, TString>&& attrs) {
+    Attributes_ = std::move(attrs);
+    return *this;
+}
+
+TChangefeedDescription& TChangefeedDescription::WithAwsRegion(const TString& value) {
+    AwsRegion_ = value;
+    return *this;
+}
+
 const TString& TChangefeedDescription::GetName() const {
     return Name_;
 }
@@ -4434,6 +4472,14 @@ bool TChangefeedDescription::GetVirtualTimestamps() const {
 
 bool TChangefeedDescription::GetInitialScan() const {
     return InitialScan_;
+}
+
+const THashMap<TString, TString>& TChangefeedDescription::GetAttributes() const {
+    return Attributes_;
+}
+
+const TString& TChangefeedDescription::GetAwsRegion() const {
+    return AwsRegion_;
 }
 
 template <typename TProto>
@@ -4465,6 +4511,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
         format = EChangefeedFormat::Json;
         break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
+        format = EChangefeedFormat::DynamoDBStreamsJson;
+        break;
     default:
         format = EChangefeedFormat::Unknown;
         break;
@@ -4473,6 +4522,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     auto ret = TChangefeedDescription(proto.name(), mode, format);
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
+    }
+    if (!proto.aws_region().empty()) {
+        ret.WithAwsRegion(proto.aws_region());
     }
 
     if constexpr (std::is_same_v<TProto, Ydb::Table::ChangefeedDescription>) {
@@ -4492,6 +4544,10 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         }
     }
 
+    for (const auto& [key, value] : proto.attributes()) {
+        ret.Attributes_[key] = value;
+    }
+
     return ret;
 }
 
@@ -4499,6 +4555,7 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     proto.set_name(Name_);
     proto.set_virtual_timestamps(VirtualTimestamps_);
     proto.set_initial_scan(InitialScan_);
+    proto.set_aws_region(AwsRegion_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:
@@ -4524,6 +4581,9 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
     case EChangefeedFormat::Json:
         proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
         break;
+    case EChangefeedFormat::DynamoDBStreamsJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        break;
     case EChangefeedFormat::Unknown:
         break;
     }
@@ -4532,6 +4592,10 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
         auto& retention = *proto.mutable_retention_period();
         retention.set_seconds(RetentionPeriod_->Seconds());
         retention.set_nanos(RetentionPeriod_->NanoSecondsOfSecond());
+    }
+
+    for (const auto& [key, value] : Attributes_) {
+        (*proto.mutable_attributes())[key] = value;
     }
 }
 
@@ -4552,6 +4616,10 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
         o << ", retention_period: " << *RetentionPeriod_;
     }
 
+    if (AwsRegion_) {
+        o << ", aws_region: " << AwsRegion_;
+    }
+
     o << " }";
 }
 
@@ -4559,7 +4627,8 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
     return lhs.GetName() == rhs.GetName()
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
-        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps();
+        && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
+        && lhs.GetAwsRegion() == rhs.GetAwsRegion();
 }
 
 bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs) {

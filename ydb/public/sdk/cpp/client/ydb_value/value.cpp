@@ -552,6 +552,10 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             out << "Void"sv;
             break;
 
+        case TTypeParser::ETypeKind::Null:
+            out << "Null"sv;
+            break;
+
         default:
             ThrowFatalError(TStringBuilder()
                 << "Unexpected type kind: " << parser.GetKind());
@@ -988,6 +992,11 @@ bool TPgValue::IsText() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+TUuidValue::TUuidValue(ui64 low_128, ui64 high_128) {
+    Buf_.Halfs[0] = low_128;
+    Buf_.Halfs[1] = high_128;
+}
 
 TUuidValue::TUuidValue(const Ydb::Value& valueProto) {
     Buf_.Halfs[0] = valueProto.low_128();

@@ -770,7 +770,7 @@ message TFeatureFlags {
     optional bool EnableChangefeedInitialScan = 77 [default = false];
     reserved 78; // EnableKqpScanQuerySourceRead
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
-    optional bool EnableKqpImmediateEffects = 80 [default = false];
+    reserved 80; // EnableKqpImmediateEffect
     optional bool EnableDataShardGenericReadSets = 81 [default = false];
     // enable alter database operation to create subdomain's system tablets
     // directly in subdomain's hive
@@ -779,8 +779,9 @@ message TFeatureFlags {
     optional bool EnableSmallDiskOptimization = 84 [default = true];
     optional bool EnableDataShardVolatileTransactions = 85 [default = false];
     optional bool EnableTopicDiskSubDomainQuota = 89 [default = false];
+    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
+    optional bool EnableGetNodeLabels = 99 [default = false];
 }
-
 
 message THttpProxyConfig {
     optional bool Enabled = 1;
@@ -1247,6 +1248,7 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
+    optional bool EnableKqpImmediateEffects = 38 [default = false];
 };
 
 // Config describes immediate controls and allows
@@ -1709,6 +1711,10 @@ message TClientCertificateAuthorization {
     optional TDynamicNodeDefinition DynamicNodeAuthorization = 1;
 }
 
+message TAwsCompatibilityConfig {
+    optional string AwsRegion = 1;
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -1776,6 +1782,7 @@ message TAppConfig {
 
     optional NYq.NConfig.TConfig YandexQueryConfig = 50; // TODO: remove after migration to FederatedQueryConfig
 
+    optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
 

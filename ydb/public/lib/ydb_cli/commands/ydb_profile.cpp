@@ -1043,11 +1043,12 @@ int TCommandUpdateProfile::Run(TConfig& config) {
 }
 
 TCommandReplaceProfile::TCommandReplaceProfile()
-            : TCommandProfileCommon("replace", {}, "Create new configuration profile or delete and re-configure existing one")
+            : TCommandProfileCommon("replace", {}, "Deletes profile and creates a new one with the same name and new property values from provided options or an stdin")
 {}
 
 void TCommandReplaceProfile::Config(TConfig& config) {
     TCommandProfileCommon::Config(config);
+    config.Opts->AddLongOption('f', "force", "Never prompt").StoreTrue(&Force);
     config.SetFreeArgsMin(1);
 }
 
@@ -1058,7 +1059,15 @@ void TCommandReplaceProfile::Parse(TConfig& config) {
 
 int TCommandReplaceProfile::Run(TConfig& config) {
     auto profileManager = CreateProfileManager(config.ProfileFile);
-    profileManager->RemoveProfile(ProfileName);
+    if (profileManager->HasProfile(ProfileName)) {
+        if (!Force) {
+            Cout << "Current profile will be replaced with a new one. All current profile data will be lost. Continue? (y/n): ";
+            if (!AskYesOrNo()) {
+                return EXIT_FAILURE;
+            }
+        }
+        profileManager->RemoveProfile(ProfileName);
+    }
     profileManager->CreateProfile(ProfileName);
     ConfigureProfile(ProfileName, profileManager, config, false, true);
     return EXIT_SUCCESS;

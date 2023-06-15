@@ -19,7 +19,7 @@ bool AskYesOrNo() {
         Cin >> input;
         if (to_lower(input) == "y" || to_lower(input) == "yes") {
             return true;
-        } else if (to_lower(input) == "n" || to_lower(input) == "n") {
+        } else if (to_lower(input) == "n" || to_lower(input) == "no") {
             return false;
         } else {
             Cout << "Type \"y\" (yes) or \"n\" (no): ";

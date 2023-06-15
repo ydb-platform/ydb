@@ -686,6 +686,11 @@
   includes:
     - BOOST_PP_ITERATE()
 
+# market uses include-via-define by design, just ignore this includes
+- source_filter: "^market/media_adv/library/experiments"
+  includes:
+    - MARKET_MADV_EXP_FLAGS_FILENAME
+
 # Connectedhomeip contrib uses a special type of imports for third-party includes https://github.com/project-chip/connectedhomeip/issues/4354
 # Also empty MACROs here defined for Linux and ESP32 platforms, but esp32 files use third-party library esp-idf
 # So there are some problems to resolve imports especially in contrib/libs/connectedhomeip/src/app,

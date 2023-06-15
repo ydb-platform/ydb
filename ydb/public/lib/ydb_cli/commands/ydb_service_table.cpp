@@ -1,5 +1,4 @@
 #include "ydb_service_table.h"
-#include "ydb/public/lib/ydb_cli/commands/ydb_common.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>

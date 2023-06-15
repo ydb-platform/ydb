@@ -143,8 +143,12 @@ public:
     virtual void CreateSetValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const = 0;
     virtual Value* CreateSwapValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const = 0;
     virtual void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
-    virtual void SetTemporaryValue(Value* value) = 0;
-    virtual void SetValueGetter(Function* value) = 0;
+
+    using TValueBuilder = std::function<llvm::Value * (const TCodegenContext &)>;
+    virtual void SetValueBuilder(TValueBuilder valueBuilder) = 0;
+
+    using TValueGetterBuilder = std::function<llvm::Function * (const TCodegenContext &)>;
+    virtual void SetValueGetterBuilder(TValueGetterBuilder valueGetterBuilder) = 0;
 };
 
 class ICodegeneratorRunNode {
@@ -949,11 +953,11 @@ protected:
     void CreateSetValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const final;
     Value* CreateSwapValue(const TCodegenContext& ctx, BasicBlock*& block, Value* value) const final;
     void CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const final;
-    void SetTemporaryValue(Value* value) final;
-    void SetValueGetter(Function* getter) final;
+    void SetValueBuilder(TValueBuilder valueBuilder) final;
+    void SetValueGetterBuilder(TValueGetterBuilder valueGetterBuilder) final;
 private:
-    Function* ValueGetter = nullptr;
-    Value* TemporaryValue = nullptr;
+    TValueBuilder ValueBuilder;
+    TValueGetterBuilder ValueGetterBuilder;
 };
 
 class TExternalCodegeneratorRootNode: public TExternalCodegeneratorNode, public ICodegeneratorRootNode

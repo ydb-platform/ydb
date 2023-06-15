@@ -427,7 +427,7 @@ private:
 
         bool isSorted = !CanHash(keyType);
         AddNode(node, NodeFactory->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr,
-            useIHash && !isSorted ? MakeHashImpl(keyType) : nullptr, 
+            useIHash && !isSorted ? MakeHashImpl(keyType) : nullptr,
             useIHash ? MakeEquateImpl(keyType) : nullptr,
             useIHash && isSorted ? MakeCompareImpl(keyType) : nullptr, isSorted));
     }
@@ -465,8 +465,7 @@ private:
                 std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1));
         const auto computationNode = Factory(node, ctx);
         const auto& name = node.GetType()->GetName();
-        if (name == "Switch" || // KIKIMR-16457
-            name == "KqpWideReadTable" ||
+        if (name == "KqpWideReadTable" ||
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
@@ -626,7 +625,7 @@ public:
         if (!KernelsTopology.has_value()) {
             CalculateKernelTopology(*Ctx);
         }
-        
+
         return &KernelsTopology.value();
     }
 

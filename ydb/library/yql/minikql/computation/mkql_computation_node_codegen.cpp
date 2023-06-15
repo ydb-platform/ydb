@@ -133,7 +133,8 @@ Value* TCodegenContext::GetBuilder() const {
     return Builder;
 }
 
-Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name, IComputationExternalNode* left, IComputationExternalNode* right, IComputationNode* compare) {
+Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name, IComputationExternalNode* left,
+                                IComputationExternalNode* right, IComputationNode* compare) {
     auto& module = codegen->GetModule();
     if (const auto f = module.getFunction(name.c_str()))
         return f;
@@ -168,8 +169,8 @@ Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen,
     const auto lv = &*++args;
     const auto rv = &*++args;
 
-    codegenLeft->SetTemporaryValue(lv);
-    codegenRight->SetTemporaryValue(rv);
+    codegenLeft->SetValueBuilder([lv](const TCodegenContext&) { return lv; });
+    codegenRight->SetValueBuilder([rv](const TCodegenContext&) { return rv; });
 
     codegenLeft->CreateInvalidate(ctx, block);
     codegenRight->CreateInvalidate(ctx, block);
@@ -178,8 +179,8 @@ Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen,
     const auto cast = CastInst::Create(Instruction::Trunc, res, returnType, "bool", block);
     ReturnInst::Create(context, cast, block);
 
-    codegenLeft->SetTemporaryValue(nullptr);
-    codegenRight->SetTemporaryValue(nullptr);
+    codegenLeft->SetValueBuilder({});
+    codegenRight->SetValueBuilder({});
 
     return ctx.Func;
 }
@@ -1132,11 +1133,13 @@ Function* TExternalCodegeneratorRootNode::GenerateSetValue(const NYql::NCodegen:
 }
 
 Value* TExternalCodegeneratorNode::CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-    if (ValueGetter) {
+    if (ValueGetterBuilder) {
+        llvm::Function * ValueGetter = ValueGetterBuilder(ctx);
         return CallInst::Create(ValueGetter, {ctx.Ctx}, "getter", block);
     }
 
-    if (TemporaryValue) {
+    if (ValueBuilder) {
+        llvm::Value * TemporaryValue = ValueBuilder(ctx);
         return LoadIfPointer(TemporaryValue, block);
     }
 
@@ -1223,8 +1226,15 @@ void TExternalCodegeneratorNode::CreateInvalidate(const TCodegenContext& ctx, Ba
     GenInvalidate(ctx, InvalidationSet, block);
 }
 
-void TExternalCodegeneratorNode::SetTemporaryValue(Value* value) { TemporaryValue = value; }
-void TExternalCodegeneratorNode::SetValueGetter(Function* function) { ValueGetter = function; }
+void TExternalCodegeneratorNode::SetValueBuilder(TValueBuilder valueBuilder)
+{
+    ValueBuilder = std::move(valueBuilder);
+}
+
+void TExternalCodegeneratorNode::SetValueGetterBuilder(TValueGetterBuilder valueGetterBuilder)
+{
+    ValueGetterBuilder = std::move(valueGetterBuilder);
+}
 
 void TWideFlowProxyCodegeneratorNode::CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const {
     GenInvalidate(ctx, InvalidationSet, block);

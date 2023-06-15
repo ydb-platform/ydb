@@ -328,6 +328,66 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
+
+    Y_UNIT_TEST_TWIN(SwitchCache, UseCache) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(true);
+        size_t cacheSize = UseCache ? 1_MB : 0;
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
+        auto kikimr = TKikimrRunner{settings};
+        auto driver = kikimr.GetDriver();
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TwoKeys` (
+                Key1 Int32,
+                Key2 Int32,
+                Value Int32,
+                PRIMARY KEY (Key1, Key2)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto result = session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/TwoKeys` (Key1, Key2, Value) VALUES
+                (1, 1, 1),
+                (2, 1, 2),
+                (3, 2, 3),
+                (4, 2, 4),
+                (5, 3, 5),
+                (6, 3, 6),
+                (7, 4, 7),
+                (8, 4, 8);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        size_t InFlight = 10;
+        NPar::LocalExecutor().RunAdditionalThreads(InFlight);
+        NPar::LocalExecutor().ExecRange([&driver](int /*id*/) {
+            TTimer t;
+            NYdb::NTable::TTableClient db(driver);
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto query = TStringBuilder()
+                << Q_(R"(
+                $values = SELECT Key1, Key2, Value FROM `/Root/TwoKeys` WHERE Value > 4;
+                $cnt = SELECT count(*) FROM $values;
+                $sum = SELECT sum(Key1) FROM $values WHERE Key1 > 4;
+
+                SELECT $cnt + $sum;
+            )");
+
+            for (ui32 i = 0; i < 20; ++i) {
+                auto result = session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                AssertSuccessResult(result);
+
+                CompareYson(
+                    R"([[[30]]])",
+                    FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+    }
 }
 
 } // namspace NKqp

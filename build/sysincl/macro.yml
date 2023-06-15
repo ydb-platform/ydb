@@ -269,18 +269,19 @@
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/fence_ops_gcc_sync.hpp
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/fence_ops_linux_arm.hpp
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/fence_ops_windows.hpp
-    - BOOST_ATOMIC_DETAIL_CORE_BACKEND_HEADER(boost/atomic/detail/wait_caps_):
-      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_gcc_atomic.hpp
-      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_gcc_sync.hpp
-      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_linux_arm.hpp
+    - BOOST_ATOMIC_DETAIL_WAIT_BACKEND_HEADER(boost/atomic/detail/wait_caps_):
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_darwin_ulock.hpp
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_dragonfly_umtx.hpp
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_freebsd_umtx.hpp
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_futex.hpp
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_caps_windows.hpp
     - BOOST_ATOMIC_DETAIL_WAIT_BACKEND_HEADER(boost/atomic/detail/wait_ops_):
-      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_windows.hpp
-      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_futex.hpp
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_darwin_ulock.hpp
-      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_freebsd_umtx.hpp
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_dragonfly_umtx.hpp
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_freebsd_umtx.hpp
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_futex.hpp
       - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_generic.hpp
+      - contrib/restricted/boost/atomic/include/boost/atomic/detail/wait_ops_windows.hpp
     - BOOST_PP_ITERATE():
       - contrib/restricted/boost/atomic/src/lock_pool_init1.ipp
       - contrib/restricted/boost/atomic/src/lock_pool_init256.ipp

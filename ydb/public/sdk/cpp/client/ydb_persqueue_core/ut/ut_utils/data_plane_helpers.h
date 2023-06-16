@@ -33,7 +33,8 @@ namespace NKikimr::NPersQueueTests {
         const TString& sourceId,
         std::optional<ui32> partitionGroup = {},
         std::optional<TString> codec = {},
-        std::optional<bool> reconnectOnFailure = {}
+        std::optional<bool> reconnectOnFailure = {},
+        THashMap<TString, TString> sessionMeta = {}
     );
 
     std::shared_ptr<NYdb::NPersQueue::IReadSession> CreateReader(

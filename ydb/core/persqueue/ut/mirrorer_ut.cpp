@@ -66,7 +66,13 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         TVector<ui32> messagesPerPartition(partitionsCount, 0);
         for (ui32 partition = 0; partition < partitionsCount; ++partition) {
             TString sourceId = "some_sourceid_" + ToString(partition);
-            auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, partition + 1);
+            THashMap<TString, TString> sessionMeta = {
+                {"some_extra_field", "some_value"},
+                {"some_extra_field2", "another_value" + ToString(partition)},
+                {"file", "/home/user/log" + ToString(partition)}
+            };
+            auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, partition + 1, std::nullopt, std::nullopt, sessionMeta); 
+
             ui64 seqNo = writer->GetInitSeqNo();
 
             for (ui32 i = 1; i <= 11; ++i) {

@@ -1,16 +1,16 @@
 #pragma once
 
 namespace NActors {
-    template <typename TEvent>
+    template<typename TEvent>
     class TWatchdogTimer {
         using TCallback = std::function<void()>;
 
         const TDuration Timeout;
         const TCallback Callback;
 
-        TMonotonic LastResetTimestamp;
-        TEvent* ExpectedEvent = nullptr;
-        ui32 Iteration = 0;
+        TMonotonic TriggerTimestamp = TMonotonic::Max();
+        bool EventScheduled = false;
+        ui32 Iteration;
 
         static constexpr ui32 NumIterationsBeforeFiring = 2;
 
@@ -18,51 +18,51 @@ namespace NActors {
         TWatchdogTimer(TDuration timeout, TCallback callback)
             : Timeout(timeout)
             , Callback(std::move(callback))
-        {
-        }
+        {}
 
-        void Arm(const TActorIdentity& actor) {
+        void Rearm(const TActorIdentity& actor) {
             if (Timeout != TDuration::Zero() && Timeout != TDuration::Max()) {
-                Schedule(Timeout, actor);
-                Reset();
+                TriggerTimestamp = TActivationContext::Monotonic() + Timeout;
+                Iteration = 0;
+                Schedule(actor);
             }
         }
 
-        void Reset() {
-            LastResetTimestamp = TActivationContext::Monotonic();
+        void Disarm() {
+            TriggerTimestamp = TMonotonic::Max();
         }
 
-        void Disarm() {
-            ExpectedEvent = nullptr;
+        bool Armed() const {
+            return TriggerTimestamp != TMonotonic::Max();
         }
 
         void operator()(typename TEvent::TPtr& ev) {
-            if (ev->Get() == ExpectedEvent) {
-                const TMonotonic now = TActivationContext::Monotonic();
-                const TMonotonic barrier = LastResetTimestamp + Timeout;
-                if (now < barrier) {
-                    // the time hasn't come yet
-                    Schedule(barrier, TActorIdentity(ev->Recipient));
-                } else if (Iteration < NumIterationsBeforeFiring) {
-                    // time has come, but we will still give actor a chance to process some messages and rearm timer
-                    ++Iteration;
-                    TActivationContext::Send(ev.Release()); // send this event into queue once more
-                } else {
-                    // no chance to disarm, fire callback
-                    Callback();
-                    ExpectedEvent = nullptr;
-                    Iteration = 0;
-                }
+            Y_VERIFY_DEBUG(EventScheduled);
+            EventScheduled = false;
+            if (!Armed()) {
+                // just do nothing
+            } else if (TActivationContext::Monotonic() < TriggerTimestamp) {
+                // the time hasn't come yet
+                Schedule(TActorIdentity(ev->Recipient));
+            } else if (Iteration < NumIterationsBeforeFiring) {
+                // time has come, but we will still give actor a chance to process some messages and rearm timer
+                ++Iteration;
+                TActivationContext::Send(ev.Release()); // send this event into queue once more
+                EventScheduled = true;
+            } else {
+                // no chance to disarm, fire callback
+                Disarm();
+                Callback();
             }
         }
 
     private:
-        template<typename T>
-        void Schedule(T&& timeout, const TActorIdentity& actor) {
-            auto ev = MakeHolder<TEvent>();
-            ExpectedEvent = ev.Get();
-            Iteration = 0;
-            actor.Schedule(timeout, ev.Release());
+        void Schedule(const TActorIdentity& actor) {
+            Y_VERIFY_DEBUG(Armed());
+            if (!EventScheduled) {
+                actor.Schedule(TriggerTimestamp, new TEvent);
+                EventScheduled = true;
+            }
         }
     };
 

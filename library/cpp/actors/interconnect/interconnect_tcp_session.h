@@ -82,6 +82,7 @@ namespace NActors {
         const ui64 UpperLimit;
     };
 
+    static constexpr TDuration DEFAULT_CLOSE_ON_IDLE_TIMEOUT = TDuration::Seconds(90);
     static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
     static constexpr TDuration DEFAULT_LOST_CONNECTION_TIMEOUT = TDuration::Seconds(10);
     static constexpr ui32 DEFAULT_MAX_INFLIGHT_DATA = 10240 * 1024;
@@ -545,6 +546,14 @@ namespace NActors {
             Terminate(TDisconnectReason::LostConnection());
         }
 
+        void RearmCloseOnIdle() {
+            if (!NumEventsInQueue && OutputCounter == LastConfirmed) {
+                CloseOnIdleWatchdog.Rearm(SelfId());
+            } else {
+                CloseOnIdleWatchdog.Disarm();
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         const TSessionParams Params;
@@ -553,7 +562,7 @@ namespace NActors {
         ui64 TotalOutputQueueSize;
         bool OutputStuckFlag;
         TRecentWnd<std::pair<ui64, ui64>> OutputQueueUtilization;
-        size_t NumEventsInReadyChannels = 0;
+        size_t NumEventsInQueue = 0;
 
         void SetOutputStuckFlag(bool state);
         void SwitchStuckPeriod();

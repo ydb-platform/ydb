@@ -35,6 +35,13 @@ else()
   message(STATUS "Using ${LLVMOPT} for LLVM IR optimization")
 endif()
 
+find_program(LLVMLLC NAMES llc-12 llc)
+if (LLVMLLC MATCHES "LLVMLLC-NOTFOUND")
+  message(SEND_ERROR "llvm llc tool not found")
+else()
+  message(STATUS "Using ${LLVMLLC} for LLVM IR to binary code compilation")
+endif()
+
 function(llvm_compile_cxx Tgt Inpt Out Tool UseC)
   list(APPEND TARGET_INCLUDES "-I$<JOIN:$<TARGET_PROPERTY:${Tgt},INCLUDE_DIRECTORIES>,$<SEMICOLON>-I>")
   list(APPEND TARGET_COMPILE_OPTIONS "'$<JOIN:$<TARGET_GENEX_EVAL:${Tgt},$<TARGET_PROPERTY:${Tgt},COMPILE_OPTIONS>>,'$<SEMICOLON>'>'")

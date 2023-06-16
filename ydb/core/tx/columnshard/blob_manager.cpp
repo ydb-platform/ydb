@@ -536,7 +536,9 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
             BlobsManagerCounters.OnDeleteBlobMarker(blobId.BlobSize());
             BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
         }
-        NBlobCache::ForgetBlob(blobId);
+        if (!EvictedBlobs.contains(TEvictedBlob{.Blob = blobId})) {
+            NBlobCache::ForgetBlob(blobId);
+        }
     } else {
         BlobsManagerCounters.OnDeleteBlobDelayedMarker(blobId.BlobSize());
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delay Delete Blob " << blobId);
@@ -725,6 +727,7 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
         return;
     }
 
+    LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Blob " << blobId << " is no longer in use");
     BlobsUseCount.erase(useIt);
 
     // Check if the blob is marked for delayed deletion
@@ -742,7 +745,10 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
             BlobsToDelete.insert(logoBlobId);
             BlobsManagerCounters.OnBlobsDelete(BlobsToDelete);
             BlobsManagerCounters.OnDeleteBlobMarker(logoBlobId.BlobSize());
-            NBlobCache::ForgetBlob(blobId);
+
+            if (!EvictedBlobs.contains(TEvictedBlob{.Blob = blobId})) {
+                NBlobCache::ForgetBlob(blobId);
+            }
         }
     }
 }

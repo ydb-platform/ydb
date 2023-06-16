@@ -953,7 +953,7 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
     for (const auto& ev : evictedBlobs) {
         auto& blobId = ev.Blob;
         if (BlobManager->BlobInUse(blobId)) {
-            LOG_S_DEBUG("Blob '" << blobId.ToStringNew() << "' in use at tablet " << TabletID());
+            LOG_S_DEBUG("Blob '" << blobId.ToStringNew() << "' is in use at tablet " << TabletID());
             strBlobsDelayed << "'" << blobId.ToStringNew() << "' ";
             continue;
         }
@@ -969,7 +969,7 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::T
             tierBlobs[meta.GetTierName()].emplace_back(std::move(evict));
         } else {
             Y_VERIFY(evict.Blob == blobId);
-            strBlobsDelayed << "'"<< blobId.ToStringNew() << "' ";
+            strBlobsDelayed << "'" << blobId.ToStringNew() << "' ";
         }
     }
 

@@ -77,6 +77,30 @@ struct TTestSchema {
             TtlColumn = columnName;
             return *this;
         }
+
+        static NKikimrSchemeOp::TS3Settings FakeS3() {
+            const TString bucket = "tiering-test-01";
+
+            NKikimrSchemeOp::TS3Settings s3Config;
+            s3Config.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+            s3Config.SetVerifySSL(false);
+            s3Config.SetBucket(bucket);
+//#define S3_TEST_USAGE
+#ifdef S3_TEST_USAGE
+            s3Config.SetEndpoint("storage.cloud-preprod.yandex.net");
+            s3Config.SetAccessKey("...");
+            s3Config.SetSecretKey("...");
+            s3Config.SetProxyHost("localhost");
+            s3Config.SetProxyPort(8080);
+            s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+#else
+            s3Config.SetEndpoint("fake");
+#endif
+            s3Config.SetRequestTimeoutMs(10000);
+            s3Config.SetHttpRequestTimeoutMs(10000);
+            s3Config.SetConnectionTimeoutMs(10000);
+            return s3Config;
+        }
     };
 
     struct TTableSpecials : public TStorageTier {

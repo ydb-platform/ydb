@@ -18,6 +18,7 @@ message TActivationPercentage {
     repeated string IncludeUsers = 3;
     repeated string ExcludeUsers = 4;
     optional bool ExcludeRobots = 5 [default = true];
+    repeated string Tags = 6;
 }
 
 message TAttr {
@@ -483,10 +484,12 @@ message TDqGatewayConfig {
 
     repeated TAttr DefaultSettings = 102;
 
-    optional uint32 WithHiddenPercentage = 5 [default = 0];
-    repeated TDefaultAutoByHourPercentage WithHiddenByHour = 6;
-    repeated string NoWithHiddenForUsers = 7;
-    repeated string WithHiddenForUsers = 8;
+    optional uint32 WithHiddenPercentage = 5 [default = 0];     // Depricated. TODO: remove
+    repeated TDefaultAutoByHourPercentage WithHiddenByHour = 6; // Depricated. TODO: remove
+    repeated string NoWithHiddenForUsers = 7;                   // Depricated. TODO: remove
+    repeated string WithHiddenForUsers = 8;                     // Depricated. TODO: remove
+
+    optional TActivationPercentage HiddenActivation = 9;
 }
 
 /////////////////////////////// Yql Core ///////////////////////////////
@@ -543,9 +546,9 @@ message TGenericClusterConfig {
     // Location represents the network address of a data source instance we want to connect
     oneof Location {
         // Endpoint must be used for on-premise deployments.
-        NYql.Connector.API.Endpoint Endpoint = 3; 
+        NYql.Connector.API.Endpoint Endpoint = 3;
         // DatabaseID must be used when the data source is deployed in cloud.
-        // Data source FQDN and port will be resolved by MDB service. 
+        // Data source FQDN and port will be resolved by MDB service.
         string DatabaseID = 4;
     }
 

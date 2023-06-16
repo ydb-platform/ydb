@@ -9,17 +9,16 @@
 
 namespace NYql::NConfig {
 
-
 template <class TActivation>
-bool Allow(const TActivation& activation, const TString& userName) {
+ui32 GetPercentage(const TActivation& activation, const TString& userName) {
     if (AnyOf(activation.GetIncludeUsers(), [&](const auto& user) { return user == userName; })) {
-        return true;
+        return 100;
     }
     if (AnyOf(activation.GetExcludeUsers(), [&](const auto& user) { return user == userName; })) {
-        return false;
+        return 0;
     }
-    if (userName.StartsWith("robot") && activation.GetExcludeRobots()) {
-        return false;
+    if ((userName.StartsWith("robot-") || userName.StartsWith("zomb-")) && activation.GetExcludeRobots()) {
+        return 0;
     }
 
     ui32 percent = activation.GetPercentage();
@@ -36,10 +35,18 @@ bool Allow(const TActivation& activation, const TString& userName) {
             }
         }
     }
+
+    return percent;
+}
+
+template <class TActivation>
+bool Allow(const TActivation& activation, const TString& userName) {
+    ui32 percent = GetPercentage(activation, userName);
     const auto random = RandomNumber<ui8>(100);
     return random < percent;
 }
 
+template ui32 GetPercentage<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName);
 template bool Allow<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName);
 
 } // namespace

@@ -910,11 +910,6 @@ public:
 
     [[nodiscard]]
     TAstNode* ParseInsertStmt(const InsertStmt* value) {
-        if (!value->selectStmt) {
-            AddError("InsertStmt: expected Select");
-            return nullptr;
-        }
-
         if (value->onConflictClause) {
             AddError("InsertStmt: not supported onConflictClause");
             return nullptr;
@@ -952,16 +947,15 @@ public:
             }
         }
 
-        auto select = ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true, targetColumns);
+        const auto select = (value->selectStmt) 
+            ? ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true, targetColumns)
+            : L(A("Void"));
         if (!select) {
             return nullptr;
         }
 
-        auto insertMode = (ProviderToInsertModeMap.contains(Provider))
-            ? ProviderToInsertModeMap.at(Provider)
-            : "append";
+        const auto writeOptions = BuildWriteOptions(value);
 
-        auto writeOptions = QL(QL(QA("mode"), QA(insertMode)));
         Statements.push_back(L(
             A("let"),
             A("world"),
@@ -1222,6 +1216,21 @@ private:
         if (ctx.isTemporary) {
             options.push_back(QL(QA("temporary")));
         }
+        return QVL(options.data(), options.size());
+    }
+
+    TAstNode* BuildWriteOptions(const InsertStmt* value) {
+        std::vector<TAstNode*> options;
+
+        const auto insertMode = (ProviderToInsertModeMap.contains(Provider))
+            ? ProviderToInsertModeMap.at(Provider)
+            : "append";
+        options.push_back(QL(QA("mode"), QA(insertMode)));
+
+        if (!value->selectStmt) {
+            options.push_back(QL(QA("default_values")));
+        }
+
         return QVL(options.data(), options.size());
     }
 

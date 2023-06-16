@@ -72,6 +72,25 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         res.Root->PrintTo(Cerr);
     }
 
+    Y_UNIT_TEST(InsertStmt_DefaultValues) {
+        auto res = PgSqlToYql("INSERT INTO plato.Input DEFAULT VALUES");
+        UNIT_ASSERT(res.Root);
+
+        const NYql::TAstNode* writeNode = nullptr;
+        VisitAstNodes(*res.Root, [&writeNode] (const NYql::TAstNode& node) {
+            const bool isWriteNode = node.IsList() && node.GetChildrenCount() > 0 
+                && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "Write!";
+            if (isWriteNode) {
+                writeNode = &node;
+            }
+        });
+
+        UNIT_ASSERT(writeNode);
+        UNIT_ASSERT(writeNode->GetChildrenCount() > 5);
+        const auto optionsQListNode = writeNode->GetChild(5);
+        UNIT_ASSERT(optionsQListNode->ToString().Contains("'default_values"));
+    }
+
     Y_UNIT_TEST(DeleteStmt) {
         auto res = PgSqlToYql("DELETE FROM plato.Input");
         UNIT_ASSERT(res.Root);

@@ -12,8 +12,8 @@ namespace GraceJoin {
 const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
 const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets);  // Number of hashed keys buckets to distribute incoming tables tuples
-const ui64 DefaultTuplesNum = 1000; // Default initial number of tuples in one bucket to allocate memory
-const ui64 DefaultTupleBytes = 512; // Default size of all columns in table row for estimations
+const ui64 DefaultTuplesNum = 100; // Default initial number of tuples in one bucket to allocate memory
+const ui64 DefaultTupleBytes = 64; // Default size of all columns in table row for estimations
 const ui64 HashSize = 1; // Using ui64 hash size
 
 /*
@@ -47,8 +47,8 @@ struct KeysHashTable {
     ui64 SlotSize = 0; // Slot size in hash table
     ui64 NSlots = 0; // Total number of slots in table  
     ui64 FillCount = 0; // Number of ui64 slots which are filled
-    std::vector<ui64> Table;  // Table to store keys data in particular slots
-    std::vector<ui64> SpillData; // Vector to store long data which cannot be fit in single hash table slot.
+    std::vector<ui64, TMKQLAllocator<ui64>> Table;  // Table to store keys data in particular slots
+    std::vector<ui64, TMKQLAllocator<ui64>> SpillData; // Vector to store long data which cannot be fit in single hash table slot.
 };
 
 struct TTableBucket {
@@ -197,6 +197,8 @@ public:
             ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
             ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0, 
             ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+    
+    ~TTable();
 
 };
 

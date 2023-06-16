@@ -13,6 +13,7 @@
 
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
+#include <util/system/mem_info.h>
 
 #include <cstdint>
 
@@ -180,6 +181,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             ui32 bigStrSize[2] = {151, 151};
 
             
+            NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
             GraceJoin::TTable bigTable(1,1,1,1);
             GraceJoin::TTable smallTable(1,1,1,1);
@@ -226,6 +229,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / ( milliseconds * 1024 * 1024) << "MB/sec" << Endl;
             CTEST << Endl;
 
+            mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage after tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
+
+
             bigTable.Clear();
             smallTable.Clear();
 
@@ -252,6 +259,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / ( milliseconds * 1024 * 1024) << "MB/sec" << Endl;
             CTEST << Endl;
            
+            mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage after tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
 
             std::vector<ui64> vals1, vals2;
@@ -305,6 +314,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             std::chrono::steady_clock::time_point end05 = std::chrono::steady_clock::now();
             CTEST << "Time for join = " << std::chrono::duration_cast<std::chrono::milliseconds>(end05 - begin05).count() << "[ms]" << Endl;
             CTEST << Endl;
+
+            mi = NMemInfo::GetMemInfo();
+            CTEST << "Mem usage after tables join (MB): " << mi.RSS / (1024 * 1024) << Endl;
+
 
             joinTable.ResetIterator();
             ui64 numJoinedTuples = 0;

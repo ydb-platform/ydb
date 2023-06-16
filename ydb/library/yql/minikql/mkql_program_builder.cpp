@@ -1988,7 +1988,7 @@ TRuntimeNode TProgramBuilder::JoinDict(TRuntimeNode dict1, bool isMulti1, TRunti
 
 TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
-        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType) {
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings ) {
 
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
     MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
@@ -2016,6 +2016,7 @@ TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flow
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
     callableBuilder.Add(NewTuple(leftRenamesNodes));
     callableBuilder.Add(NewTuple(rightRenamesNodes));
+    callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
 
 
     return TRuntimeNode(callableBuilder.Build(), false);

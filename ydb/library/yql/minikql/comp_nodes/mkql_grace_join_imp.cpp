@@ -8,16 +8,19 @@
 #include <string_view>
 #include <format>
 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace GraceJoin {
 
-
+static std::atomic<ui64> GlobalTuplesPacked = 0;
+static std::atomic<ui64> GlobalTuplesDeleted = 0;
 
 void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns ) {
 
     TotalPacked++;
+    GlobalTuplesPacked++;
 
     TempTuple.clear();
     TempTuple.insert(TempTuple.end(), intColumns, intColumns + NullsBitmapSize_ + NumberOfKeyIntColumns);
@@ -265,7 +268,7 @@ inline bool CompareIColumns(    const ui32* stringSizes1, const char * vals1,
 // Resizes KeysHashTable to new slots, keeps old content.
 void ResizeHashTable(KeysHashTable &t, ui64 newSlots){
 
-    std::vector<ui64> newTable(newSlots * t.SlotSize , 0);
+    std::vector<ui64, TMKQLAllocator<ui64>> newTable(newSlots * t.SlotSize , 0);
     for ( auto it = t.Table.begin(); it != t.Table.end(); it += t.SlotSize ) {
         if ( *it == 0)
             continue;
@@ -1207,6 +1210,10 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
      }
 
 }
+
+TTable::~TTable() {
+    GlobalTuplesDeleted += TotalPacked;
+};
 
 }
 

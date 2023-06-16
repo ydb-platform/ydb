@@ -880,7 +880,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 }
 
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
 
     const auto leftFlowNode = callable.GetInput(0);
     const auto rightFlowNode = callable.GetInput(1);
@@ -893,9 +893,7 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
     const auto rightRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(6));
     const ui32 rawJoinKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
 
-//    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui32>());
-
-    const EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None;
+    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui32>());
 
     const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
     const auto flowRight = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 1));

@@ -1342,7 +1342,7 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  
         return MakeBool<false>(node->Pos(), ctx);
     }
 
-    if (node->Head().IsCallable("Just")) {
+    if (node->Head().IsCallable({"Just", "PgConst"})) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         return MakeBool<true>(node->Pos(), ctx);
     }

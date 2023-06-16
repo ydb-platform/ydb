@@ -49,8 +49,11 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             mirrorFrom
         );
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER});
+        server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessageMeta(true);
 
         auto driver = server.AnnoyingClient->GetDriver();
+
+        using namespace NYdb;
 
         {   // write to mirrored topic (must fail)
             auto writer = CreateSimpleWriter(*driver, dstTopic, "123");
@@ -60,6 +63,87 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             UNIT_ASSERT(res);
             res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(!res);
+        }
+
+        {
+            auto channel = grpc::CreateChannel(
+                    "localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()
+            );
+            auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+            grpc::ClientContext rcontext;
+            auto writeSession = topicStub->StreamWrite(&rcontext);
+            UNIT_ASSERT(writeSession);
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+            auto* init = req.mutable_init_request();
+            init->set_path(srcTopic);
+            init->set_producer_id("directRpcSession");
+            init->set_message_group_id("directRpcSession");
+            if (!writeSession->Write(req)) {
+                UNIT_FAIL("Grpc write fail");
+            }
+            UNIT_ASSERT(writeSession->Read(&resp));
+            Cerr << "Write session init response: " << resp.DebugString() << Endl;
+            req = Ydb::Topic::StreamWriteMessage::FromClient{};
+            auto* write = req.mutable_write_request();
+            write->set_codec(1);
+            auto* msg = write->add_messages();
+            msg->set_seq_no(1);
+            msg->set_data("data");
+            msg->mutable_created_at()->set_seconds(1000);
+            auto* meta = msg->mutable_message_meta();
+            (*meta)["meta-key"] = "meta-value";
+            (*meta)["meta-key2"] = "meta-value2";
+            if (!writeSession->Write(req)) {
+                UNIT_FAIL("Grpc write fail");
+            }
+            UNIT_ASSERT(writeSession->Read(&resp));
+            Cerr << "Write session write response: " << resp.DebugString() << Endl;
+
+        }
+        auto createTopicReader = [&](const TString& topic) {
+            auto settings = NTopic::TReadSessionSettings()
+                    .AppendTopics(NTopic::TTopicReadSettings(topic))
+                    .ConsumerName("shared/user")
+                    .Decompress(false);
+
+            return NTopic::TTopicClient(*driver).CreateReadSession(settings);
+        };
+        auto getMessagesFromTopic = [&](auto& reader) {
+            TMaybe<NTopic::TReadSessionEvent::TDataReceivedEvent> result;
+            while (true) {
+                auto event = reader->GetEvent(true);
+                if (!event)
+                    return result;
+                if (auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    result = *dataEvent;
+                    break;
+                } else if (auto *lockEv = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    lockEv->Confirm();
+                } else if (auto *releaseEv = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    releaseEv->Confirm();
+                } else if (auto *closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+                    return result;
+                }
+            }
+            return result;
+        };
+        auto srcReader = createTopicReader(srcTopic);
+        auto dstReader = createTopicReader(dstTopic);
+        auto dstEvent = getMessagesFromTopic(dstReader);
+        UNIT_ASSERT(dstEvent);
+        Cerr << "Destination read message: " << dstEvent->DebugString() << "\n";
+        auto srcEvent = getMessagesFromTopic(srcReader);
+        UNIT_ASSERT(srcEvent);
+        Cerr << "Source read message: " << srcEvent->DebugString() << "\n";
+        const auto& dstMessages = dstEvent->GetCompressedMessages();
+        const auto& srcMessages = srcEvent->GetCompressedMessages();
+        UNIT_ASSERT(srcMessages.size());
+        UNIT_ASSERT_VALUES_EQUAL(srcMessages.size(), dstMessages.size());
+        for (auto i = 0u; i < srcMessages.size(); i++) {
+            UNIT_ASSERT_VALUES_EQUAL(dstMessages[i].GetMessageMeta()->Fields.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(srcMessages[i].GetMessageMeta()->Fields, dstMessages[i].GetMessageMeta()->Fields);
+
         }
 
         // write to source topic
@@ -157,8 +241,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 }
             }
         }
+
     }
-
 }
-
 } // NKikimr::NPersQueueTests

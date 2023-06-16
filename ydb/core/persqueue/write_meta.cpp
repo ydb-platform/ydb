@@ -50,6 +50,13 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
             SetMetaField(proto, item.first, item.second);
         }
     }
+    auto& fields = message.GetMessageMeta()->Fields;
+    if (!fields.empty()) {
+        auto& messageMeta = *proto.MutableMessageMeta();
+        for (const auto& item : fields) {
+            messageMeta[item.first] = item.second;
+        }
+    }
     proto.SetSeqNo(message.GetSeqNo());
     proto.SetCreateTime(message.GetCreateTime().MilliSeconds());
     auto codec = NPQ::FromTopicCodec(message.GetCodec());

@@ -373,6 +373,45 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/unpack_args.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/numbered.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/numbered_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/list/aux_/preprocessed/AUX778076_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list10_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list20_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list30_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list40_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list50.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list50_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/map/aux_/preprocessed/AUX778076_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map50.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/set/aux_/preprocessed/AUX778076_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set10_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set20_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set30_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set40_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set50.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set50_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/vector/aux_/preprocessed/AUX778076_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector20_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector30_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector40_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector50.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector50_c.hpp
 
 - source_filter: "^contrib/restricted/boost/numeric_conversion"
   includes:

@@ -20,6 +20,7 @@
     && !defined(BOOST_MPL_PREPROCESSING_MODE) \
     && (   defined(BOOST_MPL_CFG_GCC) && BOOST_MPL_CFG_GCC >= 0x0302 \
         || defined(__MWERKS__) && __MWERKS__ >= 0x3000 \
+		|| defined(__clang__) \
         )
 
 #   define BOOST_MPL_CFG_HAS_TYPEOF

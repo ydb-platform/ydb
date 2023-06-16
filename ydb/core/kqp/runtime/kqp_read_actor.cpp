@@ -1185,8 +1185,6 @@ public:
                     ResetRead(id);
                 }
 
-                StartShards();
-
                 Results.pop();
                 CA_LOG_D("dropping batch for read #" << id);
 
@@ -1194,6 +1192,8 @@ public:
                     finished = true;
                     break;
                 }
+
+                StartShards();
             } else {
                 break;
             }

@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <library/cpp/actors/util/rope.h>
+
 #include <util/generic/buffer.h>
 
 namespace NKikimr::NKqp {
@@ -10,10 +12,10 @@ namespace NKikimr::NKqp {
 struct TEvKqpSpilling {
     struct TEvWrite : public TEventLocal<TEvWrite, TKqpSpillingEvents::EvWrite> {
         ui64 BlobId;
-        TBuffer Blob;
+        TRope Blob;
         TMaybe<TDuration> Timeout;
 
-        TEvWrite(ui64 blobId, TBuffer&& blob, TMaybe<TDuration> timeout = {})
+        TEvWrite(ui64 blobId, TRope&& blob, TMaybe<TDuration> timeout = {})
             : BlobId(blobId), Blob(std::move(blob)), Timeout(timeout) {}
     };
 

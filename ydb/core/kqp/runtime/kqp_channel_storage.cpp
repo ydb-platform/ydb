@@ -138,7 +138,7 @@ public:
         return WritingBlobs.size() > MAX_INFLIGHT_BLOBS_COUNT || WritingBlobsSize > MAX_INFLIGHT_BLOBS_SIZE;
     }
 
-    void Put(ui64 blobId, TBuffer&& blob) {
+    void Put(ui64 blobId, TRope&& blob) {
         FailOnError();
 
         // TODO: timeout
@@ -223,7 +223,7 @@ public:
         return SelfActor->IsFull();
     }
 
-    void Put(ui64 blobId, TBuffer&& blob) override {
+    void Put(ui64 blobId, TRope&& blob) override {
         SelfActor->Put(blobId, std::move(blob));
     }
 

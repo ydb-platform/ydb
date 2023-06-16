@@ -43,6 +43,8 @@ private:
 
 using namespace NKikimr;
 
+using NKikimr::NMiniKQL::TPagedBuffer;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template<bool FastPack>
@@ -138,14 +140,10 @@ public:
             size_t bufSize = head.Buffer->Size();
             YQL_ENSURE(PackedDataSize >= bufSize);
 
-            TBuffer blob;
-            blob.Reserve(bufSize + sizeof(head.RowCount));
-            blob.Append((const char*)&head.RowCount, sizeof(head.RowCount));
-            head.Buffer->ForEachPage([&blob](const char *data, size_t len) {
-                blob.Append(data, len);
-            });
-
-            YQL_ENSURE(blob.Size() == bufSize + sizeof(head.RowCount));
+            TRope blob = TPagedBuffer::AsRope(head.Buffer);
+            TString header((const char*)&head.RowCount, sizeof(head.RowCount));
+            blob.Insert(blob.Begin(), TRope{header});
+            YQL_ENSURE(blob.size() == bufSize + sizeof(head.RowCount));
             Storage->Put(NextStoredId++, std::move(blob));
 
             PackedDataSize -= bufSize;
@@ -365,7 +363,7 @@ private:
     TLogFunc LogFunc;
 
     struct TSerializedBatch {
-        NKikimr::NMiniKQL::TPagedBuffer::TPtr Buffer;
+        TPagedBuffer::TPtr Buffer;
         ui64 RowCount = 0;
     };
     std::deque<TSerializedBatch> Data;

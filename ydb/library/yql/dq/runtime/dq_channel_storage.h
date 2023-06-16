@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/actors/util/rope.h>
+
 #include <util/generic/buffer.h>
 #include <util/generic/yexception.h>
 
@@ -23,12 +25,13 @@ public:
 
     // methods Put/Get can throw `TDqChannelStorageException`
 
-    // TODO: support IZeroCopyInput
-    virtual void Put(ui64 blobId, TBuffer&& blob) = 0;
+    // Data should be owned by `blob` argument since the Put() call is actually asynchronous
+    virtual void Put(ui64 blobId, TRope&& blob) = 0;
 
     // TODO: there is no way for client to delete blob.
     // It is better to replace Get() with Pull() which will delete blob after read
     // (current clients read each blob exactly once)
+    // Get() will return false if data is not ready yet. Client should repeat Get() in this case
     virtual bool Get(ui64 blobId, TBuffer& data)  = 0;
 };
 

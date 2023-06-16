@@ -30,6 +30,17 @@ TBuffer CreateBlob(ui32 size, char symbol) {
     return blob;
 }
 
+TRope CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
+    TRope result;
+    while (size) {
+        size_t count = std::min(size, chunkSize);
+        TString str(count, symbol);
+        result.Insert(result.End(), TRope{str});
+        size -= count;
+    }
+    return result;
+}
+
 void AssertEquals(const TBuffer& lhs, const TBuffer& rhs) {
     TStringBuf l{lhs.data(), lhs.size()};
     TStringBuf r{rhs.data(), rhs.size()};
@@ -100,7 +111,7 @@ Y_UNIT_TEST(Simple) {
 
     // put blob 1
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateBlob(10, 'a'));
+        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateRope(10, 'a'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester, TDuration::Seconds(1));
@@ -109,7 +120,7 @@ Y_UNIT_TEST(Simple) {
 
     // put blob 2
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(2, CreateBlob(11, 'z'));
+        auto ev = new TEvKqpSpilling::TEvWrite(2, CreateRope(11, 'z'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester, TDuration::Seconds(1));
@@ -175,7 +186,7 @@ Y_UNIT_TEST(Write_TotalSizeLimitExceeded) {
     WaitBootstrap(runtime);
 
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateBlob(51, 'a'));
+        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateRope(51, 'a'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester);
@@ -183,7 +194,7 @@ Y_UNIT_TEST(Write_TotalSizeLimitExceeded) {
     }
 
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(2, CreateBlob(50, 'b'));
+        auto ev = new TEvKqpSpilling::TEvWrite(2, CreateRope(50, 'b'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvError>(tester);
@@ -203,7 +214,7 @@ Y_UNIT_TEST(Write_FileSizeLimitExceeded) {
     WaitBootstrap(runtime);
 
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateBlob(51, 'a'));
+        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateRope(51, 'a'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester);
@@ -211,7 +222,7 @@ Y_UNIT_TEST(Write_FileSizeLimitExceeded) {
     }
 
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(2, CreateBlob(50, 'b'));
+        auto ev = new TEvKqpSpilling::TEvWrite(2, CreateRope(50, 'b'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvError>(tester);
@@ -234,7 +245,7 @@ Y_UNIT_TEST(MultipleFileParts) {
 
     for (ui32 i = 0; i < 5; ++i) {
         // Cerr << "---- store blob #" << i << Endl;
-        auto ev = new TEvKqpSpilling::TEvWrite(i, CreateBlob(20, 'a' + i));
+        auto ev = new TEvKqpSpilling::TEvWrite(i, CreateRope(20, 'a' + i));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester);
@@ -277,7 +288,7 @@ Y_UNIT_TEST(SingleFilePart) {
 
     for (ui32 i = 0; i < 5; ++i) {
         // Cerr << "---- store blob #" << i << Endl;
-        auto ev = new TEvKqpSpilling::TEvWrite(i, CreateBlob(20, 'a' + i));
+        auto ev = new TEvKqpSpilling::TEvWrite(i, CreateRope(20, 'a' + i));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester);
@@ -317,7 +328,7 @@ Y_UNIT_TEST(ReadError) {
     WaitBootstrap(runtime);
 
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(0, CreateBlob(20, 'a'));
+        auto ev = new TEvKqpSpilling::TEvWrite(0, CreateRope(20, 'a'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvWriteResult>(tester);
@@ -396,7 +407,7 @@ Y_UNIT_TEST(StartError) {
 
     // put blob 1
     {
-        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateBlob(10, 'a'));
+        auto ev = new TEvKqpSpilling::TEvWrite(1, CreateRope(10, 'a'));
         runtime.Send(new IEventHandle(spillingActor, tester, ev));
 
         auto resp = runtime.GrabEdgeEvent<TEvKqpSpilling::TEvError>(tester, TDuration::Seconds(1));

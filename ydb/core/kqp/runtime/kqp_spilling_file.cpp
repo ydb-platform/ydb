@@ -785,7 +785,7 @@ private:
         TString FileName;
         bool CreateFile = false;
         ui64 BlobId = 0;
-        TBuffer Blob;
+        TRope Blob;
         TInstant Ts = TInstant::Now();
 
         void Process(void*) override {
@@ -806,7 +806,9 @@ private:
                 } else {
                     file = TFile::ForAppend(FileName);
                 }
-                file.Write(Blob.Data(), Blob.size());
+                for (auto it = Blob.Begin(); it.Valid(); ++it) {
+                    file.Write(it.ContiguousData(), it.ContiguousSize());
+                }
             } catch (const yexception& e) {
                 A_LOG_E("[Write async] file: " << FileName << ", io error: " << e.what());
                 resp->Error = e.what();

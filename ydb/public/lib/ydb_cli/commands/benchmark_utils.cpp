@@ -17,37 +17,57 @@ namespace NYdb::NConsoleClient::BenchmarkUtils {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-TTestInfo::TTestInfo(std::vector<TDuration>&& timings)
-    : Timings(std::move(timings))
+TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings)
+    : ClientTimings(std::move(clientTimings))
+    , ServerTimings(std::move(serverTimings))
 {
 
-    if (Timings.empty()) {
+    if (ClientTimings.empty()) {
         return;
     }
 
-    ColdTime = Timings[0];
+    Y_VERIFY(ClientTimings.size() == ServerTimings.size());
 
-    if (Timings.size() > 1) {
+    ColdTime = ServerTimings[0];
+
+    if (ServerTimings.size() >= 1) {
         ui32 sum = 0;
-        for (size_t j = 1; j < Timings.size(); ++j) {
-            if (Max < Timings[j]) {
-                Max = Timings[j];
+        for (const auto& timing : ServerTimings) {
+            if (Max < timing) {
+                Max = timing;
             }
-            if (!Min || Min > Timings[j]) {
-                Min = Timings[j];
+            if (!Min || Min > timing) {
+                Min = timing;
             }
-            sum += Timings[j].MilliSeconds();
+            sum += timing.MilliSeconds();
         }
-        Mean = (double) sum / (double) (Timings.size() - 1);
-        if (Timings.size() > 2) {
+
+        Mean = static_cast<double>(sum) / static_cast<double>(ServerTimings.size());
+        if (ServerTimings.size() > 1) {
             double variance = 0;
-            for (size_t j = 1; j < Timings.size(); ++j) {
-                variance += (Mean - Timings[j].MilliSeconds()) * (Mean - Timings[j].MilliSeconds());
+            for (const auto& timing : ServerTimings) {
+                double diff = (Mean - timing.MilliSeconds());
+                variance += diff * diff;
             }
-            variance = variance / (double) (Timings.size() - 2);
+            variance = variance / static_cast<double>(ServerTimings.size() - 1);
             Std = sqrt(variance);
         }
     }
+
+    double totalDiff = 0;
+    for(size_t idx = 0; idx < ServerTimings.size(); ++idx) {
+        TDuration diff = ClientTimings[idx] - ServerTimings[idx];
+        totalDiff += diff.MilliSeconds();
+        if (idx == 0 || diff < RttMin) {
+            RttMin = diff;
+        }
+
+        if (idx == 0 || diff > RttMax) {
+            RttMax = diff;
+        }
+    }
+
+    RttMean = totalDiff / static_cast<double>(ServerTimings.size());
 }
 
 TString FullTablePath(const TString& database, const TString& table) {
@@ -76,6 +96,7 @@ bool HasCharsInString(const TString& str) {
 class IQueryResultScanner {
 private:
     TString ErrorInfo;
+    TDuration ServerTiming;
 public:
     virtual ~IQueryResultScanner() = default;
     virtual void OnStart(const TVector<NYdb::TColumn>& columns) = 0;
@@ -89,6 +110,9 @@ public:
     const TString& GetErrorInfo() const {
         return ErrorInfo;
     }
+    TDuration GetServerTiming() const {
+        return ServerTiming;
+    }
 
     bool Scan(NTable::TScanQueryPartIterator& it) {
         for (;;) {
@@ -99,6 +123,10 @@ public:
                     return false;
                 }
                 break;
+            }
+
+            if (streamPart.HasQueryStats()) {
+                ServerTiming = streamPart.GetQueryStats().GetTotalDuration();
             }
 
             if (streamPart.HasResultSet()) {
@@ -220,7 +248,7 @@ TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client
     if (!composite.Scan(it)) {
         return TQueryBenchmarkResult::Error(composite.GetErrorInfo());
     } else {
-        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV);
+        return TQueryBenchmarkResult::Result(scannerYson->GetResult(), *scannerCSV, composite.GetServerTiming());
     }
 }
 

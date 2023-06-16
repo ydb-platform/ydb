@@ -76,8 +76,10 @@ bool TTpchCommandRun::RunBench(TConfig& config)
         }
         const TString query = PatchQuery(qtokens[queryN]);
 
-        std::vector<TDuration> timings;
-        timings.reserve(IterationsCount);
+        std::vector<TDuration> clientTimings;
+        std::vector<TDuration> serverTimings;
+        clientTimings.reserve(IterationsCount);
+        serverTimings.reserve(IterationsCount);
 
         Cout << Sprintf("Query%02u", getQueryNumber(queryN)) << ":" << Endl;
         Cerr << "Query text:\n" << Endl;
@@ -92,7 +94,8 @@ bool TTpchCommandRun::RunBench(TConfig& config)
             Cout << "\titeration " << i << ":\t";
             if (!!res) {
                 Cout << "ok\t" << duration << " seconds" << Endl;
-                timings.emplace_back(duration);
+                clientTimings.emplace_back(duration);
+                serverTimings.emplace_back(res.GetServerTiming());
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << getQueryNumber(queryN) << ": " << Endl
@@ -110,7 +113,7 @@ bool TTpchCommandRun::RunBench(TConfig& config)
             allOkay = false;
         }
 
-        auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(timings)));
+        auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
         Y_VERIFY(success);
         auto& testInfo = inserted->second;
 
@@ -143,7 +146,7 @@ bool TTpchCommandRun::RunBench(TConfig& config)
                     jStream << ",";
                 }
                 ++colId;
-                jStream << testInfo.Timings.at(rowId).MilliSeconds();
+                jStream << testInfo.ServerTimings.at(rowId).MilliSeconds();
             }
 
             jStream << Endl;

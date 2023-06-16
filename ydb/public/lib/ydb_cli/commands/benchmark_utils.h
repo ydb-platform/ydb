@@ -11,11 +11,17 @@ struct TTestInfo {
     TDuration ColdTime;
     TDuration Min;
     TDuration Max;
+
+    TDuration RttMin;
+    TDuration RttMax;
+    double RttMean = 0;
+
     double Mean = 0;
     double Std = 0;
-    std::vector<TDuration> Timings;
+    std::vector<TDuration> ClientTimings; // timings captured by the client application. these timings include time RTT between server and the client application.
+    std::vector<TDuration> ServerTimings; // query timings measured by the server.
 
-    explicit TTestInfo(std::vector<TDuration>&& timings);
+    explicit TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDuration>&& serverTimings);
 };
 
 class TQueryResultInfo {
@@ -45,12 +51,14 @@ private:
     TString ErrorInfo;
     TString YSONResult;
     TQueryResultInfo QueryResult;
+    TDuration ServerTiming;
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult) {
+    static TQueryBenchmarkResult Result(const TString& yson, const TQueryResultInfo& queryResult, const TDuration& serverTiming) {
         TQueryBenchmarkResult result;
         result.YSONResult = yson;
         result.QueryResult = queryResult;
+        result.ServerTiming = serverTiming;
         return result;
     }
     static TQueryBenchmarkResult Error(const TString& error) {
@@ -63,6 +71,9 @@ public:
     }
     const TString& GetErrorInfo() const {
         return ErrorInfo;
+    }
+    TDuration GetServerTiming() const {
+        return ServerTiming;
     }
     const TString& GetYSONResult() const {
         return YSONResult;

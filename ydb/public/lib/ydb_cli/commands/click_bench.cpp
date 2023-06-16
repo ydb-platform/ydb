@@ -219,9 +219,9 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
     TStringStream report;
     report << "Results for " << IterationsCount << " iterations" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
-    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |" << Endl;
-    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
+    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
+    report << "| Query # | ColdTime |   Min   |   Max   |   Mean   |   Std   |  RttMin |  RttMax |  RttAvg |" << Endl;
+    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
 
     NJson::TJsonValue jsonReport(NJson::JSON_ARRAY);
     const bool collectJsonSensors = !JsonReportFileName.empty();
@@ -241,8 +241,10 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
 
         const TString query = PatchQuery(qInfo.GetQuery());
 
-        std::vector<TDuration> timings;
-        timings.reserve(IterationsCount);
+        std::vector<TDuration> clientTimings;
+        std::vector<TDuration> serverTimings;
+        clientTimings.reserve(IterationsCount);
+        serverTimings.reserve(IterationsCount);
 
         Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
         Cerr << "Query text:\n" << Endl;
@@ -265,7 +267,8 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             Cout << "\titeration " << i << ":\t";
             if (!!res) {
                 Cout << "ok\t" << duration << " seconds" << Endl;
-                timings.emplace_back(duration);
+                clientTimings.emplace_back(duration);
+                serverTimings.emplace_back(res.GetServerTiming());
                 ++successIteration;
                 if (successIteration == 1) {
                     outFStream << queryN << ": " << Endl
@@ -294,13 +297,14 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             allOkay = false;
         }
 
-        auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(timings)));
+        auto [inserted, success] = QueryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
         Y_VERIFY(success);
         auto& testInfo = inserted->second;
 
-        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f |", queryN,
+        report << Sprintf("|   %02u    | %8.3f | %7.3f | %7.3f | %8.3f | %7.3f | %7.3f | %7.3f | %7.3f |", queryN,
             testInfo.ColdTime.MilliSeconds() * 0.001, testInfo.Min.MilliSeconds() * 0.001, testInfo.Max.MilliSeconds() * 0.001,
-            testInfo.Mean * 0.001, testInfo.Std * 0.001) << Endl;
+            testInfo.Mean * 0.001, testInfo.Std * 0.001, testInfo.RttMin.MilliSeconds() * 0.001, testInfo.RttMax.MilliSeconds() * 0.001,
+            testInfo.RttMean * 0.001) << Endl;
         if (collectJsonSensors) {
             jsonReport.AppendValue(GetSensorValue("ColdTime", testInfo.ColdTime, queryN));
             jsonReport.AppendValue(GetSensorValue("Min", testInfo.Min, queryN));
@@ -309,12 +313,13 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
             jsonReport.AppendValue(GetSensorValue("DiffsCount", diffsCount, queryN));
             jsonReport.AppendValue(GetSensorValue("FailsCount", failsCount, queryN));
+            
         }
     }
 
     driver.Stop(true);
 
-    report << "+---------+----------+---------+---------+----------+---------+" << Endl;
+    report << "+---------+----------+---------+---------+----------+---------+---------+---------+---------+" << Endl;
 
     Cout << Endl << report.Str() << Endl;
     Cout << "Results saved to " << OutFilePath << Endl;
@@ -329,7 +334,7 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
                     jStream << ",";
                 }
                 ++colId;
-                jStream << testInfo.Timings.at(rowId).MilliSeconds();
+                jStream << testInfo.ServerTimings.at(rowId).MilliSeconds();
             }
 
             jStream << Endl;

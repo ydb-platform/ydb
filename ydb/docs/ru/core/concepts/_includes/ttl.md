@@ -53,7 +53,6 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   * миллисекунды;
   * микросекунды;
   * наносекунды.
-* Настройка TTL с использованием [YQL](../../yql/reference/index.md) возможна только для колонок типа `Date`, `Datetime`, и `Timestamp`.
 * Нельзя указать несколько TTL-колонок.
 * Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](#disable) на таблице.
 
@@ -126,6 +125,12 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
 
 {% list tabs %}
+
+- YQL
+
+  ```yql
+  ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
+  ```
 
 - CLI
 

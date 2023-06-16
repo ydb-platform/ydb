@@ -53,7 +53,6 @@ The *BRO* has the following properties:
    * Milliseconds.
    * Microseconds.
    * Nanoseconds.
-* TTL setup using [YQL](../../yql/reference/index.md) is only possible for the `Date`, `Datetime`, and `Timestamp` columns.
 * You can't specify multiple TTL columns.
 * You can't delete the TTL column. However, if this is required, you should first [disable TTL](#disable) for the table.
 
@@ -126,6 +125,12 @@ When setting up TTL using YQL, an `Interval` is created from a string literal in
 The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
 
 {% list tabs %}
+
+- YQL
+
+  ```yql
+  ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON modified_at AS SECONDS);
+  ```
 
 - CLI
 

@@ -112,7 +112,13 @@
 
 | Имя параметра | Тип | Допустимые значения | Возможность изменения | Возможность сброса |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
-| `TTL` | Expression | `Interval("<literal>") ON <column>` | Да | Да |
+| `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Да | Да |
+
+Где `<unit>`:
+* `SECONDS`;
+* `MILLISECONDS`;
+* `MICROSECONDS`;
+* `NANOSECONDS`.
 
 Подробнее об удалении устаревших данных читайте в разделе [Time to Live (TTL)](../../../concepts/ttl.md).
 

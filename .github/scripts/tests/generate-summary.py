@@ -16,7 +16,21 @@ class SummaryEntry:
     reason = ""
     is_failure: bool = False
     is_error: bool = False
+    is_muted: bool = False
     is_skipped: bool = False
+
+    @property
+    def display_status(self):
+        if self.is_error:
+            return "Error"
+        elif self.is_failure:
+            return "Failure"
+        elif self.is_muted:
+            return "Muted"
+        elif self.is_skipped:
+            return "Skipped"
+
+        return "?"
 
 
 def iter_xml_files(folder_or_file):
@@ -45,8 +59,10 @@ def parse_junit(folder_or_file):
     for fn, suite, case in iter_xml_files(folder_or_file):
         is_failure = case.find("failure") is not None
         is_error = case.find("error") is not None
-        is_skipped = case.find("skipped") is not None
-        if any([is_failure, is_skipped, is_error]):
+        is_muted = get_property_value(case, "mute") is not None
+        is_skipped = is_muted is False and case.find("skipped") is not None
+
+        if any([is_failure, is_muted, is_skipped, is_error]):
             cls, method = case.attrib["classname"], case.attrib["name"]
             log_url = get_property_value(case, "url:Log")
             target = f"{ cls }::{ method }" if cls != method else cls
@@ -56,6 +72,7 @@ def parse_junit(folder_or_file):
                     target=target,
                     log_url=log_url,
                     is_skipped=is_skipped,
+                    is_muted=is_muted,
                     is_failure=is_failure,
                     is_error=is_error,
                 )
@@ -64,28 +81,23 @@ def parse_junit(folder_or_file):
 
 
 def generate_summary(summary: List[SummaryEntry]):
-    icon = ":floppy_disk:"
+    log_icon = ":floppy_disk:"
     mute_icon = ":white_check_mark:"
+
     text = [
-        "| Test  | Status | Muted | Log |",
-        "| ----: | :----: | :---: | --: |",
+        "| Test  | Muted | Log |",
+        "| ----: | :---: | --: |",
     ]
 
     for entry in summary:
-        mute_target = mute_icon if entry.is_skipped else ""
-        if entry.is_error:
-            display_reason = "Error"
-        elif entry.is_failure:
-            display_reason = "Failure"
-        else:
-            display_reason = ""
-
         if entry.log_url:
-            log_url = f"[{icon}]({entry.log_url})"
+            log_url = f"[{log_icon}]({entry.log_url})"
         else:
             log_url = ""
 
-        text.append(f"| {entry.target} | {display_reason} | {mute_target} |  {log_url} |")
+        mute_target = mute_icon if entry.is_muted else ""
+
+        text.append(f"| {entry.target} | {mute_target} |  {log_url} |")
 
     return text
 

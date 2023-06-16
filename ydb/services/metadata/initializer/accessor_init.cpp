@@ -70,7 +70,21 @@ void TDSAccessorInitialized::DoNextModifier() {
     }
 }
 
-void TDSAccessorInitialized::Handle(NRequest::TEvRequestFinished::TPtr& /*ev*/) {
+void TDSAccessorInitialized::Handle(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    Y_VERIFY(Modifiers.size());
+    Modifiers.front()->Execute(std::make_shared<TModifierController>(SelfId()), Config);
+}
+
+void TDSAccessorInitialized::Handle(TEvAlterFinished::TPtr& /*ev*/) {
+    DoNextModifier();
+}
+
+void TDSAccessorInitialized::Handle(TEvAlterProblem::TPtr& ev) {
+    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "alter_problem")("message", ev->Get()->GetErrorMessage());
+    Schedule(TDuration::Seconds(1), new NModifications::TEvModificationFinished);
+}
+
+void TDSAccessorInitialized::Handle(NModifications::TEvModificationFinished::TPtr& /*ev*/) {
     ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
     Y_VERIFY(Modifiers.size());
     if (NProvider::TServiceOperator::IsEnabled() && InitializationSnapshot) {
@@ -87,12 +101,9 @@ void TDSAccessorInitialized::Handle(NRequest::TEvRequestFinished::TPtr& /*ev*/) 
     }
 }
 
-void TDSAccessorInitialized::Handle(NModifications::TEvModificationFinished::TPtr& /*ev*/) {
-    DoNextModifier();
-}
-
-void TDSAccessorInitialized::Handle(NModifications::TEvModificationProblem::TPtr& /*ev*/) {
-    Schedule(TDuration::Seconds(1), new NRequest::TEvRequestFinished);
+void TDSAccessorInitialized::Handle(NModifications::TEvModificationProblem::TPtr& ev) {
+    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "modification_problem")("message", ev->Get()->GetErrorMessage());
+    Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
 }
 
 TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,

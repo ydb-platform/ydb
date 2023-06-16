@@ -172,6 +172,11 @@ Y_UNIT_TEST_SUITE(ExternalIndex) {
             lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/cs_index/external`", true, &resultData);
             UNIT_ASSERT_EQUAL(resultData, "[0u]");
         }
+        {
+            TString resultData;
+            lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
+            UNIT_ASSERT_EQUAL(resultData, "[6u]");
+        }
     }
 
 }

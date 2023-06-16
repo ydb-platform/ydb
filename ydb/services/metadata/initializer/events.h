@@ -15,6 +15,8 @@ enum EEvents {
     EvInitializerPreparationFinished,
     EvInitializerPreparationProblem,
     EvInitializationFinished,
+    EvAlterFinished,
+    EvAlterProblem,
     EvEnd
 };
 
@@ -22,6 +24,20 @@ static_assert(EEvents::EvEnd < EventSpaceEnd(TKikimrEvents::ES_METADATA_INITIALI
 
 class TEvInitializerPreparationStart: public TEventLocal<TEvInitializerPreparationStart, EEvents::EvInitializerPreparationStart> {
 public:
+};
+
+class TEvAlterFinished: public TEventLocal<TEvAlterFinished, EEvents::EvAlterFinished> {
+public:
+};
+
+class TEvAlterProblem: public TEventLocal<TEvAlterProblem, EEvents::EvAlterProblem> {
+private:
+    YDB_READONLY_DEF(TString, ErrorMessage);
+public:
+    TEvAlterProblem(const TString& errorMesage)
+        : ErrorMessage(errorMesage) {
+
+    }
 };
 
 class TEvInitializerPreparationFinished: public TEventLocal<TEvInitializerPreparationFinished, EEvents::EvInitializerPreparationFinished> {

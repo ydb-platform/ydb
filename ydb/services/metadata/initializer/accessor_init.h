@@ -27,9 +27,11 @@ private:
     void Handle(TEvInitializerPreparationStart::TPtr& ev);
     void Handle(TEvInitializerPreparationFinished::TPtr& ev);
     void Handle(TEvInitializerPreparationProblem::TPtr& ev);
-    void Handle(NRequest::TEvRequestFinished::TPtr& ev);
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
     void Handle(NModifications::TEvModificationFinished::TPtr& ev);
     void Handle(NModifications::TEvModificationProblem::TPtr& ev);
+    void Handle(TEvAlterFinished::TPtr& ev);
+    void Handle(TEvAlterProblem::TPtr& ev);
     void DoNextModifier();
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -44,14 +46,19 @@ public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NRequest::TEvRequestFinished, Handle);
+            hFunc(NActors::TEvents::TEvWakeup, Handle);
             hFunc(TEvInitializerPreparationStart, Handle);
             hFunc(TEvInitializerPreparationFinished, Handle);
             hFunc(TEvInitializerPreparationProblem, Handle);
             hFunc(NModifications::TEvModificationFinished, Handle);
             hFunc(NModifications::TEvModificationProblem, Handle);
+            hFunc(TEvAlterFinished, Handle);
+            hFunc(TEvAlterProblem, Handle);
             default:
-                break;
+            {
+                auto evType = ev->GetTypeName();
+                Y_FAIL("unexpected event: %s", evType.data());
+            }
         }
     }
 };

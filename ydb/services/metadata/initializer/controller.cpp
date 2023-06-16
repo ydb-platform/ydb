@@ -14,11 +14,11 @@ void TInitializerInput::OnPreparationProblem(const TString& errorMessage) const 
 }
 
 void TInitializerInput::OnAlteringProblem(const TString& errorMessage) {
-    ActorId.Send(ActorId, new NModifications::TEvModificationProblem(errorMessage));
+    ActorId.Send(ActorId, new TEvAlterProblem(errorMessage));
 }
 
 void TInitializerInput::OnAlteringFinished() {
-    ActorId.Send(ActorId, new NModifications::TEvModificationFinished());
+    ActorId.Send(ActorId, new TEvAlterFinished());
 }
 
 void TInitializerOutput::OnInitializationFinished(const TString& id) const {

@@ -174,6 +174,11 @@ Y_UNIT_TEST_SUITE(Secret) {
 
             Tests::NCS::THelper lHelper(*server);
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
+            {
+                TString resultData;
+                lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
+                UNIT_ASSERT_EQUAL_C(resultData, "[6u]", resultData);
+            }
 
             emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(0);
             {
@@ -186,6 +191,11 @@ Y_UNIT_TEST_SUITE(Secret) {
 
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
             lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
+            {
+                TString resultData;
+                lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
+                UNIT_ASSERT_EQUAL_C(resultData, "[10u]", resultData);
+            }
 
             emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(1);
             {
@@ -249,7 +259,11 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@test1` (TYPE SECRET_ACCESS)", false);
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
-            lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`", true);
+            {
+                TString resultData;
+                lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
+                UNIT_ASSERT_EQUAL_C(resultData, "[10u]", resultData);
+            }
         }
     }
 

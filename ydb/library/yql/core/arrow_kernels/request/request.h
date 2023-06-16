@@ -28,6 +28,8 @@ public:
     ui32 AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* retType);
     ui32 AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
     ui32 Udf(const TString& name, bool isPolymorphic, const std::vector<const TTypeAnnotationNode*>& argTypes, const TTypeAnnotationNode* retType);
+    // (json/json?,utf8)->bool/bool?
+    ui32 JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
     TString Serialize();
 
 private:
@@ -38,6 +40,7 @@ private:
     NKikimr::NMiniKQL::TTypeEnvironment Env_;
     NKikimr::NMiniKQL::TProgramBuilder Pb_;
     TVector<NKikimr::NMiniKQL::TRuntimeNode> Items_;
+    TVector<NKikimr::NMiniKQL::TRuntimeNode> ArgsItems_;
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TBlockType*> CachedTypes_;
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TRuntimeNode> CachedArgs_;
 };

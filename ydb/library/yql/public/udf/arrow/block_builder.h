@@ -1120,8 +1120,10 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
         case NUdf::EDataSlot::Double:
             return std::make_unique<TFixedSizeArrayBuilder<double, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson:
             return std::make_unique<TStringArrayBuilder<arrow::BinaryType, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json:
             return std::make_unique<TStringArrayBuilder<arrow::StringType, Nullable>>(typeInfoHelper, type, pool, maxLen);
         default:
             Y_ENSURE(false, "Unsupported data slot");

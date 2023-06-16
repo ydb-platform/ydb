@@ -27,6 +27,7 @@ target_link_libraries(ydb-library-yql-core-arrow_kernels-registry-ut PUBLIC
   yql-minikql-invoke_builtins
   yql-minikql-comp_nodes
   url_udf
+  json2_udf
 )
 target_link_options(ydb-library-yql-core-arrow_kernels-registry-ut PRIVATE
   -ldl

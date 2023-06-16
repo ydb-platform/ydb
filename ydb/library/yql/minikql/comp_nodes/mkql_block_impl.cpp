@@ -67,11 +67,13 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arr
         case NUdf::EDataSlot::Double:
             return arrow::Datum(static_cast<double>(value.Get<double>()));
         case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Utf8: {
+        case NUdf::EDataSlot::Utf8: 
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::Json: {
             const auto& str = value.AsStringRef();
             std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
             std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
-            auto type = (slot == NUdf::EDataSlot::String) ? arrow::binary() : arrow::utf8();
+            auto type = (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson) ? arrow::binary() : arrow::utf8();
             std::shared_ptr<arrow::Scalar> scalar = std::make_shared<arrow::BinaryScalar>(buffer, type);
             return arrow::Datum(scalar);
         }

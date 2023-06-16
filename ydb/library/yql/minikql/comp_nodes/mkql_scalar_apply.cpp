@@ -36,6 +36,7 @@ public:
         std::unique_ptr<IBlockItemConverter> ReturnConverter;
         TVector<std::unique_ptr<IBlockItemConverter>> ArgsConverters;
         TVector<std::unique_ptr<IBlockReader>> ArgsReaders;
+        bool ScalarsProcessed = false;
     };
 
     struct TKernelState : public arrow::compute::KernelState {
@@ -165,14 +166,18 @@ public:
 
         auto returnItemType = AS_TYPE(TBlockType, ReturnType_)->GetItemType();
         if (AS_TYPE(TBlockType, ReturnType_)->GetShape() == TBlockType::EShape::Scalar) {
-            for (ui32 j = 0; j < Args_.size(); ++j) {
-                if (!LambdaArgs_[j]) {
-                    continue;
+            if (!accessors.ScalarsProcessed) {
+                for (ui32 j = 0; j < Args_.size(); ++j) {
+                    if (!LambdaArgs_[j]) {
+                        continue;
+                    }
+
+                    auto item = accessors.ArgsReaders[j]->GetScalarItem(*args[j].scalar());
+                    auto value = accessors.ArgsConverters[j]->MakeValue(item, ctx.HolderFactory);
+                    LambdaArgs_[j]->SetValue(ctx, value);
                 }
 
-                auto item = accessors.ArgsReaders[j]->GetScalarItem(*args[j].scalar());
-                auto value = accessors.ArgsConverters[j]->MakeValue(item, ctx.HolderFactory);
-                LambdaArgs_[j]->SetValue(ctx, value);
+                accessors.ScalarsProcessed = true;
             }
 
             auto value = LambdaRoot_->GetValue(ctx);
@@ -185,6 +190,10 @@ public:
                         continue;
                     }
 
+                    if (args[j].is_scalar() && accessors.ScalarsProcessed) {
+                        continue;
+                    }
+
                     auto item = args[j].is_scalar() ?
                         accessors.ArgsReaders[j]->GetScalarItem(*args[j].scalar()) :
                         accessors.ArgsReaders[j]->GetItem(*args[j].array(), i);
@@ -192,6 +201,7 @@ public:
                     LambdaArgs_[j]->SetValue(ctx, value);
                 }
 
+                accessors.ScalarsProcessed = true;
                 auto value = LambdaRoot_->GetValue(ctx);
                 auto item = accessors.ReturnConverter->MakeItem(value);
                 builder->Add(item);

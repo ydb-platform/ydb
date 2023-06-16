@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/udfs/common/url_base
+    ydb/library/yql/udfs/common/json2
 )
 
 END()

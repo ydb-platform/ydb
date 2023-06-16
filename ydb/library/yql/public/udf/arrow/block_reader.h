@@ -384,8 +384,10 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
         case NUdf::EDataSlot::Double:
             return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
         case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson:
             return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType>(isOptional);
         case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json:
             return MakeStringBlockReaderImpl<TTraits, arrow::StringType>(isOptional);
         default:
             Y_ENSURE(false, "Unsupported data slot");

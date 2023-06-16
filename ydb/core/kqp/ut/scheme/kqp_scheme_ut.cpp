@@ -4701,7 +4701,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 }
 
-Y_UNIT_TEST_SUITE(KqpOlapScheme) {
+namespace {
     class TTestHelper {
     public:
         class TColumnSchema {
@@ -4891,6 +4891,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             }
         }
     };
+}
+
+Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
     Y_UNIT_TEST(AddColumn) {
         TKikimrSettings runnerSettings;
@@ -5322,6 +5325,60 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
         }
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpOlapTypes) {
+
+    Y_UNIT_TEST(Timestamp) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("ui64_type").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        auto ts = TInstant::Now();
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(ts.MicroSeconds()).Add(ts.MicroSeconds());
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", TStringBuilder() << "[[1;" << ts.MicroSeconds() << "u;" << ts.MicroSeconds() << "u]]");
+    }
+
+    Y_UNIT_TEST(TimestampCmpErr) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        
+        TTestHelper testHelper(runnerSettings);
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("timestamp_max").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        auto ts = TInstant::Max();
+        auto now = TInstant::Now();
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(ts.MicroSeconds()).Add(now.MicroSeconds());
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+        testHelper.ReadData("SELECT timestamp < timestamp_max FROM `/Root/ColumnTableTest` WHERE id=1", "[[\%false]]");
     }
 }
 

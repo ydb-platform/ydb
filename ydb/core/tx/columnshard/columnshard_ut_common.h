@@ -435,11 +435,38 @@ namespace NKikimr::NColumnShard {
                 , Index(index)
             {}
 
-            template <class T>
-            TRowBuilder Add(const T& data) {
+            TRowBuilder Add(const char* data) {
+                return Add<std::string>(data);
+            }
+
+            template <class TData>
+            TRowBuilder Add(const TData& data) {
                 Y_VERIFY(Index < Owner.Builders.size());
-                auto dataScalar = arrow::MakeScalar(data);
-                auto res = Owner.Builders[Index]->AppendScalar(*dataScalar);
+                auto& builder = Owner.Builders[Index];
+                auto type = builder->type();
+                
+                NArrow::SwitchType(type->id(), [&](const auto& t) {
+                    using TWrap = std::decay_t<decltype(t)>;
+                    using T = typename TWrap::T;
+                    using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+
+                    auto& typedBuilder = static_cast<TBuilder&>(*builder);
+                    if constexpr (std::is_arithmetic<TData>::value) {
+                        if constexpr (arrow::has_c_type<T>::value) {
+                            using CType = typename T::c_type;
+                            Y_VERIFY(typedBuilder.Append((CType)data).ok());
+                            return true;
+                        }
+                    }
+                    if constexpr (std::is_same<TData, std::string>::value) {
+                        if constexpr (arrow::has_string_view<T>::value && arrow::is_parameter_free_type<T>::value) {
+                            Y_VERIFY(typedBuilder.Append(data.data(), data.size()).ok());
+                            return true;
+                        }
+                    }
+                    Y_FAIL("Unknown type combination");
+                    return false;
+                });
                 return TRowBuilder(Index + 1, Owner);
             }
 

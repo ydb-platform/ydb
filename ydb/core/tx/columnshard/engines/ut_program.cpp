@@ -60,6 +60,13 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                         auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
                         return ReqBuilder.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockBoolType);
                     }
+                    case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
+                    {
+                        NYql::TExprContext ctx;
+                        auto blockStringType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
+                        auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
+                        return ReqBuilder.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockBoolType);
+                    }
                     default:
                         Y_FAIL("Not implemented");
                 
@@ -117,15 +124,15 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
         TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"sum", TTypeInfo(NTypeIds::Int32) }, {"vat", TTypeInfo(NTypeIds::Int32) }}));
-        updates.AddRow().Add(1).Add(1);
-        updates.AddRow().Add(100).Add(0);
+        updates.AddRow().Add<int32_t>(1).Add<int32_t>(1);
+        updates.AddRow().Add<int32_t>(100).Add<int32_t>(0);
 
         auto batch = updates.BuildArrow();
         UNIT_ASSERT(program.ApplyProgram(batch).ok());
 
         TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Int32)) }));
-        result.AddRow().Add(2);
-        result.AddRow().Add(100);
+        result.AddRow().Add<int32_t>(2);
+        result.AddRow().Add<int32_t>(100);
 
         auto expected = result.BuildArrow();
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
@@ -152,27 +159,61 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             column->SetName("0");
         }
 
-        TKernelsWrapper kernels;
-        kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
-        const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
-       
-        TProgramContainer program;
-        TString errors;
-        UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+        {
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
+            const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+        
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }, {"substring", TTypeInfo(NTypeIds::Utf8) }}));
-        updates.AddRow().Add("Lorem ipsum dolor sit amet.").Add("Lorem");
-        updates.AddRow().Add("Lorem ipsum dolor sit amet.").Add("amet.");
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }, {"substring", TTypeInfo(NTypeIds::Utf8) }}));
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("Lorem");
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("amet.");
 
-        auto batch = updates.BuildArrow();
-        UNIT_ASSERT(program.ApplyProgram(batch).ok());
+            auto batch = updates.BuildArrow();
+            UNIT_ASSERT(program.ApplyProgram(batch).ok());
 
-        TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
-        result.AddRow().Add<ui8>(1);
-        result.AddRow().Add<ui8>(0);
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+            result.AddRow().Add<ui8>(1);
+            result.AddRow().Add<ui8>(0);
 
-        auto expected = result.BuildArrow();
-        UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+
+        // Test with binary data
+        {
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
+            const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+        
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+          
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Bytes) }, {"substring", TTypeInfo(NTypeIds::Bytes) }}));
+            updates.AddRow().Add<std::string>("Lorem ipsum \xC0 dolor\f sit amet.").Add<std::string>("dolor");
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit \amet.").Add<std::string>("amet.");
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("\amet.");
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit \amet.").Add<std::string>("\amet.");
+
+            auto batch = updates.BuildArrow();
+            Cerr << batch->ToString() << Endl;
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
+
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+            result.AddRow().Add<ui8>(1);
+            result.AddRow().Add<ui8>(0);
+            result.AddRow().Add<ui8>(0);
+            result.AddRow().Add<ui8>(1);
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
     }
 
     Y_UNIT_TEST(SimpleFunction) {

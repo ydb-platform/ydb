@@ -544,15 +544,27 @@
   includes:
     - _msgpack_atomic_counter_header:
       - $U/windows.h
-      - contrib/libs/msgpack/include/msgpack/gcc_atomic.hpp
       - contrib/libs/msgpack/include/msgpack/gcc_atomic.h
+      - contrib/libs/msgpack/include/msgpack/gcc_atomic.hpp
 
-- source_filter: "^contrib/tools/fluent-bit-full"
+- source_filter: "^contrib/tools/fluent-bit-full/lib/msgpack-c"
   includes:
     - _msgpack_atomic_counter_header:
       - $U/windows.h
       - $U/ntddk.h
       - contrib/tools/fluent-bit-full/lib/msgpack-c/include/msgpack/gcc_atomic.h
+
+- source_filter: "^mail/xiva/msgpack"
+  includes:
+    - _msgpack_atomic_counter_header:
+      - $U/windows.h
+      - mail/xiva/msgpack/include/msgpack/gcc_atomic.h
+
+- source_filter: "^skynet/packages/libraries/liner/msgpack"
+  includes:
+    - _msgpack_atomic_counter_header:
+      - $U/windows.h
+      - skynet/packages/libraries/liner/msgpack/gcc_atomic.h
 
 - source_filter: "^contrib/libs/opencv/modules/calib3d"
   includes:

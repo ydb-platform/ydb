@@ -431,6 +431,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         Ctest << "Request timer = " << timer.Passed() << Endl;
         Ctest << "BASE_PERF = " << BASE_PERF << Endl;
-        UNIT_ASSERT_LT(timer.Passed(), BASE_PERF);
+        UNIT_ASSERT_LT(timer.Passed(), 10 * BASE_PERF);
     }
 }

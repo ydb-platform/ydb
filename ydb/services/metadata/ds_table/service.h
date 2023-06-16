@@ -7,7 +7,6 @@
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/metadata/initializer/common.h>
-#include <ydb/services/metadata/initializer/events.h>
 #include <ydb/services/metadata/initializer/manager.h>
 #include <ydb/services/metadata/initializer/snapshot.h>
 #include <ydb/services/metadata/initializer/fetcher.h>

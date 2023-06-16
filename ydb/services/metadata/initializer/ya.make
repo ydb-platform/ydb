@@ -4,7 +4,6 @@ SRCS(
     accessor_init.cpp
     behaviour.cpp
     common.cpp
-    controller.cpp
     events.cpp
     manager.cpp
     object.cpp

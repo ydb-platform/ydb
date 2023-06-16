@@ -2,6 +2,7 @@
 #include "executor_controller.h"
 
 #include <ydb/services/bg_tasks/abstract/task.h>
+#include <ydb/services/metadata/initializer/events.h>
 
 #include <library/cpp/actors/core/actor.h>
 

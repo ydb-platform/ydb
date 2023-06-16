@@ -97,7 +97,7 @@ public:
 class IInitializerInput {
 public:
     using TPtr = std::shared_ptr<IInitializerInput>;
-    virtual void OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) const = 0;
+    virtual void OnPreparationFinished(const TVector<ITableModifier::TPtr>& modifiers) = 0;
     virtual void OnPreparationProblem(const TString& errorMessage) const = 0;
     virtual ~IInitializerInput() = default;
 };

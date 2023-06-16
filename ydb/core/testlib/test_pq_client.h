@@ -731,27 +731,35 @@ public:
         runtime->DispatchEvents(options);
     }
 
-    ui32 GetTopicVersionFromMetadata(const TString& name, ui64 cacheSize = 0) {
-        TAutoPtr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
-        auto req = request->Record.MutableMetaRequest()->MutableCmdGetTopicMetadata();
-        req->AddTopic(name);
-        
-        Cerr << "GetTopicVersionFromMetadata request: " << name << Endl;
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SyncCall(request, reply);
-        Cerr << "GetTopicVersionFromMetadata response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-        if (status != NBus::MESSAGE_OK)
+    NKikimrClient::TResponse RequestTopicMetadata(const TString& name) {
+        NKikimrClient::TPersQueueRequest request;
+        request.MutableMetaRequest()->MutableCmdGetTopicMetadata()->AddTopic(name);
+
+        Cerr << "RequestTopicMetadata request: " << name << " to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << Endl;
+
+        NKikimrClient::TResponse response;
+        auto channel = grpc::CreateChannel("localhost:" + ToString(GRpcPort), grpc::InsecureChannelCredentials());
+        auto stub(NKikimrClient::TGRpcServer::NewStub(channel));
+        grpc::ClientContext context;
+        auto status = stub->PersQueueRequest(&context, request, &response);
+
+        Cerr << "RequestTopicMetadata response: " << PrintResult(response) << Endl;
+
+        UNIT_ASSERT(status.ok());
+        UNIT_ASSERT(response.HasErrorCode());
+
+        return response;
+    }
+
+    ui32 GetTopicVersionFromMetadata(const TString& name, ui64 cacheSize = 0)
+    {
+        auto response = RequestTopicMetadata(name);
+
+        if (response.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK) 
             return 0;
 
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        const NMsgBusProxy::TBusResponse* response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
-        UNIT_ASSERT(response);
-        UNIT_ASSERT(response->Record.HasErrorCode());
-
-        if (response->Record.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK)
-            return 0;
-        UNIT_ASSERT(response->Record.HasMetaResponse());
-        const auto& metaResp = response->Record.GetMetaResponse();
+        UNIT_ASSERT(response.HasMetaResponse());
+        const auto& metaResp = response.GetMetaResponse();
         UNIT_ASSERT(metaResp.HasCmdGetTopicMetadataResult());
         const auto& resp = metaResp.GetCmdGetTopicMetadataResult();
         UNIT_ASSERT(resp.TopicInfoSize() == 1);
@@ -805,25 +813,10 @@ public:
         }
     }
 
-    bool TopicDeleted(const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
-        auto req = request->Record.MutableMetaRequest()->MutableCmdGetTopicMetadata();
-        req->AddTopic(name);
+    bool IsTopicDeleted(const TString& name) {
+        auto response = RequestTopicMetadata(name);
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        NBus::EMessageStatus status = SyncCall(request, reply);
-        Cerr << "Topic deleted got reply with status: " << status << Endl;
-        if (status != NBus::MESSAGE_OK)
-            return false;
-        const NMsgBusProxy::TBusResponse* response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
-        if (response == nullptr)
-            return false;
-        Cerr << "TopicDeleted response " << response->Record << "\n";
-        UNIT_ASSERT(response);
-        UNIT_ASSERT(response->Record.HasErrorCode());
-        if (response->Record.GetErrorCode() != (ui32)NPersQueue::NErrorCode::UNKNOWN_TOPIC)
-            return false;
-        return true;
+        return response.GetErrorCode() == (ui32)NPersQueue::NErrorCode::UNKNOWN_TOPIC;
     }
 
 
@@ -1043,7 +1036,7 @@ public:
         }
         RemoveTopic(name);
         const TInstant start = TInstant::Now();
-        while (waitForTopicDeletion && !TopicDeleted(name)) {
+        while (waitForTopicDeletion && !IsTopicDeleted(name)) {
             Sleep(TDuration::MilliSeconds(50));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }

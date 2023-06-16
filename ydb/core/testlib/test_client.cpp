@@ -293,6 +293,8 @@ namespace Tests {
 
         auto system(Runtime->GetAnyNodeActorSystem());
 
+        Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
+
         const size_t proxyCount = Max(ui32{1}, Settings->AppConfig.GetGRpcConfig().GetGRpcProxyCount());
         TVector<TActorId> grpcRequestProxies;
         grpcRequestProxies.reserve(proxyCount);
@@ -822,6 +824,8 @@ namespace Tests {
                 IActor* proxy = BusServer->CreateProxy();
                 TActorId proxyId = Runtime->Register(proxy, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId, TMailboxType::Revolving, 0);
                 Runtime->RegisterService(NMsgBusProxy::CreateMsgBusProxyId(), proxyId, nodeIdx);
+
+                Cerr << "NMsgBusProxy registered on Port " << Settings->Port << " GrpsPort " << Settings->GrpcPort << Endl;
             }
 
             {
@@ -1121,6 +1125,8 @@ namespace Tests {
         ClientConfig.BusSessionConfig.NumRetries = 10;
         Client.reset(new NMsgBusProxy::TMsgBusClient(ClientConfig));
         Client->Init();
+
+        Cerr << "TClient is connected to server " << ClientConfig.Ip << ":" << ClientConfig.Port << Endl;
     }
 
     const NMsgBusProxy::TMsgBusClientConfig& TClient::GetClientConfig() const {

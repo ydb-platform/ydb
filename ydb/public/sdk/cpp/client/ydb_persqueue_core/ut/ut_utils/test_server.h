@@ -43,8 +43,11 @@ public:
         PrepareNetDataFile();
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
+        EnableLogs();
+
+        Cerr << "TTestServer started on Port " << Port << " GrpcPort " << GrpcPort << Endl;
+
         AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort, databaseName);
-        EnableLogs(LOGGED_SERVICES);
         if (doClientInit) {
             AnnoyingClient->FullInit();
         }
@@ -67,7 +70,7 @@ public:
         StartServer();
     }
 
-    void EnableLogs(const TVector<NKikimrServices::EServiceKikimr> services,
+    void EnableLogs(const TVector<NKikimrServices::EServiceKikimr>& services = LOGGED_SERVICES,
                     NActors::NLog::EPriority prio = NActors::NLog::PRI_DEBUG) {
         Y_VERIFY(CleverServer != nullptr, "Start server before enabling logs");
         for (auto s : services) {

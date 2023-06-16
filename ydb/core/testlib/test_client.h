@@ -486,16 +486,20 @@ namespace Tests {
         THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
 
     protected:
-        template <class TMsg>
-        TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {
-            auto res = dynamic_cast<TMsg*>(msg);
+        TString PrintResult(const ::google::protobuf::Message& msg, size_t maxSz = 1000) {
             TString s;
-            ::google::protobuf::TextFormat::PrintToString(res->Record, &s);
+            ::google::protobuf::TextFormat::PrintToString(msg, &s);
             if (s.size() > maxSz) {
                 s.resize(maxSz);
                 s += "...\n(TRUNCATED)\n";
             }
             return s;
+        }
+
+        template <class TMsg>
+        TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {
+            auto res = dynamic_cast<TMsg*>(msg);
+            return PrintResult(res->Record, maxSz);
         }
 
         // Waits for kikimr server to become ready

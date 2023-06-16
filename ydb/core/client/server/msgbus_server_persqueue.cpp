@@ -312,6 +312,8 @@ void TPersQueueBaseRequestProcessor::Handle(
 void TPersQueueBaseRequestProcessor::Handle(
         NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx
 ) {
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPersQueueBaseRequestProcessor::Handle");
+
     auto& path = ev->Get()->Path;
     if (!ev->Get()->Success) {
         return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
@@ -334,6 +336,8 @@ bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPersQueueBaseRequestProcessor::CreateChildren");
+
     if (ChildrenCreationDone)
         return false;
     ChildrenCreationDone = true;
@@ -364,10 +368,13 @@ TPersQueueBaseRequestProcessor::~TPersQueueBaseRequestProcessor() {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext& ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded topics count = " << ChildrenToCreate.size());
+
     Y_VERIFY(NeedChildrenCreation);
 
     if (AtomicAdd(Infly, ChildrenToCreate.size()) > MAX_INFLY) {
         AtomicSub(Infly, ChildrenToCreate.size());
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "topics count =" << ChildrenToCreate.size() << " is greater then MAX_INFLY=" << MAX_INFLY);
         return false;
     }
 
@@ -391,6 +398,8 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
             return true;
         }
 
+        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "CreateTopicSubactor for topic " << name);
+
         THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
             const TActorId actorId = ctx.Register(childActor.Release());
@@ -398,6 +407,8 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
             topics.emplace(name);
             Children.emplace(actorId, std::move(perTopicInfo));
         }
+        else
+            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "CreateTopicSubactor failed.");
     }
     Y_VERIFY(topics.size() == Children.size());
 
@@ -411,8 +422,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
                 errorDesc << topic << ", ";
             }
         }
-        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                             errorDesc << "Marker# PQ95");
+        SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, errorDesc << "Marker# PQ95");
         return true;
     }
     if (ReadyForAnswer(ctx)) {

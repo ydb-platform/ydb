@@ -155,9 +155,10 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         SDKTestSetup setup2("SeqNoShift_Dc2", false);
         setup2.SetSingleDataCenter("dc2");
         setup2.AddDataCenter("dc1", *setup1, true);
-        setup2.Start();
+        setup2.Start(true, false, TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_TRACE);
         setup1->AddDataCenter("dc2", setup2, true);
-        setup1->Start();
+        setup1->Start(true, false, TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_TRACE);
+
         TString sourceId1 = SDKTestSetup::GetTestMessageGroupId() + "1";
         TString sourceId2 = SDKTestSetup::GetTestMessageGroupId() + "2";
         auto writer1 = MakeHolder<TYdbPqWriterTestHelper>("", nullptr, "dc1", setup1, sourceId1 , true);

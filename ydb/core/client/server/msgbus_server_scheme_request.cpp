@@ -210,14 +210,20 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(ERespo
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle");
+
     TEvBusProxy::TEvPersQueue *msg = ev->Get();
     const auto& rec = static_cast<TBusPersQueue *>(msg->MsgContext.GetMessage())->Record;
     if (rec.HasMetaRequest() && (rec.GetMetaRequest().HasCmdCreateTopic()
                                  || rec.GetMetaRequest().HasCmdChangeTopic()
                                  || rec.GetMetaRequest().HasCmdDeleteTopic())) {
+        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle new TMessageBusServerSchemeRequest");
+
         ctx.Register(new TMessageBusServerSchemeRequest<TBusPersQueue>(ev->Get()), TMailboxType::HTSwap, AppData()->UserPoolId);
         return;
     }
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TMessageBusServerProxy::Handle CreateMessageBusServerPersQueue");
+
     ctx.Register(CreateMessageBusServerPersQueue(msg->MsgContext, PqMetaCache));
 }
 

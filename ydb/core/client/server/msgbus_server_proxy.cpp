@@ -164,6 +164,8 @@ void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& e
 //void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbOperation::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp
 
 void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
+    LOG_TRACE_S(ctx, NKikimrServices::MSGBUS_PROXY, "TMessageBusServerProxy::Bootstrap");
+
     SelfID = ctx.SelfID;
 
     TxProxy = MakeTxProxyID();

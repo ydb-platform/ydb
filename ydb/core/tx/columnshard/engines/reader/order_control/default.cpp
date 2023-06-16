@@ -4,9 +4,8 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TAnySorting::DoFill(TGranulesFillingContext& context) {
-    auto granulesOrder = ReadMetadata->SelectInfo->GranulesOrder(ReadMetadata->IsDescSorted());
-    for (ui64 granule : granulesOrder) {
-        TGranule::TPtr g = context.GetGranuleVerified(granule);
+    for (auto&& granule : ReadMetadata->SelectInfo->GetGranulesOrdered(ReadMetadata->IsDescSorted())) {
+        TGranule::TPtr g = context.GetGranuleVerified(granule.Granule);
         GranulesOutOrder.emplace_back(g);
     }
 }

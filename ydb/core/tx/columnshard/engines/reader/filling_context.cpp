@@ -59,6 +59,10 @@ NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::Get
 }
 
 void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches) {
+    if (NotIndexedBatchesInitialized) {
+        return;
+    }
+    NotIndexedBatchesInitialized = true;
     for (auto&& [_, gPtr] : GranulesWaiting) {
         if (!batches) {
             gPtr->AddNotIndexedBatch(nullptr);

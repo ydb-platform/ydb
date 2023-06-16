@@ -12,6 +12,7 @@
 
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 
 namespace NKikimr::NOlap {
 
@@ -253,20 +254,12 @@ struct TSelectInfo {
     std::vector<TGranuleRecord> Granules; // ordered by key (ascending)
     std::vector<TPortionInfo> Portions;
 
-    std::vector<ui64> GranulesOrder(bool rev = false) const {
-        size_t size = Granules.size();
-        std::vector<ui64> order(size);
-        if (rev) {
-            size_t pos = size - 1;
-            for (size_t i = 0; i < size; ++i, --pos) {
-                order[i] = Granules[pos].Granule;
-            }
-        } else {
-            for (size_t i = 0; i < size; ++i) {
-                order[i] = Granules[i].Granule;
-            }
-        }
-        return order;
+    NColumnShard::TContainerAccessorWithDirection<std::vector<TPortionInfo>> GetPortionsOrdered(const bool reverse) const {
+        return NColumnShard::TContainerAccessorWithDirection<std::vector<TPortionInfo>>(Portions, reverse);
+    }
+
+    NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>> GetGranulesOrdered(bool reverse = false) const {
+        return NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>>(Granules, reverse);
     }
 
     size_t NumRecords() const {

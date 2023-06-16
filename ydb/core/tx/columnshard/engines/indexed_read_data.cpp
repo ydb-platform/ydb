@@ -139,7 +139,7 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
     Y_VERIFY(!GranulesContext);
     GranulesContext = std::make_unique<NIndexedReader::TGranulesFillingContext>(ReadMetadata, *this, OnePhaseReadMode);
     ui64 portionsBytes = 0;
-    for (auto& portionInfo : ReadMetadata->SelectInfo->Portions) {
+    for (auto& portionInfo : ReadMetadata->SelectInfo->GetPortionsOrdered(ReadMetadata->IsDescSorted())) {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 

@@ -13,9 +13,9 @@ namespace NKikimr::NOlap::NIndexedReader {
 class TGranulesFillingContext {
 private:
     YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
-    bool AbortedFlag = false;
     TReadMetadata::TConstPtr ReadMetadata;
     const bool InternalReading = false;
+    bool NotIndexedBatchesInitialized = false;
     TIndexedReadData& Owner;
     THashMap<ui64, NIndexedReader::TGranule::TPtr> GranulesToOut;
     std::set<ui64> ReadyGranulesAccumulator;
@@ -95,7 +95,6 @@ public:
     void Abort() {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "abort");
         GranulesWaiting.clear();
-        AbortedFlag = true;
         Y_VERIFY(!IsInProgress());
     }
 
@@ -110,7 +109,7 @@ public:
     void OnGranuleReady(const ui64 granuleId) {
         auto granule = GetGranuleVerified(granuleId);
         Y_VERIFY(GranulesToOut.emplace(granule->GetGranuleId(), granule).second);
-        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule->GetGranuleId()).second || AbortedFlag);
+        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule->GetGranuleId()).second);
         Y_VERIFY(GranulesWaiting.erase(granuleId));
         GranulesInProcessing.erase(granule->GetGranuleId());
         BlobsSizeInProcessing -= granule->GetBlobsDataSize();

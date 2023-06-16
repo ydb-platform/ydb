@@ -1,4 +1,5 @@
 #include "kqp_script_executions.h"
+#include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -29,6 +30,8 @@
 #include <util/random/random.h>
 
 namespace NKikimr::NKqp {
+
+using namespace NKikimr::NKqp::NPrivate;
 
 namespace {
 
@@ -62,65 +65,6 @@ NYql::TIssues DeserializeIssues(const TString& issuesSerialized) {
     }
     return issues;
 }
-
-struct TEvPrivate {
-    // Event ids
-    enum EEv : ui32 {
-        EvCreateScriptOperationResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCreateTableResponse,
-        EvLeaseCheckResult,
-
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    // Events
-    struct TEvCreateScriptOperationResponse : public NActors::TEventLocal<TEvCreateScriptOperationResponse, EvCreateScriptOperationResponse> {
-        TEvCreateScriptOperationResponse(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues)
-            : Status(statusCode)
-            , Issues(std::move(issues))
-        {
-        }
-
-        TEvCreateScriptOperationResponse(TString executionId)
-            : Status(Ydb::StatusIds::SUCCESS)
-            , ExecutionId(std::move(executionId))
-        {
-        }
-
-        const Ydb::StatusIds::StatusCode Status;
-        const NYql::TIssues Issues;
-        const TString ExecutionId;
-    };
-
-    struct TEvCreateTableResponse : public NActors::TEventLocal<TEvCreateTableResponse, EvCreateTableResponse> {
-        TEvCreateTableResponse() = default;
-    };
-
-    struct TEvLeaseCheckResult : public NActors::TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {
-        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues)
-            : Status(statusCode)
-            , Issues(std::move(issues))
-        {
-        }
-
-        TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus,
-            TMaybe<Ydb::Query::ExecStatus> executionStatus,
-            TMaybe<NYql::TIssues> operationIssues)
-            : Status(Ydb::StatusIds::SUCCESS)
-            , OperationStatus(operationStatus)
-            , ExecutionStatus(executionStatus)
-            , OperationIssues(operationIssues)
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const NYql::TIssues Issues;
-        const TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
-        const TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
-        const TMaybe<NYql::TIssues> OperationIssues;
-    };
-};
 
 
 class TQueryBase : public NKikimr::TQueryBase {
@@ -444,9 +388,10 @@ private:
 
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
-    TCreateScriptOperationQuery(const TString& executionId, const NKikimrKqp::TEvQueryRequest& req)
+    TCreateScriptOperationQuery(const TString& executionId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration = TDuration::Zero())
         : ExecutionId(executionId)
         , Request(req)
+        , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
     {
     }
 
@@ -515,7 +460,7 @@ public:
                 .Int32(Ydb::Query::SYNTAX_YQL_V1)
                 .Build()
             .AddParam("$lease_duration")
-                .Interval(static_cast<i64>(LEASE_DURATION.MicroSeconds()))
+                .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -537,6 +482,7 @@ public:
 private:
     const TString ExecutionId;
     NKikimrKqp::TEvQueryRequest Request;
+    TDuration LeaseDuration;
 };
 
 struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExecutionActor> {
@@ -1352,5 +1298,17 @@ NActors::IActor* CreateListScriptExecutionOperationsActor(TEvListScriptExecution
 NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev) {
     return new TCancelScriptExecutionOperationActor(std::move(ev));
 }
+
+namespace NPrivate {
+
+NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& record, TDuration leaseDuration) {
+    return new TCreateScriptOperationQuery(executionId, record, leaseDuration);
+}
+
+NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease, ui64 cookie) {
+    return new TCheckLeaseStatusActor(database, executionId, statusOnExpiredLease, cookie);
+}
+
+} // namespace NPrivate
 
 } // namespace NKikimr::NKqp

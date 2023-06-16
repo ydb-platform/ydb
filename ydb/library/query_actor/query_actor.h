@@ -97,7 +97,7 @@ private:
 public:
     static constexpr char ActorName[] = "SQL_QUERY";
 
-    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = GetDefaultDatabase());
+    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {});
 
     void Bootstrap();
 
@@ -152,7 +152,7 @@ private:
 
 protected:
     const ui64 LogComponent;
-    const TString Database;
+    TString Database;
     TString SessionId;
     TString TxId;
     bool DeleteSession = false;

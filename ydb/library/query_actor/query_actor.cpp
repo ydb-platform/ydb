@@ -142,6 +142,10 @@ STRICT_STFUNC(TQueryBase::StateFunc,
 void TQueryBase::Bootstrap() {
     Become(&TQueryBase::StateFunc);
 
+    if (!Database) {
+        Database = GetDefaultDatabase();
+    }
+
     if (SessionId) {
         RunQuery();
     } else {

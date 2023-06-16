@@ -136,7 +136,7 @@ runs:
       ls -la ${{steps.init.outputs.artifactsdir}}/reports.tar.gz
       echo "[Unittest/CTest XML reports archive](${{steps.init.outputs.logurlprefix}}/reports.tar.gz)" >> $GITHUB_STEP_SUMMARY
 
-  - name: postprocess junit reports
+  - name: postprocess xml reports
     if: inputs.run_unit_tests == 'true'
     shell: bash
     run: |
@@ -158,23 +158,29 @@ runs:
 
       echo "::endgroup::"
 
-  - name: extract log output
-    if: inputs.run_unit_tests == 'true'
-    shell: bash
-    run: |
+      echo "::group::extract-logs"
+
       mkdir ${{steps.init.outputs.artifactsdir}}/logs/
 
-      .github/scripts/tests/extract-logs.py \
-        --write-summary \
+      .github/scripts/tests/attach-logs.py \
         --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
         --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
         --filter-test-file ${{steps.init.outputs.testfilterfile}} \
-        --patch-jsuite \
         --ctest-report $TESTREPDIR/suites/ctest_report.xml \
         --junit-reports-path $TESTREPDIR/unittests/ \
         --decompress \
         ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
         ${{steps.init.outputs.artifactsdir}}/logs/
+
+      echo "::endgroup::"
+
+  - name: write unittests summary
+    if: inputs.run_unit_tests == 'true'
+    shell: bash
+    run: |
+      .github/scripts/tests/generate-summary.py -t "#### CTest run test shard failures" $TESTREPDIR/suites/ctest_report.xml
+      .github/scripts/tests/generate-summary.py -t "#### Unittest failures" $TESTREPDIR/unittests/
+
 
   - name: Unit test history upload results
     if: always() && inputs.run_unit_tests == 'true' && inputs.testman_token
@@ -216,6 +222,12 @@ runs:
         tee >(gzip --stdout > ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.pytest-logfilename}}) | \
         grep -E '(FAILED|ERROR)\s*\[.*\]' | \
         tee $WORKDIR/pytest-short.log
+
+  - name: write functional tests summary
+    if: always() && inputs.run_functional_tests == 'true'
+    shell: bash
+    run: |
+      .github/scripts/tests/generate-summary.py -t "#### Functional tests failures" $PYTESTREPDIR
 
   - name: Functional tests history upload results
     if: always() && inputs.run_functional_tests == 'true' && inputs.testman_token

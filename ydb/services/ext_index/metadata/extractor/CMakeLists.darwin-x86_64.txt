@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(ext_index-metadata-extractor)
 target_compile_options(ext_index-metadata-extractor PRIVATE
@@ -17,10 +23,16 @@ target_link_libraries(ext_index-metadata-extractor PUBLIC
   libs-apache-arrow
   ydb-core-protos
   core-tx-sharding
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ext_index-metadata-extractor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/metadata/extractor/abstract.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/metadata/extractor/container.cpp
+)
+generate_enum_serilization(ext_index-metadata-extractor
+  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/metadata/extractor/hash_by_columns.h
+  INCLUDE_HEADERS
+  ydb/services/ext_index/metadata/extractor/hash_by_columns.h
 )
 
 add_global_library_for(ext_index-metadata-extractor.global ext_index-metadata-extractor)
@@ -33,7 +45,8 @@ target_link_libraries(ext_index-metadata-extractor.global PUBLIC
   libs-apache-arrow
   ydb-core-protos
   core-tx-sharding
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ext_index-metadata-extractor.global PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/metadata/extractor/city.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ext_index/metadata/extractor/hash_by_columns.cpp
 )

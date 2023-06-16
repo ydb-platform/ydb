@@ -35,16 +35,22 @@ public:
     }
 };
 
-class TExtractorCityHash64: public IIndexExtractor {
+class THashByColumns: public IIndexExtractor {
+public:
+    enum class EHashType {
+        XX64 /* "xx64" */
+    };
 private:
     YDB_READONLY_DEF(std::vector<TExtractorField>, Fields);
-    static TFactory::TRegistrator<TExtractorCityHash64> Registrator;
+    YDB_READONLY(EHashType, HashType, EHashType::XX64);
+    static TFactory::TRegistrator<THashByColumns> Registrator;
+    static TFactory::TRegistrator<THashByColumns> RegistratorDeprecated;
 protected:
     virtual std::vector<ui64> DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
     virtual bool DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
     virtual NJson::TJsonValue DoSerializeToJson() const override;
 public:
-    static inline TString ClassName = "city64";
+    static inline TString ClassName = "hash_by_columns";
 
     virtual TString GetClassName() const override {
         return ClassName;

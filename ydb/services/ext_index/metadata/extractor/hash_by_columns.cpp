@@ -1,4 +1,4 @@
-#include "city.h"
+#include "hash_by_columns.h"
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -13,7 +13,8 @@
 
 namespace NKikimr::NMetadata::NCSIndex {
 
-TExtractorCityHash64::TFactory::TRegistrator<TExtractorCityHash64> TExtractorCityHash64::Registrator(TExtractorCityHash64::ClassName);
+THashByColumns::TFactory::TRegistrator<THashByColumns> THashByColumns::Registrator(THashByColumns::ClassName);
+THashByColumns::TFactory::TRegistrator<THashByColumns> THashByColumns::RegistratorDeprecated("city64");
 
 template <class TArrayBuilder>
 class TArrayInserter {
@@ -46,7 +47,7 @@ public:
 
 
 
-std::vector<ui64> TExtractorCityHash64::DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const {
     auto schema = batch->schema();
     std::vector<std::shared_ptr<arrow::Field>> fields;
     std::vector<std::shared_ptr<arrow::Array>> columns;
@@ -127,11 +128,16 @@ std::vector<ui64> TExtractorCityHash64::DoExtractIndex(const std::shared_ptr<arr
         return {};
     }
     auto newBatch = arrow::RecordBatch::Make(*newSchema, batch->num_rows(), columns);
-    NSharding::THashSharding hashSharding(0, fieldIds);
-    return hashSharding.MakeHashes(newBatch);
+    if (HashType == EHashType::XX64) {
+        NSharding::THashSharding hashSharding(0, fieldIds);
+        return hashSharding.MakeHashes(newBatch);
+    } else {
+        ALS_ERROR(NKikimrServices::EXT_INDEX) << "undefined hash type: " << HashType;
+        return {};
+    }
 }
 
-bool TExtractorCityHash64::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+bool THashByColumns::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
     const NJson::TJsonValue::TArray* jsonFields;
     if (!jsonInfo["fields"].GetArrayPointer(&jsonFields)) {
         return false;
@@ -146,11 +152,22 @@ bool TExtractorCityHash64::DoDeserializeFromJson(const NJson::TJsonValue& jsonIn
     if (Fields.size() == 0) {
         return false;
     }
+
+    if (jsonInfo.Has("hash_type")) {
+        if (!jsonInfo["hash_type"].IsString()) {
+            return false;
+        }
+        if (!TryFromString(jsonInfo["hash_type"].GetString(), HashType)) {
+            return false;
+        }
+    }
+
     return true;
 }
 
-NJson::TJsonValue TExtractorCityHash64::DoSerializeToJson() const {
+NJson::TJsonValue THashByColumns::DoSerializeToJson() const {
     NJson::TJsonValue result;
+    result.InsertValue("hash_type", ::ToString(HashType));
     auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
     for (auto&& i : Fields) {
         jsonFields.AppendValue(i.SerializeToJson());

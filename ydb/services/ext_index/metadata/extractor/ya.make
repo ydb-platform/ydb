@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
-    GLOBAL city.cpp
+    GLOBAL hash_by_columns.cpp
     container.cpp
 )
 
@@ -13,5 +13,6 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+GENERATE_ENUM_SERIALIZATION(hash_by_columns.h)
 
 END()

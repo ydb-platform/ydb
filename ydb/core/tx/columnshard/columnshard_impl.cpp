@@ -596,6 +596,12 @@ void TColumnShard::ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly) {
     }
 }
 
+void TColumnShard::CleanForgottenBlobs(const TActorContext& ctx) {
+    THashSet<NOlap::TEvictedBlob> blobsToForget;
+    BlobManager->GetCleanupBlobs(blobsToForget);
+    ForgetBlobs(ctx, blobsToForget);
+}
+
 void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivity activity) {
     if (periodic) {
         if (LastPeriodicBackActivation > TInstant::Now() - ActivationPeriod) {
@@ -634,9 +640,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
             ctx.Send(SelfId(), event.release());
         } else {
             // Small cleanup (no index changes)
-            THashSet<NOlap::TEvictedBlob> blobsToForget;
-            BlobManager->GetCleanupBlobs(blobsToForget);
-            ForgetBlobs(ctx, blobsToForget);
+            CleanForgottenBlobs(ctx);
         }
     }
 
@@ -1025,7 +1029,10 @@ void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
 
 void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {
     if (!Tiers) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId());
+        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
+            [this](const TActorContext& ctx){
+                CleanForgottenBlobs(ctx);
+            });
         Tiers->Start(Tiers);
     }
     if (!!Tiers) {

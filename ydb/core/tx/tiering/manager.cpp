@@ -146,6 +146,10 @@ void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt
         auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
         manager.Start(Secrets);
     }
+
+    if (ShardCallback && TlsActivationContext) {
+        ShardCallback(TActivationContext::AsActorContext());
+    }
 }
 
 TActorId TTiersManager::GetStorageActorId(const TString& tierId) {

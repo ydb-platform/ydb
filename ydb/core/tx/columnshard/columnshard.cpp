@@ -122,11 +122,8 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     }
 
-    { // Cleanup just freed dropped exported blobs
-        THashSet<NOlap::TEvictedBlob> blobsToForget;
-        BlobManager->GetCleanupBlobs(blobsToForget);
-        ForgetBlobs(ctx, blobsToForget);
-    }
+    // Cleanup just freed dropped exported blobs
+    CleanForgottenBlobs(ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {

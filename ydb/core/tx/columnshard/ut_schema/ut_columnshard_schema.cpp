@@ -1,4 +1,5 @@
 #include "columnshard_ut_common.h"
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/services/metadata/service.h>
@@ -169,15 +170,25 @@ bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 10
     return ProposeSchemaTx(runtime, sender, txBody, NOlap::TSnapshot(++planStep, ++txId));
 }
 
-TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead, std::optional<bool> finished = true)
+enum class EExpectedResult {
+    OK_FINISHED,
+    OK,
+    ERROR
+};
+
+TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead, EExpectedResult expected = EExpectedResult::OK_FINISHED)
 {
     Cerr << "Got batchNo: " << resRead.GetBatch() << "\n";
 
     UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), TTestTxConfig::TxTablet1);
-    UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    if (finished) {
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), *finished);
+    if (expected == EExpectedResult::ERROR) {
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
+    } else {
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    }
+    if (expected == EExpectedResult::OK_FINISHED) {
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
     }
     return resRead.GetData();
 }
@@ -393,6 +404,7 @@ public:
     TCounters ForgetCounters;
     ui32 CaptureReadEvents = 0;
     std::vector<TAutoPtr<IEventHandle>> CapturedReads;
+    bool BlockForgets = false;
 
     void WaitEvents(TTestBasicRuntime& runtime, const TDuration& timeout, ui32 waitExports, ui32 waitForgets,
                     const TString& promo = "START_WAITING") {
@@ -447,6 +459,10 @@ public:
         }
         CapturedReads.clear();
     }
+
+    void BlockForgetsTillReboot() {
+        BlockForgets = true;
+    }
 };
 
 class TEventsCounter {
@@ -464,7 +480,10 @@ public:
 
     bool operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         TStringBuilder ss;
-        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
+        if (ev->GetTypeRewrite() == TEvTablet::EvBoot) {
+            Counters->BlockForgets = false;
+            return false;
+        } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
             if (msg->Status == NKikimrProto::OK) {
                 ss << "EXPORT(done " << ++Counters->ExportCounters.Success << "): ";
             } else {
@@ -472,6 +491,13 @@ public:
                     << NKikimrProto::EReplyStatus_Name(msg->Status);
             }
         } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvForget>(ev)) {
+            if (Counters->BlockForgets) {
+                ss << "FORGET(ignore " << NKikimrProto::EReplyStatus_Name(msg->Status) << "): ";
+                ss << " " << ev->Sender << "->" << ev->Recipient;
+                Cerr << ss << Endl;
+                return true;
+            }
+
             if (msg->Status == NKikimrProto::OK) {
                 ss << "FORGET(done " << ++Counters->ForgetCounters.Success << "): ";
             } else {
@@ -496,6 +522,8 @@ public:
             } else {
                 return false;
             }
+        } else if (auto* msg = TryGetPrivateEvent<TEvColumnShard::TEvReadResult>(ev)) {
+            ss << "Got TEvReadResult " << NKikimrTxColumnShard::EResultStatus_Name(Proto(msg).GetStatus()) << Endl;
         } else {
             return false;
         }
@@ -573,6 +601,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
     std::vector<std::pair<ui32, ui64>> specRowsBytes;
     specRowsBytes.reserve(specs.size());
+    ui32 deplayedExports = 0;
+    ui32 deplayedForgets = 0;
 
     TCountersContainer counter;
     runtime.SetEventFilter(TEventsCounter(counter, runtime));
@@ -580,9 +610,19 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         ui32 numExports = exportSteps.contains(i) ? 1 : 0;
         ui32 numForgets = forgetSteps.contains(i) ? 1 : 0;
         bool hasColdEviction = false;
+        bool misconfig = false;
+        auto expectedReadResult = EExpectedResult::OK;
         for (auto&& spec : specs[i].Tiers) {
             if (!!spec.S3) {
                 hasColdEviction = true;
+                if (spec.S3->GetEndpoint() != "fake") {
+                    misconfig = true;
+                    expectedReadResult = EExpectedResult::ERROR;
+                    deplayedExports += numExports;
+                    deplayedForgets += numForgets;
+                    numExports = 0;
+                    numForgets = 0;
+                }
                 break;
             }
         }
@@ -596,12 +636,20 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
             }
         }
-        if (specs[i].HasTiers()) {
+        if (specs[i].HasTiers() || reboots) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
+        if (!misconfig && (deplayedExports || deplayedForgets)) {
+            UNIT_ASSERT(hasColdEviction);
+            // continue waiting: finish previous step
+            counter.WaitMoreEvents(runtime, exportTimeout, deplayedExports, deplayedForgets);
+            deplayedExports = 0;
+            deplayedForgets = 0;
+        }
+
         // Read crossed with eviction (start)
-        {
+        if (!misconfig) {
             auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
             Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
 
@@ -616,7 +664,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         Cerr << (hasColdEviction ? "Cold" : "Hot")
             << " tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size()
-            << ", exports: " << numExports << ", forgets: " << numForgets << Endl;
+            << ", exports: " << numExports << ", forgets: " << numForgets
+            << ", delayed exports: " << deplayedExports << ", delayed forgets: " << deplayedForgets << Endl;
 
         if (numExports) {
             UNIT_ASSERT(hasColdEviction);
@@ -626,12 +675,13 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             counter.WaitEvents(runtime, timeout, 0, 0);
         }
 
-        if (reboots) {
-            ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+        if (numForgets && reboots) {
+            // Do not finish forget before reboot. Check forget would happen after it.
+            counter.BlockForgetsTillReboot();
         }
 
         // Read crossed with eviction (finish)
-        {
+        if (!misconfig) {
             counter.ResendCapturedReads(runtime);
             ui32 numBatches = 0;
             THashSet<ui32> batchNumbers;
@@ -640,12 +690,22 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
-                TString data = GetReadResult(resRead, {});
+                TString data = GetReadResult(resRead, EExpectedResult::OK);
+
                 batchNumbers.insert(resRead.GetBatch());
                 if (resRead.GetFinished()) {
                     numBatches = resRead.GetBatch() + 1;
                 }
             }
+        }
+
+        if (numForgets) {
+            UNIT_ASSERT(hasColdEviction);
+            if (reboots) {
+                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+                ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            }
+            counter.WaitMoreEvents(runtime, exportTimeout, 0, numForgets);
         }
 
         // Read data after eviction
@@ -657,13 +717,16 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         specRowsBytes.emplace_back(0, 0);
         ui32 numBatches = 0;
-        ui32 numExpected = 100;
-        for (ui32 numBatches = 0; numBatches < numExpected; ++numBatches) {
+        ui32 numExpected = (expectedReadResult == EExpectedResult::ERROR) ? 1 : 100;
+        for (; numBatches < numExpected; ++numBatches) {
             auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
             UNIT_ASSERT(event);
 
             auto& resRead = Proto(event);
-            TString data = GetReadResult(resRead, {});
+            TString data = GetReadResult(resRead, expectedReadResult);
+            if (expectedReadResult == EExpectedResult::ERROR) {
+                break;
+            }
             if (!data.size()) {
                 UNIT_ASSERT(resRead.GetFinished());
                 break;
@@ -687,12 +750,6 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-
-        // TODO: move upper
-        if (numForgets) {
-            UNIT_ASSERT(hasColdEviction);
-            counter.WaitMoreEvents(runtime, exportTimeout, 0, numForgets);
         }
     }
 
@@ -835,7 +892,8 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     return rowsBytes;
 }
 
-std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec, bool reboots) {
+std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec, bool reboots,
+                                                    std::optional<ui32> misconfig) {
     const std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     ui32 overlapSize = 0;
@@ -852,18 +910,26 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
     changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
     UNIT_ASSERT_VALUES_EQUAL(alters.size(), 4);
 
-    // TODO: Add error in config => eviction + not finished export
-    //UNIT_ASSERT_VALUES_EQUAL(alters[1].Tiers.size(), 1);
-    //UNIT_ASSERT(alters[1].Tiers[0].S3);
-    //alters[1].Tiers[0].S3->SetEndpoint("wrong");
+    THashSet<ui32> exports = {1};
+    if (misconfig) {
+        // Add error in config => eviction + not finished export
+        UNIT_ASSERT_VALUES_EQUAL(alters[*misconfig].Tiers.size(), 1);
+        UNIT_ASSERT(alters[*misconfig].Tiers[0].S3);
+        alters[*misconfig].Tiers[0].S3->SetEndpoint("nowhere"); // clear special "fake" endpoint
+        if (*misconfig == 1) {
+            exports = {2};
+        }
+    }
 
-    auto rowsBytes = TestTiers(reboots, blobs, alters, {1}, {2, 3});
+    auto rowsBytes = TestTiers(reboots, blobs, alters, exports, {2, 3});
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
 
     UNIT_ASSERT_EQUAL(rowsBytes.size(), alters.size());
-    // TODO
+    if (!misconfig) {
+        changes.Assert(spec, rowsBytes, 1);
+    }
     return rowsBytes;
 }
 
@@ -913,7 +979,7 @@ void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
     TestTiersAndTtl(spec, reboot, initial);
 }
 
-void TestExport(bool reboot) {
+void TestExport(bool reboot, std::optional<ui32> misconfig = {}) {
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
 
@@ -925,7 +991,7 @@ void TestExport(bool reboot) {
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    TestOneTierExport(spec, reboot);
+    TestOneTierExport(spec, reboot, misconfig);
 }
 
 void TestDrop(bool reboots) {
@@ -1264,9 +1330,22 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(RebootOneColdTier) {
         TestExport(true);
     }
+#if 0 // TODO
+    Y_UNIT_TEST(ExportAfterFail) {
+        TestExport(false, 1);
+    }
 
-    // TODO: ExportAfterFail
-    // TODO: ForgetAfterFail
+    Y_UNIT_TEST(RebootExportAfterFail) {
+        TestExport(true, 1);
+    }
+#endif
+    Y_UNIT_TEST(ForgetAfterFail) {
+        TestExport(false, 2);
+    }
+
+    Y_UNIT_TEST(RebootForgetAfterFail) {
+        TestExport(true, 2);
+    }
 
     // TODO: LastTierBorderIsTtl = false
 

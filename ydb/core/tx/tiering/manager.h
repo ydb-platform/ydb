@@ -1,6 +1,8 @@
 #pragma once
 #include "external_data.h"
 
+#include <functional>
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 
@@ -38,6 +40,7 @@ private:
     using TManagers = std::unordered_map<TString, NTiers::TManager>;
     ui64 TabletId = 0;
     const TActorId TabletActorId;
+    std::function<void(const TActorContext& ctx)> ShardCallback;
     TActor* Actor = nullptr;
     std::unordered_map<ui64, TString> PathIdTiering;
     YDB_READONLY_DEF(TManagers, Managers);
@@ -47,9 +50,11 @@ private:
     mutable NMetadata::NFetcher::ISnapshotsFetcher::TPtr ExternalDataManipulation;
 
 public:
-    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId)
+    TTiersManager(const ui64 tabletId, const TActorId& tabletActorId,
+                std::function<void(const TActorContext& ctx)> shardCallback = {})
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
+        , ShardCallback(shardCallback)
     {
     }
     TActorId GetActorId() const;

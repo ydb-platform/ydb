@@ -1906,6 +1906,51 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CountAllPushdownBackwardCompatibility, EnableLlvm) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = fmt::format(R"(
+                --!syntax_v1
+                PRAGMA Kikimr.EnableLlvm = "{}";
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )", EnableLlvm ? "true" : "false");
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[23000u;]])");
+
+            // Check plan
+#if SSA_RUNTIME_VERSION >= 2U
+            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
+#else
+            CheckPlanForAggregatePushdown(query, tableClient, { "Condense" }, "");
+#endif
+        }
+    }
+
     Y_UNIT_TEST(CountAllNoPushdown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)

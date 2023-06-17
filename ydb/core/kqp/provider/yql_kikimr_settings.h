@@ -41,6 +41,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> _ResultRowsLimit;
     NCommon::TConfSetting<bool, false> EnableSystemColumns;
     NCommon::TConfSetting<bool, false> UseLlvm;
+    NCommon::TConfSetting<bool, false> EnableLlvm;
     NCommon::TConfSetting<NDq::EHashJoinMode, false> HashJoinMode;
 
     /* Disable optimizer rules */

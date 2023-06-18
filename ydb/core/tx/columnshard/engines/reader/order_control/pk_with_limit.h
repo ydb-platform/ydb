@@ -51,7 +51,7 @@ private:
 protected:
     virtual bool DoWakeup(const TGranule& granule, TGranulesFillingContext& context) override;
     virtual void DoFill(TGranulesFillingContext& context) override;
-    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) override;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(TResultController& granulesToOut) override;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) override;
     virtual TFeatures DoGetFeatures() const override {
         return (TFeatures)EFeatures::CanInterrupt & (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;

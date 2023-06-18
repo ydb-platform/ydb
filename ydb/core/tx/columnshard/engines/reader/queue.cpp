@@ -4,22 +4,22 @@ namespace NKikimr::NOlap {
 
 NKikimr::NOlap::TBlobRange TFetchBlobsQueue::pop_front() {
     if (!StoppedFlag && IteratorBlobsSequential.size()) {
-        TBlobRange result = IteratorBlobsSequential.front();
+        auto result = IteratorBlobsSequential.front();
         IteratorBlobsSequential.pop_front();
-        return result;
+        return result.GetRange();
     } else {
         return TBlobRange();
     }
 }
 
-void TFetchBlobsQueue::emplace_front(const TBlobRange& range) {
+void TFetchBlobsQueue::emplace_front(const ui64 granuleId, const TBlobRange& range) {
     Y_VERIFY(!StoppedFlag);
-    IteratorBlobsSequential.emplace_front(range);
+    IteratorBlobsSequential.emplace_front(granuleId, range);
 }
 
-void TFetchBlobsQueue::emplace_back(const TBlobRange& range) {
+void TFetchBlobsQueue::emplace_back(const ui64 granuleId, const TBlobRange& range) {
     Y_VERIFY(!StoppedFlag);
-    IteratorBlobsSequential.emplace_back(range);
+    IteratorBlobsSequential.emplace_back(granuleId, range);
 }
 
 }

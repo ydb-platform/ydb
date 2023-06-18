@@ -99,7 +99,7 @@ void TPKSortingWithLimit::DoFill(TGranulesFillingContext& context) {
     }
 }
 
-std::vector<TGranule::TPtr> TPKSortingWithLimit::DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) {
+std::vector<TGranule::TPtr> TPKSortingWithLimit::DoDetachReadyGranules(TResultController& granulesToOut) {
     std::vector<TGranule::TPtr> result;
     while (GranulesOutOrder.size()) {
         NIndexedReader::TGranule::TPtr granule = GranulesOutOrder.front();
@@ -107,7 +107,7 @@ std::vector<TGranule::TPtr> TPKSortingWithLimit::DoDetachReadyGranules(THashMap<
             break;
         }
         result.emplace_back(granule);
-        Y_VERIFY(granulesToOut.erase(granule->GetGranuleId()));
+        Y_VERIFY(granulesToOut.ExtractResult(granule->GetGranuleId()));
         GranulesOutOrder.pop_front();
     }
     return result;

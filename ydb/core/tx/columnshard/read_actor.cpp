@@ -35,7 +35,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata, IndexedBlobsForFetch, true, counters, TDataTasksProcessorContainer())
+        , IndexedData(ReadMetadata, true, counters, TDataTasksProcessorContainer())
         , Deadline(deadline)
         , ColumnShardActorId(columnShardActorId)
         , RequestCookie(requestCookie)
@@ -173,8 +173,8 @@ public:
         }
 
         IndexedData.InitRead(notIndexed);
-        while (IndexedBlobsForFetch.size()) {
-            const auto blobRange = IndexedBlobsForFetch.pop_front();
+        while (IndexedData.HasMoreBlobs()) {
+            const auto blobRange = IndexedData.NextBlob();
             WaitIndexed.insert(blobRange);
             IndexedBlobs.emplace(blobRange);
         }
@@ -258,7 +258,6 @@ private:
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
-    NOlap::TFetchBlobsQueue IndexedBlobsForFetch;
     NOlap::TIndexedReadData IndexedData;
     TInstant Deadline;
     TActorId ColumnShardActorId;

@@ -33,7 +33,7 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
     CheckReady();
 }
 
-NKikimr::NOlap::NIndexedReader::TBatch& TGranule::AddBatch(const TPortionInfo& portionInfo) {
+NKikimr::NOlap::NIndexedReader::TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
     Y_VERIFY(!ReadyFlag);
     ui32 batchGranuleIdx = Batches.size();
     WaitBatches.emplace(batchGranuleIdx);

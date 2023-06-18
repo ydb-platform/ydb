@@ -8,6 +8,7 @@ SRCS(
     filling_context.cpp
     filter_assembler.cpp
     granule.cpp
+    processing_context.cpp
     postfilter_assembler.cpp
     queue.cpp
     read_filter_merger.cpp

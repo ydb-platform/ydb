@@ -4,6 +4,7 @@ SRCS(
     abstract.cpp
     not_sorted.cpp
     pk_with_limit.cpp
+    result.cpp
     default.cpp
 )
 

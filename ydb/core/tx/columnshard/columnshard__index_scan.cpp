@@ -7,7 +7,7 @@ namespace NKikimr::NColumnShard {
 TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata,
     NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TScanCounters& scanCounters)
     : ReadMetadata(readMetadata)
-    , IndexedData(ReadMetadata, FetchBlobsQueue, false, scanCounters, processor)
+    , IndexedData(ReadMetadata, false, scanCounters, processor)
     , DataTasksProcessor(processor)
     , ScanCounters(scanCounters)
 {
@@ -29,13 +29,13 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
     // Read all remained committed blobs
     for (const auto& [cmtBlob, _] : WaitCommitted) {
         auto& blobId = cmtBlob.GetBlobId();
-        FetchBlobsQueue.emplace_front(TBlobRange(blobId, 0, blobId.BlobSize()));
+        IndexedData.AddBlobToFetchInFront(0, TBlobRange(blobId, 0, blobId.BlobSize()));
     }
 
     Y_VERIFY(ReadMetadata->IsSorted());
 
     if (ReadMetadata->Empty()) {
-        FetchBlobsQueue.Stop();
+        IndexedData.Abort();
     }
 }
 
@@ -66,11 +66,7 @@ NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
 }
 
 NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
-    if (IndexedData.GetGranulesContext().CanProcessMore()) {
-        return FetchBlobsQueue.pop_front();
-    } else {
-        return NKikimr::NColumnShard::TBlobRange();
-    }
+    return IndexedData.NextBlob();
 }
 
 void TColumnShardScanIterator::FillReadyResults() {
@@ -96,12 +92,10 @@ void TColumnShardScanIterator::FillReadyResults() {
         DataTasksProcessor.Stop();
         WaitCommitted.clear();
         IndexedData.Abort();
-        FetchBlobsQueue.Stop();
     }
 
-    if (WaitCommitted.empty() && !IndexedData.IsInProgress() && FetchBlobsQueue.empty()) {
+    if (WaitCommitted.empty() && IndexedData.IsFinished()) {
         DataTasksProcessor.Stop();
-        FetchBlobsQueue.Stop();
     }
 }
 

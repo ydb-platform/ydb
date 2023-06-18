@@ -9,7 +9,7 @@ private:
     std::deque<TGranule::TPtr> GranulesOutOrder;
 protected:
     virtual void DoFill(TGranulesFillingContext& context) override;
-    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, NIndexedReader::TGranule::TPtr>& granulesToOut) override;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(TResultController& granulesToOut) override;
     virtual TString DoDebugString() const override {
         return TStringBuilder() << "type=AnySorting;granules_count=" << GranulesOutOrder.size() << ";";
     }

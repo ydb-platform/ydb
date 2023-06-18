@@ -1,4 +1,5 @@
 #pragma once
+#include "result.h"
 #include <ydb/core/tx/columnshard/engines/reader/granule.h>
 #include <ydb/core/tx/columnshard/engines/reader/read_metadata.h>
 
@@ -22,7 +23,7 @@ protected:
     virtual bool DoWakeup(const TGranule& /*granule*/, TGranulesFillingContext& /*context*/) {
         return true;
     }
-    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(THashMap<ui64, TGranule::TPtr>& granulesToOut) = 0;
+    virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(TResultController& granulesToOut) = 0;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& /*granule*/, TGranulesFillingContext& context) {
         OnBatchFilterInitialized(batchInfo, context);
         return true;
@@ -67,7 +68,7 @@ public:
 
     virtual bool ReadyForAddNotIndexedToEnd() const = 0;
 
-    std::vector<TGranule::TPtr> DetachReadyGranules(THashMap<ui64, TGranule::TPtr>& granulesToOut) {
+    std::vector<TGranule::TPtr> DetachReadyGranules(TResultController& granulesToOut) {
         return DoDetachReadyGranules(granulesToOut);
     }
 

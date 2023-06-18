@@ -23,7 +23,7 @@ private:
 
     NColumnShard::TScanCounters Counters;
     NColumnShard::TDataTasksProcessorContainer TasksProcessor;
-    TFetchBlobsQueue& FetchBlobsQueue;
+    TFetchBlobsQueue FetchBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     bool OnePhaseReadMode = false;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
@@ -35,7 +35,7 @@ private:
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
 
 public:
-    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, TFetchBlobsQueue& fetchBlobsQueue,
+    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
         const bool internalRead, const NColumnShard::TScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
 
     const NColumnShard::TScanCounters& GetCounters() const noexcept {
@@ -53,14 +53,8 @@ public:
 
     /// Initial FetchBlobsQueue filling (queue from external scan iterator). Granules could be read independently
     void InitRead(ui32 numNotIndexed);
-    void Abort() {
-        Y_VERIFY(GranulesContext);
-        return GranulesContext->Abort();
-    }
-    bool IsInProgress() const {
-        Y_VERIFY(GranulesContext);
-        return GranulesContext->IsInProgress();
-    }
+    void Abort();
+    bool IsFinished() const;
 
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
@@ -89,6 +83,24 @@ public:
     void OnBatchReady(const NIndexedReader::TBatch& /*batchInfo*/, std::shared_ptr<arrow::RecordBatch> batch) {
         if (batch && batch->num_rows()) {
             ReadMetadata->ReadStats->SelectedRows += batch->num_rows();
+        }
+    }
+
+    void AddBlobToFetchInFront(const ui64 granuleId, const TBlobRange& range) {
+        FetchBlobsQueue.emplace_front(granuleId, range);
+    }
+
+    bool HasMoreBlobs() const {
+        return FetchBlobsQueue.size();
+    }
+
+    TBlobRange NextBlob() {
+        Y_VERIFY(GranulesContext);
+        auto* f = FetchBlobsQueue.front();
+        if (f && GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
+            return FetchBlobsQueue.pop_front();
+        } else {
+            return TBlobRange();
         }
     }
 

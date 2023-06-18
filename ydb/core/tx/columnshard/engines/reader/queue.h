@@ -4,12 +4,33 @@
 
 namespace NKikimr::NOlap {
 
+class TBatchBlobRange {
+private:
+    const ui64 GranuleId;
+    const TBlobRange Range;
+public:
+    ui64 GetGranuleId() const {
+        return GranuleId;
+    }
+
+    const TBlobRange& GetRange() const {
+        return Range;
+    }
+
+    TBatchBlobRange(const ui64 granuleId, const TBlobRange range)
+        : GranuleId(granuleId)
+        , Range(range)
+    {
+
+    }
+};
+
 class TFetchBlobsQueue {
 private:
     bool StoppedFlag = false;
-    std::deque<TBlobRange> IteratorBlobsSequential;
+    std::deque<TBatchBlobRange> IteratorBlobsSequential;
 public:
-    const std::deque<TBlobRange>& GetIteratorBlobsSequential() const noexcept {
+    const std::deque<TBatchBlobRange>& GetIteratorBlobsSequential() const noexcept {
         return IteratorBlobsSequential;
     }
 
@@ -30,10 +51,16 @@ public:
         return IteratorBlobsSequential.size();
     }
 
+    const TBatchBlobRange* front() const {
+        if (!IteratorBlobsSequential.size()) {
+            return nullptr;
+        }
+        return &IteratorBlobsSequential.front();
+    }
     TBlobRange pop_front();
 
-    void emplace_front(const TBlobRange& range);
-    void emplace_back(const TBlobRange& range);
+    void emplace_front(const ui64 granuleId, const TBlobRange& range);
+    void emplace_back(const ui64 granuleId, const TBlobRange& range);
 };
 
 }

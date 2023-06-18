@@ -1,7 +1,7 @@
 #include "filling_context.h"
-#include "filling_context.h"
 #include "order_control/not_sorted.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -17,11 +17,12 @@ TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMe
     EarlyFilterColumns = ReadMetadata->GetEarlyFilterColumnIds();
     FilterStageColumns = SortingPolicy->GetFilterStageColumns();
     PKColumnNames = ReadMetadata->GetReplaceKey()->field_names();
-
     PostFilterColumns = ReadMetadata->GetUsedColumnIds();
     for (auto&& i : FilterStageColumns) {
         PostFilterColumns.erase(i);
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TGranulesFillingContext")("used", UsedColumns.size())("early", EarlyFilterColumns.size())
+        ("filter_stage", FilterStageColumns.size())("PKColumnNames", JoinSeq(",", PKColumnNames))("post_filter", PostFilterColumns.size());
 }
 
 bool TGranulesFillingContext::PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const {
@@ -46,12 +47,7 @@ void TGranulesFillingContext::OnBatchReady(const NIndexedReader::TBatch& batchIn
 }
 
 NIndexedReader::TBatch* TGranulesFillingContext::GetBatchInfo(const TBatchAddress& address) {
-    auto it = GranulesWaiting.find(address.GetGranuleId());
-    if (it == GranulesWaiting.end()) {
-        return nullptr;
-    } else {
-        return &it->second->GetBatchInfo(address.GetBatchGranuleIdx());
-    }
+    return Processing.GetBatchInfo(address);
 }
 
 NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::GetTasksProcessor() const {
@@ -59,29 +55,39 @@ NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::Get
 }
 
 void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches) {
-    if (NotIndexedBatchesInitialized) {
-        return;
-    }
-    NotIndexedBatchesInitialized = true;
-    for (auto&& [_, gPtr] : GranulesWaiting) {
-        if (!batches) {
-            gPtr->AddNotIndexedBatch(nullptr);
-        } else {
-            auto it = batches->find(gPtr->GetGranuleId());
-            if (it == batches->end()) {
-                gPtr->AddNotIndexedBatch(nullptr);
-            } else {
-                gPtr->AddNotIndexedBatch(it->second);
-            }
-            batches->erase(it);
-        }
+    Processing.DrainNotIndexedBatches(batches);
+}
+
+bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range) {
+    Y_VERIFY_DEBUG(!Result.IsReady(granuleId));
+    if (InternalReading || Processing.IsInProgress(granuleId)) {
+        Processing.StartBlobProcessing(granuleId, range);
+        return true;
+    } else if (CheckBufferAvailable()) {
+        Processing.StartBlobProcessing(granuleId, range);
+        return true;
+    } else {
+        return false;
     }
 }
 
-bool TGranulesFillingContext::CanProcessMore() const {
-    return GranulesInProcessing.size() <= GranulesCountProcessingLimit ||
-        BlobsSizeInProcessing <= ProcessingBytesLimit
-        ;
+bool TGranulesFillingContext::CheckBufferAvailable() const {
+    return Result.GetCount() + Processing.GetCount() < GranulesCountProcessingLimit ||
+        Result.GetBlobsSize() + Processing.GetBlobsSize() < ProcessingBytesLimit;
+}
+
+void TGranulesFillingContext::OnGranuleReady(const ui64 granuleId) {
+    Result.AddResult(Processing.ExtractReadyVerified(granuleId));
+}
+
+std::vector<NKikimr::NOlap::NIndexedReader::TGranule::TPtr> TGranulesFillingContext::DetachReadyInOrder() {
+    Y_VERIFY(SortingPolicy);
+    const ui32 sizeBefore = Result.GetCount();
+    auto result = SortingPolicy->DetachReadyGranules(Result);
+    if (sizeBefore == Result.GetCount()) {
+        Y_VERIFY(InternalReading || CheckBufferAvailable());
+    }
+    return result;
 }
 
 }

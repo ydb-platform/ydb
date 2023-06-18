@@ -30,7 +30,6 @@ using NOlap::TBlobRange;
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
-    NOlap::TFetchBlobsQueue FetchBlobsQueue;
     NOlap::TIndexedReadData IndexedData;
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     TDeque<NOlap::TPartialReadResult> ReadyResults;
@@ -49,7 +48,7 @@ public:
     void AddData(const TBlobRange& blobRange, TString data) override;
 
     bool Finished() const  override {
-        return FetchBlobsQueue.IsStopped() && ReadyResults.empty();
+        return IndexedData.IsFinished() && ReadyResults.empty();
     }
 
     NOlap::TPartialReadResult GetBatch() override;

@@ -1,6 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 #include "granule.h"
+#include "processing_context.h"
 #include "order_control/abstract.h"
 #include <util/generic/hash.h>
 
@@ -14,33 +15,28 @@ class TGranulesFillingContext {
 private:
     YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
     TReadMetadata::TConstPtr ReadMetadata;
+    bool StartedFlag = false;
     const bool InternalReading = false;
-    bool NotIndexedBatchesInitialized = false;
+    TProcessingController Processing;
+    TResultController Result;
     TIndexedReadData& Owner;
-    THashMap<ui64, NIndexedReader::TGranule::TPtr> GranulesToOut;
-    std::set<ui64> ReadyGranulesAccumulator;
-    THashMap<ui64, NIndexedReader::TGranule::TPtr> GranulesWaiting;
     std::set<ui32> EarlyFilterColumns;
     std::set<ui32> PostFilterColumns;
     std::set<ui32> FilterStageColumns;
     std::set<ui32> UsedColumns;
     IOrderPolicy::TPtr SortingPolicy;
     NColumnShard::TScanCounters Counters;
-    std::set<ui64> GranulesInProcessing;
-    i64 BlobsSizeInProcessing = 0;
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
     static constexpr ui32 GranulesCountProcessingLimit = 16;
     static constexpr ui64 ExpectedBytesForGranule = 200 * 1024 * 1024;
     static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
+    bool CheckBufferAvailable() const;
 public:
-    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading);
+    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
+    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData & owner, const bool internalReading);
 
-    bool CanProcessMore() const;
-    
-    void OnBlobReady(const ui64 granuleId, const TBlobRange& range) noexcept {
-        GranulesInProcessing.emplace(granuleId);
-        BlobsSizeInProcessing += range.Size;
+    void OnBlobReady(const ui64 /*granuleId*/, const TBlobRange& /*range*/) noexcept {
     }
 
     TReadMetadata::TConstPtr GetReadMetadata() const noexcept {
@@ -72,14 +68,15 @@ public:
     void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
 
     TGranule::TPtr GetGranuleVerified(const ui64 granuleId) {
-        auto it = GranulesWaiting.find(granuleId);
-        Y_VERIFY(it != GranulesWaiting.end());
-        return it->second;
+        return Processing.GetGranuleVerified(granuleId);
     }
 
-    bool IsInProgress() const { return GranulesWaiting.size(); }
+    bool IsFinished() const {
+        return Processing.IsFinished() && !Result.GetCount();
+    }
 
     void OnNewBatch(TBatch& batch) {
+        Y_VERIFY(!StartedFlag);
         if (!InternalReading && PredictEmptyAfterFilter(batch.GetPortionInfo())) {
             batch.ResetNoFilter(FilterStageColumns);
         } else {
@@ -87,40 +84,34 @@ public:
         }
     }
 
-    std::vector<TGranule::TPtr> DetachReadyInOrder() {
-        Y_VERIFY(SortingPolicy);
-        return SortingPolicy->DetachReadyGranules(GranulesToOut);
-    }
+    std::vector<TGranule::TPtr> DetachReadyInOrder();
 
     void Abort() {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "abort");
-        GranulesWaiting.clear();
-        Y_VERIFY(!IsInProgress());
+        Processing.Abort();
+        Result.Clear();
+        Y_VERIFY(IsFinished());
     }
 
     TGranule::TPtr UpsertGranule(const ui64 granuleId) {
-        auto itGranule = GranulesWaiting.find(granuleId);
-        if (itGranule == GranulesWaiting.end()) {
-            itGranule = GranulesWaiting.emplace(granuleId, std::make_shared<TGranule>(granuleId, *this)).first;
+        Y_VERIFY(!StartedFlag);
+        auto g = Processing.GetGranule(granuleId);
+        if (!g) {
+            return Processing.InsertGranule(std::make_shared<TGranule>(granuleId, *this));
+        } else {
+            return g;
         }
-        return itGranule->second;
     }
 
-    void OnGranuleReady(const ui64 granuleId) {
-        auto granule = GetGranuleVerified(granuleId);
-        Y_VERIFY(GranulesToOut.emplace(granule->GetGranuleId(), granule).second);
-        Y_VERIFY(ReadyGranulesAccumulator.emplace(granule->GetGranuleId()).second);
-        Y_VERIFY(GranulesWaiting.erase(granuleId));
-        GranulesInProcessing.erase(granule->GetGranuleId());
-        BlobsSizeInProcessing -= granule->GetBlobsDataSize();
-        Y_VERIFY(BlobsSizeInProcessing >= 0);
-    }
+    void OnGranuleReady(const ui64 granuleId);
 
     void Wakeup(TGranule& granule) {
         SortingPolicy->Wakeup(granule, *this);
     }
 
     void PrepareForStart() {
+        Y_VERIFY(!StartedFlag);
+        StartedFlag = true;
         SortingPolicy->Fill(*this);
     }
 };

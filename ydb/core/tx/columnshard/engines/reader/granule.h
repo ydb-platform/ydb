@@ -130,7 +130,7 @@ public:
     void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
     void OnBlobReady(const TBlobRange& range) noexcept;
     bool OnFilterReady(TBatch& batchInfo);
-    TBatch& AddBatch(const TPortionInfo& portionInfo);
+    TBatch& RegisterBatchForFetching(const TPortionInfo& portionInfo);
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) const;
 
 };

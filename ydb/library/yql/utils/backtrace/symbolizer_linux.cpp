@@ -6,6 +6,7 @@
 
 #include <util/generic/hash.h>
 #include <util/system/execpath.h>
+#include <util/string/builder.h>
 
 #include <dlfcn.h>
 #include <link.h>
@@ -20,16 +21,15 @@ namespace NBacktrace {
     
 extern THashMap<TString, TString> Mapping;
 
-}
-}
+} // namespace NBacktrace
+} // namespace NYql
 
 int DlIterCallback(struct dl_phdr_info *info, size_t size, void *data)
 {
     Y_UNUSED(size);
-    Y_UNUSED(data);
     if (*info->dlpi_name) {
         TDllInfo dllInfo{ info->dlpi_name, (ui64)info->dlpi_addr };
-        ((THashMap<TString, TDllInfo>*)data)->emplace(dllInfo.Path, dllInfo);
+        reinterpret_cast<THashMap<TString, TDllInfo>*>(data)->emplace(dllInfo.Path, dllInfo);
     }
 
     return 0;
@@ -60,7 +60,7 @@ public:
         }
 #endif
         if (!KikimrFormat_) {
-            return "StackFrame: " + modulePath + " " + address + " " + offset + "\n";
+            return TStringBuilder() << "StackFrame: " << modulePath << " " << address << " " <<  offset << "\n";
         }
 
         llvm::object::SectionedAddress secAddr;
@@ -68,10 +68,6 @@ public:
         return NYql::NBacktrace::SymbolizeAndDumpToString(modulePath, secAddr, offset);
     }
 
-    ~TBacktraceSymbolizer() override {
-
-    }
-    
 private:
     THashMap<TString, TDllInfo> DLLs_;
     TString BinaryPath_ = GetPersistentExecPath();

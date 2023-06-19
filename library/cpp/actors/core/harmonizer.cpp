@@ -490,9 +490,9 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             }
 
             TPoolInfo &pool = Pools[poolIdx];
-            i64 threadCount = pool.GetThreadCount();
-            size_t additionalThreadsCount = Max(0L, threadCount - pool.DefaultThreadCount);
-            size_t currentTakingAwayThreads = Min(additionalThreadsCount, currentTakingAwayThreads);
+            size_t threadCount = pool.GetThreadCount();
+            size_t additionalThreadsCount = Max<size_t>(0L, threadCount - pool.DefaultThreadCount);
+            size_t currentTakingAwayThreads = Min(additionalThreadsCount, takingAwayThreads);
 
             if (!currentTakingAwayThreads) {
                 continue;

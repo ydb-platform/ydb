@@ -136,7 +136,7 @@ private:
             return &lineage;
         }
 
-        if (node.IsCallable({"Unordered", "Right!", "Skip", "Take", "Sort"})) {
+        if (node.IsCallable({"Unordered", "Right!", "Skip", "Take", "Sort", "AssumeSorted"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {

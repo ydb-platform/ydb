@@ -2,8 +2,8 @@
 
 #include <arrow/api.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/providers/generic/connector/api/connector.grpc.pb.h>
-#include <ydb/library/yql/providers/generic/connector/api/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
 namespace NYql::Connector {
     struct DescribeTableResult {

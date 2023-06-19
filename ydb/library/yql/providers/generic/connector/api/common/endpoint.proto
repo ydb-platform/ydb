@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package NYql.Connector.API;
+
+option go_package = "a.yandex-team.ru/ydb/library/yql/providers/generic/connector/api/common";
+
+// Endpoint represents the network address of a data source instance
+message Endpoint {
+    string host = 1;
+    uint32 port = 2;
+}

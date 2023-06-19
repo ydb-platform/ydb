@@ -5,6 +5,7 @@ package NYql.Connector.API;
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
 
 // NOTE: Protobuf-generated code for Go will appear in yql (non-public) path
 option go_package = "a.yandex-team.ru/yql/providers/connector/libgo/gen/protos";
@@ -397,45 +398,6 @@ message Filter {
 }
 
 // ---------- Utils ----------
-
-// Describes the kind of external data source
-enum DataSourceKind {
-    DATA_SOURCE_KIND_RESERVED = 0;
-    CLICKHOUSE = 1;
-    POSTGRESQL = 2;
-}
-
-message Endpoint {
-    string host = 1;
-    uint32 port = 2;
-}
-
-message Credentials {
-    // Basic
-    message Basic {
-        string username = 1;
-        string password = 2;
-    }
-
-    oneof payload {
-        Basic basic = 1;
-    }
-}
-
-// DataSourceInstance helps to identify the instance of a data source to route request to.
-message DataSourceInstance {
-    // Kind of the DataSource
-    DataSourceKind kind = 1;
-
-    // Network address to connect
-    Endpoint endpoint = 2;
-
-    // What database to connect
-    string database = 3;
-
-    // Information for authentication
-    Credentials credentials = 4;
-}
 
 // Special type to describe the result of any operation
 message Error {

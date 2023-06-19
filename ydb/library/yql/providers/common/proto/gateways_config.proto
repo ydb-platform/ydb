@@ -2,7 +2,8 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "ydb/library/yql/protos/clickhouse.proto";
-import "ydb/library/yql/providers/generic/connector/api/protos/connector.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 
 
 /////////////////////////////// common ///////////////////////////////
@@ -556,6 +557,7 @@ message TGenericClusterConfig {
 }
 
 message TGenericGatewayConfig {
+    // TODO: replace with map<DataSourceKind, Endpoint>
     required string Endpoint = 1;
     reserved 2;
     repeated TGenericClusterConfig ClusterMapping = 3;

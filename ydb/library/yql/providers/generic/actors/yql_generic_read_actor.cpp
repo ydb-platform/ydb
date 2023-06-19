@@ -12,7 +12,7 @@
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/providers/generic/connector/api/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 
 namespace NYql::NDq {

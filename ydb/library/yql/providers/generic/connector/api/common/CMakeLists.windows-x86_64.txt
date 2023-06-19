@@ -6,12 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(protos)
 get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
 )
 get_built_tool_path(
   TOOL_protoc_bin
@@ -26,22 +31,17 @@ get_built_tool_path(
   cpp_styleguide
 )
 
-add_library(generic-connector-api)
-set_property(TARGET generic-connector-api PROPERTY
-  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
-)
-target_link_libraries(generic-connector-api PUBLIC
-  contrib-libs-linux-headers
+add_library(connector-api-common)
+target_link_libraries(connector-api-common PUBLIC
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-grpc
-  connector-api-protos
   contrib-libs-protobuf
 )
-target_proto_messages(generic-connector-api PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/connector.proto
+target_proto_messages(connector-api-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/common/data_source.proto
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/common/endpoint.proto
 )
-target_proto_addincls(generic-connector-api
+target_proto_addincls(connector-api-common
   ./
   ${CMAKE_SOURCE_DIR}/
   ${CMAKE_BINARY_DIR}
@@ -50,11 +50,7 @@ target_proto_addincls(generic-connector-api
   ${CMAKE_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
-target_proto_outs(generic-connector-api
+target_proto_outs(connector-api-common
   --cpp_out=${CMAKE_BINARY_DIR}/
   --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(generic-connector-api
-  grpc_cpp
-  grpc_cpp
 )

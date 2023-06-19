@@ -18,33 +18,20 @@ get_built_tool_path(
   contrib/tools/protoc/plugins/cpp_styleguide
   cpp_styleguide
 )
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
 
-add_library(providers-generic-proto)
-target_link_libraries(providers-generic-proto PUBLIC
+add_library(api-service-protos)
+target_link_libraries(api-service-protos PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  api-service-protos
   connector-api-common
+  api-protos
   contrib-libs-protobuf
 )
-target_proto_messages(providers-generic-proto PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/proto/range.proto
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/proto/source.proto
+target_proto_messages(api-service-protos PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto
 )
-target_proto_addincls(providers-generic-proto
+target_proto_addincls(api-service-protos
   ./
   ${CMAKE_SOURCE_DIR}/
   ${CMAKE_BINARY_DIR}
@@ -53,7 +40,7 @@ target_proto_addincls(providers-generic-proto
   ${CMAKE_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
-target_proto_outs(providers-generic-proto
+target_proto_outs(api-service-protos
   --cpp_out=${CMAKE_BINARY_DIR}/
   --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
 )

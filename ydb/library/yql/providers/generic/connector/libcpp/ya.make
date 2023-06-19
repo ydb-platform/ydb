@@ -12,9 +12,10 @@ PEERDIR(
     contrib/libs/grpc
     ydb/core/formats/arrow/serializer
     ydb/library/yql/ast
+    ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/generic/connector/api/service
     ydb/library/yql/public/issue
     ydb/library/yql/utils
-    ydb/library/yql/providers/generic/connector/api
 )
 
 END()

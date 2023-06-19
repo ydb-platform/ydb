@@ -1,16 +1,4 @@
-PROTO_LIBRARY()
-
-GRPC()
-
-SRCS(
-    connector.proto
+RECURSE(
+    common  # Keep this library pure of dependencies on YDB protofiles
+    service # Use YDB protofiles only here
 )
-
-# Because Go is excluded in YDB protofiles
-EXCLUDE_TAGS(GO_PROTO)
-
-PEERDIR(
-    ydb/library/yql/providers/generic/connector/api/protos
-)
-
-END()

@@ -17,9 +17,10 @@ target_link_libraries(generic-connector-libcpp PUBLIC
   contrib-libs-grpc
   formats-arrow-serializer
   library-yql-ast
+  connector-api-common
+  connector-api-service
   yql-public-issue
   library-yql-utils
-  generic-connector-api
 )
 target_sources(generic-connector-libcpp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/client_grpc.cpp

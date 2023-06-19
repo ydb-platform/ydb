@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NYql.Connector.API;
 
-import "ydb/library/yql/providers/generic/connector/api/protos/connector.proto";
+import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
 
 // NOTE: Protobuf-generated code for Go will appear in yql (non-public) path
 option go_package = "a.yandex-team.ru/yql/providers/connector/libgo/gen";

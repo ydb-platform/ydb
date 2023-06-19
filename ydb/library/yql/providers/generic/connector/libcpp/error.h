@@ -2,7 +2,7 @@
 
 #include <grpcpp/support/status.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/providers/generic/connector/api/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
 namespace NYql::Connector {
 

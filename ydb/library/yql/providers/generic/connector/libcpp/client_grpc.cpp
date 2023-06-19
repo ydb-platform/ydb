@@ -5,7 +5,7 @@
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/generic/connector/api/connector.grpc.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 
 #define REQUEST_START() ({ YQL_LOG(INFO) << __func__ << ": request handling started"; })
 

@@ -4,7 +4,7 @@
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/generic/connector/api/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {

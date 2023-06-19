@@ -273,7 +273,6 @@ struct TEvColumnShard {
         std::shared_ptr<arrow::RecordBatch> WrittenBatch;
         NColumnShard::TBlobBatch BlobBatch;
         NColumnShard::TUsage ResourceUsage;
-        ui64 MaxSmallBlobSize;
     };
 
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult,

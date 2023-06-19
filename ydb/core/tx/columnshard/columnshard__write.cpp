@@ -231,8 +231,6 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                 return;
             }
         }
-
-        ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
         ev->Get()->ResourceUsage.SourceMemorySize = data.size();
 
         ++WritesInFlight; // write started
@@ -245,7 +243,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
         const auto& snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
         ctx.Register(CreateWriteActor(TabletID(), snapshotSchema, ctx.SelfID,
-            BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
+            BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release(), TInstant::Max(), Settings.MaxSmallBlobSize));
     }
 
     SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);

@@ -780,12 +780,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Ydb::Topic::StreamReadMessage::FromClient req;
         Ydb::Topic::StreamReadMessage::FromServer resp;
 
-        NACLib::TDiffACL acl;
+        NYdb::NScheme::TSchemeClient schemeClient(*driver);
+        auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
+
+        TVector<std::pair<TString, TVector<TString>>> permissions;
         for (ui32 i = 0; i < 10; ++i) {
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN);
+            permissions.push_back({"test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}});
         }
-        server.Server->AnnoyingClient->ModifyACL("/Root/PQ", "acc/topic1", acl.SerializeAsString());
-        WaitACLModification();
+        server.ModifyTopicACL("/Root/PQ/rt3.dc1--acc--topic1", permissions);
 
         for (ui32 i = 0; i < 10; ++i) {
             resp.Clear();
@@ -2298,15 +2300,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, TString()); // Fail if user set empty token
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
 
-        NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "topic1@" BUILTIN_ACL_DOMAIN);
-        server.AnnoyingClient->ModifyACL("/Root/PQ", DEFAULT_TOPIC_NAME, acl.SerializeAsString());
-        WaitACLModification();
+        auto driver = server.AnnoyingClient->GetDriver();
+
+
+        ModifyTopicACL(driver, "/Root/PQ/" + DEFAULT_TOPIC_NAME, {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
+
 
         writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
         writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true, "invalid_ticket");
-
-        auto driver = server.AnnoyingClient->GetDriver();
 
 
         for (ui32 i = 0; i < 2; ++i) {
@@ -2383,14 +2384,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         server.CleverServer->GetRuntime()->GetAppData().PQConfig.SetRequireCredentialsInNewProtocol(true);
 
-        NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "1@" BUILTIN_ACL_DOMAIN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "2@" BUILTIN_ACL_DOMAIN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@" BUILTIN_ACL_DOMAIN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2@" BUILTIN_ACL_DOMAIN);
-        server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString());
-        WaitACLModification();
+        auto driver = server.AnnoyingClient->GetDriver();
 
+        ModifyTopicACL(driver, "/Root/PQ/" + topic2, {{"1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
+                                                      {"2@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
+                                                      {"user1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}},
+                                                      {"user2@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
         auto ticket1 = "1@" BUILTIN_ACL_DOMAIN;
         auto ticket2 = "2@" BUILTIN_ACL_DOMAIN;
 
@@ -2406,10 +2405,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         writer.Read(shortTopic2Name, "user5", ticket1, true, false, true);
         writer.Read(shortTopic2Name, "user5", ticket2, true, false, true);
 
-        acl.Clear();
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user3@" BUILTIN_ACL_DOMAIN);
-        server.AnnoyingClient->ModifyACL("/Root/PQ", topic2, acl.SerializeAsString());
-        WaitACLModification();
+        ModifyTopicACL(driver, "/Root/PQ/" + topic2, {{"user3@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
+
 
         Cerr << "==== Writer - read\n";
         writer.Read(shortTopic2Name, "user1", "user3@" BUILTIN_ACL_DOMAIN, false, true, true);

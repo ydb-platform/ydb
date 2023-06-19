@@ -15,11 +15,6 @@ static constexpr int DEBUG_LOG_LEVEL = 7;
 
 using namespace NKikimr::NPersQueueTests;
 
-inline void WaitACLModification() {
-    // TODO: Tests are flacky without sleep after ModifyACL. Can we cleanly await modified ACLs without random waits? Or at least poll for ACL changes.
-    Sleep(TDuration::Seconds(5));
-}
-
 // TODO: Remove and replace all usage with ApiTestSetup
 #define SETUP_API_TEST_PREREQUISITES()\
     const TString topic = "topic1";\

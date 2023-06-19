@@ -8,7 +8,6 @@
 #include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
-#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -74,12 +73,16 @@ namespace NKikimr::NPersQueueTests {
             writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
 
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "topic1@" BUILTIN_ACL_DOMAIN);
-            server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString());
-            server.AnnoyingClient->ModifyACL("/Root/PQ/account1", "topic1", acl.SerializeAsString());
+            NYdb::TDriverConfig driverCfg;
 
-            WaitACLModification();
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+
+            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
+
+
+            ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
+            ModifyTopicACL(ydbDriver.Get(), "/Root/PQ/account1/topic1", {{"topic1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.write"}}});
+
             writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
 
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
@@ -107,13 +110,7 @@ namespace NKikimr::NPersQueueTests {
                 UNIT_ASSERT(res.GetValue().IsSuccess());
             }
 
-            {
-                NACLib::TDiffACL acl;
-                acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@" BUILTIN_ACL_DOMAIN);
-                server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString());
-            }
-
-            WaitACLModification();
+            ModifyTopicACL(ydbDriver.Get(), "/Root/account2/topic2", {{"user1@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}}});
 
             {
                 auto writer = CreateSimpleWriter(*ydbDriver, "/Root/account2/topic2", "123", 1);
@@ -348,8 +345,6 @@ namespace NKikimr::NPersQueueTests {
                     res.Wait();
                     UNIT_ASSERT(res.GetValue().IsSuccess());
                 }
-
-                WaitACLModification();
 
                 auto checkCounters =
                     [cloudId, folderId, databaseId](auto monPort,

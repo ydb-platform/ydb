@@ -16,6 +16,22 @@
 
 namespace NKikimr::NPersQueueTests {
 
+static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
+
+    NYdb::NScheme::TSchemeClient schemeClient(*driver);
+    auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
+
+    for (const auto& user: acl) {
+        NYdb::NScheme::TPermissions permissions(user.first, user.second);
+        modifyPermissionsSettings.AddSetPermissions(permissions);
+    }
+
+    Cerr << "BEFORE MODIFY PERMISSIONS\n";
+
+    auto result = schemeClient.ModifyPermissions(topic, modifyPermissionsSettings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 
 
 
@@ -142,16 +158,11 @@ namespace NKikimr::NPersQueueTests {
             return TenantMode;
         }
 
-        void ModifyTopicACL(const TString& topic, const NACLib::TDiffACL& acl) {
-            if (TenantModeEnabled()) {
-                TFsPath path(topic);
-                Server->AnnoyingClient->ModifyACL(path.Dirname(), path.Basename(), acl.SerializeAsString());
-            } else {
-                Server->AnnoyingClient->ModifyACL("/Root/PQ", topic, acl.SerializeAsString());
-            }
-            WaitACLModification();
+        void ModifyTopicACL(const TString& topic, const TVector<std::pair<TString, TVector<TString>>>& acl) {
 
+            ::ModifyTopicACL(YdbDriver.get(), topic, acl);
         }
+
 
         TString GetRoot() const {
             return !TenantModeEnabled() ? "/Root/PQ" : "";
@@ -165,6 +176,10 @@ namespace NKikimr::NPersQueueTests {
             return TenantModeEnabled() ? "/Root/acc/topic1" : "topic1";
         }
 
+
+        TString GetFullTopicPath() {
+            return TenantModeEnabled() ? "/Root/acc/topic1" : "/Root/PQ/rt3.dc1--topic1";
+        }
         TString GetTopicPathMultipleDC() const {
             return "acc/topic2dc";
         }

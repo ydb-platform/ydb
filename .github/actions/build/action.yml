@@ -50,3 +50,4 @@ runs:
       cd ../build
       ninja
       ccache -s
+      df -h

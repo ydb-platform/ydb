@@ -215,7 +215,7 @@ int TCommandKvRunSelectRandom::Run(TConfig& config) {
 }
 
 TCommandKvRunReadRowsRandom::TCommandKvRunReadRowsRandom()
-    : TWorkloadCommand("ReadRows", {}, "ReadRows rows matching primary key(s)")
+    : TWorkloadCommand("read-rows", {}, "ReadRows rows matching primary key(s)")
 {}
 
 void TCommandKvRunReadRowsRandom::Config(TConfig& config) {

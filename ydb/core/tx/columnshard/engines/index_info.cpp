@@ -316,21 +316,17 @@ TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId, const TSaverContext
     }
 }
 
-std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) const {
+TColumnFeatures& TIndexInfo::GetOrCreateColumnFeatures(const ui32 columnId) const {
     auto it = ColumnFeatures.find(columnId);
-    NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (it != ColumnFeatures.end()) {
-        transformer = it->second.GetLoadTransformer();
+    if (it == ColumnFeatures.end()) {
+        it = ColumnFeatures.emplace(columnId, TColumnFeatures(columnId)).first;
     }
-    if (!transformer) {
-        return std::make_shared<TColumnLoader>(transformer,
-            std::make_shared<NArrow::NSerialization::TBatchPayloadDeserializer>(GetColumnSchema(columnId)),
-            GetColumnSchema(columnId), columnId);
-    } else {
-        return std::make_shared<TColumnLoader>(transformer,
-            std::make_shared<NArrow::NSerialization::TFullDataDeserializer>(),
-            GetColumnSchema(columnId), columnId);
-    }
+    return it->second;
+}
+
+std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) const {
+    TColumnFeatures& features = GetOrCreateColumnFeatures(columnId);
+    return features.GetLoader(*this);
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
@@ -357,7 +353,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             col.HasTypeInfo() ? &col.GetTypeInfo() : nullptr);
         Columns[id] = NTable::TColumn(name, id, typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
         ColumnNames[name] = id;
-        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col);
+        std::optional<TColumnFeatures> cFeatures = TColumnFeatures::BuildFromProto(col, id);
         if (!cFeatures) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_column_feature");
             return false;
@@ -414,22 +410,6 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
         out.emplace_back(ci->second.Name, ci->second.PType);
     }
     return out;
-}
-
-NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetSaveTransformer() const {
-    NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (DictionaryEncoding) {
-        transformer = DictionaryEncoding->BuildEncoder();
-    }
-    return transformer;
-}
-
-NArrow::NTransformation::ITransformer::TPtr TColumnFeatures::GetLoadTransformer() const {
-    NArrow::NTransformation::ITransformer::TPtr transformer;
-    if (DictionaryEncoding) {
-        transformer = DictionaryEncoding->BuildDecoder();
-    }
-    return transformer;
 }
 
 } // namespace NKikimr::NOlap

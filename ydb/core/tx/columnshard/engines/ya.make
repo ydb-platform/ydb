@@ -7,6 +7,7 @@ LIBRARY()
 SRCS(
     column_engine_logs.cpp
     column_engine.cpp
+    column_features.cpp
     compaction_info.cpp
     db_wrapper.cpp
     index_info.cpp

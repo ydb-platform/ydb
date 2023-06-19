@@ -17,11 +17,13 @@ TString TCommonCountersOwner::NormalizeSignalName(const TString& name) const {
     return TFsPath(name).Fix().GetPath();
 }
 
-TCommonCountersOwner::TCommonCountersOwner(const TString& module)
+TCommonCountersOwner::TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
     : ModuleId(module)
 {
-    if (NActors::TlsActivationContext) {
-        SubGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "columnshard");
+    if (baseSignals) {
+        SubGroup = baseSignals->GetSubgroup("common_module", module);
+    } else if (NActors::TlsActivationContext) {
+        SubGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("common_module", module);
     } else {
         SubGroup = new NMonitoring::TDynamicCounters();
     }

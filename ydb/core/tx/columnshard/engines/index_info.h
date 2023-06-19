@@ -1,5 +1,6 @@
 #pragma once
 
+#include "column_features.h"
 #include "defs.h"
 #include "scalars.h"
 #include "tier_info.h"
@@ -27,130 +28,15 @@ struct TInsertedData;
 class TSnapshotColumnInfo;
 using TNameTypeInfo = std::pair<TString, NScheme::TTypeInfo>;
 
-class TSaverContext {
-private:
-    TString TierName;
-    std::optional<NArrow::TCompression> ExternalCompression;
-public:
-    const std::optional<NArrow::TCompression>& GetExternalCompression() const {
-        return ExternalCompression;
-    }
-    TSaverContext& SetExternalCompression(const std::optional<NArrow::TCompression>& value) {
-        ExternalCompression = value;
-        return *this;
-    }
-    const TString& GetTierName() const {
-        return TierName;
-    }
-    TSaverContext& SetTierName(const TString& value) {
-        TierName = value;
-        return *this;
-    }
-};
-
-class TColumnSaver {
-private:
-    NArrow::NTransformation::ITransformer::TPtr Transformer;
-    NArrow::NSerialization::ISerializer::TPtr Serializer;
-public:
-    TColumnSaver() = default;
-    TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, NArrow::NSerialization::ISerializer::TPtr serializer)
-        : Transformer(transformer)
-        , Serializer(serializer) {
-        Y_VERIFY(Serializer);
-    }
-
-    TString Apply(const std::shared_ptr<arrow::RecordBatch>& data) const {
-        Y_VERIFY(Serializer);
-        if (Transformer) {
-            return Serializer->Serialize(Transformer->Transform(data));
-        } else {
-            return Serializer->Serialize(data);
-        }
-    }
-};
-
-class TColumnLoader {
-private:
-    NArrow::NTransformation::ITransformer::TPtr Transformer;
-    NArrow::NSerialization::IDeserializer::TPtr Deserializer;
-    std::shared_ptr<arrow::Schema> ExpectedSchema;
-    const ui32 ColumnId;
-public:
-    TColumnLoader(NArrow::NTransformation::ITransformer::TPtr transformer, NArrow::NSerialization::IDeserializer::TPtr deserializer,
-        const std::shared_ptr<arrow::Schema>& expectedSchema, const ui32 columnId)
-        : Transformer(transformer)
-        , Deserializer(deserializer)
-        , ExpectedSchema(expectedSchema)
-        , ColumnId(columnId)
-    {
-        Y_VERIFY(ExpectedSchema);
-        Y_VERIFY(Deserializer);
-    }
-
-    ui32 GetColumnId() const {
-        return ColumnId;
-    }
-
-    std::shared_ptr<arrow::Schema> GetExpectedSchema() const {
-        return ExpectedSchema;
-    }
-
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> Apply(const TString& data) const {
-        Y_VERIFY(Deserializer);
-        arrow::Result<std::shared_ptr<arrow::RecordBatch>> columnArray = Deserializer->Deserialize(data);
-        if (!columnArray.ok()) {
-            return columnArray;
-        }
-        if (Transformer) {
-            return Transformer->Transform(*columnArray);
-        } else {
-            return columnArray;
-        }
-    }
-};
-
-class TColumnFeatures {
-private:
-    std::optional<NArrow::TCompression> Compression;
-    std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
-public:
-    static std::optional<TColumnFeatures> BuildFromProto(const NKikimrSchemeOp::TOlapColumnDescription& columnInfo) {
-        TColumnFeatures result;
-        if (columnInfo.HasCompression()) {
-            auto settings = NArrow::TCompression::BuildFromProto(columnInfo.GetCompression());
-            Y_VERIFY(settings.IsSuccess());
-            result.Compression = *settings;
-        }
-        if (columnInfo.HasDictionaryEncoding()) {
-            auto settings = NArrow::NDictionary::TEncodingSettings::BuildFromProto(columnInfo.GetDictionaryEncoding());
-            Y_VERIFY(settings.IsSuccess());
-            result.DictionaryEncoding =  *settings;
-        }
-        return result;
-    }
-
-    NArrow::NTransformation::ITransformer::TPtr GetSaveTransformer() const;
-    NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
-
-    std::unique_ptr<arrow::util::Codec> GetCompressionCodec() const {
-        if (Compression) {
-            return Compression->BuildArrowCodec();
-        } else {
-            return nullptr;
-        }
-    }
-
-};
-
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
 struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
-    THashMap<ui32, TColumnFeatures> ColumnFeatures;
+    mutable THashMap<ui32, TColumnFeatures> ColumnFeatures;
     mutable THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
     TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
 public:
     static constexpr const char* SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char* SPEC_COL_TX_ID = "_yql_tx_id";

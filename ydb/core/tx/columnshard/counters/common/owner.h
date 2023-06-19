@@ -21,7 +21,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr GetDeriviative(const TString& name) const;
     NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;
 
-    TCommonCountersOwner(const TString& module);
+    TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);
 };
 
 }

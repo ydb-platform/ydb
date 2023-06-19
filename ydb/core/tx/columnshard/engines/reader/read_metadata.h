@@ -139,6 +139,8 @@ private:
     std::vector<ui32> AllColumns;
     std::vector<ui32> ResultColumnsIds;
     std::shared_ptr<NIndexedReader::IOrderPolicy> DoBuildSortingPolicy() const;
+    mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
+    mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
@@ -177,9 +179,17 @@ public:
     
     ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
         if (!version) {
-            return make_shared<TFilteredSnapshotSchema>(ResultIndexSchema, AllColumns);
+            if (!EmptyVersionSchemaCache) {
+                EmptyVersionSchemaCache = make_shared<TFilteredSnapshotSchema>(ResultIndexSchema, AllColumns);
+            }
+            return EmptyVersionSchemaCache;
         }
-        return make_shared<TFilteredSnapshotSchema>(IndexVersions.GetSchema(*version), AllColumns);
+        auto schemaOriginal = IndexVersions.GetSchema(*version);
+        auto it = SchemasByVersionCache.find(schemaOriginal->GetSnapshot());
+        if (it == SchemasByVersionCache.end()) {
+            it = SchemasByVersionCache.emplace(schemaOriginal->GetSnapshot(), make_shared<TFilteredSnapshotSchema>(schemaOriginal, AllColumns)).first;
+        }
+        return it->second;
     }
 
     std::shared_ptr<arrow::Schema> GetBlobSchema(const TSnapshot& version) const {

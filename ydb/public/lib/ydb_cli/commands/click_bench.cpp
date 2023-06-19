@@ -313,7 +313,8 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
             jsonReport.AppendValue(GetSensorValue("Std", testInfo.Std, queryN));
             jsonReport.AppendValue(GetSensorValue("DiffsCount", diffsCount, queryN));
             jsonReport.AppendValue(GetSensorValue("FailsCount", failsCount, queryN));
-            
+            jsonReport.AppendValue(GetSensorValue("SuccessCount", successIteration, queryN));
+
         }
     }
 
@@ -334,7 +335,9 @@ bool TClickBenchCommandRun::RunBench(TConfig& config)
                     jStream << ",";
                 }
                 ++colId;
-                jStream << testInfo.ServerTimings.at(rowId).MilliSeconds();
+                if (rowId < testInfo.ServerTimings.size()) {
+                    jStream << testInfo.ServerTimings.at(rowId).MilliSeconds();
+                }
             }
 
             jStream << Endl;

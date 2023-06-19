@@ -1,5 +1,6 @@
 import operator
 import xml.etree.ElementTree as ET
+from junit_utils import add_junit_property
 
 
 class MutedTestCheck:
@@ -62,6 +63,8 @@ def mute_target(node):
     skipped = ET.Element("skipped", {"message": failure.attrib["message"]})
     node.remove(failure)
     node.append(skipped)
+
+    add_junit_property(node, "mute", "automatically muted based on rules")
 
     return True
 

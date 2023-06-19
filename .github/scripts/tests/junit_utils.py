@@ -20,3 +20,43 @@ def add_junit_property(testcase, name, value):
 
 def add_junit_log_property(testcase, url):
     add_junit_link_property(testcase, "Log", url)
+
+
+def get_property_value(testcase, name):
+    props = testcase.find("properties")
+    if props is None:
+        return None
+
+    for prop in props.findall("property"):
+        if prop.attrib["name"] == name:
+            return prop.attrib["value"]
+
+
+def create_error_testsuite(testcases):
+    n = str(len(testcases))
+    root = ET.Element("testsuite", dict(tests=n, failures=n))
+    root.extend(testcases)
+    return ET.ElementTree(root)
+
+
+def create_error_testcase(shardname, classname, name, log_fn=None, log_url=None):
+    testcase = ET.Element("testcase", dict(classname=classname, name=name))
+    add_junit_property(testcase, "shard", shardname)
+    if log_url:
+        add_junit_log_property(testcase, log_url)
+
+    err = ET.Element("error", dict(type="error"))
+
+    if log_fn:
+        with open(log_fn, "rt") as fp:
+            err.text = fp.read(4096)
+    testcase.append(err)
+
+    return testcase
+
+
+def suite_case_iterator(root):
+    for suite in root.findall("testsuite"):
+        for case in suite.findall("testcase"):
+            cls, method = case.attrib["classname"], case.attrib["name"]
+            yield suite, case, cls, method

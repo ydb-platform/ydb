@@ -139,8 +139,10 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr IsStarved;
         NMonitoring::TDynamicCounters::TCounterPtr IsHoggish;
         NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByNeedyState;
+        NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByExchange;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByStarvedState;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByHoggishState;
+        NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByExchange;
         NMonitoring::TDynamicCounters::TCounterPtr NotEnoughCpuExecutions;
         NMonitoring::TDynamicCounters::TCounterPtr MaxConsumedCpu;
         NMonitoring::TDynamicCounters::TCounterPtr MinConsumedCpu;
@@ -199,8 +201,10 @@ private:
             IsStarved = PoolGroup->GetCounter("IsStarved", false);
             IsHoggish = PoolGroup->GetCounter("IsHoggish", false);
             IncreasingThreadsByNeedyState = PoolGroup->GetCounter("IncreasingThreadsByNeedyState", true);
+            IncreasingThreadsByExchange = PoolGroup->GetCounter("IncreasingThreadsByExchange", true);
             DecreasingThreadsByStarvedState = PoolGroup->GetCounter("DecreasingThreadsByStarvedState", true);
             DecreasingThreadsByHoggishState = PoolGroup->GetCounter("DecreasingThreadsByHoggishState", true);
+            DecreasingThreadsByExchange = PoolGroup->GetCounter("DecreasingThreadsByExchange", true);
             NotEnoughCpuExecutions = PoolGroup->GetCounter("NotEnoughCpuExecutions", true);
             MaxConsumedCpu = PoolGroup->GetCounter("MaxConsumedCpuByPool", false);
             MinConsumedCpu = PoolGroup->GetCounter("MinConsumedCpuByPool", false);
@@ -251,8 +255,10 @@ private:
             *IsStarved = poolStats.IsStarved;
             *IsHoggish = poolStats.IsHoggish;
             *IncreasingThreadsByNeedyState = poolStats.IncreasingThreadsByNeedyState;
+            *IncreasingThreadsByExchange = poolStats.IncreasingThreadsByExchange;
             *DecreasingThreadsByStarvedState = poolStats.DecreasingThreadsByStarvedState;
             *DecreasingThreadsByHoggishState = poolStats.DecreasingThreadsByHoggishState;
+            *DecreasingThreadsByExchange = poolStats.DecreasingThreadsByExchange;
             *NotEnoughCpuExecutions = stats.NotEnoughCpuExecutions;
 
             LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);

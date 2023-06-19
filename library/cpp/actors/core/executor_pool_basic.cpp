@@ -342,8 +342,10 @@ namespace NActors {
             poolStats.IsStarved = stats.IsStarved;
             poolStats.IsHoggish = stats.IsHoggish;
             poolStats.IncreasingThreadsByNeedyState = stats.IncreasingThreadsByNeedyState;
+            poolStats.IncreasingThreadsByExchange = stats.IncreasingThreadsByExchange;
             poolStats.DecreasingThreadsByStarvedState = stats.DecreasingThreadsByStarvedState;
             poolStats.DecreasingThreadsByHoggishState = stats.DecreasingThreadsByHoggishState;
+            poolStats.DecreasingThreadsByExchange = stats.DecreasingThreadsByExchange;
             poolStats.PotentialMaxThreadCount = stats.PotentialMaxThreadCount;
             poolStats.MaxConsumedCpuUs = stats.MaxConsumedCpu;
             poolStats.MinConsumedCpuUs = stats.MinConsumedCpu;

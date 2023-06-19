@@ -8,8 +8,10 @@ namespace NActors {
 
     struct TPoolHarmonizerStats {
         ui64 IncreasingThreadsByNeedyState = 0;
+        ui64 IncreasingThreadsByExchange = 0;
         ui64 DecreasingThreadsByStarvedState = 0;
         ui64 DecreasingThreadsByHoggishState = 0;
+        ui64 DecreasingThreadsByExchange = 0;
         i64 MaxConsumedCpu = 0.0;
         i64 MinConsumedCpu = 0.0;
         i64 MaxBookedCpu = 0.0;

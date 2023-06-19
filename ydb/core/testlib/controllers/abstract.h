@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
 #include <util/generic/singleton.h>
+#include <util/generic/refcount.h>
 #include <memory>
 
 namespace NKikimr::NOlap::NIndexedReader {
@@ -11,7 +12,7 @@ namespace NKikimr::NYDBTest {
 
 class ICSController {
 private:
-    YDB_READONLY(ui32, OnSortingPolicyCounter, 0);
+    YDB_READONLY(TAtomicCounter, OnSortingPolicyCounter, 0);
 protected:
     virtual bool DoOnSortingPolicy(std::shared_ptr<NOlap::NIndexedReader::IOrderPolicy> /*policy*/) {
         return true;
@@ -20,7 +21,7 @@ public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
     bool OnSortingPolicy(std::shared_ptr<NOlap::NIndexedReader::IOrderPolicy> policy) {
-        ++OnSortingPolicyCounter;
+        OnSortingPolicyCounter.Inc();
         return DoOnSortingPolicy(policy);
     }
 };

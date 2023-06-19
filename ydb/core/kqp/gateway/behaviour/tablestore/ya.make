@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     manager.cpp
-    initializer.cpp
     GLOBAL behaviour.cpp
 )
 

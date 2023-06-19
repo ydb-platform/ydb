@@ -1,6 +1,5 @@
 #include "behaviour.h"
 #include "manager.h"
-#include "initializer.h"
 
 namespace NKikimr::NKqp {
 
@@ -11,7 +10,7 @@ NMetadata::NModifications::IOperationsManager::TPtr TTableStoreBehaviour::Constr
 }
 
 NMetadata::NInitializer::IInitializationBehaviour::TPtr TTableStoreBehaviour::ConstructInitializer() const {
-    return std::make_shared<TTableStoreInitializer>();
+    return nullptr;
 }
 
 TString TTableStoreBehaviour::GetInternalStorageTablePath() const {

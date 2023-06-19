@@ -23,7 +23,6 @@ target_link_libraries(gateway-behaviour-tablestore PUBLIC
 )
 target_sources(gateway-behaviour-tablestore PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/manager.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/initializer.cpp
 )
 
 add_global_library_for(gateway-behaviour-tablestore.global gateway-behaviour-tablestore)

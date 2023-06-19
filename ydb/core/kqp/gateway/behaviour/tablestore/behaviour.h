@@ -1,6 +1,6 @@
 #pragma once
-
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/metadata/abstract/initialization.h>
 
 namespace NKikimr::NKqp {
 

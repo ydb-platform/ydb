@@ -726,6 +726,17 @@ public:
     }
 };
 
+class TUpsertObjectTransformer: public TObjectModifierTransformer<TKiUpsertObject, TUpsertObjectSettings> {
+private:
+    using TBase = TObjectModifierTransformer<TKiUpsertObject, TUpsertObjectSettings>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TUpsertObjectSettings& settings) override {
+        return GetGateway()->UpsertObject(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
 class TCreateObjectTransformer: public TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings> {
 private:
     using TBase = TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings>;
@@ -1669,10 +1680,14 @@ public:
             }, "Executing DROP USER");
         }
 
+        if (auto kiObject = TMaybeNode<TKiUpsertObject>(input)) {
+            return TUpsertObjectTransformer("UPSERT OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+        }
+
         if (auto kiObject = TMaybeNode<TKiCreateObject>(input)) {
             return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                    ? TCreateExternalDataSourceTransformer("CREATE EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                    : TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+                ? TCreateExternalDataSourceTransformer("CREATE EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
+                : TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto kiObject = TMaybeNode<TKiAlterObject>(input)) {

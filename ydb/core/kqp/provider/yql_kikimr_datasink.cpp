@@ -119,6 +119,12 @@ private:
         return TStatus::Error;
     }
 
+    TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+            << "UpsertObject is not yet implemented for intent determination transformer"));
+        return TStatus::Error;
+    }
+
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "CreateObject is not yet implemented for intent determination transformer"));
@@ -438,6 +444,7 @@ public:
             || node.IsCallable(TKiCreateGroup::CallableName())
             || node.IsCallable(TKiAlterGroup::CallableName())
             || node.IsCallable(TKiDropGroup::CallableName())
+            || node.IsCallable(TKiUpsertObject::CallableName())
             || node.IsCallable(TKiCreateObject::CallableName())
             || node.IsCallable(TKiAlterObject::CallableName())
             || node.IsCallable(TKiDropObject::CallableName()))
@@ -640,7 +647,16 @@ public:
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
 
-                if (mode == "createObject") {
+                if (mode == "upsertObject") {
+                    return Build<TKiUpsertObject>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .ObjectId().Build(key.GetObjectId())
+                        .TypeId().Build(key.GetObjectType())
+                        .Features(settings.Features)
+                        .Done()
+                        .Ptr();
+                } else if (mode == "createObject") {
                     return Build<TKiCreateObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -838,6 +854,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropTopic>(input)) {
         return HandleDropTopic(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiUpsertObject>(input)) {
+        return HandleUpsertObject(node.Cast(), ctx);
     }
 
     if (auto node = TMaybeNode<TKiCreateObject>(input)) {

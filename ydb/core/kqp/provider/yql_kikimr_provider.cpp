@@ -50,6 +50,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
         DataSinkNames.insert(TKiDropUser::CallableName());
+        DataSinkNames.insert(TKiUpsertObject::CallableName());
         DataSinkNames.insert(TKiCreateObject::CallableName());
         DataSinkNames.insert(TKiAlterObject::CallableName());
         DataSinkNames.insert(TKiDropObject::CallableName());

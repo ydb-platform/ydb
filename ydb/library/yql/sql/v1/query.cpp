@@ -1877,6 +1877,10 @@ private:
     TSourcePtr FakeSource;
 };
 
+TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
+    return new TUpsertObject(pos, objectId, typeId, std::move(features), context);
+}
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
     std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
     return new TCreateObject(pos, objectId, typeId, std::move(features), context);

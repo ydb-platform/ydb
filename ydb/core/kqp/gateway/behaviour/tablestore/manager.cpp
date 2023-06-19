@@ -20,6 +20,7 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
 
         switch (context.GetActivityType()) {
             case EActivityType::Create:
+            case EActivityType::Upsert:
             case EActivityType::Drop:
             case EActivityType::Undefined:
                 return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("not implemented"));

@@ -43,6 +43,7 @@ public:
     }
 };
 
+using TUpsertObjectSettings = TObjectSettingsImpl;
 using TCreateObjectSettings = TObjectSettingsImpl;
 using TAlterObjectSettings = TObjectSettingsImpl;
 using TDropObjectSettings = TObjectSettingsImpl;

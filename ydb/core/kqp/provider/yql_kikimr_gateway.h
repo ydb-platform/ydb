@@ -741,6 +741,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropUser(const TString& cluster, const TDropUserSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterObject(const TString& cluster, const TAlterObjectSettings& settings) = 0;

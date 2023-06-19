@@ -174,13 +174,15 @@ Y_UNIT_TEST_SUITE(Secret) {
 
             Tests::NCS::THelper lHelper(*server);
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
+            lHelper.StartSchemaRequest("UPSERT OBJECT secret1_1 (TYPE SECRET) WITH value = `100`");
+            lHelper.StartSchemaRequest("UPSERT OBJECT secret1_1 (TYPE SECRET) WITH value = `200`");
             {
                 TString resultData;
                 lHelper.StartDataRequest("SELECT COUNT(*) FROM `/Root/.metadata/initialization/migrations`", true, &resultData);
                 UNIT_ASSERT_EQUAL_C(resultData, "[6u]", resultData);
             }
 
-            emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(0);
+            emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(0);
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
@@ -197,7 +199,7 @@ Y_UNIT_TEST_SUITE(Secret) {
                 UNIT_ASSERT_EQUAL_C(resultData, "[10u]", resultData);
             }
 
-            emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(1);
+            emulator->SetExpectedSecretsCount(2).SetExpectedAccessCount(1);
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {
@@ -210,7 +212,7 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)");
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/initialization/migrations`");
 
-            emulator->SetExpectedSecretsCount(0).SetExpectedAccessCount(0);
+            emulator->SetExpectedSecretsCount(1).SetExpectedAccessCount(0);
             {
                 const TInstant start = Now();
                 while (!emulator->IsFound() && Now() - start < TDuration::Seconds(20)) {

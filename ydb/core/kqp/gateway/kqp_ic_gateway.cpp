@@ -1580,14 +1580,27 @@ public:
         }
     };
 
+    class TObjectUpsert: public IObjectModifier<NYql::TUpsertObjectSettings> {
+    private:
+        using TBase = IObjectModifier<NYql::TUpsertObjectSettings>;
+    protected:
+        virtual TFuture<TYqlConclusionStatus> DoExecute(
+            NMetadata::IClassBehaviour::TPtr manager, const NYql::TUpsertObjectSettings& settings,
+            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override
+        {
+            return manager->GetOperationsManager()->UpsertObject(settings, TBase::GetNodeId(), manager, context);
+        }
+    public:
+        using TBase::TBase;
+    };
+
     class TObjectCreate: public IObjectModifier<NYql::TCreateObjectSettings> {
     private:
         using TBase = IObjectModifier<NYql::TCreateObjectSettings>;
     protected:
         virtual TFuture<TYqlConclusionStatus> DoExecute(
             NMetadata::IClassBehaviour::TPtr manager, const NYql::TCreateObjectSettings& settings,
-            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override
-        {
+            const NMetadata::NModifications::IOperationsManager::TExternalModificationContext& context) override {
             return manager->GetOperationsManager()->CreateObject(settings, TBase::GetNodeId(), manager, context);
         }
     public:
@@ -1619,6 +1632,10 @@ public:
     public:
         using TBase::TBase;
     };
+
+    TFuture<TGenericResult> UpsertObject(const TString& cluster, const NYql::TUpsertObjectSettings& settings) override {
+        return TObjectUpsert(*this).Execute(cluster, settings);
+    }
 
     TFuture<TGenericResult> CreateObject(const TString& cluster, const NYql::TCreateObjectSettings& settings) override {
         return TObjectCreate(*this).Execute(cluster, settings);

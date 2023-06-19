@@ -44,7 +44,7 @@ void TDSAccessorInitialized::OnModificationFinished(const TString& modificationI
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
         NModifications::IOperationsManager::TExternalModificationContext extContext;
         extContext.SetUserToken(NACLib::TSystemUsers::Metadata());
-        auto alterCommand = std::make_shared<NModifications::TCreateCommand<TDBInitialization>>(
+        auto alterCommand = std::make_shared<NModifications::TUpsertObjectCommand<TDBInitialization>>(
             dbInit.SerializeToRecord(), TDBInitialization::GetBehaviour(), SelfPtr,
             NModifications::IOperationsManager::TInternalModificationContext(extContext));
 

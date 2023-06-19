@@ -52,6 +52,7 @@ public:
 
     enum class EActivityType {
         Undefined,
+        Upsert,
         Create,
         Alter,
         Drop
@@ -81,6 +82,9 @@ protected:
         IClassBehaviour::TPtr manager, TInternalModificationContext& context) const = 0;
 public:
     virtual ~IOperationsManager() = default;
+
+    NThreading::TFuture<TYqlConclusionStatus> UpsertObject(const NYql::TUpsertObjectSettings& settings, const ui32 nodeId,
+        IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
 
     NThreading::TFuture<TYqlConclusionStatus> CreateObject(const NYql::TCreateObjectSettings& settings, const ui32 nodeId,
         IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const;
@@ -126,7 +130,7 @@ public:
     }
 };
 
-class IAlterCommand {
+class IObjectModificationCommand {
 private:
     YDB_READONLY_DEF(std::vector<NInternal::TTableRecord>, Records);
     YDB_ACCESSOR_DEF(IClassBehaviour::TPtr, Behaviour);
@@ -135,8 +139,8 @@ protected:
     IOperationsManager::TInternalModificationContext Context;
     virtual void DoExecute() const = 0;
 public:
-    using TPtr = std::shared_ptr<IAlterCommand>;
-    virtual ~IAlterCommand() = default;
+    using TPtr = std::shared_ptr<IObjectModificationCommand>;
+    virtual ~IObjectModificationCommand() = default;
 
     template <class TObject>
     std::shared_ptr<IObjectOperationsManager<TObject>> GetOperationsManagerFor() const {
@@ -149,7 +153,7 @@ public:
         return Context;
     }
 
-    IAlterCommand(const std::vector<NInternal::TTableRecord>& records,
+    IObjectModificationCommand(const std::vector<NInternal::TTableRecord>& records,
         IClassBehaviour::TPtr behaviour,
         NModifications::IAlterController::TPtr controller,
         const IOperationsManager::TInternalModificationContext& context)
@@ -160,7 +164,7 @@ public:
         Y_VERIFY(Behaviour->GetOperationsManager());
     }
 
-    IAlterCommand(const NInternal::TTableRecord& record,
+    IObjectModificationCommand(const NInternal::TTableRecord& record,
         IClassBehaviour::TPtr behaviour,
         NModifications::IAlterController::TPtr controller,
         const IOperationsManager::TInternalModificationContext& context)

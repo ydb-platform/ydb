@@ -49,21 +49,24 @@ protected:
                 return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(patch.GetErrorMessage()));
             }
             auto controller = std::make_shared<TOperationsController>(std::move(promise));
-            IAlterCommand::TPtr alterCommand;
+            IObjectModificationCommand::TPtr modifyObjectCommand;
             switch (context.GetActivityType()) {
+                case IOperationsManager::EActivityType::Upsert:
+                    modifyObjectCommand = std::make_shared<TUpsertObjectCommand<T>>(patch.GetResult(), manager, controller, context);
+                    break;
                 case IOperationsManager::EActivityType::Create:
-                    alterCommand = std::make_shared<TCreateCommand<T>>(patch.GetResult(), manager, controller, context);
+                    modifyObjectCommand = std::make_shared<TCreateObjectCommand<T>>(patch.GetResult(), manager, controller, context);
                     break;
                 case IOperationsManager::EActivityType::Alter:
-                    alterCommand = std::make_shared<TAlterCommand<T>>(patch.GetResult(), manager, controller, context);
+                    modifyObjectCommand = std::make_shared<TUpdateObjectCommand<T>>(patch.GetResult(), manager, controller, context);
                     break;
                 case IOperationsManager::EActivityType::Drop:
-                    alterCommand = std::make_shared<TDropCommand<T>>(patch.GetResult(), manager, controller, context);
+                    modifyObjectCommand = std::make_shared<TDeleteObjectCommand<T>>(patch.GetResult(), manager, controller, context);
                     break;
                 case IOperationsManager::EActivityType::Undefined:
                     return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("undefined action type"));
             }
-            TActivationContext::Send(new IEventHandle(NProvider::MakeServiceId(nodeId), {}, new NProvider::TEvObjectsOperation(alterCommand)));
+            TActivationContext::Send(new IEventHandle(NProvider::MakeServiceId(nodeId), {}, new NProvider::TEvObjectsOperation(modifyObjectCommand)));
         }
         return result;
     }

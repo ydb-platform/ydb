@@ -10200,6 +10200,30 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore39:
+        {
+            // create_object_stmt: UPSERT OBJECT name (TYPE type [WITH k=v,...]);
+            auto& node = core.GetAlt_sql_stmt_core39().GetRule_upsert_object_stmt1();
+            TObjectOperatorContext context(Ctx.Scoped);
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            }
+
+            const TString& objectId = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
+            const TString& typeId = Id(node.GetRule_object_type_ref6().GetRule_an_id_or_type1(), *this);
+            std::map<TString, TDeferredAtom> kv;
+            if (node.HasBlock8()) {
+                if (!ParseObjectFeatures(kv, node.GetBlock8().GetRule_create_object_features1().GetRule_object_features2())) {
+                    return false;
+                }
+            }
+
+            AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
+            break;
+        }
         default:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

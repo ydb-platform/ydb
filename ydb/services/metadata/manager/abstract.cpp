@@ -57,13 +57,22 @@ NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager
 }
 
 NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager::CreateObject(const NYql::TCreateObjectSettings& settings,
-    const ui32 nodeId, IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const
-{
+    const ui32 nodeId, IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const {
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("metadata provider service is disabled"));
     }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Create);
+    return DoModify(settings, nodeId, manager, internalContext);
+}
+
+NThreading::TFuture<IOperationsManager::TYqlConclusionStatus> IOperationsManager::UpsertObject(const NYql::TUpsertObjectSettings& settings,
+    const ui32 nodeId, IClassBehaviour::TPtr manager, const TExternalModificationContext& context) const {
+    if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("metadata provider service is disabled"));
+    }
+    TInternalModificationContext internalContext(context);
+    internalContext.SetActivityType(EActivityType::Upsert);
     return DoModify(settings, nodeId, manager, internalContext);
 }
 

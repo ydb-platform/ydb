@@ -7,9 +7,9 @@ namespace NKikimr::NMetadata::NProvider {
 
 class TEvObjectsOperation: public NActors::TEventLocal<TEvObjectsOperation, EEvents::EvAlterObjects> {
 private:
-    YDB_READONLY_DEF(NModifications::IAlterCommand::TPtr, Command);
+    YDB_READONLY_DEF(NModifications::IObjectModificationCommand::TPtr, Command);
 public:
-    TEvObjectsOperation(NModifications::IAlterCommand::TPtr command)
+    TEvObjectsOperation(NModifications::IObjectModificationCommand::TPtr command)
         : Command(command) {
 
     }

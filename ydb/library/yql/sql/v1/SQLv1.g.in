@@ -57,6 +57,7 @@ sql_stmt_core:
   | grant_permissions_stmt
   | revoke_permissions_stmt
   | alter_table_store_stmt
+  | upsert_object_stmt
 ;
 
 expr:
@@ -469,6 +470,10 @@ create_external_data_source_stmt: CREATE EXTERNAL DATA SOURCE object_ref
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE object_ref;
 
+upsert_object_stmt: UPSERT OBJECT object_ref
+    LPAREN TYPE object_type_ref RPAREN
+    create_object_features?
+;
 create_object_stmt: CREATE OBJECT object_ref
     LPAREN TYPE object_type_ref RPAREN
     create_object_features?

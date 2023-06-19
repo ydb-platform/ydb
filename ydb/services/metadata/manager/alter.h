@@ -10,7 +10,7 @@
 namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
-class TAlterActor: public TModificationActor<TObject> {
+class TUpdateObjectActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
@@ -28,7 +28,26 @@ public:
 };
 
 template <class TObject>
-class TCreateActor: public TModificationActor<TObject> {
+class TUpsertObjectActor: public TModificationActor<TObject> {
+private:
+    using TBase = TModificationActor<TObject>;
+protected:
+    virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
+        TBase::Register(new TUpsertObjectsActor<TObject>(std::move(records), TBase::UserToken,
+            TBase::InternalController, TBase::SessionId, TBase::TransactionId,
+            TBase::Context.GetExternalData().GetUserToken()));
+        return true;
+    }
+
+    virtual TString GetModificationType() const override {
+        return "UPSERT";
+    }
+public:
+    using TBase::TBase;
+};
+
+template <class TObject>
+class TCreateObjectActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
@@ -47,7 +66,7 @@ public:
 };
 
 template <class TObject>
-class TDropActor: public TModificationActor<TObject> {
+class TDeleteObjectActor: public TModificationActor<TObject> {
 private:
     using TBase = TModificationActor<TObject>;
 protected:
@@ -91,39 +110,52 @@ public:
 };
 
 template <class TObject>
-class TCreateCommand: public IAlterCommand {
+class TUpsertObjectCommand: public IObjectModificationCommand {
 private:
-    using TBase = IAlterCommand;
+    using TBase = IObjectModificationCommand;
 protected:
     virtual void DoExecute() const override {
         typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
-        TActivationContext::AsActorContext().Register(new TCreateActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
+        TActivationContext::AsActorContext().Register(new TUpsertObjectActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
     using TBase::TBase;
 };
 
 template <class TObject>
-class TAlterCommand: public IAlterCommand {
+class TCreateObjectCommand: public IObjectModificationCommand {
 private:
-    using TBase = IAlterCommand;
+    using TBase = IObjectModificationCommand;
 protected:
     virtual void DoExecute() const override {
         typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
-        TActivationContext::AsActorContext().Register(new TAlterActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
+        TActivationContext::AsActorContext().Register(new TCreateObjectActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
     using TBase::TBase;
 };
 
 template <class TObject>
-class TDropCommand: public IAlterCommand {
+class TUpdateObjectCommand: public IObjectModificationCommand {
 private:
-    using TBase = IAlterCommand;
+    using TBase = IObjectModificationCommand;
 protected:
     virtual void DoExecute() const override {
         typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
-        TActivationContext::AsActorContext().Register(new TDropActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
+        TActivationContext::AsActorContext().Register(new TUpdateObjectActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
+    }
+public:
+    using TBase::TBase;
+};
+
+template <class TObject>
+class TDeleteObjectCommand: public IObjectModificationCommand {
+private:
+    using TBase = IObjectModificationCommand;
+protected:
+    virtual void DoExecute() const override {
+        typename IObjectOperationsManager<TObject>::TPtr manager = TBase::GetOperationsManagerFor<TObject>();
+        TActivationContext::AsActorContext().Register(new TDeleteObjectActor<TObject>(GetRecords(), GetController(), manager, GetContext()));
     }
 public:
     using TBase::TBase;

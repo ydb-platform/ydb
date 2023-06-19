@@ -8,7 +8,6 @@
 
 add_subdirectory(actors)
 add_subdirectory(basics)
-add_subdirectory(controllers)
 add_subdirectory(default)
 add_subdirectory(pg)
 
@@ -61,7 +60,6 @@ target_link_libraries(ydb-core-testlib PUBLIC
   core-sys_view-processor
   core-sys_view-service
   core-testlib-actors
-  core-testlib-controllers
   core-testlib-basics
   core-tx-columnshard
   core-tx-coordinator

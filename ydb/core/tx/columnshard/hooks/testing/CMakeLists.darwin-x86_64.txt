@@ -7,12 +7,13 @@
 
 
 
-add_library(core-testlib-controllers)
-target_link_libraries(core-testlib-controllers PUBLIC
-  contrib-libs-linux-headers
+add_library(columnshard-hooks-testing)
+target_link_libraries(columnshard-hooks-testing PUBLIC
   contrib-libs-cxxsupp
   yutil
+  columnshard-hooks-abstract
+  engines-reader-order_control
 )
-target_sources(core-testlib-controllers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/controllers/abstract.cpp
+target_sources(columnshard-hooks-testing PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/hooks/testing/controller.cpp
 )

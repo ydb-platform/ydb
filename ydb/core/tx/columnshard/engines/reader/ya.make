@@ -20,7 +20,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/engines/predicate
-    ydb/core/tx/columnshard/testlib
+    ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/program
     ydb/core/tx/columnshard/engines/reader/order_control
 )

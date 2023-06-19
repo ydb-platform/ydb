@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/testlib/controllers/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
 

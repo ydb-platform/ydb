@@ -1,7 +1,7 @@
 #include "read_metadata.h"
 #include "order_control/default.h"
 #include "order_control/pk_with_limit.h"
-#include <ydb/core/testlib/controllers/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 #include <util/string/join.h>

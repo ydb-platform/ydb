@@ -25,7 +25,7 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   ydb-core-protos
   core-formats-arrow
   columnshard-engines-predicate
-  tx-columnshard-testlib
+  columnshard-hooks-abstract
   core-tx-program
   engines-reader-order_control
   tools-enum_parser-enum_serialization_runtime

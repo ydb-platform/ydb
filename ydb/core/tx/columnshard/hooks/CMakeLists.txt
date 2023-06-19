@@ -6,15 +6,5 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(tx-columnshard-testlib)
-target_link_libraries(tx-columnshard-testlib PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-testlib-controllers
-  engines-reader-order_control
-)
-target_sources(tx-columnshard-testlib PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/testlib/controller.cpp
-)
+add_subdirectory(abstract)
+add_subdirectory(testing)

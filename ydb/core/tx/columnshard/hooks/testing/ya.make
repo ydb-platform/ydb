@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib/controllers
+    ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/engines/reader/order_control
 )
 

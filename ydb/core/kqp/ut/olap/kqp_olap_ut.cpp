@@ -13,8 +13,8 @@
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/testlib/controllers/abstract.h>
-#include <ydb/core/tx/columnshard/testlib/controller.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/datashard/datashard_ut_common.h>
@@ -75,6 +75,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             } else {
                 value.OpenOptional();
             }
+        }
+
+        if (value.IsNull()) {
+            out << "<NULL>";
+            return;
         }
 
         switch (value.GetPrimitiveType()) {
@@ -162,17 +167,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         return rows;
     }
 
-    TVector<THashMap<TString, NYdb::TValue>> ExecuteScanQuery(NYdb::NTable::TTableClient& tableClient, const TString& query) {
-        Cerr << "====================================\n"
-            << "QUERY:\n" << query
-            << "\n\nRESULT:\n";
+    TVector<THashMap<TString, NYdb::TValue>> ExecuteScanQuery(NYdb::NTable::TTableClient& tableClient, const TString& query, const bool verbose = true) {
+        if (verbose) {
+            Cerr << "====================================\n"
+                << "QUERY:\n" << query
+                << "\n\nRESULT:\n";
+        }
 
         TStreamExecScanQuerySettings scanSettings;
         auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
         auto rows = CollectRows(it);
-
-        PrintRows(Cerr, rows);
-        Cerr << "\n";
+        if (verbose) {
+            PrintRows(Cerr, rows);
+            Cerr << "\n";
+        }
 
         return rows;
     }
@@ -277,11 +285,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
         };
 
-        TDistribution GetDistribution() {
-            const TString selectQuery = "SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
+        TDistribution GetDistribution(const bool verbose = false) {
+            const TString selectQuery = "PRAGMA Kikimr.OptUseFinalizeByKey='true';SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
 
             auto tableClient = KikimrRunner.GetTableClient();
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
             ui32 count = 0;
             std::optional<ui32> minCount;
             std::optional<ui32> maxCount;
@@ -300,7 +308,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     } else if (c.first == "field") {
                         Y_VERIFY(groups.emplace(c.second.GetProto().DebugString()).second);
                     }
-                    Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
+                    if (verbose) {
+                        Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
+                    }
                 }
             }
             Y_VERIFY(maxCount);
@@ -345,6 +355,21 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
             }
             Cerr << bytes << "/" << rawBytes << Endl;
+        }
+
+        void GetCount(ui64& count) {
+            const TString selectQuery = "SELECT COUNT(*) as a FROM `" + TablePath + "`";
+
+            auto tableClient = KikimrRunner.GetTableClient();
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            for (auto&& r : rows) {
+                for (auto&& c : r) {
+                    if (c.first == "a") {
+                        count = GetUint64(c.second);
+                    }
+                }
+            }
         }
 
         template <class TFiller>
@@ -1343,6 +1368,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
+//        EnableDebugLogging(kikimr);
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -3408,7 +3434,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToString());
             }
             Sleep(TDuration::Seconds(5));
-            helper.FillTable(sPool, 1, 800000);
+            helper.FillTable(sPool, 1, rowsCount);
             Sleep(TDuration::Seconds(5));
             {
                 helper.GetVolumes(rawBytesPackAndUnpack2PK, bytesPackAndUnpack2PK, false);

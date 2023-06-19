@@ -63,7 +63,6 @@ PEERDIR(
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/testlib/actors
-    ydb/core/testlib/controllers
     ydb/core/testlib/basics
     ydb/core/tx/columnshard
     ydb/core/tx/coordinator

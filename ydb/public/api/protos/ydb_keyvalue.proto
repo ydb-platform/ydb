@@ -1,0 +1,544 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.KeyValue;
+
+option java_package = "com.yandex.ydb.keyvalue";
+option java_outer_classname = "KeyValueProtos";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+//
+// KeyValue API.
+//
+
+
+message StorageChannelInfo {
+    enum StatusFlag {
+        // The system was unable to get the storage channel status.
+        STATUS_FLAG_UNSPECIFIED = 0;
+
+        // Enough storage space is available.
+        STATUS_FLAG_GREEN = 10;
+
+        // Free storage space is low, user must stop writing new data. Compaction's writes are allow.
+        STATUS_FLAG_YELLOW_STOP = 20;
+
+        // No free storage space is available, no writes will successed.
+        STATUS_FLAG_ORANGE_OUT_SPACE = 30;
+    }
+
+    // Storage channel index.
+    uint32 storage_channel = 1;
+
+    // The status flag of the storage channel.
+    StatusFlag status_flag = 2;
+}
+
+
+message Priorities {
+    enum Priority {
+        // Use default priority (PRIORITY_REALTIME).
+        PRIORITY_UNSPECIFIED = 0;
+
+        // High priority for user-initiated operations, the default priority.
+        PRIORITY_REALTIME = 1;
+
+        // Low priority for background system activity.
+        PRIORITY_BACKGROUND = 2;
+    }
+}
+
+
+message StorageConfig {
+    message ChannelConfig {
+        // Media for the storage channel.
+        // This field specifies the kind of one storage_pool_types configured in config.yaml
+        string media = 1;
+    }
+
+    // Channel configs.
+    // Channels 0 and 1 are system channels needed for tablet operation.
+    // Channels starting with 2 are user channels.
+    repeated ChannelConfig channel = 1;
+}
+
+
+message KeyRange {
+    // The lower bound of the key range.
+    // If unspecified, the range begins from the lowest key.
+    oneof from_bound {
+        // Set in order for the range to include the key specified
+        string from_key_inclusive = 1;
+        // Set in order for the range not to include the key specified
+        string from_key_exclusive = 2;
+    }
+
+    // The higher bound of the key range.
+    // If unspecified, the range ends with the highest key.
+    oneof to_bound {
+        // Set in order for the range to include the key specified
+        string to_key_inclusive = 3;
+        // Set in order for the range not to include the key specified
+        string to_key_exclusive = 4;
+    }
+}
+
+// The lock mechanism provides a way to ensure that only one client holds the lock.
+// The client is provided the lock generation.
+// Only operations with matching lock generation and operations with no lock generation are executed.
+// When lock generation is missmatched operations will be failed with PRECONDITION_FAILED status.
+message AcquireLockRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+    // Partition of the volume.
+    uint64 partition_id = 3;
+}
+
+message AcquireLockResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AcquireLockResult {
+    // The generation of the lock to provide as an argument to all the operations the user performs with the partition.
+    uint64 lock_generation = 1;
+
+    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
+    uint32 node_id = 2;
+}
+
+message ExecuteTransactionRequest {
+    message Command {
+        message Rename {
+            // The key to change.
+            string old_key = 1;
+
+            // The new key to change the old key to.
+            string new_key = 2;
+        }
+        message Concat {
+            // Keys to use as the source for the concatenation.
+            repeated string input_keys = 1;
+
+            // New key to use for the result of the concatenation.
+            string output_key = 2;
+
+            // Input keys are deleted after the concatenation by default.
+            // In order to keep both the inputs and the output, set keep_inputs to true.
+            bool keep_inputs = 3;
+        }
+
+        // Make a copy of a range of key-value pairs.
+        // New keys are formed by removing a prefix and/or prepending keys with the new prefix.
+        // For example, copy of the key-value pairs [{aaabc,1}, {aaaef,2}, {baaef,3}] can be stripped of the 'aa' prefix
+        // and prepended with the 'x' so that the new pairs that are added are [{xabc, 1}, {xaef, 2}].
+        message CopyRange {
+            // The range of keys to copy
+            KeyRange range = 1;
+
+            // For each source key that begins with the prefix_to_remove, that prefix is removed from the new key before
+            // prepending it with the prefix_to_add.
+            // Acts as filter if not empty.
+            string prefix_to_remove = 2;
+
+            // The prefix to prepend to each new key.
+            string prefix_to_add = 3;
+        }
+        message Write {
+            enum Tactic {
+                // Use default tactic (TACTIC_MAX_THROUGHPUT).
+                TACTIC_UNSPECIFIED = 0;
+
+                // Write minimum required redundant data. Does not affect storage durability. The default tactic.
+                TACTIC_MAX_THROUGHPUT = 1;
+
+                // Write additional redundant data to reduce operation duration. Will use additional space.
+                TACTIC_MIN_LATENCY = 2;
+            }
+            // Key of the key-value pair to write.
+            string key = 1;
+
+            // Value of the key-value pair to write.
+            bytes value = 2;
+
+            // Storage channel to write the value to. Channel numbers begin with 1 and may go up to approximately 250
+            // (depends on the channel configuration of each partition).
+            // Channel 1 is called the INLINE channel (value is stored in the index table).
+            // Channel 2 is called the MAIN channel (value is stored as a separate blob in the Distributed Storage).
+            // Channels 1 and 2 are available for all partitions.
+            // If the storage channel specified is not configured for the partition, the value is stored in
+            // channel 2 (the MAIN channel).
+            uint32 storage_channel = 3; // (default = 0 is same as 2 or MAIN)
+
+            // Priority to use for the Distributed Storage Get operation.
+            // Has no effect for the INLINE storage channel.
+            Priorities.Priority priority = 4;
+
+            // Tactic to use for the Distributed Storage Put operation.
+            // Has no effect for the INLINE storage channel.
+            Tactic tactic = 5;
+        }
+        message DeleteRange {
+            // The range of keys to delete.
+            KeyRange range = 1;
+        }
+
+        oneof action {
+            // Delete key-value pairs with keys in the range specified.
+            DeleteRange delete_range = 1;
+
+            // Change the key of a key-value pair.
+            Rename rename = 2;
+
+            // Create a copy of key-value pairs with keys in the range specified by removing and/or prepending a prefix
+            // to each key.
+            CopyRange copy_range = 3;
+
+            // Create a new key-value pair with key specified by concatenating values of multiple other key-value pairs
+            // with keys specified.
+            Concat concat = 4;
+
+            // Create a new key-value pair with key and value specified.
+            Write write = 5;
+        }
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+    // Partition of the volume.
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock acquired for the partition as a result of an AcquireLock call.
+    optional uint64 lock_generation = 4;
+
+    // Commands to execute as a single atomic transaction.
+    // The order of execution of commands is the same as the order of commands in the ExecuteTransactionRequest.
+    // The order of execution of different transactions is not specified.
+    repeated Command commands = 5;
+}
+
+message ExecuteTransactionResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExecuteTransactionResult {
+    // Contains status flags for the storage channels used by the transaction.
+    repeated StorageChannelInfo storage_channel_info = 1;
+
+    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
+    uint32 node_id = 2;
+}
+
+message ReadRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+    // Partition of the volume.
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock acquired for the partition as a result of an AcquireLock call.
+    optional uint64 lock_generation = 4;
+
+    // Key of the key-value pair to read.
+    string key = 5;
+
+    // Offset in bytes from the beginning of the value to read data from.
+    uint64 offset = 6;
+
+    // Size of the data to read in bytes. 0 means "read to the end of the value".
+    uint64 size = 7;
+
+    // Result protobuf size limit.
+    // Overrides the default limit only with a smaller value.
+    // 0 means "use the default limit".
+    uint64 limit_bytes = 8;
+
+    // Priority to use for the Distributed Storage Get operation.
+    // Has no effect for the INLINE storage channel.
+    Priorities.Priority priority = 9;
+}
+
+message ReadResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadResult {
+    // The key of the requested key-value pair.
+    string requested_key = 1;
+
+    // Offset in bytes from the beginning of the value requested.
+    uint64 requested_offset = 2;
+
+    // Size of the data requested.
+    uint64 requested_size = 3;
+
+    // The bytes of the requested part of the value.
+    bytes value = 4;
+
+    // If requested data size is larger than limit_bytes then result will contain only part of the requested value and
+    // the is_overrun flag will be set.
+    bool is_overrun = 5;
+
+    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
+    uint32 node_id = 6;
+}
+
+message ReadRangeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+    // Partition of the volume.
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock acquired for the partition as a result of an AcquireLock call.
+    optional uint64 lock_generation = 4;
+
+    // The range of keys to read.
+    KeyRange range = 5;
+
+    // Result protobuf size limit.
+    // Overrides the default limit only with a smaller value.
+    // 0 means "use the default limit".
+    uint64 limit_bytes = 6;
+
+    // Priority to use for the Distributed Storage Get operation.
+    // Has no effect for the INLINE storage channel.
+    Priorities.Priority priority = 7;
+}
+
+message ReadRangeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadRangeResult {
+    message KeyValuePair {
+        // The key of the key-value pair.
+        string key = 1;
+
+        // The value of the key-value pair.
+        bytes value = 2;
+
+        // Unix time of the creation of the key-value pair (in ms).
+        uint64 creation_unix_time = 4;
+
+        // Contains the index of the actually used storage channel. The actually used storage channel may differ from
+        // the value specified in the write request for example if there were no such storage channel at the moment
+        // of execution of the write command.
+        // For values created as a result of concatenation or copy of concatenated values, the storage channel of the first
+        // part of the value is specified.
+        uint32 storage_channel = 5;
+    }
+
+    // List of key-value pairs requested.
+    repeated KeyValuePair pair = 1;
+
+    // If requested data size is larger than limit_bytes then result will contain
+    // only part of the requested key-value pairs and the is_overrun flag will be set.
+    // The pair list contains only full values.
+    // In order to continue reading the client should send another request for the key range
+    // with from_key_exclusive set to the last key read.
+    // If first pair doesn't fit the limit_bytes then the result will be empty and the is_overrun flag will be set.
+    // Use ListRange and Read methods to find and read large key-value pairs.
+    bool is_overrun = 2;
+
+    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
+    uint32 node_id = 3;
+}
+
+message ListRangeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+    // Partition of the volume.
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock acquired for the partition as a result of an AcquireLock call.
+    optional uint64 lock_generation = 4;
+
+    // The range of keys to read
+    KeyRange range = 5;
+
+    // Result protobuf size limit. If not 0, overrides the default one only with a smaller value.
+    uint64 limit_bytes = 6;
+}
+
+message ListRangeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListRangeResult {
+    message KeyInfo {
+        // The key of the key-value pair.
+        string key = 1;
+
+        // Full size of the value of the key-value pair.
+        uint32 value_size = 2;
+
+        // Unix time of the creation of the key-value pair (in ms).
+        uint64 creation_unix_time = 3;
+
+        // Contains the index of the actually used storage channel. The actually used storage channel may differ from
+        // the value specified in the write request for example if there were no such storage channel at the moment
+        // of execution of the write command.
+        // For values created as a result of concatenation or copy of concatenated values, the storage channel of the first
+        // part of the value is specified.
+        uint32 storage_channel = 4;
+    }
+
+    // List of the key-value pairs and metadata requested.
+    repeated KeyInfo key = 1;
+
+    // If requested data size is larger than limit_bytes then result will contain
+    // only part of the requested key-value pairs and the is_overrun flag will be set.
+    bool is_overrun = 2;
+
+    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
+    uint32 node_id = 3;
+}
+
+message GetStorageChannelStatusRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+    // Partition of the volume.
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock acquired for the partition as a result of an AcquireLock call.
+    optional uint64 lock_generation = 4;
+
+    // List of storage channels to get StorageChannelInfo for.
+    repeated uint32 storage_channel = 5;
+}
+
+message GetStorageChannelStatusResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetStorageChannelStatusResult {
+    // Contains status flags for the requested storage channels.
+    repeated StorageChannelInfo storage_channel_info = 1;
+
+    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
+    uint32 node_id = 2;
+}
+
+message CreateVolumeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+
+    // The partition count of the new volume.
+    uint32 partition_count = 4;
+
+    // Set storage kinds for storage channels.
+    StorageConfig storage_config = 5;
+}
+
+message CreateVolumeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateVolumeResult {
+}
+
+message DropVolumeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+}
+
+message DropVolumeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DropVolumeResult {
+}
+
+message AlterVolumeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+
+    // Change the partition count of the volume.
+    // The value should be greater or equal than current patition count.
+    uint32 alter_partition_count = 3;
+
+    // Set storage kinds for storage channels.
+    // If the field is not present, storage channel settings are not changed.
+    StorageConfig storage_config = 4;
+}
+
+message AlterVolumeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AlterVolumeResult {
+}
+
+message DescribeVolumeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+}
+
+message DescribeVolumeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeVolumeResult {
+    // Volume path.
+    string path = 1;
+
+    // Count of partitions.
+    uint64 partition_count = 2;
+}
+
+message ListLocalPartitionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Volume path.
+    string path = 2;
+
+    // ID of the node to get partitions for.
+    // 0 means the node the request was send to.
+    uint64 node_id = 3;
+}
+
+message ListLocalPartitionsResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListLocalPartitionsResult {
+    // Volume path.
+    string path = 1;
+
+    // ID of the node.
+    uint64 node_id = 2;
+
+    // List of the partitions of the volume on the node.
+    repeated uint64 partition_ids = 3;
+}

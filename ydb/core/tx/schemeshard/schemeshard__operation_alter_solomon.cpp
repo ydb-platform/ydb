@@ -259,7 +259,13 @@ public:
         }
 
         TChannelsBindings channelsBinding;
-        if (!context.SS->ResolveSolomonChannels(channelProfileId, path.GetPathIdForDomain(), channelsBinding)) {
+        bool isResolved = false;
+        if (alter.HasStorageConfig()) {
+            isResolved = context.SS->ResolveSolomonChannels(alter.GetStorageConfig(), path.GetPathIdForDomain(), channelsBinding);
+        } else {
+            isResolved = context.SS->ResolveSolomonChannels(channelProfileId, path.GetPathIdForDomain(), channelsBinding);
+        }
+        if (!isResolved) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
             return result;
         }

@@ -19,15 +19,15 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
         return false;
     }
     if (op.GetPartitionCount()) {
-        if (!op.HasChannelProfileId()) {
-            errStr = "set channel profile id, please";
+        if (!op.HasChannelProfileId() && !op.HasStorageConfig()) {
+            errStr = "set storage config, please";
             status = TEvSchemeShard::EStatus::StatusInvalidParameter;
         }
         return true;
     }
 
-    if (op.HasChannelProfileId()) {
-        errStr = "don't set channel profile id, please. We are going to adopt already created tablets";
+    if (op.HasChannelProfileId() || op.HasStorageConfig()) {
+        errStr = "don't set channel profile id or storage config, please. We are going to adopt already created tablets";
         status = TEvSchemeShard::EStatus::StatusInvalidParameter;
     }
 
@@ -330,9 +330,17 @@ public:
         const bool adoptingTablets = solomonDescription.AdoptedPartitionsSize() > 0;
 
         TChannelsBindings channelsBinding;
-        if (!adoptingTablets && !context.SS->ResolveSolomonChannels(channelProfileId, dstPath.GetPathIdForDomain(), channelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
-            return result;
+        if (!adoptingTablets) {
+            bool isResolved = false;
+            if (solomonDescription.HasStorageConfig()) {
+                isResolved = context.SS->ResolveSolomonChannels(solomonDescription.GetStorageConfig(), dstPath.GetPathIdForDomain(), channelsBinding);
+            } else {
+                isResolved = context.SS->ResolveSolomonChannels(channelProfileId, dstPath.GetPathIdForDomain(), channelsBinding);
+            }
+            if (!isResolved) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
+                return result;
+            }
         }
 
         dstPath.MaterializeLeaf(owner);

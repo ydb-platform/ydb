@@ -444,6 +444,7 @@ public:
     bool ResolveTabletChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveRtmrChannels(const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    bool ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveChannelsByPoolKinds(
         const TVector<TStringBuf>& channelPoolKinds,

@@ -824,6 +824,29 @@ bool TSchemeShard::ResolveRtmrChannels(const TPathId domainId, TChannelsBindings
     return ResolveChannelCommon(profileId, domainId, channelsBinding, &ResolveChannelsDetailsAsIs);
 }
 
+bool TSchemeShard::ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const
+{
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
+    auto& storagePools = domainInfo->EffectiveStoragePools();
+
+    if (!storagePools) {
+        // no storage pool no binding it's Ok
+        channelsBinding.clear();
+        return false;
+    }
+
+    auto getPoolKind = [&] (ui32 channel) {
+        return TStringBuf(config.GetChannel(channel).GetPreferredPoolKind());
+    };
+
+    return ResolvePoolNames(
+        config.ChannelSize(),
+        getPoolKind,
+        storagePools,
+        channelsBinding
+    );
+}
+
 bool TSchemeShard::ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings &channelsBinding) const
 {
     return ResolveChannelCommon(profileId, domainId, channelsBinding, &ResolveChannelsDetailsAsIs);

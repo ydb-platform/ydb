@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package Ydb.KeyValue.V1;
+
+option java_package = "com.yandex.ydb.keyvalue.v1";
+option java_outer_classname = "KeyValueGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_keyvalue.proto";
+
+// KeyValue tablets provide a simple key-value storage in a low-overhead and easy-to-shoot-your-leg manner.
+// To use KeyValue tablets in an efficient way one must be familiar with the design of both the KeyValue tablet
+// and the Distributed Storage underneath it.
+
+service KeyValueService {
+
+    // Create a volume by path and partition count
+    rpc CreateVolume(KeyValue.CreateVolumeRequest) returns (KeyValue.CreateVolumeResponse);
+
+    // Drop the volume by path
+    rpc DropVolume(KeyValue.DropVolumeRequest) returns (KeyValue.DropVolumeResponse);
+
+    // Alter the volume by path
+    rpc AlterVolume(KeyValue.AlterVolumeRequest) returns (KeyValue.AlterVolumeResponse);
+
+    // Describe the volume by path
+    rpc DescribeVolume(KeyValue.DescribeVolumeRequest) returns (KeyValue.DescribeVolumeResponse);
+
+    // List partitions of a volume at the local node.
+    rpc ListLocalPartitions(KeyValue.ListLocalPartitionsRequest) returns (KeyValue.ListLocalPartitionsResponse);
+
+    // Acquire an exclusive lock for the partition.
+    rpc AcquireLock(KeyValue.AcquireLockRequest) returns (KeyValue.AcquireLockResponse);
+
+    // Perform list of commands to modify the state of the partition as an atomic transaction.
+    rpc ExecuteTransaction(KeyValue.ExecuteTransactionRequest) returns (KeyValue.ExecuteTransactionResponse);
+
+    // Read the value stored in the item with the key specified.
+    rpc Read(KeyValue.ReadRequest) returns (KeyValue.ReadResponse);
+
+    // Read items with keys in the specified range.
+    rpc ReadRange(KeyValue.ReadRangeRequest) returns (KeyValue.ReadRangeResponse);
+
+    // List keys and metadata of items with keys in the specified range.
+    rpc ListRange(KeyValue.ListRangeRequest) returns (KeyValue.ListRangeResponse);
+
+    // Get storage channel status of the partition.
+    rpc GetStorageChannelStatus(KeyValue.GetStorageChannelStatusRequest) returns (KeyValue.GetStorageChannelStatusResponse);
+}

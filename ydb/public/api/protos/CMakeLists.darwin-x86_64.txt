@@ -411,6 +411,18 @@ get_built_tool_path(
   cpp_styleguide
 )
 get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
   tools/enum_parser/enum_parser
@@ -477,6 +489,7 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_table.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_keyvalue.proto
 )
 generate_enum_serilization(api-protos
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h

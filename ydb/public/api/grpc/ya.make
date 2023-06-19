@@ -19,6 +19,7 @@ SRCS(
     ydb_scripting_v1.proto
     ydb_table_v1.proto
     ydb_topic_v1.proto
+    ydb_keyvalue_v1.proto
 )
 
 PEERDIR(

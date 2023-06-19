@@ -40,6 +40,7 @@ SRCS(
     ydb_table.proto
     ydb_topic.proto
     ydb_value.proto
+    ydb_keyvalue.proto
 )
 
 CPP_PROTO_PLUGIN0(validation ydb/public/lib/validation)

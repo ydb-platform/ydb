@@ -373,6 +373,19 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/unpack_args.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/numbered.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/numbered_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/list/AUX778076_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list0_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list10_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list20_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list30_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list40_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list50.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list50_c.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/list/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list10.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list10_c.hpp
@@ -384,6 +397,13 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list40_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list50.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list50_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/map/AUX778076_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map50.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/map/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map10.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map20.hpp
@@ -401,6 +421,19 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set40_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set50.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set50_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/vector/AUX778076_VECTOR_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector0_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector10_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector20_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector30_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector40_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector50.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector50_c.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/vector/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10_c.hpp

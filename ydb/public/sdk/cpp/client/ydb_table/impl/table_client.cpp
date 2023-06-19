@@ -867,7 +867,7 @@ bool TTableClient::TImpl::ReturnSession(TSession::TImpl* sessionImpl) {
 void TTableClient::TImpl::DeleteSession(TSession::TImpl* sessionImpl) {
     // Closing not owned by session pool session should not fire getting new session
     if (sessionImpl->IsOwnedBySessionPool()) {
-        if (SessionPool_.CheckAndFeedWaiterNewSession(shared_from_this())) {
+        if (SessionPool_.CheckAndFeedWaiterNewSession(shared_from_this(), sessionImpl->NeedUpdateActiveCounter())) {
             // We requested new session for waiter which already incremented
             // active session counter and old session will be deleted
             // - skip update active counter in this case

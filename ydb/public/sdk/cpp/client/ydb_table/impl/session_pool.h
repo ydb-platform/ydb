@@ -51,7 +51,7 @@ public:
     bool ReturnSession(TSession::TImpl* impl, bool active, std::shared_ptr<TTableClient::TImpl> client);
     // Returns trun if has waiter and scheduled to create new session
     // too feed it
-    bool CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client);
+    bool CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client, bool active);
     TPeriodicCb CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient, TKeepAliveCmd&& cmd, TDeletePredicate&& predicate);
     i64 GetActiveSessions() const;
     i64 GetActiveSessionsLimit() const;

@@ -160,7 +160,7 @@ TAsyncCreateSessionResult TSessionPool::GetSession(
     return createSessionPromise.GetFuture();
 }
 
-bool TSessionPool::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client) {
+bool TSessionPool::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client, bool active) {
     NThreading::TPromise<TCreateSessionResult> createSessionPromise;
     {
         std::lock_guard guard(Mtx_);
@@ -172,6 +172,21 @@ bool TSessionPool::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TI
         } else {
             return false;
         }
+    }
+
+    if (!active) {
+        // Session was IDLE. It means session has been closed during
+        // keep-alive activity inside session pool. In this case
+        // we must not touch ActiveSession counter.
+        // Moreover it is unsafe to recreate the session because session
+        // may be closed during balancing or draining routine.
+        // But we must feed waiters if we have some otherwise deadlock
+        // is possible.
+        // The above mentioned conditions is quite rare so
+        // we can just return an error. In this case uplevel code should
+        // start retry.
+        CreateFakeSession(createSessionPromise, client);
+        return true;
     }
 
     // This code can be called from client dtors. It may be unsafe to

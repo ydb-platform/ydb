@@ -90,7 +90,7 @@ struct TScriptExecutionsYdbSetup {
         req.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         const ui32 node = 0;
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, req, leaseDuration), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), req, leaseDuration), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
         auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor);
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);

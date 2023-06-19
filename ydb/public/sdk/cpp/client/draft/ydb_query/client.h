@@ -41,6 +41,9 @@ public:
     TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId,
         const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
 
+    TAsyncFetchScriptResultsResult FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation,
+        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

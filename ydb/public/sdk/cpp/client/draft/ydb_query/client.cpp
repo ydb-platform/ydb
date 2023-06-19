@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_query/impl/exec_query.h>
 
@@ -70,9 +71,19 @@ public:
     }
 
     TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId, const TFetchScriptResultsSettings& settings) {
-        using namespace Ydb::Query;
-        auto request = MakeRequest<FetchScriptResultsRequest>();
+        auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
         request.set_execution_id(executionId);
+        return FetchScriptResultsImpl(std::move(request), settings);
+    }
+
+    TAsyncFetchScriptResultsResult FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation, const TFetchScriptResultsSettings& settings) {
+        auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
+        request.set_operation_id(NKikimr::NOperationId::ProtoToString(scriptExecutionOperation.Id()));
+        return FetchScriptResultsImpl(std::move(request), settings);
+    }
+
+    TAsyncFetchScriptResultsResult FetchScriptResultsImpl(Ydb::Query::FetchScriptResultsRequest&& request, const TFetchScriptResultsSettings& settings) {
+        using namespace Ydb::Query;
         if (settings.FetchToken_) {
             request.set_fetch_token(settings.FetchToken_);
         }
@@ -164,6 +175,12 @@ TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const TString& e
     const TFetchScriptResultsSettings& settings)
 {
     return Impl_->FetchScriptResults(executionId, settings);
+}
+
+TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation,
+    const TFetchScriptResultsSettings& settings)
+{
+    return Impl_->FetchScriptResults(scriptExecutionOperation, settings);
 }
 
 } // namespace NYdb::NQuery

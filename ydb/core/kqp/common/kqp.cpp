@@ -6,11 +6,11 @@
 
 namespace NKikimr::NKqp {
 
-TString ActorIdToScriptExecutionId(const NActors::TActorId& actorId) {
+TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId) {
     return TStringBuilder() << "[" << actorId.NodeId() << ":" << actorId.LocalId() << ":" << actorId.Hint() << ":" << actorId.PoolID() << "]";
 }
 
-bool ScriptExecutionIdToActorId(const TString& executionId, TActorId& actorId) {
+bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId& actorId) {
     if (executionId.Size() < 5 || executionId[0] != '[' || executionId[executionId.Size() - 1] != ']')
         return false;
 

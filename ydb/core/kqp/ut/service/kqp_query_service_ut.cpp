@@ -277,13 +277,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
 
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId).ExtractValueSync();
-        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-        TResultSetParser resultSet(results.ExtractResultSet());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-        UNIT_ASSERT(resultSet.TryNextRow());
-        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+        auto checkFetch = [&](const auto& executionOrOperation) {
+            TFetchScriptResultsResult results = db.FetchScriptResults(executionOrOperation).ExtractValueSync();
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+        };
+
+        checkFetch(scriptExecutionOperation.Metadata().ExecutionId);
+        checkFetch(scriptExecutionOperation);
     }
 
     Y_UNIT_TEST(ListScriptExecutions) {

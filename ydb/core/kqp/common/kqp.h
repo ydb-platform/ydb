@@ -35,8 +35,8 @@ namespace NKikimr::NKqp {
 
 void ConvertKqpQueryResultToDbResult(const NKikimrMiniKQL::TResult& from, Ydb::ResultSet* to);
 
-TString ActorIdToScriptExecutionId(const NActors::TActorId& actorId);
-bool ScriptExecutionIdToActorId(const TString& executionId, TActorId& actorId);
+TString ScriptExecutionRunnerActorIdString(const NActors::TActorId& actorId);
+bool ScriptExecutionRunnerActorIdFromString(const TString& executionId, TActorId& actorId);
 
 template<typename TFrom, typename TTo>
 inline void ConvertKqpQueryResultsToDbResult(const TFrom& from, TTo* to) {

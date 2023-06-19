@@ -26,6 +26,7 @@
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <util/generic/guid.h>
 #include <util/generic/utility.h>
 #include <util/random/random.h>
 
@@ -335,6 +336,7 @@ private:
                 {
                     Col("database", NScheme::NTypeIds::Text),
                     Col("execution_id", NScheme::NTypeIds::Text),
+                    Col("run_script_actor_id", NScheme::NTypeIds::Text),
                     Col("operation_status", NScheme::NTypeIds::Int32),
                     Col("execution_status", NScheme::NTypeIds::Int32),
                     Col("execution_mode", NScheme::NTypeIds::Int32),
@@ -388,8 +390,9 @@ private:
 
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
-    TCreateScriptOperationQuery(const TString& executionId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration = TDuration::Zero())
+    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration = TDuration::Zero())
         : ExecutionId(executionId)
+        , RunScriptActorId(runScriptActorId)
         , Request(req)
         , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
     {
@@ -424,6 +427,7 @@ public:
         TString sql = R"(
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
+            DECLARE $run_script_actor_id AS Text;
             DECLARE $execution_status AS Int32;
             DECLARE $execution_mode AS Int32;
             DECLARE $query_text AS Text;
@@ -431,8 +435,8 @@ public:
             DECLARE $lease_duration AS Interval;
 
             UPSERT INTO `.metadata/script_executions`
-                (database, execution_id, execution_status, execution_mode, start_ts, query_text, syntax)
-            VALUES ($database, $execution_id, $execution_status, $execution_mode, CurrentUtcTimestamp(), $query_text, $syntax);
+                (database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts, query_text, syntax)
+            VALUES ($database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(), $query_text, $syntax);
 
             UPSERT INTO `.metadata/script_execution_leases`
                 (database, execution_id, lease_deadline, lease_generation)
@@ -446,6 +450,9 @@ public:
                 .Build()
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$run_script_actor_id")
+                .Utf8(ScriptExecutionRunnerActorIdString(RunScriptActorId))
                 .Build()
             .AddParam("$execution_status")
                 .Int32(Ydb::Query::EXEC_STATUS_STARTING)
@@ -481,6 +488,7 @@ public:
 
 private:
     const TString ExecutionId;
+    const NActors::TActorId RunScriptActorId;
     NKikimrKqp::TEvQueryRequest Request;
     TDuration LeaseDuration;
 };
@@ -494,10 +502,11 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
     void Bootstrap() {
         Become(&TCreateScriptExecutionActor::StateFunc);
 
+        ExecutionId = CreateGuidAsString();
+
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1));
-        TString executionId = ActorIdToScriptExecutionId(RunScriptActorId);
-        Register(new TCreateScriptOperationQuery(executionId, Event->Get()->Record));
+        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1));
+        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record));
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
@@ -516,6 +525,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
 
 private:
     TEvKqp::TEvScriptRequest::TPtr Event;
+    TString ExecutionId;
     NActors::TActorId RunScriptActorId;
 };
 
@@ -680,7 +690,7 @@ public:
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
-            SELECT operation_status, execution_status, issues FROM `.metadata/script_executions`
+            SELECT operation_status, execution_status, issues, run_script_actor_id FROM `.metadata/script_executions`
                 WHERE database = $database AND execution_id = $execution_id;
 
             SELECT lease_deadline FROM `.metadata/script_execution_leases`
@@ -712,6 +722,16 @@ public:
         }
 
         result.TryNextRow();
+
+        const TMaybe<TString> runScriptActorId = result.ColumnParser("run_script_actor_id").GetOptionalUtf8();
+        if (!runScriptActorId) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+        if (!NKqp::ScriptExecutionRunnerActorIdFromString(*runScriptActorId, RunScriptActorId)) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
 
         TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
         TMaybe<TInstant> leaseDeadline;
@@ -759,7 +779,7 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (status == Ydb::StatusIds::SUCCESS) {
-            Send(Owner, new TEvPrivate::TEvLeaseCheckResult(OperationStatus, ExecutionStatus, std::move(OperationIssues)), 0, Cookie);
+            Send(Owner, new TEvPrivate::TEvLeaseCheckResult(OperationStatus, ExecutionStatus, std::move(OperationIssues), RunScriptActorId), 0, Cookie);
         } else {
             Send(Owner, new TEvPrivate::TEvLeaseCheckResult(status, std::move(issues)), 0, Cookie);
         }
@@ -774,6 +794,7 @@ private:
     TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
     TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
     TMaybe<NYql::TIssues> OperationIssues;
+    NActors::TActorId RunScriptActorId;
 };
 
 class TGetScriptExecutionOperationActor : public TScriptExecutionFinisherBase {
@@ -804,7 +825,7 @@ public:
             WHERE database = $database AND execution_id = $execution_id;
         )";
 
-        TMaybe<TString> maybeExecutionId = ScriptExecutionFromOperation(Request->Get()->OperationId);
+        TMaybe<TString> maybeExecutionId = ScriptExecutionIdFromOperation(Request->Get()->OperationId);
         Y_ENSURE(maybeExecutionId, "No execution id specified");
         ExecutionId = *maybeExecutionId;
 
@@ -841,7 +862,7 @@ public:
 
         Ydb::Query::ExecuteScriptMetadata metadata;
 
-        metadata.set_execution_id(*ScriptExecutionFromOperation(Request->Get()->OperationId));
+        metadata.set_execution_id(*ScriptExecutionIdFromOperation(Request->Get()->OperationId));
 
         const TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
         if (executionStatus) {
@@ -1175,15 +1196,11 @@ public:
     {}
 
     void Bootstrap() {
-        const TMaybe<TString> executionId = NKqp::ScriptExecutionFromOperation(Request->Get()->OperationId);
+        const TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId);
         if (!executionId) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
         }
         ExecutionId = *executionId;
-
-        if (!NKqp::ScriptExecutionIdToActorId(ExecutionId, RunScriptActor)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Incorrect operation id");
-        }
 
         Become(&TCancelScriptExecutionOperationActor::StateFunc);
         Register(new TCheckLeaseStatusActor(Request->Get()->Database, ExecutionId));
@@ -1198,6 +1215,7 @@ public:
 
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            RunScriptActor = ev->Get()->RunScriptActorId;
             if (ev->Get()->OperationStatus) {
                 Reply(Ydb::StatusIds::PRECONDITION_FAILED); // Already finished.
             } else {
@@ -1266,6 +1284,36 @@ private:
     bool CancelSent = false;
 };
 
+// TODO: remove when there will be fetch script result through database
+class TGetRunScriptActorActor : public NActors::TActorBootstrapped<TGetRunScriptActorActor> {
+public:
+    TGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorRequest::TPtr ev)
+        : Request(std::move(ev))
+    {}
+
+    void Bootstrap() {
+        Register(new TCheckLeaseStatusActor(Request->Get()->Database, Request->Get()->ExecutionId));
+        Become(&TGetRunScriptActorActor::StateFunc);
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvPrivate::TEvLeaseCheckResult, Handle);
+    )
+
+    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            Send(Request->Sender, new TEvKqp::TEvGetRunScriptActorResponse(ev->Get()->RunScriptActorId));
+        } else {
+            Send(Request->Sender, new TEvKqp::TEvGetRunScriptActorResponse(ev->Get()->Status, std::move(ev->Get()->Issues)));
+        }
+        PassAway();
+    }
+
+private:
+    TEvKqp::TEvGetRunScriptActorRequest::TPtr Request;
+};
+
 } // anonymous namespace
 
 NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev) {
@@ -1299,10 +1347,15 @@ NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecut
     return new TCancelScriptExecutionOperationActor(std::move(ev));
 }
 
+NActors::IActor* CreateGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorRequest::TPtr ev) {
+    return new TGetRunScriptActorActor(std::move(ev));
+}
+
+
 namespace NPrivate {
 
-NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& record, TDuration leaseDuration) {
-    return new TCreateScriptOperationQuery(executionId, record, leaseDuration);
+NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record, TDuration leaseDuration) {
+    return new TCreateScriptOperationQuery(executionId, runScriptActorId, record, leaseDuration);
 }
 
 NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease, ui64 cookie) {
@@ -1310,5 +1363,4 @@ NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TStr
 }
 
 } // namespace NPrivate
-
 } // namespace NKikimr::NKqp

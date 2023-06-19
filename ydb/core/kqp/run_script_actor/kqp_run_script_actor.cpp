@@ -40,8 +40,9 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         Finished,
     };
 public:
-    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration)
-        : Request(request)
+    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration)
+        : ExecutionId(executionId)
+        , Request(request)
         , Database(database)
         , LeaseGeneration(leaseGeneration)
     {}
@@ -300,7 +301,7 @@ private:
     void Finish(Ydb::StatusIds::StatusCode status, ERunState runState = ERunState::Finishing) {
         RunState = runState;
         Status = status;
-        Register(CreateScriptExecutionFinisher(ActorIdToScriptExecutionId(SelfId()), Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
+        Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
         if (RunState == ERunState::Cancelling) {
             Issues.AddIssue("Script execution is cancelled");
             ResultSets.clear();
@@ -325,6 +326,7 @@ private:
     }
 
 private:
+    const TString ExecutionId;
     const NKikimrKqp::TEvQueryRequest Request;
     const TString Database;
     const ui64 LeaseGeneration;
@@ -340,8 +342,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration) {
-    return new TRunScriptActor(request, database, leaseGeneration);
+NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration) {
+    return new TRunScriptActor(executionId, request, database, leaseGeneration);
 }
 
 } // namespace NKikimr::NKqp

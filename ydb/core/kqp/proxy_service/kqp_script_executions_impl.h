@@ -50,11 +50,13 @@ struct TEvPrivate {
 
         TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus,
             TMaybe<Ydb::Query::ExecStatus> executionStatus,
-            TMaybe<NYql::TIssues> operationIssues)
+            TMaybe<NYql::TIssues> operationIssues,
+            const NActors::TActorId& runScriptActorId)
             : Status(Ydb::StatusIds::SUCCESS)
             , OperationStatus(operationStatus)
             , ExecutionStatus(executionStatus)
             , OperationIssues(operationIssues)
+            , RunScriptActorId(runScriptActorId)
         {}
 
         const Ydb::StatusIds::StatusCode Status;
@@ -62,12 +64,13 @@ struct TEvPrivate {
         const TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
         const TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
         const TMaybe<NYql::TIssues> OperationIssues;
+        const NActors::TActorId RunScriptActorId;
     };
 };
 
 // Writes new script into db.
 // If lease duration is zero, default one will be taken.
-NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& record, TDuration leaseDuration = TDuration::Zero());
+NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record, TDuration leaseDuration = TDuration::Zero());
 
 // Checks lease of execution, finishes execution if its lease is off, returns current status
 NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED, ui64 cookie = 0);

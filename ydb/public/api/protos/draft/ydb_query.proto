@@ -259,7 +259,10 @@ message ExecuteScriptMetadata {
 }
 
 message FetchScriptResultsRequest {
-    string execution_id = 1 [(Ydb.length).le = 1024];
+    oneof execution {
+        string execution_id = 1 [(Ydb.length).le = 1024];
+        string operation_id = 5 [(Ydb.length).le = 1024];
+    }
 
     oneof fetch {
         string fetch_token = 2 [(Ydb.length).le = 1024];

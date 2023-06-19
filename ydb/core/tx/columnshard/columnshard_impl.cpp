@@ -179,7 +179,9 @@ bool TColumnShard::WaitPlanStep(ui64 step) {
 }
 
 void TColumnShard::SendWaitPlanStep(ui64 step) {
-    Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+    if (MediatorTimeCastRegistered) {
+        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+    }
 }
 
 void TColumnShard::RescheduleWaitingReads() {

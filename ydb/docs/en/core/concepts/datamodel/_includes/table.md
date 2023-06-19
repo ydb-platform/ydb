@@ -18,7 +18,7 @@ If there is not a lot of data or load, the table may consist of a single shard. 
 
 The size-based shard split threshold and automatic splitting can be configured (enabled/disabled) individually for each database table.
 
-In addition to automatically splitting shards, you can create an empty table with a predefined number of shards. You can manually set the exact shard key split range or evenly split it into a predefined number of shards. In this case, ranges are created based on the first component of the primary key. You can set even splitting for tables that have a Uint64 or Uint32 integer as the first component of the primary key.
+In addition to automatically splitting shards, you can create an empty table with a predefined number of shards. You can manually set the exact shard key split range or evenly split it into a predefined number of shards. In this case, ranges are created based on the first component of the primary key. You can set even splitting for tables that have a `Uint64` or `Uint32` integer as the first component of the primary key.
 
 Partitioning parameters refer to the table itself rather than to secondary indexes built from its data. Each index is served by its own set of shards and decisions to split or merge its partitions are made independently based on the default settings. These settings may become available to users in the future like the settings of the main table.
 

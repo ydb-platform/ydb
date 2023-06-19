@@ -8,11 +8,11 @@
 `resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. К служебным данным относятся данные первичного и [вторичных индексов](../../concepts/secondary_indexes.md).
 `resources.storage.limit_bytes`<br/>`IGAUGE`, байты  | Ограничение на размер пользовательских и служебных данных, которые база данных может сохранить в распределенном сетевом хранилище.
 
-### Метрики API {#api}
+### Метрики GRPC API общие {#grpc_api}
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`api.grpc.request.bytes`<br/>`RATE`, байты | Размер запросов, которые получены базой данных в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
+`api.grpc.request.bytes`<br/>`RATE`, байты | Размер запросов, которые получены базой данных в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table` или `data_streams`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery` (для сервиса `table`), или `PutRecord`, `GetRecords` (для сервиса `data_streams`).
 `api.grpc.request.dropped_count`<br/>`RATE`, штуки | Количество запросов, обработка которых была прекращена на транспортном (gRPC) уровне из-за ошибки.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
 `api.grpc.request.inflight_count`<br/>`IGAUGE`, штуки | Количество запросов, которые одновременно обрабатываются базой данных в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
 `api.grpc.request.inflight_bytes`<br/>`IGAUGE`, байты | Размер запросов, которые одновременно обрабатываются базой данных в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
@@ -20,6 +20,41 @@
 `api.grpc.response.count`<br/>`RATE`, штуки | Количество ответов, которые отправлены базой в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.<br/>- _status_ – статус выполнения запроса, подробнее статусы описаны в разделе [Обработка ошибок](../../reference/ydb-sdk/error_handling.md).
 `api.grpc.response.dropped_count`<br/>`RATE`, штуки | Количество ответов, отправка которых была прекращена на на транспортном (gRPC) уровне из-за ошибки.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
 `api.grpc.response.issues`<br/>`RATE`, штуки | Количество ошибок определенного типа, возникших при выполнении запросов в определенный период времени.<br/>Метки:<br/>- _issue_type_ – тип ошибки, единственное значение – `optimistic_locks_invalidation`, подробнее инвалидация блокировок описана в разделе [Транзакции и запросы к {{ ydb-short-name }}](../../concepts/transactions.md).
+
+### Метрики GRPC API для топиков {#grpc_api_topics}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`grpc.topic.stream_read.commits`<br/>`RATE`, штуки | Количество коммитов метода `Ydb::TopicService::StreamRead`.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.bytes`<br/>`RATE`, штуки | Количество байт, прочитанных методом `Ydb::TopicService::StreamRead`.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.messages`<br/>`RATE`, штуки | Количество сообщений, прочитанных методом `Ydb::TopicService::StreamRead`.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.partition_session.errors`<br/>`RATE`, штуки | Количество ошибок при работе с партицией.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.partition_session.started`<br/>`RATE`, штуки | Количество сессий, запущенных в единицу времени.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.partition_session.stopped`<br/>`RATE`, штуки | Количество сессий, остановленных в единицу времени.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.partition_session.starting_count`<br/>`RATE`, штуки | Количество запускаемых сессий (то есть клиенту пришла команда о запуске сессии, но клиент еще не запустил сессию).<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.partition_session.stopping_count`<br/>`RATE`, штуки | Количество останавливаемых сессий.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_read.partition_session.count`<br/>`RATE`, штуки | Количество partition_session.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`grpc.topic.stream_write.bytes`<br/>`RATE`, байты | Количество байт, записанных методом `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.errors`<br/>`RATE`, штуки | Количество ошибок при вызове метода  `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом   `Ydb::TopicService::StreamWrite`.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.partition_throttled_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, ожидавших на квоте.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.sessions_active_count`<br/>`GAUGE`, штуки | Количество открытых сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
+`grpc.topic.stream_write.sessions_created`<br/>`RATE`, штуки | Количество созданных сессий записи.<br/>Метки:<br/>- _topic_ – название топика.
+
+### Метрики HTTP API {#http_api}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`api.http.data_streams.request.count`<br/>`RATE`, штуки  | Количество запросов по протоколу HTTP.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API, например `PutRecord`, `GetRecords`.<br/>- _topic_ – название топика.
+`api.http.data_streams.request.bytes`<br/>`RATE`, байты  | Суммарный размер запросов по протоколу HTTP.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API, в данном случае только `PutRecord`.<br/>- _topic_ – название топика.
+`api.http.data_streams.response.count`<br/>`RATE`, штуки  | Количество ответов по протоколу HTTP.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API, например `PutRecord`, `GetRecords`.<br/>- _topic_ – название топика.<br/>- _code_ – код ответа HTTP.
+`api.http.data_streams.response.bytes`<br/>`RATE`, байты  | Суммарный размер ответов по протоколу HTTP.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API, в данном случае только `GetRecords`.<br/>- _topic_ – название топика.
+`api.http.data_streams.response.duration_milliseconds`<br/>`HIST_RATE`, штуки  | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество ответов, время выполнения которых попадает в определенный интервал.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API.<br/>- _topic_ – название топика.
+`api.http.data_streams.get_records.messages`<br/>`RATE`, штуки | Количество сообщений, прочитанных методом `GetRecords`.<br/>Метки:<br/>- _topic_ – название топика.
+`api.http.data_streams.put_record.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом `PutRecord` (всегда =1).<br/>Метки:<br/>- _topic_ – название топика.
+`api.http.data_streams.put_records.failed_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`, которые не были записаны.<br/>Метки:<br/>- _topic_ – название топика.
+`api.http.data_streams.put_records.successful_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`, которые были успешно записаны.<br/>Метки:<br/>- _topic_ – название топика.
+`api.http.data_streams.put_records.total_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`.<br/>Метки:<br/>- _topic_ – название топика.
 
 ### Метрики сессий {#sessions}
 
@@ -87,3 +122,47 @@
 `table.query.compilation.cache_evictions`<br/>`RATE`, штуки | Количество запросов, вытесненных из кэша [подготовленных запросов](../../reference/ydb-sdk/example/index.md#param-queries) в определенный период времени.
 `table.query.compilation.cache_size_bytes`<br/>`IGAUGE`, байты | Размер кэша [подготовленных запросов](../../reference/ydb-sdk/example/index.md#param-queries).
 `table.query.compilation.cached_query_count`<br/>`IGAUGE`, штуки |  Размер кэша [подготовленных запросов](../../reference/ydb-sdk/example/index.md#param-queries).
+
+### Метрики топиков {#topics}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`topic.producers_count`<br/>`GAUGE`, штуки | Количество уникальных [источников](../concepts/topic#producer-id) топика.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.storage_bytes`<br/>`GAUGE`, байты | Размер топика в байтах.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.read.bytes`<br/>`RATE`, байты | Количество байт, прочитанных из топика.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.read.messages`<br/>`RATE`, штуки | Количество сообщений, прочитанных из топика.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.read.lag_messages`<br/>`RATE`, штуки | Суммарное по топику количество невычитанных данным читателем сообщений.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.read.lag_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, у которых разница между временем чтения и временем создания сообщения попадает в заданный интервал.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.write.bytes`<br/>`RATE`, байты | Размер записанных данных.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.uncompressed_bytes`<br/>`RATE`, байты | Размер разжатых записанных данных.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.messages`<br/>`RATE`, штуки | Количество записанных сообщений.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.message_size_bytes`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в байтах. Показывает количество сообщений, размер которых соответствует границам интервала.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.write.lag_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество сообщений, у которых разница между временем записи и временем создания сообщения попадает в заданный интервал.<br/>Метки:<br/>- _topic_ – название топика.
+
+### Агрегированные метрики партиций топика {#topics_partitions}
+
+В следующей таблице приведены агрегированные метрики партиций для топика. Максимальные и минимальные значения считаются по всем партициям заданного топика.
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`topic.partition.init_duration_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная задержка инициализации партиции.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.producers_count_max`<br/>`GAUGE`, штуки | Максимальное количество источников в партиции.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.storage_bytes_max`<br/>`GAUGE`, байты | Максимальный размер партиции в байтах.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.uptime_milliseconds_min`<br/>`GAUGE`, штуки | Минимальное время работы партиции после рестарта.<br>В норме во время rolling restart-а `topic.partition.uptime_milliseconds_min` близко к 0, после окончания rolling restart-а значение `topic.partition.uptime_milliseconds_min` должно увеличиваться до бесконечности.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.total_count`<br/>`GAUGE`, штуки | Общее количество партиций в топике.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.alive_count`<br/>`GAUGE`, штуки | Количество партиций, отправляющих свои метрики.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.committed_end_to_end_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная (по всем партициям) разница между текущим временем и временем создания последнего закомиченного сообщения.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.committed_lag_messages_max`<br/>`GAUGE`, штуки | Максимальная (по всем партициям) разница между последним оффсетом партиции и закомиченным оффсетом партиции.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.committed_read_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная (по всем партициям) разница между текущим временем и временем записи последнего закомиченного сообщения.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.end_to_end_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Разница между текущим временем и минимальным временем создания среди всех вычитанных за последнюю минуту сообщений во всех партициях.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.lag_messages_max`<br/>`GAUGE`, штуки | Максимальная разница (по всем партициям) последнего оффсета в партиции и последнего вычитанного оффсета.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Разница между текущим временем и минимальным временем записи среди всех вычитанных за последнюю минуту сообщений во всех партициях.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.read.idle_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальное время простоя (сколько времени не читали из партиции) по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная разница между временем записи и временем создания среди всех вычитанных за последнюю минуту сообщений.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.write.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная разница между временем записи и временем создания среди всех записанных за последнюю минуту сообщений.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.write.speed_limit_bytes_per_second`<br/>`GAUGE`, байты в секунду | Квота на запись в байтах в секунду на одну партицию.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.write.throttled_nanoseconds_max`<br/>`GAUGE`, наносекунды | Максимальное время троттлинга записи (ожидания на квоте) по всем партициям. В пределе если `topic.partition.write.throttled_nanoseconds_maх` = 10^9, то это означает, что всю секунду ожидали на квоте.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.write.bytes_per_day_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последние сутки, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последний час, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, байты | Максимальное количество байт, записанное за последнюю минуту, по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.
+`topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальное время простоя партиции на запись.<br/>Метки:<br/>- _topic_ – название топика.

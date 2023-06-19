@@ -7,10 +7,8 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
-    if (Owner->GetSortingPolicy()->CanInterrupt()) {
-        if (ReadyFlag) {
-            return;
-        }
+    if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
+        return;
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
         ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size());
@@ -94,6 +92,10 @@ std::deque<TGranule::TBatchForMerge> TGranule::SortBatchesByPK(const bool revers
 }
 
 void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+    if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
+        return;
+    }
+    Y_VERIFY(!ReadyFlag);
     Y_VERIFY(!NotIndexedBatchReadyFlag || !batch);
     if (!NotIndexedBatchReadyFlag) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)("batch_no", "add_not_indexed_batch")("count", WaitBatches.size());
@@ -122,6 +124,10 @@ void TGranule::CheckReady() {
 }
 
 void TGranule::OnBlobReady(const TBlobRange& range) noexcept {
+    if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
+        return;
+    }
+    Y_VERIFY(!ReadyFlag);
     BlobsDataSize += range.Size;
     Owner->OnBlobReady(GranuleId, range);
 }

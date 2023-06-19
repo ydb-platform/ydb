@@ -14,8 +14,6 @@ public:
         NeedNotAppliedEarlyFilter = 1 << 1
     };
     using TFeatures = ui32;
-private:
-    mutable std::optional<TFeatures> Features;
 protected:
     TReadMetadata::TConstPtr ReadMetadata;
     virtual TString DoDebugString() const = 0;
@@ -34,10 +32,7 @@ protected:
         return 0;
     }
     TFeatures GetFeatures() const {
-        if (!Features) {
-            Features = DoGetFeatures();
-        }
-        return *Features;
+        return DoGetFeatures();
     }
 public:
     using TPtr = std::shared_ptr<IOrderPolicy>;

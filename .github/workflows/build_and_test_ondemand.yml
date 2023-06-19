@@ -57,7 +57,7 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           folder-id: ${{secrets.YC_FOLDER}}
           image-id: ${{inputs.image}}
-          disk-size: 1023GB
+          disk-size: ${{vars.DISK_SIZE && vars.DISK_SIZE || '1023GB'}}
           disk-type: network-ssd-nonreplicated
           cores: 32
           memory: 64GB

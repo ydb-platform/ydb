@@ -1,17 +1,10 @@
 #pragma once
 
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-
-#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_tx_info.h>
-#include <ydb/core/kqp/topics/kqp_topics.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
-#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
-
-#include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NKikimr {

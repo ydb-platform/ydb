@@ -504,6 +504,22 @@ public:
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
             txBindingProto.SetResultIndex(txResultIndex);
+
+            auto type = binding.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            YQL_ENSURE(type);
+            YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Struct);
+
+            NKikimrMiniKQL::TType kikimrProto;
+
+            NYql::ExportTypeToKikimrProto(*type, kikimrProto, ctx);
+
+            auto resultMeta = queryBindingProto.MutableResultSetMeta();
+
+            for (const auto& column : kikimrProto.GetStruct().GetMember()) {
+                auto columnMeta = resultMeta->add_columns();
+                columnMeta->set_name(column.GetName());
+                ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta->mutable_type());
+            }
         }
 
         return true;

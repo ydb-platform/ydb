@@ -2,6 +2,7 @@
 #include "kqp_opt_peephole_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/host/kqp_transform.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>

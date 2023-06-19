@@ -294,6 +294,11 @@ public:
         YQL_ENSURE(ExecuteCtx.QueryResults.size() == 1);
         queryResult = std::move(ExecuteCtx.QueryResults[0]);
         queryResult.QueryPlan = queryResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
+        auto& bindings = queryResult.PreparingQuery->GetPhysicalQuery().GetResultBindings();
+        for (const auto& binding: bindings) {
+            auto meta = queryResult.ResultSetsMeta.Add();
+            meta->CopyFrom(binding.GetResultSetMeta());
+        }
     }
 
 private:

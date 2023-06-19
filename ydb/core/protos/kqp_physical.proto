@@ -42,10 +42,15 @@ message TKqpPhyParamBinding {
     }
 }
 
+message TResultSetMeta {
+    repeated Ydb.Column columns = 1;
+};
+
 message TKqpPhyResultBinding {
     oneof Type {
         TKqpPhyTxResultBinding TxResultBinding = 1;
     }
+    TResultSetMeta ResultSetMeta = 2;
 }
 
 message TKqpPhyColumnId {
@@ -384,4 +389,5 @@ message TKqpPhyQuery {
     repeated TKqpTableOp TableOps = 7;
     repeated TKqpTableInfo TableInfos = 8;
     bool HasUncommittedChangesRead = 9;
+
 }

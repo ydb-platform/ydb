@@ -672,6 +672,7 @@ public:
         TString QueryPlan;
         std::shared_ptr<google::protobuf::Arena> ProtobufArenaPtr;
         TMaybe<ui16> SqlVersion;
+        google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
     };
 
     struct TLoadTableMetadataSettings {

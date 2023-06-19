@@ -64,3 +64,9 @@
 - source_filter: "^contrib/python/(coverage|gevent|greenlet)"
   includes:
   - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h
+
+# These are stubs for actual resolving into system
+- source_filter: ^(contrib/libs/glibcasm/glibc/include/features\.h)
+  includes:
+  - stdc-predef.h: contrib/libs/glibcasm/glibc/include/stdc-predef.h
+  - gnu/stubs.h: contrib/libs/glibcasm/glibc/include/gnu/stubs.h

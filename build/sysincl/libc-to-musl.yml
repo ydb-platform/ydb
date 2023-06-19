@@ -251,3 +251,8 @@
   - values.h:               contrib/libs/musl/include/values.h
   - wait.h:                 contrib/libs/musl/include/wait.h
   - wordexp.h:              contrib/libs/musl/include/wordexp.h
+
+# musl defines its own stub for stdc-predef
+- source_filter: ^(contrib/libs/glibcasm/glibc/include/features\.h)
+  includes:
+  - stdc-predef.h: contrib/libs/musl/include/stdc-predef.h

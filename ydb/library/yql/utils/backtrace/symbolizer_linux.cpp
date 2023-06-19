@@ -39,7 +39,7 @@ class TBacktraceSymbolizer : public IBacktraceSymbolizer {
 public:
     TBacktraceSymbolizer(bool kikimrFormat) : IBacktraceSymbolizer(), KikimrFormat_(kikimrFormat) {
         dl_iterate_phdr(DlIterCallback, &DLLs_);
-        
+
     }
 
     TString SymbolizeFrame(void* ptr) override {
@@ -59,6 +59,11 @@ public:
             }
         }
 #endif
+        auto it = NYql::NBacktrace::Mapping.find(modulePath);
+        if (it != NYql::NBacktrace::Mapping.end()) {
+            modulePath = it->second;
+        }
+
         if (!KikimrFormat_) {
             return TStringBuilder() << "StackFrame: " << modulePath << " " << address << " " <<  offset << "\n";
         }

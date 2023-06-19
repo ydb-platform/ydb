@@ -1236,7 +1236,7 @@ namespace Tests {
         SendAndWaitCompletion(request, reply);
 
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         return reply;
     }
@@ -1353,7 +1353,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
@@ -1370,7 +1370,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
@@ -1836,7 +1836,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         auto msgStatus = WaitCompletion(descr.GetCreateTxId(), descr.GetSchemeshardId(), descr.GetPathId(), reply, timeout);
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
@@ -1853,7 +1853,7 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
 
-        Cerr << "TClient::Ls response: " << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cerr << "TClient::Ls response: " << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
     }
@@ -2008,7 +2008,7 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(readRequest, reply);
 
 #ifndef NDEBUG
-        Cerr << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cerr << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
@@ -2039,7 +2039,7 @@ namespace Tests {
         NBus::EMessageStatus msgStatus = SendWhenReady(deleteRequest, replyDelete);
 
 #ifndef NDEBUG
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(replyDelete.Get()) << Endl;
+        Cout << PrintToString<NMsgBusProxy::TBusResponse>(replyDelete.Get()) << Endl;
 #endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &responseDelete = dynamic_cast<NMsgBusProxy::TBusResponse *>(replyDelete.Get())->Record;

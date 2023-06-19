@@ -95,6 +95,7 @@ namespace Tests {
 
         ui16 Port;
         ui16 GrpcPort = 0;
+        int GrpcMaxMessageSize = 0;  // 0 - default (4_MB), -1 - no limit
         NKikimrProto::TAuthConfig AuthConfig;
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
@@ -141,6 +142,7 @@ namespace Tests {
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
 
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
+        TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
@@ -486,7 +488,7 @@ namespace Tests {
         THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
 
     protected:
-        TString PrintResult(const ::google::protobuf::Message& msg, size_t maxSz = 1000) {
+        TString PrintToString(const ::google::protobuf::Message& msg, size_t maxSz = 1000) {
             TString s;
             ::google::protobuf::TextFormat::PrintToString(msg, &s);
             if (s.size() > maxSz) {
@@ -497,9 +499,9 @@ namespace Tests {
         }
 
         template <class TMsg>
-        TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {
-            auto res = dynamic_cast<TMsg*>(msg);
-            return PrintResult(res->Record, maxSz);
+        TString PrintToString(const NBus::TBusMessage* msg, size_t maxSz = 1000) {
+            auto res = dynamic_cast<const TMsg*>(msg);
+            return PrintToString(res->Record, maxSz);
         }
 
         // Waits for kikimr server to become ready

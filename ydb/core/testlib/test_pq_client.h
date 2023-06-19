@@ -459,11 +459,6 @@ struct TRequestDescribePQ {
     }
 };
 
-enum class ETransport {
-    MsgBus,
-    GRpc
-};
-
 struct TPQTestClusterInfo {
     TString Balancer;
     bool Enabled;
@@ -487,9 +482,10 @@ private:
     const ui16 GRpcPort;
     NClient::TKikimr Kikimr;
     THolder<NYdb::TDriver> Driver;
+    std::unique_ptr<NKikimrClient::TGRpcServer::Stub> Stub;
+
     ui64 TopicsVersion = 0;
     bool UseConfigTables = true;
-
 public:
     void RunYqlSchemeQuery(TString query, bool expectSuccess = true) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
@@ -527,21 +523,29 @@ public:
     }
 
 
-    TFlatMsgBusPQClient(
-            const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing()
-    )
+    TFlatMsgBusPQClient(const Tests::TServerSettings& settings, ui16 grpc, TMaybe<TString> databaseName = Nothing())
         : TFlatMsgBusClient(settings)
         , Settings(settings)
         , GRpcPort(grpc)
         , Kikimr(GetClientConfig())
     {
+        TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
         auto driverConfig = NYdb::TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << GRpcPort)
-                .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
-        if (databaseName) {
+            .SetEndpoint(endpoint)
+            .SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        if (databaseName) 
             driverConfig.SetDatabase(*databaseName);
-        }
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
+
+        grpc::ChannelArguments args;
+        if (settings.GrpcMaxMessageSize != 0)
+        {
+            args.SetMaxReceiveMessageSize(settings.GrpcMaxMessageSize);
+            args.SetMaxSendMessageSize(settings.GrpcMaxMessageSize);
+        }
+        auto channel = grpc::CreateCustomChannel(endpoint, grpc::InsecureChannelCredentials(), args);
+
+        Stub = NKikimrClient::TGRpcServer::NewStub(channel);
     }
 
     ~TFlatMsgBusPQClient() {
@@ -735,20 +739,7 @@ public:
         NKikimrClient::TPersQueueRequest request;
         request.MutableMetaRequest()->MutableCmdGetTopicMetadata()->AddTopic(name);
 
-        Cerr << "RequestTopicMetadata request: " << name << " to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << Endl;
-
-        NKikimrClient::TResponse response;
-        auto channel = grpc::CreateChannel("localhost:" + ToString(GRpcPort), grpc::InsecureChannelCredentials());
-        auto stub(NKikimrClient::TGRpcServer::NewStub(channel));
-        grpc::ClientContext context;
-        auto status = stub->PersQueueRequest(&context, request, &response);
-
-        Cerr << "RequestTopicMetadata response: " << PrintResult(response) << Endl;
-
-        UNIT_ASSERT(status.ok());
-        UNIT_ASSERT(response.HasErrorCode());
-
-        return response;
+        return CallPersQueueGRPC(request);
     }
 
     ui32 GetTopicVersionFromMetadata(const TString& name, ui64 cacheSize = 0)
@@ -819,19 +810,20 @@ public:
         return response.GetErrorCode() == (ui32)NPersQueue::NErrorCode::UNKNOWN_TOPIC;
     }
 
+    NKikimrClient::TResponse CallPersQueueGRPC(const NKikimrClient::TPersQueueRequest& request, ui64 maxPrintSize = 1000) {
+        Cerr << "CallPersQueueGRPC request to " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
+             << PrintToString(request, maxPrintSize) << Endl;
 
-    const NMsgBusProxy::TBusResponse* SendAndGetReply(TAutoPtr<NMsgBusProxy::TBusPersQueue> request,
-            TAutoPtr<NBus::TBusMessage>& reply, ui64 maxPrintSize = 0) {
-        NBus::EMessageStatus status = SyncCall(request, reply);
-        TString msgStr;
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
-        if (maxPrintSize) {
-            msgStr = PrintResult<NMsgBusProxy::TBusResponse>(reply.Get(), maxPrintSize);
-        } else {
-            msgStr = PrintResult<NMsgBusProxy::TBusResponse>(reply.Get());
-        }
-        Cerr << msgStr << Endl;
-        return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get());
+        NKikimrClient::TResponse response;
+        grpc::ClientContext context;
+        grpc::Status status = Stub->PersQueueRequest(&context, request, &response);
+
+        UNIT_ASSERT_C(status.ok(), status.error_message());
+        UNIT_ASSERT(response.HasErrorCode());
+
+        Cerr << "CallPersQueueGRPC response:\n" << PrintToString(response, maxPrintSize) << Endl;
+
+        return response;
     }
 
     void CreateConsumer(const TString& oldName) {
@@ -902,18 +894,12 @@ public:
         } while (true);
     }
 
-    void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true
-    ) {
+    void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true) {
         const TInstant start = TInstant::Now();
 
-        THolder<NMsgBusProxy::TBusPersQueue> request = createRequest.GetRequest();
-
         ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request, reply);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
-                                   TStringBuilder() << "proxy failure: " << response->Record.DebugString());
+
+        CallPersQueueGRPC(createRequest.GetRequest()->Record);
 
         AddTopic(createRequest.Topic);
         while (doWait && GetTopicVersionFromPath(createRequest.Topic) != prevVersion + 1) {
@@ -976,15 +962,11 @@ public:
     ) {
         Y_VERIFY(name.StartsWith("rt3."));
         TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
-        THolder<NMsgBusProxy::TBusPersQueue> request = requestDescr.GetRequest();
+        THolder<NMsgBusProxy::TBusPersQueue> alterRequest = requestDescr.GetRequest();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(name);
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
-                                   response->Record.DebugString().c_str());
+        CallPersQueueGRPC(alterRequest->Record);
 
         const TInstant start = TInstant::Now();
         AlterTopic();
@@ -1013,13 +995,9 @@ public:
     ) {
 
         Y_VERIFY(name.StartsWith("rt3."));
-        THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDeletePQ{name}.GetRequest();
+        THolder<NMsgBusProxy::TBusPersQueue> deleteRequest = TRequestDeletePQ{name}.GetRequest();
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)expectedStatus,
-                                   "proxy failure");
+        CallPersQueueGRPC(deleteRequest->Record);
 
         // wait for drop completion
         if (expectedStatus == NPersQueue::NErrorCode::OK) {
@@ -1042,52 +1020,37 @@ public:
         }
     }
 
-    TString GetOwnership(const TRequestGetOwnership& getOwnership,
-                   NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK) {
-
-        THolder<NMsgBusProxy::TBusPersQueue> request = getOwnership.GetRequest();
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), expectedStatus,
-                                   "proxy failure");
+    TString GetOwnership(const TRequestGetOwnership& getOwnership, NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK) {
+        auto response = CallPersQueueGRPC(getOwnership.GetRequest()->Record);
 
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT_VALUES_EQUAL_C((ui32)response->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK,
-                                       "write failure");
-            return response->Record.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+            UNIT_ASSERT_VALUES_EQUAL_C((ui32)response.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK, "write failure");
+            return response.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
         }
         return "";
     }
 
-    void ChooseProxy(ETransport transport = ETransport::MsgBus) {
-        THolder<NMsgBusProxy::TBusChooseProxy> request = MakeHolder<NMsgBusProxy::TBusChooseProxy>();
+    void ChooseProxy() {
+        NKikimrClient::TChooseProxyRequest request;
         NKikimrClient::TResponse response;
 
-        if (transport == ETransport::GRpc) {
-            auto channel = grpc::CreateChannel("localhost:"+ToString(GRpcPort), grpc::InsecureChannelCredentials());
-            auto stub(NKikimrClient::TGRpcServer::NewStub(channel));
-            grpc::ClientContext context;
-            auto status = stub->ChooseProxy(&context, request->Record, &response);
+        Cerr << "ChooseProxy request to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
+                << PrintToString(request) << Endl;
 
-            UNIT_ASSERT(status.ok());
-        } else {
-            Y_FAIL("not allowed");
-        }
+        grpc::ClientContext context;
+        auto status = Stub->ChooseProxy(&context, request, &response);
 
-        Cerr << response << "\n";
+        Cerr << "ChooseProxy response:\n" << PrintToString(response) << Endl;
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK,
-                                   "proxy failure");
+        UNIT_ASSERT_C(status.ok(), status.error_message());
+ 
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK, "proxy failure");
     }
 
 
     void WriteToPQ(
             const TRequestWritePQ& writeRequest, const TString& data,
             const TString& ticket = "",
-            ETransport transport = ETransport::MsgBus,
             NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
             NMsgBusProxy::EResponseStatus expectedOwnerStatus = NMsgBusProxy::MSTATUS_OK
     ) {
@@ -1095,27 +1058,11 @@ public:
         TString cookie = GetOwnership({writeRequest.Topic, writeRequest.Partition}, expectedOwnerStatus);
 
         THolder<NMsgBusProxy::TBusPersQueue> request = writeRequest.GetRequest(data, cookie);
-        if (!ticket.empty()) {
+        if (!ticket.empty()) 
             request.Get()->Record.SetTicket(ticket);
-        }
-        NKikimrClient::TResponse response;
 
-        if (transport == ETransport::GRpc) {
-            auto channel = grpc::CreateChannel("localhost:"+ToString(GRpcPort), grpc::InsecureChannelCredentials());
-            auto stub(NKikimrClient::TGRpcServer::NewStub(channel));
-            grpc::ClientContext context;
-            auto status = stub->PersQueueRequest(&context, request->Record, &response);
+        auto response = CallPersQueueGRPC(request->Record);
 
-            UNIT_ASSERT(status.ok());
-        } else {
-            TAutoPtr<NBus::TBusMessage> reply;
-            const NMsgBusProxy::TBusResponse* busResponse = SendAndGetReply(request.Release(), reply);
-            UNIT_ASSERT(busResponse);
-
-            response.CopyFrom(busResponse->Record);
-        }
-
-        Cerr << response << "\n";
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), expectedStatus,
                                    "proxy failure");
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
@@ -1126,10 +1073,9 @@ public:
 
     void WriteToPQ(const TString& topic, ui32 partition, const TString& sourceId, const ui64 seqNo, const TString& data,
                 const TString& ticket = "",
-                ETransport transport = ETransport::MsgBus,
                 NMsgBusProxy::EResponseStatus expectedStatus = NMsgBusProxy::MSTATUS_OK,
                 NMsgBusProxy::EResponseStatus expectedOwnerStatus = NMsgBusProxy::MSTATUS_OK) {
-        WriteToPQ({topic, partition, sourceId, seqNo}, data, ticket, transport, expectedStatus, expectedOwnerStatus);
+        WriteToPQ({topic, partition, sourceId, seqNo}, data, ticket, expectedStatus, expectedOwnerStatus);
     }
 
     struct TReadDebugInfo {
@@ -1149,22 +1095,20 @@ public:
             request.Get()->Record.SetTicket(ticket);
         }
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
+        auto response = CallPersQueueGRPC(request->Record);
 
-        auto status = response->Record.GetStatus();
-        auto errorCode = response->Record.GetErrorCode();
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, expectedStatus, response->Record.GetErrorReason());
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)errorCode, (ui32)expectedError, response->Record.GetErrorReason());
+        auto status = response.GetStatus();
+        auto errorCode = response.GetErrorCode();
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, expectedStatus, response.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C((ui32)errorCode, (ui32)expectedError, response.GetErrorReason());
 
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
-            UNIT_ASSERT(response->Record.GetPartitionResponse().HasCmdReadResult());
-            if (readCount > 0) UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
+            UNIT_ASSERT(response.GetPartitionResponse().HasCmdReadResult());
+            if (readCount > 0) UNIT_ASSERT_VALUES_EQUAL(response.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
         }
 
         TReadDebugInfo info;
-        auto result = response->Record.GetPartitionResponse().GetCmdReadResult();
+        auto result = response.GetPartitionResponse().GetCmdReadResult();
         if (result.HasBlobsFromDisk())
             info.BlobsFromDisk = result.GetBlobsFromDisk();
         if (result.HasBlobsFromCache())
@@ -1193,14 +1137,12 @@ public:
             request.Get()->Record.SetTicket(ticket);
         }
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
+        auto response = CallPersQueueGRPC(request->Record);
 
-        auto status = response->Record.GetStatus();
-        auto errorCode = response->Record.GetErrorCode();
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, expectedStatus, response->Record.GetErrorReason());
-        UNIT_ASSERT_VALUES_EQUAL_C((ui32)errorCode, (ui32)expectedError, response->Record.GetErrorReason());
+        auto status = response.GetStatus();
+        auto errorCode = response.GetErrorCode();
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, expectedStatus, response.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL_C((ui32)errorCode, (ui32)expectedError, response.GetErrorReason());
     }
 
     void SetClientOffsetPQ(const TString& topic, ui32 partition, ui64 offset, const TString& ticket = "",
@@ -1211,24 +1153,21 @@ public:
 
     void FetchRequestPQ(const TVector<FetchPartInfo>& fetchParts, ui32 maxBytes, ui32 waitMs) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TFetchRequestPQ().GetRequest(fetchParts, maxBytes, waitMs);
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
+        CallPersQueueGRPC(request->Record);
     }
 
     void GetPartOffset(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts, ui32 resCount, ui32 hasClientOffset, bool ok) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartOffsets().GetRequest(topicsAndParts);
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
+        auto response = CallPersQueueGRPC(request->Record);
+
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
                                    "proxy failure");
 
         if (!ok)
             return;
 
-        auto res = response->Record.GetMetaResponse().GetCmdGetPartitionOffsetsResult();
+        auto res = response.GetMetaResponse().GetCmdGetPartitionOffsetsResult();
         ui32 count = 0;
         ui32 clientOffsetCount = 0;
         for (ui32 i = 0; i < res.TopicResultSize(); ++i) {
@@ -1247,11 +1186,9 @@ public:
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetClientInfo().GetRequest(topics, user);
         Cerr << "Request: " << request->Record << Endl;
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-        Cerr << "Response: " << response->Record << "\n";
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
+        auto response = CallPersQueueGRPC(request->Record);
+
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
                                    "proxy failure");
         THashSet<TString> good;
         THashSet<TString> bad;
@@ -1263,7 +1200,7 @@ public:
                 good.insert(t);
             }
         }
-        for (auto& tt : response->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
+        for (auto& tt : response.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult()) {
             const auto& topic = tt.GetTopic();
             if (bad.contains(topic)) {
                 UNIT_ASSERT(tt.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
@@ -1271,22 +1208,21 @@ public:
                 UNIT_ASSERT(tt.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK);
             }
         }
-        return response->Record;
+        return response;
     }
 
 
     void GetPartStatus(const TVector<std::pair<TString, TVector<ui32>>>& topicsAndParts, ui32 resCount, bool ok) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartStatus().GetRequest(topicsAndParts);
 
-        TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
+        auto response = CallPersQueueGRPC(request->Record);
+
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
                                    "proxy failure");
         if (!ok)
             return;
 
-        auto res = response->Record.GetMetaResponse().GetCmdGetPartitionStatusResult();
+        auto res = response.GetMetaResponse().GetCmdGetPartitionStatusResult();
         ui32 count = 0;
         for (ui32 i = 0; i < res.TopicResultSize(); ++i) {
             auto t = res.GetTopicResult(i);
@@ -1306,20 +1242,19 @@ public:
 
             THolder<NMsgBusProxy::TBusPersQueue> request = TRequestGetPartLocations().GetRequest(topicsAndParts);
 
-            TAutoPtr<NBus::TBusMessage> reply;
-            const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-            UNIT_ASSERT(response);
-            if (response->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+            auto response = CallPersQueueGRPC(request->Record);
+
+            if (response.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
                 doRetry = true;
                 continue;
             }
-            UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
+            UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), ok ? NMsgBusProxy::MSTATUS_OK : NMsgBusProxy::MSTATUS_ERROR,
                                        "proxy failure");
 
             if (!ok)
                 return {};
 
-            auto res = response->Record.GetMetaResponse().GetCmdGetPartitionLocationsResult();
+            auto res = response.GetMetaResponse().GetCmdGetPartitionLocationsResult();
 
             for (ui32 i = 0; i < res.TopicResultSize(); ++i) {
                 auto t = res.GetTopicResult(i);
@@ -1347,17 +1282,17 @@ public:
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest(topics);
 
         TAutoPtr<NBus::TBusMessage> reply;
-        const NMsgBusProxy::TBusResponse* response = SendAndGetReply(request.Release(), reply);
-        UNIT_ASSERT(response);
-        if ((NMsgBusProxy::EResponseStatus)response->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+        auto response = CallPersQueueGRPC(request->Record);
+
+        if ((NMsgBusProxy::EResponseStatus)response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
             UNIT_ASSERT(error);
             return {};
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK,
+        UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK,
                                    "proxy failure");
 
-        auto res = response->Record.GetMetaResponse().GetCmdGetTopicMetadataResult();
+        auto res = response.GetMetaResponse().GetCmdGetTopicMetadataResult();
 
         UNIT_ASSERT(topics.size() <= res.TopicInfoSize());
         for (ui32 i = 0; i < res.TopicInfoSize(); ++i) {

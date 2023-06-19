@@ -1865,8 +1865,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(status.ok());
         }
 
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, "valuevaluevalue1", "", ETransport::GRpc);
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, "valuevaluevalue1", "", ETransport::GRpc);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 1, "valuevaluevalue1", "");
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, "valuevaluevalue1", "");
     }
 
     Y_UNIT_TEST(WriteExistingBigValue) {
@@ -1890,10 +1890,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.EnableLogs({ NKikimrServices::PERSQUEUE });
 
         // empty data and sourceId
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
-        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_OK);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "", "", NMsgBusProxy::MSTATUS_ERROR);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "", "", NMsgBusProxy::MSTATUS_ERROR);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "a", "", NMsgBusProxy::MSTATUS_ERROR);
+        server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "a", "", NMsgBusProxy::MSTATUS_OK);
     }
 
 
@@ -1906,7 +1906,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         server.AnnoyingClient->WriteToPQ(
                 DEFAULT_TOPIC_NAME, 100500, "abacaba", 1, "valuevaluevalue1", "",
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR
+                NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR
         );
     }
 
@@ -1917,7 +1917,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         server.AnnoyingClient->WriteToPQ(
                 DEFAULT_TOPIC_NAME + "000", 1, "abacaba", 1, "valuevaluevalue1", "",
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR
+                NMsgBusProxy::MSTATUS_ERROR, NMsgBusProxy::MSTATUS_ERROR
         );
     }
 
@@ -1946,7 +1946,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         server.AnnoyingClient->WriteToPQ(
                 DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1", "",
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR
+                NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR
         );
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -1958,7 +1958,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 5, "abacaba", 1, "valuevaluevalue1");
         server.AnnoyingClient->WriteToPQ(
                 DEFAULT_TOPIC_NAME, 15, "abacaba", 1, "valuevaluevalue1", "",
-                ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR
+                NMsgBusProxy::MSTATUS_ERROR,  NMsgBusProxy::MSTATUS_ERROR
         );
 
         server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 20);
@@ -1990,7 +1990,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
 
     Y_UNIT_TEST(BigRead) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(24_MB));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400, 20000000, "user", 2000000);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
@@ -1999,7 +1999,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
-        // trying to read small PQ messages in a big messagebus event
+        // trying to read small PQ messages in a big gRPC event
         auto info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
         UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromCache, 4);
@@ -2016,7 +2016,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     // expects that L2 size is 32Mb
     Y_UNIT_TEST(Cache) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(18_MB));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
@@ -2047,7 +2047,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(CacheHead) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
+        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(16_MB));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6_MB, 86400);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });

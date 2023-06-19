@@ -55,7 +55,7 @@ public:
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(request, reply);
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
-        Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
+        Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
         return dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
     }
 

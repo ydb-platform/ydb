@@ -108,13 +108,13 @@ message Action {
 }
 
 message ActionGroup {
-    repeated Action actions = 1;
+    repeated Action actions = 1 [(size).ge = 1];
 }
 
 message CreateMaintenanceTaskRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     MaintenanceTaskOptions task_options = 2;
-    repeated ActionGroup action_groups = 3;
+    repeated ActionGroup action_groups = 3 [(size).ge = 1];
 }
 
 message RefreshMaintenanceTaskRequest {
@@ -222,7 +222,7 @@ message ManageMaintenanceTaskResponse {
 
 message CompleteActionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    repeated ActionUid action_uids = 2;
+    repeated ActionUid action_uids = 2 [(size).ge = 1];
 }
 
 message ManageActionResult {

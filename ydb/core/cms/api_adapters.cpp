@@ -108,9 +108,11 @@ protected:
         auto ev = MakeHolder<TEvResponse>();
         ev->Record.SetStatus(code);
 
-        auto& issue = *ev->Record.AddIssues();
-        issue.set_severity(NYql::TSeverityIds::S_ERROR);
-        issue.set_message(error);
+        if (error) {
+            auto& issue = *ev->Record.AddIssues();
+            issue.set_severity(NYql::TSeverityIds::S_ERROR);
+            issue.set_message(error);
+        }
 
         Reply(std::move(ev));
     }
@@ -614,44 +616,65 @@ class TDropMaintenanceTask: public TAdapterActor<
         TEvCms::TEvDropMaintenanceTaskRequest,
         TEvCms::TEvManageMaintenanceTaskResponse>
 {
+    void DropRequest(const TTaskInfo& task) {
+        auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
+        cmsRequest->Record.SetUser(task.Owner);
+        cmsRequest->Record.SetRequestId(task.RequestId);
+        cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::REJECT);
+
+        Send(CmsActorId, std::move(cmsRequest));
+    }
+
+    void DropPermissions(const TTaskInfo& task) {
+        auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
+        cmsRequest->Record.SetUser(task.Owner);
+        cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
+
+        for (const auto& id : task.Permissions) {
+            cmsRequest->Record.AddPermissions(id);
+        }
+
+        Send(CmsActorId, std::move(cmsRequest));
+    }
+
 public:
     using TBase::TBase;
 
     void Bootstrap() {
         auto cmsState = GetCmsState();
 
-        auto it = cmsState->MaintenanceTasks.find(Request->Get()->Record.GetRequest().task_uid());
+        auto it = cmsState->MaintenanceTasks.find(GetTaskUid());
         if (it == cmsState->MaintenanceTasks.end()) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Task not found");
         }
 
         const auto& task = it->second;
         if (cmsState->ScheduledRequests.contains(task.RequestId)) {
-            auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
-            cmsRequest->Record.SetUser(task.Owner);
-            cmsRequest->Record.SetRequestId(task.RequestId);
-            cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::REJECT);
-
-            Send(CmsActorId, std::move(cmsRequest));
+            DropRequest(task);
         } else {
-            auto cmsRequest = MakeHolder<TEvCms::TEvManagePermissionRequest>();
-            cmsRequest->Record.SetUser(task.Owner);
-            cmsRequest->Record.SetCommand(NKikimrCms::TManagePermissionRequest::REJECT);
-
-            for (const auto& id : task.Permissions) {
-                cmsRequest->Record.AddPermissions(id);
-            }
-
-            Send(CmsActorId, std::move(cmsRequest));
+            DropPermissions(task);
         }
 
         Become(&TThis::StateWork);
     }
 
+    const TString& GetTaskUid() const {
+        return Request->Get()->Record.GetRequest().task_uid();
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvCms::TEvManageRequestResponse, Handle<TEvCms::TEvManageRequestResponse>);
+            hFunc(TEvCms::TEvManageRequestResponse, HandleDropRequest);
             hFunc(TEvCms::TEvManagePermissionResponse, Handle<TEvCms::TEvManagePermissionResponse>);
+        }
+    }
+
+    void HandleDropRequest(TEvCms::TEvManageRequestResponse::TPtr& ev) {
+        auto cmsState = GetCmsState();
+        if (cmsState->MaintenanceTasks.contains(GetTaskUid())) {
+            DropPermissions(cmsState->MaintenanceTasks.at(GetTaskUid()));
+        } else {
+            Handle<TEvCms::TEvManageRequestResponse>(ev);
         }
     }
 
@@ -661,7 +684,7 @@ public:
 
         switch (record.GetStatus().GetCode()) {
         case NKikimrCms::TStatus::OK:
-            return Reply(Ydb::StatusIds::SUCCESS, record.GetStatus().GetReason());
+            return Reply(Ydb::StatusIds::SUCCESS);
         case NKikimrCms::TStatus::WRONG_REQUEST:
             return Reply(Ydb::StatusIds::BAD_REQUEST, record.GetStatus().GetReason());
         default:

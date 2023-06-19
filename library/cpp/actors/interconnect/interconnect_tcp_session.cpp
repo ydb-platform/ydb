@@ -712,6 +712,8 @@ namespace NActors {
 
     void TInterconnectSessionTCP::SetForcePacketTimestamp(TDuration period) {
         if (period != TDuration::Max()) {
+            // randomize period a bit
+            period = TDuration::FromValue(period.GetValue() - RandomNumber<ui64>(period.GetValue() / 10));
             const TMonotonic when = TActivationContext::Monotonic() + period;
             if (when < ForcePacketTimestamp) {
                 ForcePacketTimestamp = when;

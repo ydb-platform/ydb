@@ -16,7 +16,6 @@ def create_request(args, storage_pool):
     request = common.kikimr_bsconfig.TConfigRequest(Rollback=args.dry_run)
     cmd = request.Command.add()
     cmd.DefineStoragePool.CopyFrom(storage_pool)
-    cmd.DefineStoragePool.ClearField("Geometry")
     cmd.DefineStoragePool.NumGroups += args.groups
     cmd = request.Command.add()
     cmd.QueryBaseConfig.CopyFrom(common.kikimr_bsconfig.TQueryBaseConfig())

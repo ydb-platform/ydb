@@ -496,7 +496,7 @@ private:
         bool HasValues_ = false;
         TVector<char> AggStates_;
 
-        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams<IBlockAggregatorCombineAll>>& params, TComputationContext& ctx)
+        TState(TMemoryUsageInfo* memInfo, size_t width, std::optional<ui32>, const TVector<TAggParams<IBlockAggregatorCombineAll>>& params, TComputationContext& ctx)
             : TComputationValue(memInfo)
             , Values_(width)
             , ValuePointers_(width)
@@ -649,8 +649,8 @@ public:
         , OutputWidth_(keys.size() + aggsParams.size() + 1)
         , Keys_(keys)
         , MaxBlockLen_(maxBlockLen)
-        , KeyLength_(keyLength)
         , AggsParams_(std::move(aggsParams))
+        , KeyLength_(keyLength)
         , StreamIndex_(streamIndex)
         , Streams_(std::move(streams))
     {
@@ -847,7 +847,7 @@ private:
         typename TFixedMapImpl::iterator HashFixedMapIt_;
         TPagedArena Arena_;
 
-        TState(TMemoryUsageInfo* memInfo, ui32 keyLength, size_t width, std::optional<ui32> filterColumn, const TVector<TAggParams<TAggregator>>& params,
+        TState(TMemoryUsageInfo* memInfo, ui32 keyLength, size_t width, std::optional<ui32>, const TVector<TAggParams<TAggregator>>& params,
             const TVector<TVector<ui32>>& streams, const std::vector<TKeyParams>& keys, size_t maxBlockLen, TComputationContext& ctx)
             : TBase(memInfo)
             , Values_(width)
@@ -869,7 +869,7 @@ private:
 
             if constexpr (Many) {
                 TotalStateSize_ += streams.size();
-            } 
+            }
 
             for (const auto& p : params) {
                 Aggs_.emplace_back(p.Prepared_->Make(ctx));
@@ -889,7 +889,7 @@ private:
                 } else {
                     HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>>(TotalStateSize_, hasher, equal);
                 }
-            } 
+            }
         }
 
         void PrepareAggBuilders(size_t maxBlockSize) {
@@ -1452,7 +1452,7 @@ IComputationNode* WrapBlockCombineAll(TCallable& callable, const TComputationNod
 
     auto aggsVal = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     TVector<TAggParams<IBlockAggregatorCombineAll>> aggsParams;
-    ui32 totalStateSize = FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false, returnWideComponents, 0);
+    FillAggParams<IBlockAggregatorCombineAll>(aggsVal, tupleType, filterColumn, aggsParams, ctx.Env, false, false, returnWideComponents, 0);
     return new TBlockCombineAllWrapper(ctx.Mutables, wideFlow, filterColumn, tupleType->GetElementsCount(), std::move(aggsParams));
 }
 

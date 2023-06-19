@@ -72,7 +72,7 @@ IComputationNode* WrapSourceOf(TCallable& callable, const TComputationNodeFactor
     THROW yexception() << "Expected flow or stream.";
 }
 
-IComputationNode* WrapSource(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapSource(TCallable& callable, const TComputationNodeFactoryContext&) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args.");
     MKQL_ENSURE(!GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType())), "Expected zero width of output flow.");
     return new TSourceWrapper;

@@ -17,7 +17,7 @@ public:
         : TBaseComputation(data)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx, const NUdf::TUnboxedValuePod& value) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
         if (IsOptional && !value)
             return NUdf::TUnboxedValuePod();
 
@@ -46,7 +46,7 @@ public:
         : TBaseComputation(data)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx, const NUdf::TUnboxedValuePod& value) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
         if (IsOptional && !value)
             return NUdf::TUnboxedValuePod();
 

@@ -457,8 +457,6 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     ui64 keyIntColumnsNum = std::count_if(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo a) { return (a.IsKeyColumn && !a.IsString && !a.IsPgType);});
     ui64 keyIColumnsNum = std::count_if(ColumnsPackInfo.begin(), ColumnsPackInfo.end(), [](TColumnDataPackInfo a) { return (a.IsKeyColumn && a.IsIType);});
     ui64 keyStrColumnsNum = nKeyColumns - keyIntColumnsNum - keyIColumnsNum;
-    ui64 dataIntColumnsNum = totalIntColumnsNum - keyIntColumnsNum;
-    ui64 dataStrColumnsNum = totalStrColumnsNum - keyStrColumnsNum;
 
     TotalColumnsNum = nColumns;
     TotalIntColumnsNum = totalIntColumnsNum;
@@ -542,7 +540,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
 
     PackedKeyIntColumnsNum =  (keyIntOffset + sizeof(ui64) - 1 ) / sizeof(ui64) - NullsBitmapSize;
     PackedDataIntColumnsNum = (currIntOffset + sizeof(ui64) - 1) / sizeof(ui64) - PackedKeyIntColumnsNum - NullsBitmapSize;
-  
+
     GraceJoin::TColTypeInterface * cti_p = nullptr;
 
     if (TotalIColumnsNum > 0 ) {
@@ -550,7 +548,7 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     }
 
     TablePtr = std::make_unique<GraceJoin::TTable>(
-        PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum, 
+        PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum,
         DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny );
 
 }
@@ -566,7 +564,13 @@ public:
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
         const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, const THolderFactory & holderFactory)
     :  TBase(memInfo)
-    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
+    ,   FlowLeft(flowLeft)
+    ,   FlowRight(flowRight)
+    ,   JoinKind(joinKind)
+    ,   LeftKeyColumns(leftKeyColumns)
+    ,   RightKeyColumns(rightKeyColumns)
+    ,   LeftRenames(leftRenames)
+    ,   RightRenames(rightRenames)    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both)))
     ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, holderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both)))
     ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
@@ -574,14 +578,6 @@ public:
     ,   HaveMoreLeftRows(std::make_unique<bool>(true))
     ,   HaveMoreRightRows(std::make_unique<bool>(true))
     ,   JoinedTuple(std::make_unique<std::vector<NUdf::TUnboxedValue*>>() )
-    ,   FlowLeft(flowLeft)
-    ,   FlowRight(flowRight)
-    ,   JoinKind(joinKind)
-    ,   AnyJoinSettings_(anyJoinSettings)
-    ,   LeftKeyColumns(leftKeyColumns)
-    ,   RightKeyColumns(rightKeyColumns)
-    ,   LeftRenames(leftRenames)
-    ,   RightRenames(rightRenames)
     {
         if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
@@ -593,7 +589,6 @@ private:
     IComputationWideFlowNode* const FlowRight;
 
     const EJoinKind JoinKind;
-    const EAnyJoinSettings AnyJoinSettings_;
     const std::vector<ui32> LeftKeyColumns;
     const std::vector<ui32> RightKeyColumns;
     const std::vector<ui32> LeftRenames;

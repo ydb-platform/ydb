@@ -94,7 +94,7 @@ public:
         } else {
             const auto& array = datum.array();
             auto len = array->length;
-            
+
             const ui8* filterBitmap = nullptr;
             if (filtered) {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
@@ -103,7 +103,7 @@ public:
                 filterBitmap = filterArray->template GetValues<uint8_t>(1);
             }
 
-            for (size_t i = 0; i < len; ++i) {
+            for (auto i = 0; i < len; ++i) {
                 TBlockItem curr = Reader_->GetItem(*array, i);
                 if (curr && (!filterBitmap || filterBitmap[i])) {
                     typedState = Converter_->MakeValue(curr, Ctx_.HolderFactory);
@@ -242,10 +242,8 @@ private:
 
 template <typename TTag>
 std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSome(TTupleType* tupleType, std::optional<ui32> filterColumn, ui32 argColumn) {
-    auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(argColumn));
-    const bool isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-    auto argType = blockType->GetItemType();    
-
+    const auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(argColumn));
+    const auto argType = blockType->GetItemType();
     return std::make_unique<TPreparedSomeBlockGenericAggregator<TTag>>(argType, filterColumn, argColumn);
 }
 

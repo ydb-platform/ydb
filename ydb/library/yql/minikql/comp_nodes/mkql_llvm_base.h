@@ -1,4 +1,6 @@
 #pragma once
+
+#ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Type.h>
@@ -54,5 +56,5 @@ public:
     }
 };
 
-
 }
+#endif

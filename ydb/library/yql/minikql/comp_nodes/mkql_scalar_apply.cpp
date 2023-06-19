@@ -19,7 +19,7 @@ class TScalarApplyWrapper : public TMutableComputationNode<TScalarApplyWrapper> 
 friend class TArrowNode;
 public:
     struct TAccessors {
-        TAccessors(const TVector<TType*>& argsTypes, TType* returnType, const NUdf::IPgBuilder& pgBuilder) 
+        TAccessors(const TVector<TType*>& argsTypes, TType* returnType, const NUdf::IPgBuilder& pgBuilder)
             : PgBuilder(pgBuilder)
         {
             auto returnItemType = AS_TYPE(TBlockType, returnType)->GetItemType();
@@ -44,14 +44,14 @@ public:
             : Alloc(__LOCATION__)
             , MemInfo("ScalarApply")
             , HolderFactory(Alloc.Ref(), MemInfo)
-            , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception) 
+            , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception)
             , PgBuilder(NYql::CreatePgBuilder())
             , Accessors(argsTypes, returnType, *PgBuilder)
             , ArrowMemoryPool(MakeArrowMemoryPool(Alloc.Ref()))
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
             , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(
-                nullptr, Alloc.Ref(), *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, nullptr), 
+                nullptr, Alloc.Ref(), *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, nullptr),
                 originalContext.Mutables, *ArrowMemoryPool)
         {
             Alloc.Release();
@@ -80,7 +80,7 @@ public:
             : Parent_(parent)
             , OriginalContext_(originalContext)
             , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes_))
-            , Kernel_(ConvertToInputTypes(parent->ArgsTypes_), ConvertToOutputType(parent->ReturnType_), [parent, this](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            , Kernel_(ConvertToInputTypes(parent->ArgsTypes_), ConvertToOutputType(parent->ReturnType_), [parent](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
                 auto guard = Guard(state.Alloc);
                 TVector<TDatumProvider> providers;

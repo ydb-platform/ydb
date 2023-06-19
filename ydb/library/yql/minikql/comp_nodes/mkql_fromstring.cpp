@@ -265,7 +265,6 @@ private:
     }
 
     [[noreturn]] static void Throw(const NUdf::TUnboxedValuePod data, NUdf::EDataSlot slot) {
-        const auto& ref = data.AsStringRef();
         ThrowConvertError(data.AsStringRef(), NUdf::GetDataTypeInfo(slot).Name);
     }
 

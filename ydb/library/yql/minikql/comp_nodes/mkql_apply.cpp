@@ -22,7 +22,7 @@ public:
             : Alloc(__LOCATION__)
             , MemInfo("Apply")
             , HolderFactory(Alloc.Ref(), MemInfo)
-            , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception) 
+            , ValueBuilder(HolderFactory, NUdf::EValidatePolicy::Exception)
             , Args(argsCount)
         {
             Alloc.Release();
@@ -46,7 +46,7 @@ public:
             : Parent_(parent)
             , Callable_(callable)
             , ArgsValuesDescr_(ToValueDescr(argsTypes))
-            , Kernel_(ConvertToInputTypes(argsTypes), ConvertToOutputType(returnType), [parent, this](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            , Kernel_(ConvertToInputTypes(argsTypes), ConvertToOutputType(returnType), [this](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
                 auto guard = Guard(state.Alloc);
                 Y_ENSURE(batch.values.size() == state.Args.size());
@@ -106,9 +106,9 @@ public:
         if (UsedArgs != CallableType->GetArgumentsCount()) {
             return {};
         }
-        
+
         std::shared_ptr<arrow::DataType> t;
-        if (!CallableType->GetReturnType()->IsBlock() || 
+        if (!CallableType->GetReturnType()->IsBlock() ||
             !ConvertArrowType(AS_TYPE(TBlockType, CallableType->GetReturnType())->GetItemType(), t)) {
             return {};
         }

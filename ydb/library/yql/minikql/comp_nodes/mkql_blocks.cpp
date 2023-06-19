@@ -204,7 +204,7 @@ private:
                 if (Arrays_.empty()) {
                     return {};
                 }
-                if (Index_ < Arrays_.front()->length) {
+                if (Index_ < ui64(Arrays_.front()->length)) {
                     break;
                 }
                 Index_ = 0;
@@ -348,7 +348,7 @@ public:
     class TArrowNode : public IArrowKernelComputationNode {
     public:
         TArrowNode(const arrow::Datum& datum)
-            : Kernel_({}, datum.scalar()->type, [datum](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            : Kernel_({}, datum.scalar()->type, [datum](arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum* res) {
                 *res = datum;
                 return arrow::Status::OK();
             })

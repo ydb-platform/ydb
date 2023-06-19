@@ -73,8 +73,6 @@ using TCompareFunc = std::function<int(const bool*, const NUdf::TUnboxedValuePod
 template <bool HasCount>
 class TState : public TComputationValue<TState<HasCount>> {
 using TBase = TComputationValue<TState<HasCount>>;
-public:
-using TLLVMBase = TLLVMFieldsStructure<TComputationValue<TState<HasCount>>>;
 private:
     using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
@@ -126,7 +124,7 @@ public:
         return Fields.data();
     }
 
-    bool Push() {
+    bool Put() {
         if constexpr (!HasCount) {
             ResetFields();
             return true;
@@ -210,9 +208,9 @@ private:
 
 #ifndef MKQL_DISABLE_CODEGEN
 template <bool HasCount>
-class TLLVMFieldsStructureState: public TState<HasCount>::TLLVMBase {
+class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState<HasCount>>> {
 private:
-    using TBase = typename TState<HasCount>::TLLVMBase;
+    using TBase = TLLVMFieldsStructure<TComputationValue<TState<HasCount>>>;
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
@@ -288,7 +286,7 @@ public:
             while (EFetchResult::Finish != ptr->InputStatus) {
                 switch (ptr->InputStatus = Flow->FetchValues(ctx, ptr->GetFields())) {
                     case EFetchResult::One:
-                        ptr->Push();
+                        ptr->Put();
                         continue;
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -443,7 +441,7 @@ public:
             }
 
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::Push));
+            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState<HasCount>::Put));
             const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto pushPtr = CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block);
             const auto accepted = CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block);

@@ -330,11 +330,9 @@ private:
     public:
         using TBase = TComputationValue<TSubStream>;
 
-        TSubStream(TMemoryUsageInfo* memInfo, const TStatePtr& state, const NUdf::TUnboxedValue& stream, IComputationExternalNode* itemArg, IComputationNode* key, IComputationExternalNode* keyArg, IComputationNode* chop, TComputationContext& ctx)
+        TSubStream(TMemoryUsageInfo* memInfo, const TStatePtr& state, const NUdf::TUnboxedValue& stream, IComputationExternalNode* itemArg, IComputationNode* chop, TComputationContext& ctx)
             : TBase(memInfo), State(state), Stream(stream)
             , ItemArg(itemArg)
-            , Key(key)
-            , KeyArg(keyArg)
             , Chop(chop)
             , Ctx(ctx)
         {}
@@ -371,8 +369,6 @@ private:
         const NUdf::TUnboxedValue Stream;
 
         IComputationExternalNode *const ItemArg;
-        IComputationNode *const Key;
-        IComputationExternalNode *const KeyArg;
         IComputationNode *const Chop;
 
         TComputationContext& Ctx;
@@ -381,7 +377,7 @@ private:
     class TMainStream : public TComputationValue<TMainStream> {
     public:
         TMainStream(TMemoryUsageInfo* memInfo, TStatePtr&& state, NUdf::TUnboxedValue&& stream, const IComputationExternalNode *itemArg, const IComputationNode *key, const IComputationExternalNode *keyArg, const IComputationNode *chop, const IComputationExternalNode *input, const IComputationNode *output, TComputationContext& ctx)
-            : TComputationValue(memInfo), State(std::move(state)), ItemArg(itemArg), Key(key), KeyArg(keyArg), Chop(chop), Input(input), Output(output), InputStream(std::move(stream)), Ctx(ctx)
+            : TComputationValue(memInfo), State(std::move(state)), ItemArg(itemArg), Key(key), Chop(chop), KeyArg(keyArg), Input(input), Output(output), InputStream(std::move(stream)), Ctx(ctx)
         {}
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -507,7 +503,7 @@ public:
             Input->SetValue(ctx, ctx.HolderFactory.Create<TCodegenInput>(InputPtr, stream, &ctx, sharedState));
         else
 #endif
-            Input->SetValue(ctx, ctx.HolderFactory.Create<TSubStream>(sharedState, stream, ItemArg, Key, KeyArg, Chop, ctx));
+            Input->SetValue(ctx, ctx.HolderFactory.Create<TSubStream>(sharedState, stream, ItemArg, Chop, ctx));
 
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && OutputPtr)

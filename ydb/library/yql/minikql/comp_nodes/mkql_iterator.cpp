@@ -178,7 +178,7 @@ private:
         this->DependsOn(Flow);
     }
 
-    [[noinline]] [[noreturn]] static void Throw() {
+    [[noreturn]] static void Throw() {
         UdfTerminate("Unexpected flow status.");
     }
 

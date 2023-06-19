@@ -248,7 +248,7 @@ protected:
             node->SetOwner(this);
         }
     }
-  
+
     const EValueRepresentation RepresentationKind;
 private:
     bool IsTemporaryValue() const final {
@@ -473,7 +473,7 @@ template <typename TDerived, bool SerializableState = false>
 class TStatefulFlowComputationNode: public TBaseFlowBaseComputationNode<TDerived>
 {
 protected:
-    TStatefulFlowComputationNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind, EValueRepresentation stateKind)
+    TStatefulFlowComputationNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind, EValueRepresentation stateKind = EValueRepresentation::Any)
         : TBaseFlowBaseComputationNode<TDerived>(source, kind), StateIndex(mutables.CurValueIndex++), StateKind(stateKind)
     {
         if constexpr (SerializableState) {
@@ -546,11 +546,10 @@ private:
 
 class TWideFlowProxyComputationNode: public TRefCountedComputationNode<IComputationWideFlowProxyNode>
 {
-protected:
+public:
     TWideFlowProxyComputationNode() = default;
-
+protected:
     TString DebugString() const final;
-
 private:
     void InitNode(TComputationContext&) const override {}
 

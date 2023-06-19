@@ -221,8 +221,7 @@ private:
             }
         }
         TTzValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, T start, T end, TStep step, ui16 TimezoneId)
-            : TimezoneId(TimezoneId)
-            , TValue(memInfo, ctx, start, end, step)
+            : TValue(memInfo, ctx, start, end, step), TimezoneId(TimezoneId)
         {
         }
     private:

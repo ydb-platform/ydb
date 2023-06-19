@@ -75,7 +75,6 @@ class TState: public TComputationValue<TState> {
         THashFunc, TEqualsFunc,
         TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod>>>;
 public:
-    using TLLVMBase = TLLVMFieldsStructure<TBase>;
     TState(TMemoryUsageInfo* memInfo, const THashFunc& hash, const TEqualsFunc& equal)
         : TBase(memInfo), States(0, hash, equal) {
         States.max_load_factor(1.2f);
@@ -123,9 +122,9 @@ private:
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
-class TLLVMFieldsStructureState: public TState::TLLVMBase {
+class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
-    using TBase = typename TState::TLLVMBase;
+    using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     llvm::PointerType* StructPtrType;
     llvm::IntegerType* StatusType;
 protected:

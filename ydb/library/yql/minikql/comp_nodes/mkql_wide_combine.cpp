@@ -151,8 +151,6 @@ struct TCombinerNodes {
 
 class TState : public TComputationValue<TState> {
     typedef TComputationValue<TState> TBase;
-public:
-    using TLLVMBase = TLLVMFieldsStructure<TComputationValue<TState>>;
 private:
     using TStates = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
     using TRow = std::vector<NUdf::TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>>;
@@ -284,9 +282,9 @@ private:
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
-class TLLVMFieldsStructureState: public TState::TLLVMBase {
+class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
-    using TBase = TState::TLLVMBase;
+    using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;

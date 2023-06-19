@@ -26,12 +26,12 @@ public:
             , State(std::move(state))
             , Switch(outSwitch)
             , UpdateState(std::move(updateState))
-            , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-            , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + State.size()))
             , SwitchItem(IsPasstrought(Switch, Items))
             , ItemsOnInit(GetPasstroughtMap(Items, InitState))
             , ItemsOnUpdate(GetPasstroughtMap(Items, UpdateState))
             , UpdateOnItems(GetPasstroughtMap(UpdateState, Items))
+            , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+            , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + State.size()))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {

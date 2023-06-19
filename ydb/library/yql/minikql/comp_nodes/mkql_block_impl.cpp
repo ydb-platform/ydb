@@ -67,7 +67,7 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arr
         case NUdf::EDataSlot::Double:
             return arrow::Datum(static_cast<double>(value.Get<double>()));
         case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Utf8: 
+        case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::Json: {
             const auto& str = value.AsStringRef();
@@ -197,7 +197,7 @@ TBlockFuncNode::TState& TBlockFuncNode::GetState(TComputationContext& ctx) const
     return *static_cast<TState*>(result.AsBoxed().Get());
 }
 
-std::unique_ptr<IArrowKernelComputationNode> TBlockFuncNode::PrepareArrowKernelComputationNode(TComputationContext& ctx) const {
+std::unique_ptr<IArrowKernelComputationNode> TBlockFuncNode::PrepareArrowKernelComputationNode(TComputationContext&) const {
     return std::make_unique<TArrowNode>(this);
 }
 

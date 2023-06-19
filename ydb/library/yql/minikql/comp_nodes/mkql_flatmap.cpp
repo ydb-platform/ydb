@@ -1386,6 +1386,7 @@ private:
 #endif
 };
 
+#ifndef MKQL_DISABLE_CODEGEN
 NUdf::TUnboxedValuePod* MyArrayAlloc(const ui64 size) {
     return TMKQLAllocator<NUdf::TUnboxedValuePod>::allocate(size);
 }
@@ -1393,7 +1394,7 @@ NUdf::TUnboxedValuePod* MyArrayAlloc(const ui64 size) {
 void MyArrayFree(const NUdf::TUnboxedValuePod *const ptr, const ui64 size) noexcept {
     TMKQLAllocator<NUdf::TUnboxedValuePod>::deallocate(ptr, size);
 }
-
+#endif
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
 class TListFlatMapWrapper : public TBothWaysCodegeneratorNode<TListFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>,
     private TBaseFlatMapWrapper<false, IsMultiRowPerItem, ResultContainerOpt> {

@@ -124,12 +124,12 @@ public:
                             auto datum = TArrowBlock::From(s.Values_[i]).GetDatum();
                             arrayIndicies[i] = MakeChunkedArrayIndex(datum);
                         }
-                    }    
-                
+                    }
+
                     TBlockLess cmp(KeyIndicies_, s, arrayIndicies);
                     NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + s.Count_, blockIndicies->end(), cmp);
                 }
-                
+
                 // copy all to builders
                 s.AddTop(Columns_, blockIndicies, blockLen);
                 if (s.BuilderLength_ + s.Count_ > s.BuilderMaxLength_) {
@@ -262,7 +262,7 @@ private:
             }
         }
 
-        void CompressBuilders(bool sort, const TVector<TBlockType*>& columns, const TVector<ui32>& keyIndicies, TComputationContext& ctx) {
+        void CompressBuilders(bool sort, const TVector<TBlockType*>& columns, const TVector<ui32>& keyIndicies, TComputationContext&) {
             Y_VERIFY(ScalarsFilled_);
             TVector<TChunkedArrayIndex> arrayIndicies(columns.size());
             TVector<arrow::Datum> tmpDatums(columns.size());
@@ -514,7 +514,7 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
         MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
         count = LocateNode(ctx.NodeLocator, callable, 1);
     }
-    
+
     TVector<IComputationNode*> directions;
     TVector<ui32> keyIndicies;
     for (ui32 i = 2; i < inputsWithCount; i += 2) {

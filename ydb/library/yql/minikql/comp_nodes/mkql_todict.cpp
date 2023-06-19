@@ -42,8 +42,8 @@ public:
 
     THashedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
         NUdf::ICompare::TPtr compare, NUdf::IEquate::TPtr equate, NUdf::IHash::TPtr hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Map(0, TValueHasher(KeyTypes, isTuple, hash),
-        TValueEqual(KeyTypes, isTuple, equate)), Hash(hash), Equate(equate)
+        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Hash(hash), Equate(equate)
+        , Map(0, TValueHasher(KeyTypes, isTuple, hash), TValueEqual(KeyTypes, isTuple, equate))
     {
         Y_UNUSED(compare);
         if (encoded) {
@@ -95,8 +95,8 @@ public:
 
     THashedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
         NUdf::ICompare::TPtr compare, NUdf::IEquate::TPtr equate, NUdf::IHash::TPtr hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Map(0, TValueHasher(KeyTypes, isTuple, hash),
-        TValueEqual(KeyTypes, isTuple, equate)), Hash(hash), Equate(equate)
+        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Hash(hash), Equate(equate)
+        , Map(0, TValueHasher(KeyTypes, isTuple, hash), TValueEqual(KeyTypes, isTuple, equate))
     {
         Y_UNUSED(compare);
         if (encoded) {
@@ -882,7 +882,6 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
-        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
             : TBase(memInfo), SetAccum(std::move(setAccum)) {}
 
@@ -941,7 +940,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
@@ -1062,7 +1061,6 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
-        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TSetAccumulator&& setAccum)
             : TBase(memInfo), SetAccum(std::move(setAccum)) {}
 
@@ -1127,7 +1125,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
@@ -1380,7 +1378,6 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
-        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
             : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
 
@@ -1441,7 +1438,7 @@ public:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);
@@ -1567,7 +1564,6 @@ public:
     class TState : public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
-        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, TMapAccumulator&& mapAccum)
             : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
 
@@ -1636,7 +1632,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
 
-        TLLVMFieldsStructureStateWithAccum<typename TState::TLLVMBase> fieldsStruct(context);
+        TLLVMFieldsStructureStateWithAccum<TLLVMFieldsStructure<TComputationValue<TState>>> fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
 
         const auto statePtrType = PointerType::getUnqual(stateType);

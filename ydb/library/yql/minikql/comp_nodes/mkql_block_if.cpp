@@ -131,9 +131,7 @@ template<bool ThenIsScalar, bool ElseIsScalar>
 class TIfBlockExec {
 public:
     explicit TIfBlockExec(TType* type)
-        : Type(type)
-        , ThenReader(MakeBlockReader(TTypeInfoHelper(), type))
-        , ElseReader(MakeBlockReader(TTypeInfoHelper(), type))
+        : ThenReader(MakeBlockReader(TTypeInfoHelper(), type)), ElseReader(MakeBlockReader(TTypeInfoHelper(), type)), Type(type)
     {
     }
 
@@ -175,8 +173,6 @@ public:
             }
 
             ui64 mask = -ui64(predValues[i]);
-
-            TBlockItem result;
             ui64 low = (thenItem.Low() & mask) | (elseItem.Low() & ~mask);
             ui64 high = (thenItem.High() & mask) | (elseItem.High() & ~mask);
             builder->Add(TBlockItem{low, high});
@@ -239,7 +235,7 @@ IComputationNode* WrapBlockIf(TCallable& callable, const TComputationNodeFactory
     }
 
     TVector<IComputationNode*> argsNodes = { predCompute, thenCompute, elseCompute };
-   
+
     std::shared_ptr<arrow::compute::ScalarKernel> kernel;
     if (thenIsScalar && elseIsScalar) {
         kernel = MakeBlockIfKernel<true, true>(argsTypes, thenType);

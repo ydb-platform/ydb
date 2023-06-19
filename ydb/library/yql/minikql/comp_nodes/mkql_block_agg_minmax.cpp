@@ -31,7 +31,7 @@ inline bool AggLess(T a, T b) {
         }
     }
     return a < b;
-}    
+}
 
 template <bool IsMin, typename T>
 inline T UpdateMinMax(T x, T y) {
@@ -239,10 +239,10 @@ public:
             }
         } else {
             stateItem = Converter_->MakeItem(typedState);
-            
+
             const auto& array = datum.array();
             auto len = array->length;
-            
+
             const ui8* filterBitmap = nullptr;
             if (filtered) {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
@@ -251,7 +251,7 @@ public:
                 filterBitmap = filterArray->template GetValues<uint8_t>(1);
             }
             auto& comparator = *Compare_;
-            for (size_t i = 0; i < len; ++i) {
+            for (auto i = 0; i < len; ++i) {
                 TBlockItem curr = currReader->GetItem(*array, i);
                 if (curr && (!filterBitmap || filterBitmap[i])) {
                     bool changed = false;
@@ -912,7 +912,7 @@ template <typename TTag, bool IsMin>
 std::unique_ptr<typename TTag::TPreparedAggregator> PrepareMinMax(TTupleType* tupleType, std::optional<ui32> filterColumn, ui32 argColumn) {
     auto blockType = AS_TYPE(TBlockType, tupleType->GetElementType(argColumn));
     const bool isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
-    auto argType = blockType->GetItemType();    
+    auto argType = blockType->GetItemType();
 
     bool isOptional;
     auto unpacked = UnpackOptional(argType, isOptional);
@@ -1000,6 +1000,6 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockMinFactory() {
 std::unique_ptr<IBlockAggregatorFactory> MakeBlockMaxFactory() {
     return std::make_unique<TBlockMinMaxFactory<false>>();
 }
- 
+
 }
 }

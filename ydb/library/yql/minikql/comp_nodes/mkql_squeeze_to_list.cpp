@@ -16,7 +16,6 @@ public:
     class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
     public:
-        using TLLVMBase = TLLVMFieldsStructure<TBase>;
         TState(TMemoryUsageInfo* memInfo, ui64 limit)
             : TBase(memInfo), Limit(limit) {
         }
@@ -32,7 +31,7 @@ public:
             return list;
         }
 
-        bool Push(NUdf::TUnboxedValuePod value) {
+        bool Put(NUdf::TUnboxedValuePod value) {
             Accumulator.emplace_back(std::move(value));
             return Limit != 0 && Limit <= Accumulator.size();
         }
@@ -56,7 +55,7 @@ public:
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
             if (auto item = Flow->GetValue(ctx); item.IsYield()) {
                 return item.Release();
-            } else if (item.IsFinish() || statePtr->Push(item.Release())) {
+            } else if (item.IsFinish() || statePtr->Put(item.Release())) {
                 const auto list = statePtr->Pull(ctx);
                 state = NUdf::TUnboxedValuePod::MakeFinish();
                 return list;
@@ -66,9 +65,9 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    class TLLVMFieldsStructureForState: public TState::TLLVMBase {
+    class TLLVMFieldsStructureForState: public TLLVMFieldsStructure<TComputationValue<TState>> {
     private:
-        using TBase = typename TState::TLLVMBase;
+        using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
         llvm::PointerType* StructPtrType;
     protected:
         using TBase::Context;
@@ -140,7 +139,7 @@ public:
 
         block = plus;
 
-        const auto push = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Push));
+        const auto push = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Put));
 
         const auto arg = WrapArgumentForWindows(item, ctx, block);
 

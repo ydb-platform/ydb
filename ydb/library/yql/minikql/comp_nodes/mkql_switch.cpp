@@ -33,7 +33,6 @@ using TSwitchHandlersList = std::vector<TSwitchHandler, TMKQLAllocator<TSwitchHa
 class TState : public TComputationValue<TState> {
     typedef TComputationValue<TState> TBase;
 public:
-    using TLLVMBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     TState(TMemoryUsageInfo* memInfo, ui32 size)
         : TBase(memInfo), ChildReadIndex(size)
     {}
@@ -43,9 +42,9 @@ public:
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
-class TLLVMFieldsStructureForState: public TState::TLLVMBase {
+class TLLVMFieldsStructureForState: public TLLVMFieldsStructure<TComputationValue<TState>> {
 private:
-    using TBase = TState::TLLVMBase;
+    using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     llvm::IntegerType* IndexType;
     llvm::IntegerType* StatusType;
     const ui32 FieldsCount = 0;
@@ -92,7 +91,6 @@ class TSwitchFlowWrapper : public TStatefulFlowCodegeneratorNode<TSwitchFlowWrap
 private:
     class TFlowState : public TState {
     public:
-        using TLLVMBase = TLLVMFieldsStructureForState;
         TFlowState(TMemoryUsageInfo* memInfo, TAlignedPagePool& pool, ui32 size)
             : TState(memInfo, size), Buffer(pool)
         {}
@@ -126,7 +124,7 @@ private:
             Position = 0U;
         }
 
-        NUdf::TUnboxedValuePod Handler(ui32 index, const TSwitchHandler& handler, TComputationContext& ctx) {
+        NUdf::TUnboxedValuePod Handler(ui32, const TSwitchHandler& handler, TComputationContext& ctx) {
             while (true) {
                 auto current = Get(Position++);
                 if (current.IsSpecial()) {
@@ -245,9 +243,9 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
 private:
-    class TLLVMFieldsStructureForFlowState: public TFlowState::TLLVMBase {
+    class TLLVMFieldsStructureForFlowState: public TLLVMFieldsStructureForState {
     private:
-        using TBase = typename TFlowState::TLLVMBase;
+        using TBase = TLLVMFieldsStructureForState;
         llvm::PointerType* StructPtrType;
         llvm::IntegerType* IndexType;
     protected:
@@ -628,8 +626,6 @@ private:
 
     class TValueBase : public TState {
     public:
-        using TLLVMBase = TLLVMFieldsStructureForState;
-
         void Add(NUdf::TUnboxedValue&& item) {
             Buffer.Add(std::move(item));
         }
@@ -776,9 +772,9 @@ private:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    class TLLVMFieldsStructureForValueBase: public TValueBase::TLLVMBase {
+    class TLLVMFieldsStructureForValueBase: public TLLVMFieldsStructureForState {
     private:
-        using TBase = typename TValueBase::TLLVMBase;
+        using TBase = TLLVMFieldsStructureForState;
     protected:
         using TBase::Context;
     public:

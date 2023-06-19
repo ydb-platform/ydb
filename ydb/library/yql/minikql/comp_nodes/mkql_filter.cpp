@@ -645,9 +645,10 @@ private:
 };
 
 static constexpr size_t UseOnStack = 1ULL << 8ULL;
+#ifndef MKQL_DISABLE_CODEGEN
 ui64* MyAlloc(const ui64 size) { return TMKQLAllocator<ui64>::allocate(size); }
 void MyFree(const ui64 *const ptr, const ui64 size) noexcept { TMKQLAllocator<ui64>::deallocate(ptr, size); }
-
+#endif
 class TListFilterWrapper : public TBothWaysCodegeneratorNode<TListFilterWrapper>,
     private TBaseFilterWrapper<false> {
     typedef TBaseFilterWrapper<false> TBaseWrapper;
@@ -696,7 +697,6 @@ public:
             NUdf::TUnboxedValue* items = nullptr;
             const auto result = ctx.HolderFactory.CreateDirectArrayHolder(count, items);
             for (auto p = mask; count; ++p) {
-                const auto cb = count;
                 auto e = elements;
                 elements += 64ULL;
                 for (auto bits = *p; bits; bits >>= 1ULL) {
@@ -1060,7 +1060,6 @@ public:
             NUdf::TUnboxedValue* items = nullptr;
             const auto result = ctx.HolderFactory.CreateDirectArrayHolder(count, items);
             for (auto p = mask; count; ++p) {
-                const auto cb = count;
                 auto e = elements;
                 elements += 64ULL;
                 for (auto bits = *p; bits; bits >>= 1ULL) {

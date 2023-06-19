@@ -103,7 +103,7 @@ private:
         TVector<TDeque<std::shared_ptr<arrow::ArrayData>>> Arrays;
         ui64 Count = 0;
 
-        TState(TMemoryUsageInfo* memInfo, size_t width, NUdf::TUnboxedValue*const* values, TComputationContext& ctx)
+        TState(TMemoryUsageInfo* memInfo, size_t width, NUdf::TUnboxedValue*const* values, TComputationContext&)
             : TBase(memInfo)
             , Values(width)
             , ValuePointers(width)
@@ -126,7 +126,6 @@ private:
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const final {
         TState& s = GetState(ctx, output);
-        const TDerived& child = static_cast<const TDerived&>(*this);
         while (s.Count == 0) {
             auto result = static_cast<const TDerived*>(this)->DoCalculate(s.ChildState, ctx, s.ValuePointers.data());
             if (result != EFetchResult::One) {
@@ -165,7 +164,7 @@ private:
                 continue;
             }
 
-            MKQL_ENSURE(arr.front()->length <= s.Count, "Unexpected array length at column #" << i);
+            MKQL_ENSURE(ui64(arr.front()->length) <= s.Count, "Unexpected array length at column #" << i);
             sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
         }
 
@@ -179,7 +178,7 @@ private:
             }
 
             auto& array = s.Arrays[i].front();
-            if (array->length == sliceSize) {
+            if (ui64(array->length) == sliceSize) {
                 *(output[i]) = ctx.HolderFactory.CreateArrowBlock(std::move(array));
                 s.Arrays[i].pop_front();
             } else {

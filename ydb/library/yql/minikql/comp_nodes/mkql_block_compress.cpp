@@ -193,7 +193,7 @@ public:
                         // all entries are filtered
                         continue;
                     }
-                    bool copyAsIs = !s.HaveBlocks_ || popCount == bitmap->length;
+                    bool copyAsIs = !s.HaveBlocks_ || popCount == ui64(bitmap->length);
                     if (copyAsIs) {
                         // client is not interested in any block columns or there is nothing to filter
                         s.OutputPos_ = popCount;
@@ -205,7 +205,7 @@ public:
                 for (size_t i = 0; i < Width_; ++i) {
                     if (s.Builders_[i] || i == BitmapIndex_) {
                         s.Arrays_[i] = TArrowBlock::From(s.InputValues_[i]).GetDatum().array();
-                        Y_VERIFY(s.Arrays_[i]->length == s.InputSize_);
+                        Y_VERIFY(ui64(s.Arrays_[i]->length) == s.InputSize_);
                     }
                 }
             }

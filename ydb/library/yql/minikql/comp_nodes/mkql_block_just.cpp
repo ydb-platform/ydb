@@ -18,7 +18,7 @@ public:
         : ReturnArrowType(returnArrowType)
     {}
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow::Status Exec(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         arrow::Datum inputDatum = batch.values[0];
         if (Trivial) {
             *res = inputDatum;

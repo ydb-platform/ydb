@@ -199,8 +199,8 @@ struct TCompareDescr {
         const TVector<NUdf::ICompare::TPtr>& comparators)
         : KeySchemeTypes(std::move(keySchemeTypes))
         , KeyTypes(PrepareKeyTypesByScheme(KeySchemeTypes))
-        , Encoders(mutables)
         , Comparators(comparators)
+        , Encoders(mutables)
     {}
 
     static TKeyPayloadPairVector::value_type::first_type& Set(TKeyPayloadPairVector::value_type& item) { return item.first; }
@@ -220,7 +220,6 @@ struct TCompareDescr {
                     const auto& right = Get(y);
 
                     for (ui32 i = 0; i < KeyTypes.size(); ++i) {
-                        const auto& keyType = KeyTypes[i];
                         const auto& leftElem = left.GetElement(i);
                         const auto& rightElem = right.GetElement(i);
                         const bool asc = ascending.GetElement(i).Get<bool>();
@@ -450,7 +449,7 @@ public:
         return result;
     }
 
-    void PerformInplace(TComputationContext& ctx, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
+    void PerformInplace(TComputationContext&, ui32 size, NUdf::TUnboxedValue* keys, NUdf::TUnboxedValue* items, const TComparator& comparator) const {
         AlgorithmInplace(TGatherIterator(keys, items), TGatherIterator(keys, items) + size, comparator);
     }
 

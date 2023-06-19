@@ -982,15 +982,6 @@ public:
         }
 
     public:
-        TIteratorImpl& operator=(const TIteratorImpl& rhs) {
-            Hash = rhs.Hash;
-            Bucket = rhs.Bucket;
-            EndBucket = rhs.EndBucket;
-            Pos = rhs.Pos;
-            SubPos = rhs.SubPos;
-            return *this;
-        }
-
         bool Ok() const {
             return Bucket < EndBucket;
         }

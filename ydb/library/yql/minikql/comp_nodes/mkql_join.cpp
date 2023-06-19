@@ -1009,7 +1009,7 @@ public:
         }
 
         template <bool IsLeftNull>
-        void PrepareNullItem(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        void PrepareNullItem(TComputationContext&, NUdf::TUnboxedValue*const* output) {
             for (ui32 i = 0; i < Self->LeftInputColumns.size(); ++i) {
                 if (const auto out = output[Self->LeftOutputColumns[i]]) {
                     if constexpr (IsLeftNull) {

@@ -54,7 +54,7 @@ protected:
     virtual std::vector<TGranule::TPtr> DoDetachReadyGranules(TResultController& granulesToOut) override;
     virtual bool DoOnFilterReady(TBatch& batchInfo, const TGranule& granule, TGranulesFillingContext& context) override;
     virtual TFeatures DoGetFeatures() const override {
-        return (TFeatures)EFeatures::CanInterrupt & (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;
+        return (TFeatures)EFeatures::CanInterrupt | (TFeatures)EFeatures::NeedNotAppliedEarlyFilter;
     }
 
     virtual TString DoDebugString() const override {

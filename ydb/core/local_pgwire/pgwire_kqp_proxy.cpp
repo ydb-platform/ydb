@@ -53,13 +53,26 @@ protected:
         return event;
     }
 
+    TString ToUpperASCII(TStringBuf s) {
+        TString r;
+        r.resize(s.size());
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] <= 0x7f && s[i] >= 0x20) {
+                r[i] = toupper(s[i]);
+            } else {
+                r[i] = s[i];
+            }
+        }
+        return r;
+    }
+
     void ConvertQueryToRequest(TStringBuf query, NKikimrKqp::TQueryRequest& request) {
         if (Connection_.SessionId) {
             request.SetSessionId(Connection_.SessionId);
         }
         request.SetKeepSession(true);
         // HACK
-        TString q(ToUpperUTF8(query.substr(0, 10)));
+        TString q(ToUpperASCII(query.substr(0, 10)));
         if (q.StartsWith("BEGIN")) {
             Tag_ = "BEGIN";
             request.SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);

@@ -96,7 +96,7 @@ Reading data from followers allows you:
 
 You can enable running read replicas for each shard of the table in the table data schema. The read replicas (followers) are typically accessed without leaving the data center network, which ensures response delays in milliseconds.
 
-| Parameter name | Description | Type | Acceptable values | Update<br>possibility | Reset<br>capability |
+| Option name | Description | Type | Acceptable values | Update<br>capability | Reset<br>capability |
 | ------------- | --------- | --- | ------------------- | --------------------- | ------------------ |
 | `READ_REPLICAS_SETTINGS` | `PER_AZ` means using the specified number of replicas in each AZ and `ANY_AZ` in all AZs in total. | String | `"PER_AZ:<count>"`, `"ANY_AZ:<count>"`, where `<count>` is the number of replicas | Yes | No |
 
@@ -110,15 +110,15 @@ If there are multiple followers, their delay from the leader may vary: although 
 
 {{ ydb-short-name }} supports automatic background deletion of expired data. A table data schema may define a column of the [appropriate type](../../../concepts/ttl.md#restrictions). The column value for all rows will be compared with the current time in the background. Rows for which the current time becomes greater than the column value, factoring in the specified delay, will be deleted.
 
-| Parameter name | Type | Acceptable values | Update<br>possibility | Reset<br>capability |
+| Option name | Type | Acceptable values | Update<br>capability | Reset<br>capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Yes | Yes |
 
-Where `<unit>` is:
-* `SECONDS`;
-* `MILLISECONDS`;
-* `MICROSECONDS`;
-* `NANOSECONDS`.
+Where `<unit>`:
+* `SECONDS`
+* `MILLISECONDS`
+* `MICROSECONDS`
+* `NANOSECONDS`
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md).
 
@@ -137,7 +137,7 @@ The speed of renaming is determined by the type of data transactions currently r
 
 With a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter), you can more efficiently determine if some keys are missing in a table when making multiple single queries by the primary key. This reduces the number of required disk I/O operations but increases the amount of memory consumed.
 
-| Parameter name | Type | Acceptable values | Update<br>possibility | Reset<br>capability |
+| Option name | Type | Acceptable values | Update<br>capability | Reset<br>capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Yes | No |
 

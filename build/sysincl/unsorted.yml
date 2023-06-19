@@ -260,6 +260,11 @@
   - lwip/netdb.h
   - lwip/sockets.h
 
+- source_filter: "^(contrib/libs/curl/lib/vtls)"
+  includes:
+  - bearssl.h: contrib/libs/curl/lib/vtls/bearssl.h
+  - rustls.h: contrib/libs/curl/lib/vtls/rustls.h
+
 - includes:
   - cpu-features.h
   - cuda/include/cuComplex.h

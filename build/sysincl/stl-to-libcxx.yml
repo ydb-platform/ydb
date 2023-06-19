@@ -164,10 +164,11 @@
   includes:
     - ../include/fenv.h: contrib/libs/cxxsupp/libcxx/include/fenv.h
 
-# This includes all headers needed to resolve includes in c-headers from libcxx listed avove
+# This includes all headers needed to resolve includes in c-headers from libcxx listed above
 - includes:
   - __assert:                                     contrib/libs/cxxsupp/libcxx/include/__assert
   - __availability:                               contrib/libs/cxxsupp/libcxx/include/__availability
+  - __bsd_locale_defaults.h:                      contrib/libs/cxxsupp/libcxx/include/__bsd_locale_defaults.h
   - __bsd_locale_fallbacks.h:                     contrib/libs/cxxsupp/libcxx/include/__bsd_locale_fallbacks.h
   - __locale:                                     contrib/libs/cxxsupp/libcxx/include/__locale
   - __bit_reference:                              contrib/libs/cxxsupp/libcxx/include/__bit_reference
@@ -376,6 +377,7 @@
   - __iterator/iter_swap.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/iter_swap.h
   - __iterator/iterator.h:                        contrib/libs/cxxsupp/libcxx/include/__iterator/iterator.h
   - __iterator/iterator_traits.h:                 contrib/libs/cxxsupp/libcxx/include/__iterator/iterator_traits.h
+  - __iterator/mergeable.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/mergeable.h
   - __iterator/move_iterator.h:                   contrib/libs/cxxsupp/libcxx/include/__iterator/move_iterator.h
   - __iterator/next.h:                            contrib/libs/cxxsupp/libcxx/include/__iterator/next.h
   - __iterator/ostream_iterator.h:                contrib/libs/cxxsupp/libcxx/include/__iterator/ostream_iterator.h
@@ -387,6 +389,7 @@
   - __iterator/reverse_access.h:                  contrib/libs/cxxsupp/libcxx/include/__iterator/reverse_access.h
   - __iterator/reverse_iterator.h:                contrib/libs/cxxsupp/libcxx/include/__iterator/reverse_iterator.h
   - __iterator/size.h:                            contrib/libs/cxxsupp/libcxx/include/__iterator/size.h
+  - __iterator/sortable.h:                        contrib/libs/cxxsupp/libcxx/include/__iterator/sortable.h
   - __iterator/unreachable_sentinel.h:            contrib/libs/cxxsupp/libcxx/include/__iterator/unreachable_sentinel.h
   - __iterator/wrap_iter.h:                       contrib/libs/cxxsupp/libcxx/include/__iterator/wrap_iter.h
   - __memory/addressof.h:                         contrib/libs/cxxsupp/libcxx/include/__memory/addressof.h
@@ -417,7 +420,17 @@
   - __ranges/enable_borrowed_range.h:             contrib/libs/cxxsupp/libcxx/include/__ranges/enable_borrowed_range.h
   - __ranges/enable_view.h:                       contrib/libs/cxxsupp/libcxx/include/__ranges/enable_view.h
   - __ranges/size.h:                              contrib/libs/cxxsupp/libcxx/include/__ranges/size.h
+  - __support/android/locale_bionic.h:            contrib/libs/cxxsupp/libcxx/include/__support/android/locale_bionic.h
+  - __support/fuchsia/xlocale.h:                  contrib/libs/cxxsupp/libcxx/include/__support/fuchsia/xlocale.h
   - __support/ibm/locale_mgmt_zos.h:              contrib/libs/cxxsupp/libcxx/include/__support/ibm/locale_mgmt_zos.h
+  - __support/ibm/nanosleep.h:                    contrib/libs/cxxsupp/libcxx/include/__support/ibm/nanosleep.h
+  - __support/ibm/xlocale.h:                      contrib/libs/cxxsupp/libcxx/include/__support/ibm/xlocale.h
+  - __support/musl/xlocale.h:                     contrib/libs/cxxsupp/libcxx/include/__support/musl/xlocale.h
+  - __support/newlib/xlocale.h:                   contrib/libs/cxxsupp/libcxx/include/__support/newlib/xlocale.h
+  - __support/openbsd/xlocale.h:                  contrib/libs/cxxsupp/libcxx/include/__support/openbsd/xlocale.h
+  - __support/solaris/xlocale.h:                  contrib/libs/cxxsupp/libcxx/include/__support/solaris/xlocale.h
+  - __support/win32/atomic_win32.h:               contrib/libs/cxxsupp/libcxx/include/__support/win32/atomic_win32.h
+  - __support/win32/locale_win32.h:               contrib/libs/cxxsupp/libcxx/include/__support/win32/locale_win32.h
   - __support/xlocale/__posix_l_fallback.h:       contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__posix_l_fallback.h
   - __support/xlocale/__posix_l_fallback.h:       contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__posix_l_fallback.h
   - __support/xlocale/__strtonum_fallback.h:      contrib/libs/cxxsupp/libcxx/include/__support/xlocale/__strtonum_fallback.h

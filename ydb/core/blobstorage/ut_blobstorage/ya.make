@@ -29,6 +29,7 @@ SRCS(
     snapshots.cpp
     space_check.cpp
     sync.cpp
+    vdisk_recovery.cpp
 )
 
 IF (BUILD_TYPE == "RELEASE")

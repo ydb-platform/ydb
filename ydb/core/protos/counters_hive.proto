@@ -111,4 +111,5 @@ enum ETxTypes {
     TXTYPE_TABLET_OWNERS_REPLY = 58                       [(TxTypeOpts) = {Name: "TxTabletOwnersReply"}];
     TXTYPE_REQUEST_TABLET_OWNERS = 59                     [(TxTypeOpts) = {Name: "TxRequestTabletOwners"}];
     TXTYPE_REASSIGN_GROUPS_ON_DECOMMIT = 60               [(TxTypeOpts) = {Name: "TxReassignGroupsOnDecommit"}];
+    TXTYPE_UPDATE_TABLETS_OBJECT = 61                     [(TxTypeOpts) = {Name: "TxUpdateTabletsObject"}];
 }

@@ -2627,6 +2627,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvRequestTabletOwners, Handle);
         hFunc(TEvHive::TEvTabletOwnersReply, Handle);
         hFunc(TEvPrivate::TEvBalancerOut, Handle);
+        hFunc(TEvHive::TEvUpdateTabletsObject, Handle);
     }
 }
 
@@ -2716,6 +2717,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestTabletOwners::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvTabletOwnersReply::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvBalancerOut::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -2937,6 +2939,11 @@ void THive::Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev) {
 void THive::Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvTabletOwnersReply()");
     Execute(CreateTabletOwnersReply(std::move(ev)));
+}
+
+void THive::Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvUpdateTabletsObject");
+    Execute(CreateUpdateTabletsObject(std::move(ev)));
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

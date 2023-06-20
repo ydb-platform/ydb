@@ -83,4 +83,5 @@ target_sources(core-mind-hive PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_groups.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_metrics.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablets_object.cpp
 )

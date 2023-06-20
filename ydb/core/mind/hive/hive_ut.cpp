@@ -4149,6 +4149,154 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         check_distribution();
     }*/
 
+    Y_UNIT_TEST(TestSpreadNeighboursWithUpdateTabletsObject) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+
+        auto getDistribution = [hiveTablet, nodeBase, senderA, &runtime]() -> std::array<std::vector<ui64>, 2> {
+            std::array<std::vector<ui64>, 2> nodeTablets = {};
+            {
+                runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+                TAutoPtr<IEventHandle> handle;
+                TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+                for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                    UNIT_ASSERT_C(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < 2),
+                            "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
+                    nodeTablets[tablet.GetNodeID() - nodeBase].push_back(tablet.GetTabletID());
+                }
+            }
+            // Check even distribution: each node must have 2 tablets
+            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0].size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1].size(), 2);
+            return nodeTablets;
+        };
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<ui64> tablets;
+        for (int i = 0; i < 4; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(0);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            tablets.emplace_back(tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        // update objects, so that distribution of objects on nodes becomes {0, 0}, {1, 1}
+        auto initialDistribution = getDistribution();
+        auto tabletsToUpdate = initialDistribution[1];
+        auto wasTabletUpdated = [&tabletsToUpdate](ui64 tablet) {
+            return std::find(tabletsToUpdate.begin(), tabletsToUpdate.end(), tablet) != tabletsToUpdate.end();
+        };
+        {
+            auto ev = new TEvHive::TEvUpdateTabletsObject;
+            ev->Record.SetObjectId(1);
+            for (auto tablet : tabletsToUpdate) {
+                ev->Record.AddTabletIds(tablet);
+            }
+            runtime.SendToPipe(hiveTablet, senderA, ev);
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvUpdateTabletsObjectReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateTabletsObjectReply>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        }
+        Ctest << "Reassigned objects\n";
+
+        // we want the distribution to become {0, 1}, {0, 1}, but
+        // we don't (yet) have a balancer trigger on object imbalance, so we will just kill all tablets
+        for (ui64 node = 0; node < 2; ++node) {
+            for (auto tablet : initialDistribution[node]) {
+                runtime.Register(CreateTabletKiller(tablet, runtime.GetNodeId(node)));
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvLocal::EvDeadTabletAck);
+                runtime.DispatchEvents(options);
+                Ctest << "Killed tablet " << tablet << "\n";
+            }
+        }
+
+        for (auto tablet : tablets) {
+            WaitForTabletIsUp(runtime, tablet, 0);
+            Ctest << "Tablet " << tablet << " is up\n";
+        }
+
+        auto newDistribution = getDistribution();
+        UNIT_ASSERT_VALUES_UNEQUAL(wasTabletUpdated(newDistribution[0][0]), wasTabletUpdated(newDistribution[0][1]));
+    }
+
+    Y_UNIT_TEST(TestUpdateTabletsObjectUpdatesMetrics) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        static const int NUM_TABLETS = 5;
+        TVector<ui64> tablets;
+        ui64 totalNetwork = 0;
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        for (size_t i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i % 2);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            tablets.emplace_back(tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        for (size_t i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablets[i]);
+            metric->MutableResourceUsage()->SetNetwork(i);
+            totalNetwork += i;
+
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
+        {
+            auto ev = new TEvHive::TEvUpdateTabletsObject;
+            ev->Record.SetObjectId(1);
+            for (size_t i = 0; i < NUM_TABLETS; i += 2) {
+                ev->Record.AddTabletIds(tablets[i]);
+            }
+            runtime.SendToPipe(hiveTablet, senderA, ev);
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvUpdateTabletsObjectReply* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvUpdateTabletsObjectReply>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        }
+
+        ui64 newTablet;
+        {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + NUM_TABLETS, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(1);
+            newTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            MakeSureTabletIsUp(runtime, newTablet, 0);
+        }
+
+        {
+            THolder<TEvHive::TEvRequestHiveInfo> ev = MakeHolder<TEvHive::TEvRequestHiveInfo>(newTablet, false);
+            ev->Record.SetReturnMetrics(true);
+            runtime.SendToPipe(hiveTablet, senderA, ev.Release());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            ui64 newTabletNetwork = response->Record.GetTablets().Get(0).GetMetrics().GetNetwork();
+            ui64 expectedNewTabletNetwork = totalNetwork / NUM_TABLETS;
+            UNIT_ASSERT_VALUES_EQUAL(newTabletNetwork, expectedNewTabletNetwork);
+        }
+    }
+
     Y_UNIT_TEST(TestRestartTablets) {
         TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);

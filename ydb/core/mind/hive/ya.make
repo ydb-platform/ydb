@@ -74,6 +74,7 @@ SRCS(
     tx__update_tablet_groups.cpp
     tx__update_tablet_metrics.cpp
     tx__update_tablet_status.cpp
+    tx__update_tablets_object.cpp
 )
 
 PEERDIR(

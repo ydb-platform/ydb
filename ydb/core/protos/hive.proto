@@ -540,3 +540,13 @@ message TTabletOwnerRecord {
 message TEvTabletOwnersReply {
     repeated TTabletOwnerRecord TabletOwners = 1;
 }
+
+message TEvUpdateTabletsObject {
+    optional uint64 ObjectId = 1;
+    repeated fixed64 TabletIds = 2;
+}
+
+message TEvUpdateTabletsObjectReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+}
+

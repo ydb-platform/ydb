@@ -217,6 +217,7 @@ protected:
     friend class TTxSwitchDrainOff;
     friend class TTxTabletOwnersReply;
     friend class TTxRequestTabletOwners;
+    friend class TTxUpdateTabletsObject;
 
     friend class TDeleteTabletActor;
 
@@ -274,6 +275,7 @@ protected:
     ITransaction* CreateSwitchDrainOff(TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
+    ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -314,8 +316,8 @@ protected:
         NKikimrTabletBase::TMetrics Metrics;
         ui64 Counter = 0;
 
-        void IncreaseCount() {
-            ++Counter;
+        void IncreaseCount(ui64 value = 1) {
+            Counter += value;
         }
 
         void DecreaseCount() {
@@ -504,6 +506,7 @@ protected:
     void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev);
     void Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev);
     void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
+    void Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
 
 protected:

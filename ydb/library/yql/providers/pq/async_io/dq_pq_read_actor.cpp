@@ -288,17 +288,22 @@ private:
             return usedSpace;
         }
 
-        auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(Max<i64>(freeSpace, 0)));
+        bool recheckBatch = false;
 
-        ui32 batchItemsEstimatedCount = 0;
-        for (auto& event : events) {
-            if (const auto* val = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                batchItemsEstimatedCount += val->GetMessages().size();
+        if (freeSpace > 0) {
+            auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(freeSpace));
+            recheckBatch = !events.empty();
+
+            ui32 batchItemsEstimatedCount = 0;
+            for (auto& event : events) {
+                if (const auto* val = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                    batchItemsEstimatedCount += val->GetMessages().size();
+                }
             }
-        }
 
-        for (auto& event : events) {
-            std::visit(TPQEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
+            for (auto& event : events) {
+                std::visit(TPQEventProcessor{*this, batchItemsEstimatedCount, LogPrefix}, event);
+            }
         }
 
         if (WatermarkTracker) {
@@ -308,11 +313,15 @@ private:
                 const auto t = watermark;
                 SRC_LOG_T("Fake watermark " << t << " was produced");
                 PushWatermarkToReady(*watermark);
+                recheckBatch = true;
             }
         }
 
-        if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
-            return usedSpace;
+        if (recheckBatch) {
+            usedSpace = 0;
+            if (MaybeReturnReadyBatch(buffer, watermark, usedSpace)) {
+                return usedSpace;
+            }
         }
 
         watermark = Nothing();

@@ -9,6 +9,7 @@ Y_UNIT_TEST_SUITE(ConsoleDumper) {
                          const TVector<ui32> &orders) {
         NKikimrConsole::TConfigItem *configItem = items.Add();
         configItem->SetMergeStrategy(mergeStrategy);
+        configItem->MutableId()->SetId(1);
         configItem->SetOrder(orders[0]);
         configItem->SetKind((ui32)NKikimrConsole::TConfigItem::LogConfigItem);
         configItem->SetCookie("test");
@@ -52,6 +53,7 @@ Y_UNIT_TEST_SUITE(ConsoleDumper) {
             ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> items;
             NKikimrConsole::TConfigItem *configItem = items.Add();
             configItem->SetMergeStrategy(mergeStrategy);
+            configItem->MutableId()->SetId(1);
             configItem->SetOrder(21);
             configItem->SetKind((ui32)NKikimrConsole::TConfigItem::LogConfigItem);
             configItem->SetCookie("test");
@@ -289,6 +291,7 @@ selector_config: []
     Y_UNIT_TEST(SimpleNode) {
         ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> items;
         NKikimrConsole::TConfigItem *configItem = items.Add();
+        configItem->MutableId()->SetId(1);
         configItem->SetMergeStrategy(1);
         configItem->MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType("test_node_type");
         configItem->SetOrder(21);
@@ -308,7 +311,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     node_type: test_node_type
   config:
@@ -464,6 +467,7 @@ selector_config:
     Y_UNIT_TEST(SimpleTenant) {
         ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> items;
         NKikimrConsole::TConfigItem *configItem = items.Add();
+        configItem->MutableId()->SetId(1);
         configItem->SetMergeStrategy(1);
         configItem->MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant("test_tenant");
         configItem->SetOrder(21);
@@ -483,7 +487,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     tenant: test_tenant
   config:
@@ -498,6 +502,7 @@ selector_config:
     Y_UNIT_TEST(SimpleNodeTenant) {
         ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> items;
         NKikimrConsole::TConfigItem *configItem = items.Add();
+        configItem->MutableId()->SetId(1);
         configItem->SetMergeStrategy(1);
         configItem->MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant("test_tenant");
         configItem->MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetNodeType("test_node_type");
@@ -518,7 +523,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     node_type: test_node_type
     tenant: test_tenant
@@ -534,6 +539,7 @@ selector_config:
     Y_UNIT_TEST(SimpleHostId) {
         ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> items;
         NKikimrConsole::TConfigItem *configItem = items.Add();
+        configItem->MutableId()->SetId(1);
         configItem->SetMergeStrategy(1);
         configItem->MutableUsageScope()->MutableHostFilter()->AddHosts("test_host_1");
         configItem->SetOrder(21);
@@ -553,7 +559,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     host: test_host_1
   config:
@@ -576,7 +582,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     host:
       in:
@@ -594,6 +600,7 @@ selector_config:
     Y_UNIT_TEST(SimpleNodeId) {
         ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> items;
         NKikimrConsole::TConfigItem *configItem = items.Add();
+        configItem->MutableId()->SetId(1);
         configItem->SetMergeStrategy(1);
         configItem->MutableUsageScope()->MutableNodeFilter()->AddNodes(1);
         configItem->SetOrder(21);
@@ -613,7 +620,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     node_id: 1
   config:
@@ -636,7 +643,7 @@ allowed_labels:
   tenant:
     type: string
 selector_config:
-- description: cookie=test merge_strategy=OVERWRITE id=0.0
+- description: cookie=test merge_strategy=OVERWRITE id=1.0
   selector:
     node_id:
       in:

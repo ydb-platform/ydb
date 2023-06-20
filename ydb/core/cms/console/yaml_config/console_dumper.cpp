@@ -120,6 +120,17 @@ void CopyFrom(::google::protobuf::Message &to,
     }
 }
 
+ui32 DetectConfigItemKind(const NKikimrConsole::TConfigItem &item)
+{
+    std::vector<const ::google::protobuf::FieldDescriptor*> fields;
+    auto *reflection = item.GetConfig().GetReflection();
+    reflection->ListFields(item.GetConfig(), &fields);
+
+    Y_VERIFY(fields.size() == 1, "Can't detect config item kind");
+
+    return fields[0]->number();
+}
+
 std::pair<TDomainItemsContainer, TSelectorItemsContainer> ExtractSuitableItems(
     const ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> &configItems) {
 
@@ -127,9 +138,16 @@ std::pair<TDomainItemsContainer, TSelectorItemsContainer> ExtractSuitableItems(
     TSelectorItemsContainer selectorItemsByOrder;
 
     for (auto &item : configItems) {
-        if (item.GetKind() == NKikimrConsole::TConfigItem::NameserviceConfigItem ||
-            item.GetKind() == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem ||
-            item.GetKind() == NKikimrConsole::TConfigItem::NamedConfigsItem ||
+        ui32 kind = item.GetKind();
+
+        if (kind == 0) {
+            kind = DetectConfigItemKind(item);
+        }
+
+
+        if (kind == NKikimrConsole::TConfigItem::NameserviceConfigItem ||
+            kind == NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem ||
+            kind == NKikimrConsole::TConfigItem::NamedConfigsItem ||
             item.GetCookie().StartsWith("ydbcp")) {
             continue;
         }
@@ -157,23 +175,28 @@ NKikimrConfig::TAppConfig BundleDomainConfig(const TDomainItemsContainer &items)
     NKikimrConfig::TAppConfig config;
 
     for (auto &[_, item] : items) {
-        Y_VERIFY(item.GetKind() != 0, "Tool doesn't support items with kind Auto");
+        ui32 kind = item.GetKind();
+
+        if (kind == 0) {
+            kind = DetectConfigItemKind(item);
+        }
+
         if (item.GetMergeStrategy() == NKikimrConsole::TConfigItem::MERGE) {
             config.MergeFrom(item.GetConfig());
         } else if (item.GetMergeStrategy() == NKikimrConsole::TConfigItem::OVERWRITE) {
-            CopyFrom(config, item.GetConfig(), item.GetKind());
+            CopyFrom(config, item.GetConfig(), kind);
         } else if (item.GetMergeStrategy() == NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED) {
-            MergeMessageOverwriteRepeated(config, item.GetConfig(), item.GetKind());
+            MergeMessageOverwriteRepeated(config, item.GetConfig(), kind);
         }
     }
 
     return config;
 }
 
-TVector<TSelectorData> FillSelectorsData(const TSelectorItemsContainer &items) {
+TVector<TSelectorData> FillSelectorsData(const TSelectorItemsContainer &sItems) {
     TVector<TSelectorData> selectors;
 
-    for (auto &[tuple, items] : items) {
+    for (auto &[_, items] : sItems) {
         auto &item = items.back();
 
         NYamlConfig::TSelector rules;
@@ -219,8 +242,10 @@ TVector<TSelectorData> FillSelectorsData(const TSelectorItemsContainer &items) {
 
                         TStringStream desc;
                         desc << "cookie=" << item.GetCookie()
-                             << " merge_strategy=" << NConsole::TConfigItem::MergeStrategyName(item.GetMergeStrategy())
-                             << " id=" << it.GetId().GetId() << "." << it.GetId().GetGeneration();;
+                             << " merge_strategy=" << NConsole::TConfigItem::MergeStrategyName(item.GetMergeStrategy());
+                        if (it.GetId().GetId() != 0) {
+                            desc << " id=" << it.GetId().GetId() << "." << it.GetId().GetGeneration();;
+                        }
 
                         selectors.emplace_back(TSelectorData{
                             item.GetMergeStrategy(),
@@ -254,12 +279,15 @@ TVector<TSelectorData> FillSelectorsData(const TSelectorItemsContainer &items) {
         if (!rules.In.empty()) {
             TStringStream desc;
             desc << "cookie=" << item.GetCookie()
-                 << " merge_strategy=" << NConsole::TConfigItem::MergeStrategyName(item.GetMergeStrategy())
-                 <<  " id=";
-            bool first = true;
-            for (auto &it : items) {
-                desc << (first ? "" : ",") << it.GetId().GetId() << "." << it.GetId().GetGeneration();
-                first = false;
+                 << " merge_strategy=" << NConsole::TConfigItem::MergeStrategyName(item.GetMergeStrategy());
+
+            if (items[0].GetId().GetId() != 0) {
+                desc << " id=";
+                bool first = true;
+                for (auto &it : items) {
+                    desc << (first ? "" : ",") << it.GetId().GetId() << "." << it.GetId().GetGeneration();
+                    first = false;
+                }
             }
 
             selectors.emplace_back(TSelectorData{
@@ -362,6 +390,68 @@ selector_config: []
     res << outDoc;
 
     return res.Str();
+}
+
+TDumpConsoleConfigItemResult DumpConsoleConfigItem(const NKikimrConsole::TConfigItem &item) {
+    google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> configItems;
+    auto* newItem = configItems.Add();
+    newItem->CopyFrom(item);
+    const auto [domainItemsByOrder, selectorItemsByOrder] = ExtractSuitableItems(configItems);
+
+    const TString configTemplate = R"(
+[]
+)";
+    auto outDoc = NFyaml::TDocument::Parse(configTemplate);
+    auto selectorsSeq = outDoc.Root().Sequence();
+    if (!domainItemsByOrder.empty()) {
+        const NKikimrConfig::TAppConfig configProto = BundleDomainConfig(domainItemsByOrder);
+        auto mainConfigYaml = NFyaml::TDocument::Parse(
+            NProtobufJson::Proto2Json(configProto, GetProto2JsonConfig()));
+
+        auto configNodeRef = mainConfigYaml.Root();
+
+        switch (item.GetMergeStrategy()) {
+            case NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED:
+                MarkYamlForMergeOverwriteRepeated(configNodeRef);
+            break;
+            case NKikimrConsole::TConfigItem::MERGE:
+                MarkYamlForMerge(configNodeRef);
+            break;
+            default: break;
+        }
+
+        const TString selectorTemplate = R"(
+description: ""
+selector: {}
+config: {}
+)";
+
+        auto selectorTemplateYaml = NFyaml::TDocument::Parse(selectorTemplate);
+        auto selectorConfigRoot = selectorTemplateYaml.Root();
+
+        auto mainConfigRoot = mainConfigYaml.Root().Copy(selectorTemplateYaml);
+        selectorConfigRoot.Map().pair_at("config").SetValue(mainConfigRoot.Ref());
+
+        TStringStream desc;
+
+        desc << "cookie=" << item.GetCookie()
+             << " merge_strategy=" << NConsole::TConfigItem::MergeStrategyName(item.GetMergeStrategy());
+
+        selectorConfigRoot.Map().pair_at("description").SetValue(selectorTemplateYaml.Buildf("%s", desc.Str().c_str()));
+
+        auto selector = selectorConfigRoot.Copy(outDoc);
+        outDoc.Root().Sequence().Append(selector.Ref());
+    } else {
+        const auto selectors = FillSelectorsData(selectorItemsByOrder);
+        SerializeSelectorsToYaml(selectors, outDoc, selectorsSeq);
+    }
+
+    Beautify(outDoc);
+
+    TStringStream res;
+    res << outDoc;
+
+    return {!domainItemsByOrder.empty(), res.Str()};
 }
 
 } // namespace NYamlConfig

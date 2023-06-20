@@ -8,4 +8,11 @@ namespace NYamlConfig {
 
 TString DumpConsoleConfigs(const ::google::protobuf::RepeatedPtrField<NKikimrConsole::TConfigItem> &configItems);
 
+struct TDumpConsoleConfigItemResult {
+    bool Domain;
+    TString Config;
+};
+
+TDumpConsoleConfigItemResult DumpConsoleConfigItem(const NKikimrConsole::TConfigItem &item);
+
 } // namespace NYamlConfig

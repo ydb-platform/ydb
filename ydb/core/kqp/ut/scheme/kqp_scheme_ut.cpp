@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/testlib/common_helper.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -4902,27 +4903,6 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
-    void EnableDebugLogging(NActors::TTestActorRuntime * runtime) {
-        //runtime->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
-        // runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        // runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
-        // runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
-        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::TX_CONVEYOR, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::METADATA_PROVIDER, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
-    }
-
-    void EnableDebugLogging(TKikimrRunner& kikimr) {
-        EnableDebugLogging(kikimr.GetTestServer().GetRuntime());
-    }
-
     Y_UNIT_TEST(AddColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -4967,7 +4947,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
         testHelper.ReadData("SELECT new_column FROM `/Root/ColumnTableTest` WHERE id=1", "[[#]]");
         testHelper.ReadData("SELECT resource_id FROM `/Root/ColumnTableTest` WHERE id=1", "[[[\"test_res_1\"]]]");
-        EnableDebugLogging(testHelper.GetKikimr());
+        Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(3).Add("test_res_3").Add(123).Add<uint64_t>(200);

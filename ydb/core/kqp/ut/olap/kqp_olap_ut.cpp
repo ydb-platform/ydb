@@ -44,27 +44,6 @@ using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table:
     Ydb::Table::BulkUpsertResponse>;
 
 Y_UNIT_TEST_SUITE(KqpOlap) {
-    void EnableDebugLogging(NActors::TTestActorRuntime* runtime) {
-        //runtime->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
-        // runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        // runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
-        // runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
-        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::TX_CONVEYOR, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::METADATA_PROVIDER, NActors::NLog::PRI_DEBUG);
-        //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
-    }
-
-    void EnableDebugLogging(TKikimrRunner& kikimr) {
-        EnableDebugLogging(kikimr.GetTestServer().GetRuntime());
-    }
-
     void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
         NYdb::TValueParser value(v);
 
@@ -763,15 +742,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        // EnableDebugLogging(kikimr);
-
         TLocalHelper(kikimr).CreateTestOlapTable();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
         auto client = kikimr.GetTableClient();
 
-        // EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         {
             auto it = client.StreamExecuteScanQuery(R"(
@@ -1456,7 +1433,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -1668,7 +1645,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -1724,7 +1701,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
         WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
         auto query = R"(SELECT id, binary_str FROM `/Root/tableWithNulls` WHERE binary_str LIKE "5%")";
@@ -1747,7 +1724,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
         WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
         auto query = R"(
@@ -1773,7 +1750,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5);
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
         auto query = R"(
@@ -2205,7 +2182,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-        EnableDebugLogging(runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         ui32 numShards = 1;
         ui32 numIterations = 10;
@@ -2353,7 +2330,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
         auto tableClient = kikimr.GetTableClient();
 
@@ -3383,7 +3360,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
-            EnableDebugLogging(kikimr);
+            Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("", kikimr, "olapTable", "olapStore12");
             helper.CreateTestOlapTable();
             helper.FillPKOnly(0, 800000);
@@ -3400,7 +3377,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false);
             TKikimrRunner kikimr(settings);
-            EnableDebugLogging(kikimr);
+            Tests::NCommon::TLoggerInit(kikimr).Initialize();
             TTypedLocalHelper helper("Utf8", kikimr);
             helper.CreateTestOlapTable();
             NArrow::NConstruction::TStringPoolFiller sPool(groupsCount, 52);
@@ -3476,7 +3453,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-        EnableDebugLogging(runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         const ui32 numShards = 10;
         const ui32 numIterations = 10;
@@ -3563,7 +3540,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-        EnableDebugLogging(runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(1000, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(50, 10);
@@ -3629,7 +3606,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-        EnableDebugLogging(runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         const ui32 numShards = 10;
         const ui32 numIterations = 50;
@@ -3692,7 +3669,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto sender = runtime->AllocateEdgeActor();
 
         InitRoot(server, sender);
-        EnableDebugLogging(runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
         ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
@@ -3836,7 +3813,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         static ui32 numKinds = 5;
 
@@ -3997,7 +3974,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 3000);
         }
 
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
 
@@ -4420,7 +4397,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TClient client(serverSettings);
 
         auto& runtime = *server->GetRuntime();
-        EnableDebugLogging(&runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
@@ -4476,7 +4453,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TClient client(serverSettings);
 
         auto& runtime = *server->GetRuntime();
-        EnableDebugLogging(&runtime);
+        Tests::NCommon::TLoggerInit(runtime).Initialize();
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
@@ -4858,7 +4835,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
 
         auto tableClient = kikimr.GetTableClient();
@@ -4878,7 +4855,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -4904,7 +4881,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
         TLocalHelper(kikimr).CreateTestOlapTable();
 
@@ -4927,7 +4904,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetForceColumnTablesCompositeMarks(true);
         TKikimrRunner kikimr(settings);
 
-        EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
         TTableWithNullsHelper(kikimr).CreateTableWithNulls();
         TLocalHelper(kikimr).CreateTestOlapTable();
 

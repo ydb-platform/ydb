@@ -3,7 +3,42 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <library/cpp/yson/writer.h>
 
+namespace NKikimr::NKqp {
+class TKikimrRunner;
+}
+
 namespace NKikimr::Tests::NCommon {
+
+class TLoggerInit {
+public:
+    static const std::vector<NKikimrServices::EServiceKikimr> KqpServices;
+    static const std::vector<NKikimrServices::EServiceKikimr> CSServices;
+private:
+    NActors::TTestActorRuntime* Runtime;
+    NActors::NLog::EPriority Priority = NActors::NLog::EPriority::PRI_DEBUG;
+    std::vector<std::vector<NKikimrServices::EServiceKikimr>> Services = {KqpServices, CSServices};
+public:
+    TLoggerInit(NActors::TTestActorRuntime* runtime)
+        : Runtime(runtime) {
+    }
+    TLoggerInit(NActors::TTestActorRuntime& runtime)
+        : Runtime(&runtime) {
+    }
+    TLoggerInit(NKqp::TKikimrRunner& kikimr);
+    void Initialize();
+    ~TLoggerInit() {
+        Initialize();
+    }
+    void SetComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
+        Services = { services };
+    }
+    void AddComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
+        Services.emplace_back(services);
+    }
+    void SetPriority(const NActors::NLog::EPriority priority) {
+        Priority = priority;
+    }
+};
 
 class THelper {
 protected:

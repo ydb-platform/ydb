@@ -1,7 +1,9 @@
-#include "cs_helper.h"
+#include "common_helper.h"
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/driver_lib/run/run.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -9,6 +11,31 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::Tests::NCommon {
+
+const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::KqpServices = {
+    NKikimrServices::KQP_COMPUTE,
+    NKikimrServices::KQP_GATEWAY,
+    NKikimrServices::KQP_RESOURCE_MANAGER,
+    NKikimrServices::KQP_EXECUTER
+};
+
+const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::CSServices = {
+    NKikimrServices::TX_COLUMNSHARD,
+    NKikimrServices::TX_COLUMNSHARD_SCAN,
+    NKikimrServices::TX_CONVEYOR
+};
+
+TLoggerInit::TLoggerInit(NKqp::TKikimrRunner& kikimr)
+    : Runtime(kikimr.GetTestServer().GetRuntime()) {
+}
+
+void TLoggerInit::Initialize() {
+    for (auto&& i : Services) {
+        for (auto&& s : i) {
+            Runtime->SetLogPriority(s, Priority);
+        }
+    }
+}
 
 void THelper::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     auto& runtime = *Server.GetRuntime();

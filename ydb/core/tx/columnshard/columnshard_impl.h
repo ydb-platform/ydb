@@ -518,8 +518,9 @@ private:
                         bool ok = false, ui64 blobsWritten = 0, ui64 bytesWritten = 0);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
     TActorId GetS3ActorForTier(const TString& tierId) const;
-    void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName, ui64 pathId,
-        TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const;
+    void SendExport(const TActorContext& ctx, ui64 exportNo, TString tierName, ui64 pathId,
+                    THashMap<TUnifiedBlobId, TString>&& blobs);
+    void ExportBlobs(const TActorContext& ctx, TEvPrivate::TEvExport::TPtr& ev) const;
     void ForgetTierBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const;
     void ForgetBlobs(const TActorContext& ctx, const THashSet<NOlap::TEvictedBlob>& blobs);
     bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,

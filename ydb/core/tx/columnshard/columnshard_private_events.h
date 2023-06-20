@@ -132,7 +132,6 @@ struct TEvPrivate {
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         ui64 ExportNo = 0;
         TString TierName;
-        ui64 PathId = 0;
         TActorId DstActor;
         TBlobDataMap Blobs; // src: blobId -> data map; dst: exported blobIds set
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
@@ -141,27 +140,29 @@ struct TEvPrivate {
         explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TBlobDataMap&& tierBlobs)
             : ExportNo(exportNo)
             , TierName(tierName)
-            , PathId(pathId)
             , Blobs(std::move(tierBlobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
-            Y_VERIFY(PathId);
+            Y_VERIFY(pathId);
             Y_VERIFY(!Blobs.empty());
+            InitDstBlobIds(pathId);
         }
 
-        TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TActorId dstActor, TBlobDataMap&& blobs)
-            : ExportNo(exportNo)
-            , TierName(tierName)
-            , PathId(pathId)
+        TEvExport(TEvPrivate::TEvExport::TPtr& ev, TActorId dstActor)
+            : ExportNo(ev->Get()->ExportNo)
+            , TierName(ev->Get()->TierName)
             , DstActor(dstActor)
-            , Blobs(std::move(blobs))
+            , Blobs(std::move(ev->Get()->Blobs))
+            , SrcToDstBlobs(std::move(ev->Get()->SrcToDstBlobs))
         {
-            Y_VERIFY(ExportNo);
-            Y_VERIFY(!TierName.empty());
-            Y_VERIFY(PathId);
             Y_VERIFY(DstActor);
-            Y_VERIFY(!Blobs.empty());
+        }
+
+        void InitDstBlobIds(ui64 pathId) {
+            for (auto& [srcBlobId, _] : Blobs) {
+                SrcToDstBlobs[srcBlobId] = srcBlobId.MakeS3BlobId(pathId);
+            }
         }
 
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {

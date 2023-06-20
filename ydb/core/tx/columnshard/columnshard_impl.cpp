@@ -925,19 +925,29 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
     }
 }
 
-void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName, ui64 pathId,
-                               TEvPrivate::TEvExport::TBlobDataMap&& blobsInfo) const {
-    Y_VERIFY(blobsInfo.size());
+void TColumnShard::SendExport(const TActorContext& ctx, ui64 exportNo, TString tierName, ui64 pathId,
+                            THashMap<TUnifiedBlobId, TString>&& blobs) {
+    Y_VERIFY(exportNo);
+    Y_VERIFY(pathId);
+    ctx.Send(SelfId(), new TEvPrivate::TEvExport(exportNo, tierName, pathId, std::move(blobs)));
+}
+
+void TColumnShard::ExportBlobs(const TActorContext& ctx, TEvPrivate::TEvExport::TPtr& ev) const {
+    Y_VERIFY(ev->Get()->Blobs.size());
 
     TStringBuilder strBlobs;
-    for (auto& [blobId, _] : blobsInfo) {
+    for (auto& [blobId, _] : ev->Get()->Blobs) {
         strBlobs << "'" << blobId.ToStringNew() << "' ";
     }
-    LOG_S_NOTICE("Export blobs " << strBlobs << "at tablet " << TabletID());
 
+    const auto& tierName = ev->Get()->TierName;
     if (auto s3 = GetS3ActorForTier(tierName)) {
-        auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, pathId, s3, std::move(blobsInfo));
+        LOG_S_DEBUG("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
+        auto event = std::make_unique<TEvPrivate::TEvExport>(ev, s3);
         ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
+    } else {
+        LOG_S_INFO("Cannot export blobs "
+            << strBlobs << "(no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
     }
 }
 

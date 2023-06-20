@@ -617,7 +617,10 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 hasColdEviction = true;
                 if (spec.S3->GetEndpoint() != "fake") {
                     misconfig = true;
-                    expectedReadResult = EExpectedResult::ERROR;
+                    // misconfig in export => OK, misconfig after export => ERROR
+                    if (i > 1) {
+                        expectedReadResult = EExpectedResult::ERROR;
+                    }
                     deplayedExports += numExports;
                     deplayedForgets += numForgets;
                     numExports = 0;
@@ -910,18 +913,14 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
     changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
     UNIT_ASSERT_VALUES_EQUAL(alters.size(), 4);
 
-    THashSet<ui32> exports = {1};
     if (misconfig) {
         // Add error in config => eviction + not finished export
         UNIT_ASSERT_VALUES_EQUAL(alters[*misconfig].Tiers.size(), 1);
         UNIT_ASSERT(alters[*misconfig].Tiers[0].S3);
         alters[*misconfig].Tiers[0].S3->SetEndpoint("nowhere"); // clear special "fake" endpoint
-        if (*misconfig == 1) {
-            exports = {2};
-        }
     }
 
-    auto rowsBytes = TestTiers(reboots, blobs, alters, exports, {2, 3});
+    auto rowsBytes = TestTiers(reboots, blobs, alters, {1}, {2, 3});
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
@@ -1346,6 +1345,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(RebootForgetAfterFail) {
         TestExport(true, 2);
     }
+
+    // TODO: ExportLostS3Answer
+    // TODO: ForgetLostS3Answer
 
     // TODO: LastTierBorderIsTtl = false
 

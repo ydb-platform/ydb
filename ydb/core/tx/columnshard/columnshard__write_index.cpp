@@ -271,14 +271,9 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
-        Y_VERIFY(ExportNo);
-        Y_VERIFY(pathBlobs.PathId);
-
-        ctx.Send(Self->SelfId(),
-                 new TEvPrivate::TEvExport(ExportNo, tierName, pathBlobs.PathId, std::move(pathBlobs.Blobs)));
+        Self->SendExport(ctx, ExportNo, tierName, pathBlobs.PathId, std::move(pathBlobs.Blobs));
         ++ExportNo;
     }
-
     Self->ForgetBlobs(ctx, BlobsToForget);
 }
 

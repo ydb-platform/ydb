@@ -114,11 +114,10 @@ void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& 
     Y_VERIFY(ActiveEvictions, "Unexpected active evictions count at tablet %lu", TabletID());
     ui64 exportNo = msg.ExportNo;
     auto& tierName = msg.TierName;
-    ui64 pathId = msg.PathId;
 
     if (status == NKikimrProto::UNKNOWN) {
         LOG_S_DEBUG("Export (write): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-        ExportBlobs(ctx, exportNo, tierName, pathId, std::move(msg.Blobs));
+        ExportBlobs(ctx, ev);
     } else if (status == NKikimrProto::ERROR && msg.Blobs.empty()) {
         LOG_S_WARN("Export (fail): id " << exportNo << " tier '" << tierName << "' error: "
             << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());

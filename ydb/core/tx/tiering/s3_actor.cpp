@@ -35,9 +35,9 @@ public:
         return Event->Blobs;
     }
 
-    TUnifiedBlobId AddExported(const TUnifiedBlobId& srcBlob, const ui64 pathId) {
-        Event->SrcToDstBlobs[srcBlob] = srcBlob.MakeS3BlobId(pathId);
-        return Event->SrcToDstBlobs[srcBlob];
+    TString GetS3Key(const TUnifiedBlobId& srcBlob) const {
+        Y_VERIFY(Event->SrcToDstBlobs.contains(srcBlob));
+        return Event->SrcToDstBlobs.find(srcBlob)->second.GetS3Key();
     }
 
     bool ExtractionFinished() const {
@@ -125,9 +125,22 @@ public:
         Exports[exportNo] = TS3Export(ev->Release());
         auto& ex = Exports[exportNo];
 
+        // Do not allow dup keys inflight
+        for (auto& [blobId, _] : ex.Blobs()) {
+            TString key = ex.GetS3Key(blobId);
+            if (ExportingKeys.count(key)) {
+                auto strBlobId = blobId.ToStringNew();
+                LOG_S_NOTICE("[S3] Abort export " << exportNo << ". There's another export for blob '"
+                    << strBlobId << "' inflight at tablet " << TabletId);
+                Exports.clear(exportNo);
+                return; // TODO: return an error?
+            }
+        }
+
         for (auto& [blobId, blobData] : ex.Blobs()) {
-            TString key = ex.AddExported(blobId, msg.PathId).GetS3Key();
-            Y_VERIFY(!ExportingKeys.count(key)); // TODO: allow reexport?
+            TString key = ex.GetS3Key(blobId);
+            Y_VERIFY(!key.empty());
+            Y_VERIFY(!ExportingKeys.count(key));
 
             ex.RegisterKey(key, blobId);
             ExportingKeys[key] = exportNo;
@@ -270,7 +283,7 @@ public:
         LOG_S_DEBUG("[S3] DeleteObjectResponse '" << key << "' at tablet " << TabletId);
 
         if (!ForgettingKeys.count(key)) {
-            LOG_S_DEBUG("[S3] DeleteObjectResponse for unknown key '" << key << "' at tablet " << TabletId);
+            LOG_S_INFO("[S3] DeleteObjectResponse for unknown key '" << key << "' at tablet " << TabletId);
             return;
         }
 
@@ -278,7 +291,7 @@ public:
         ForgettingKeys.erase(key);
 
         if (!Forgets.count(forgetNo)) {
-            LOG_S_DEBUG("[S3] DeleteObjectResponse for unknown forget with key '" << key << "' at tablet " << TabletId);
+            LOG_S_INFO("[S3] DeleteObjectResponse for unknown forget with key '" << key << "' at tablet " << TabletId);
             return;
         }
 
@@ -359,7 +372,7 @@ public:
         {
             auto itExportKey = ExportingKeys.find(key);
             if (itExportKey == ExportingKeys.end()) {
-                LOG_S_DEBUG("[S3] KeyFinished for unknown key '" << key << "' at tablet " << TabletId);
+                LOG_S_INFO("[S3] KeyFinished for unknown key '" << key << "' at tablet " << TabletId);
                 return;
             }
             exportNo = itExportKey->second;
@@ -367,7 +380,7 @@ public:
         }
         auto it = Exports.find(exportNo);
         if (it == Exports.end()) {
-            LOG_S_DEBUG("[S3] KeyFinished for unknown export with key '" << key << "' at tablet " << TabletId);
+            LOG_S_INFO("[S3] KeyFinished for unknown export with key '" << key << "' at tablet " << TabletId);
             return;
         }
 

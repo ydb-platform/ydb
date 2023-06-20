@@ -479,17 +479,18 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/aux_/preprocessed/plain/vector_c.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/list/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/list/list0.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/list/list0_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/list10.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/list/list10_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/list20.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/list/list20_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/list30.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/list/list30_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/list40.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/list/list40_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/list50.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/list/list50_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/list/AUX778076_LIST_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/list/list50.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/list/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list10.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/list/aux_/preprocessed/plain/list10_c.hpp
@@ -508,12 +509,26 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/map/map30.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/map40.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/map50.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/map/AUX778076_MAP_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/map/map50.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/map/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map10.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map20.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map30.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map40.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/map/aux_/preprocessed/typeof_based/map50.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/set/AUX778076_SET_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/set0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/set10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/set20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/set30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/set40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/set/set50.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/set/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set10.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set10_c.hpp

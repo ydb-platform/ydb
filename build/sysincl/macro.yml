@@ -34,6 +34,10 @@
     # Hence this file was already parsed and empty resolving is equivalent to providing the actual resolution for it.
     - BOOST_PP_INCLUDE_SELF()
 
+    # BOOST_PP_UPDATE_COUNTER() is defined in boost/preprocessor/slot/counter.
+    # It is unclear why the author used macro include at all.
+    - BOOST_PP_UPDATE_COUNTER(): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/counter.hpp
+
     # libfreetype officially insists on using macros to include its headers:
     # https://freetype.org/freetype2/docs/tutorial/step1.html#section-1
     #

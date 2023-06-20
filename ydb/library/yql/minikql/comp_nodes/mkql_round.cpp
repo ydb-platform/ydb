@@ -32,16 +32,16 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto value = Source->GetValue(ctx).Get<From>();
-        auto toMin = std::numeric_limits<To>::min();
-        auto toMax = std::numeric_limits<To>::max();
+        const auto value = Source->GetValue(ctx).Get<From>();
+        constexpr auto toMin = std::numeric_limits<To>::min();
+        constexpr auto toMax = std::numeric_limits<To>::max();
 
         if constexpr (std::is_signed<From>::value && std::is_unsigned<To>::value) {
             if (value < 0) {
                 return Down ? TUnboxedValuePod() : TUnboxedValuePod(toMin);
             }
 
-            if (value > toMax) {
+            if (static_cast<std::make_unsigned_t<From>>(value) > toMax) {
                 return Down ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
             }
 
@@ -49,7 +49,7 @@ public:
         }
 
         if constexpr (std::is_unsigned<From>::value && std::is_signed<To>::value) {
-            if (value > toMax) {
+            if (value > static_cast<std::make_unsigned_t<To>>(toMax)) {
                 return Down ? TUnboxedValuePod(toMax) : TUnboxedValuePod();
             }
 

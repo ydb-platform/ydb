@@ -1081,12 +1081,14 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo().Failure()); // Callback will be called.
 
-        setup.MockProcessor->Wait();
-        secondProcessor->Wait();
-
         setup.Session->Abort();
 
         setup.AssertNoEvents();
+
+        setup.MockProcessor->Wait();
+        secondProcessor->Wait();
+        secondProcessor->Validate();
+
     }
 
     Y_UNIT_TEST(CreatePartitionStream) {

@@ -357,6 +357,10 @@
   includes:
     - jni.h
 
+- source_filter: "^contrib/(libs/ffmpeg-3|libs/ffmpeg-3.4.1|restricted/patched/ffmpeg_minimal)/libavcodec/"
+  includes:
+    - jni.h
+
 - source_filter: "^contrib/(libs/(ffmpeg-3|kyotocabinet)|tools/ag)"
   includes:
     - lzma.h
@@ -635,3 +639,11 @@
 - source_filter: "^contrib/tools/bison/bison/data"
   includes:
     - position.hh
+
+- source_filter: "^contrib/libs/re2/util/pcre.h"
+  includes:
+    - pcre.h
+
+- source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
+  includes:
+    - psimd.h

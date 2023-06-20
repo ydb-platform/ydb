@@ -33,6 +33,8 @@ target_link_libraries(providers-dq-provider PUBLIC
   providers-common-metrics
   common-schema-expr
   providers-common-transform
+  providers-common-activation
+  providers-common-proto
   dq-api-grpc
   dq-api-protos
   providers-dq-common

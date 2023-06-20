@@ -17,7 +17,6 @@ target_link_libraries(providers-common-config PUBLIC
   library-yql-core
   yql-core-expr_nodes
   library-yql-ast
-  providers-common-activation
   cpp-containers-sorted_vector
   cpp-string_utils-parse_size
   cpp-string_utils-levenshtein_diff

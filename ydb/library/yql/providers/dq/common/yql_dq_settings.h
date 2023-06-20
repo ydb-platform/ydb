@@ -169,29 +169,10 @@ struct TDqConfiguration: public TDqSettings, public NCommon::TSettingDispatcher 
     TDqConfiguration();
     TDqConfiguration(const TDqConfiguration&) = delete;
 
-    template <class TProtoConfig>
-    void Init(const TProtoConfig& config, const TString& userName)
-    {
+    template <class TProtoConfig, typename TFilter>
+    void Init(const TProtoConfig& config, const TFilter& filter) {
         // Init settings from config
-        this->Dispatch(config.GetDefaultSettings(), userName);
-
-        // TODO: drop after releasing new gateways config
-        if (this->AnalyzeQuery.Get().Empty()) {
-            int percent = 0;
-
-            if ((percent = this->_AnalyzeQueryPercentage.Get().GetOrElse(0)) &&
-                RandomNumber<ui8>(100) < percent)
-            {
-                this->Dispatch(NCommon::ALL_CLUSTERS, "AnalyzeQuery", "true", TDqConfiguration::EStage::STATIC);
-            }
-
-            for (const auto& userFromConfig : config.GetDefaultAnalyzeQueryForUsers()) {
-                if (userFromConfig == userName) {
-                    this->Dispatch(NCommon::ALL_CLUSTERS, "AnalyzeQuery", "true", TDqConfiguration::EStage::STATIC);
-                    break;
-                }
-            }
-        }
+        this->Dispatch(config.GetDefaultSettings(), filter);
 
         this->FreezeDefaults();
     }

@@ -18,6 +18,9 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/cast.h>
+#include <util/generic/hash.h>
+#include <util/generic/utility.h>
+#include <util/string/builder.h>
 
 #include <vector>
 
@@ -143,10 +146,20 @@ namespace {
         }
 
         bool Initialize(TExprContext& ctx) override {
+            auto filter = [this](const TCoreAttr& attr) {
+                if (!attr.HasActivation() || !Username) {
+                    return true;
+                }
+                if (NConfig::Allow(attr.GetActivation(), Username)) {
+                    Statistics.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
+                    return true;
+                }
+                return false;
+            };
             if (CoreConfig) {
                 TPosition pos;
                 for (auto& flag: CoreConfig->GetFlags()) {
-                    if (!flag.HasActivation() || !Username || NConfig::Allow(flag.GetActivation(), Username)) {
+                    if (filter(flag)) {
                         TVector<TStringBuf> args;
                         for (auto& arg: flag.GetArgs()) {
                             args.push_back(arg);
@@ -157,6 +170,18 @@ namespace {
                     }
                 }
             }
+            return true;
+        }
+
+        bool CollectStatistics(NYson::TYsonWriter& writer, bool totalOnly) override {
+            if (Statistics.Entries.empty()) {
+                return false;
+            }
+
+            THashMap<ui32, TOperationStatistics> tmp;
+            tmp.emplace(Max<ui32>(), Statistics);
+            NCommon::WriteStatistics(writer, totalOnly, tmp);
+
             return true;
         }
 
@@ -1058,6 +1083,7 @@ namespace {
         const TYqlCoreConfig* CoreConfig;
         TString Username;
         const TAllowSettingPolicy Policy;
+        TOperationStatistics Statistics;
     };
 }
 

@@ -5,6 +5,7 @@
 #include "yql_dq_datasource.h"
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/activation/yql_activation.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
@@ -77,7 +78,20 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             }
 
             if (gatewaysConfig) {
-                state->Settings->Init(gatewaysConfig->GetDq(), username);
+                auto filter = [username, state](const NYql::TAttr& attr) -> bool {
+                    if (!attr.HasActivation()) {
+                        return true;
+                    }
+                    if (NConfig::Allow(attr.GetActivation(), username)) {
+                        with_lock(state->Mutex) {
+                            state->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
+                        }
+                        return true;
+                    }
+                    return false;
+                };
+
+                state->Settings->Init(gatewaysConfig->GetDq(), filter);
             }
 
             Y_UNUSED(progressWriter);

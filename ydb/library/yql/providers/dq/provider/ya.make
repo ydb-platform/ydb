@@ -42,6 +42,8 @@ PEERDIR(
     ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/common/schema/expr
     ydb/library/yql/providers/common/transform
+    ydb/library/yql/providers/common/activation
+    ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common

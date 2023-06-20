@@ -2,7 +2,6 @@
 
 #include "yql_setting.h"
 
-#include <ydb/library/yql/providers/common/activation/yql_activation.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
@@ -325,10 +324,10 @@ public:
 
     bool Dispatch(const TString& cluster, const TString& name, const TMaybe<TString>& value, EStage stage);
 
-    template <class TContainer>
-    void Dispatch(const TString& cluster, const TContainer& clusterValues, const TString& userName) {
+    template <class TContainer, typename TFilter>
+    void Dispatch(const TString& cluster, const TContainer& clusterValues, const TFilter& filter) {
         for (auto& v: clusterValues) {
-            if (!v.HasActivation() || NConfig::Allow(v.GetActivation(), userName)) {
+            if (filter(v)) {
                 Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG);
             }
         }
@@ -341,9 +340,9 @@ public:
         }
     }
 
-    template <class TContainer>
-    void Dispatch(const TContainer& globalValues, const TString& userName) {
-        Dispatch(ALL_CLUSTERS, globalValues, userName);
+    template <class TContainer, typename TFilter>
+    void Dispatch(const TContainer& globalValues, const TFilter& filter) {
+        Dispatch(ALL_CLUSTERS, globalValues, filter);
     }
 
     template <class TContainer>

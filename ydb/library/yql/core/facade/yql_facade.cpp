@@ -1277,6 +1277,7 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
 
     // Providers
     bool hasStatistics = false;
+    THashSet<TStringBuf> processed;
     for (auto& datasink : TypeCtx_->DataSinks) {
         TStringStream providerOut;
         NYson::TYsonWriter providerWriter(&providerOut);
@@ -1284,6 +1285,18 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             writer.OnKeyedItem(datasink->GetName());
             writer.OnRaw(providerOut.Str());
             hasStatistics = true;
+            processed.insert(datasink->GetName());
+        }
+    }
+    for (auto& datasource : TypeCtx_->DataSources) {
+        if (processed.insert(datasource->GetName()).second) {
+            TStringStream providerOut;
+            NYson::TYsonWriter providerWriter(&providerOut);
+            if (datasource->CollectStatistics(providerWriter, totalOnly)) {
+                writer.OnKeyedItem(datasource->GetName());
+                writer.OnRaw(providerOut.Str());
+                hasStatistics = true;
+            }
         }
     }
 

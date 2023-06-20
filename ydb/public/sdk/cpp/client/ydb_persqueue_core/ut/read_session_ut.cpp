@@ -181,6 +181,9 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
     }
 
     void Validate() {
+        UNIT_ASSERT(CallbackFutures.empty());
+        ConnectedCallback = nullptr;
+        ConnectTimeoutCallback = nullptr;
     }
 
     std::atomic<size_t> CreateCallsCount = 0;
@@ -403,8 +406,12 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
     void Validate() {
         with_lock (Lock) {
             UNIT_ASSERT(ReadResponses.empty());
+            UNIT_ASSERT(CallbackFutures.empty());
+
+            ActiveRead = TClientReadInfo{};
         }
     }
+
 
     void ProcessRead() {
         NGrpc::TGrpcStatus status;
@@ -435,6 +442,7 @@ struct TMockReadSessionProcessor : public TMockProcessorFactory<Ydb::PersQueue::
             ProcessRead();
         }
     }
+
 
     TAdaptiveLock Lock;
     TClientReadInfo ActiveRead;
@@ -579,8 +587,6 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
 
-    Mock::AllowLeak(MockProcessor.Get());
-    Mock::AllowLeak(MockProcessorFactory.get());
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
@@ -591,7 +597,9 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
         MockProcessorFactory->Validate();
         MockProcessor->Validate();
     }
+
     Session = nullptr;
+
     ThreadPool->Stop();
 }
 
@@ -1045,11 +1053,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             .WillByDefault([state](TDuration timeout) mutable {
                     UNIT_ASSERT_VALUES_EQUAL(timeout, *state->GetNextRetryDelay(NYdb::EStatus::INTERNAL_ERROR));
             });
-
         auto failCreation = [&]() {
             setup.MockProcessorFactory->FailCreation();
         };
-
         EXPECT_CALL(*setup.MockProcessorFactory, OnCreateProcessor(_))
             .WillOnce(failCreation)
             .WillOnce(failCreation)
@@ -1074,6 +1080,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             .WillOnce([&](){ setup.MockProcessorFactory->CreateProcessor(secondProcessor); });
 
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo().Failure()); // Callback will be called.
+
+        setup.MockProcessor->Wait();
+        secondProcessor->Wait();
+
+        setup.Session->Abort();
+
+        setup.AssertNoEvents();
     }
 
     Y_UNIT_TEST(CreatePartitionStream) {
@@ -1754,7 +1767,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         auto dataReceived = std::make_shared<NThreading::TPromise<void>>(NThreading::NewPromise<void>());
         auto dataReceivedFuture = dataReceived->GetFuture();
         std::shared_ptr<TMaybe<TReadSessionEvent::TDataReceivedEvent>> dataReceivedEvent = std::make_shared<TMaybe<TReadSessionEvent::TDataReceivedEvent>>();
-        setup.Settings.EventHandlers_.SimpleDataHandlers([=](TReadSessionEvent::TDataReceivedEvent& event) mutable {
+        setup.Settings.EventHandlers_.SimpleDataHandlers([dataReceivedEvent,dataReceived](TReadSessionEvent::TDataReceivedEvent& event) mutable {
             *dataReceivedEvent = std::move(event);
             dataReceived->SetValue();
         }, withCommit, withGracefulRelease);
@@ -1763,15 +1776,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         auto commitCalled = std::make_shared<NThreading::TPromise<void>>(NThreading::NewPromise<void>());
         auto commitCalledFuture = commitCalled->GetFuture();
 
-        Mock::AllowLeak(setup.MockProcessor.Get());
-
-        EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillOnce([=](){ commitCalled->SetValue(); });
+        if (withCommit) {
+            EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
+                .WillOnce([commitCalled](){ commitCalled->SetValue(); });
+        }
 
         auto destroyCalled = std::make_shared<NThreading::TPromise<void>>(NThreading::NewPromise<void>());
         auto destroyCalledFuture = destroyCalled->GetFuture();
         EXPECT_CALL(*setup.MockProcessor, OnReleasedRequest(_))
-            .WillOnce([=](){ destroyCalled->SetValue(); });
+            .WillOnce([destroyCalled](){ destroyCalled->SetValue(); });
 
         EXPECT_CALL(*setup.MockProcessor, OnStartReadRequest(_));
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
@@ -1809,7 +1822,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         if (withCommit) {
             commitCalledFuture.Wait();
-        } if (withCommit || withGracefulRelease) {
+        }
+        if (withCommit || withGracefulRelease) {
             setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                    .CommitAcknowledgement(1));
         }

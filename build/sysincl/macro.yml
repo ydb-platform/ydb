@@ -587,6 +587,14 @@
   includes:
     - BOOST_PHOENIX_UNORDERED_MAP_HEADER: $U/unordered_map
     - BOOST_PHOENIX_UNORDERED_SET_HEADER: $U/unordered_set
+    # boost/phoenix preprocessor magic works as follows
+    # 1. Each file defines BOOST_PHOENIX_ITERATION_PARAMS as a tuple whose last element contains current file name (checked on version 1.82).
+    # 2. It includes then BOOST_PHOENIX_ITERATE() which is simplify defined to <boost/phoenix/support/detail/iterate.hpp>.
+    # 3. The latter sets BOOST_PP_ITERATION_PARAMS from BOOST_PHOENIX_ITERATION_PARAMS and calls BOOST_PP_ITERATE() macro.
+    #
+    # Hence #include BOOST_PHOENIX_ITERATION_FILE will always result in including the file already seen ymake.
+    # This is equivalent to resolving this macro include into nothing.
+    - BOOST_PHOENIX_ITERATION_FILE()
     - BOOST_PHOENIX_ITERATE(): contrib/restricted/boost/phoenix/include/boost/phoenix/support/detail/iterate.hpp
     - BOOST_PP_ITERATE(): contrib/restricted/boost/phoenix/include/boost/phoenix/support/detail/iterate.hpp
 

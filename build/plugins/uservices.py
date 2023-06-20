@@ -34,4 +34,5 @@ def on_process_usrv_files(unit, *args):
             ymake.report_configure_error('Dependencies for {} not found in {}'.format(f, args[0]))
             unit.on_usrv_mv_with_deps([f])
             return
-        unit.on_move([f + '.usrv', mode, f, 'CPP_DEPS'] + deps)
+        deps_type = 'OUTPUT_INCLUDES' if f.endswith('.proto') else 'CPP_DEPS'
+        unit.on_move([f + '.usrv', mode, f, deps_type] + deps)

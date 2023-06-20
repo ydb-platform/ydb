@@ -242,9 +242,11 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 auto filterBySpace = [params = *params, currentGroup, &maxUsage](const TStorageGroupInfo& newGroup) -> bool {
                     if (newGroup.IsMatchesParameters(params)) {
                         if (currentGroup) {
-                            bool result = newGroup.Id != currentGroup->Id
-                                          && newGroup.GroupParameters.GetCurrentResources().GetOccupancy()
+                            bool result = newGroup.Id != currentGroup->Id;
+                            if (currentGroup->GroupParameters.GetCurrentResources().HasOccupancy()) {
+                                result &= newGroup.GroupParameters.GetCurrentResources().GetOccupancy()
                                           < currentGroup->GroupParameters.GetCurrentResources().GetOccupancy();
+                            }
                             if (result) {
                                 maxUsage = std::max(maxUsage, newGroup.GetUsage());
                             }
@@ -259,7 +261,10 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                 double spacePenalty = Hive.GetSpaceUsagePenalty();
                 auto calculateUsageWithSpacePenalty = [currentGroup, &maxUsage, spacePenaltyThreshold, spacePenalty](const TStorageGroupInfo* newGroup) -> double {
                     double usage = newGroup->GetUsage();
-                    if (currentGroup && currentGroup->MaximumSize) {
+                    if (currentGroup && currentGroup->GroupParameters.GetCurrentResources().HasOccupancy()) {
+                        if (!newGroup->GroupParameters.GetCurrentResources().HasOccupancy()) {
+                            return maxUsage;
+                        }
                         if (1 - newGroup->GroupParameters.GetCurrentResources().GetOccupancy()
                             < spacePenaltyThreshold * (1 - currentGroup->GroupParameters.GetCurrentResources().GetOccupancy())) {
                             double avail = maxUsage - usage;

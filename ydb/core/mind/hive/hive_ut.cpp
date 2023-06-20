@@ -2760,6 +2760,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             metrics->MutableGroupParameters()->SetGroupID(group.Id);
             metrics->MutableGroupParameters()->SetStoragePoolName("def1");
             metrics->MutableGroupParameters()->MutableCurrentResources()->SetOccupancy(group.Occupancy);
+            // If assured space is not set, usage is always set to 1
+            metrics->MutableGroupParameters()->MutableAssuredResources()->SetSpace(100000);
         }
 
         runtime.SendToPipe(MakeBSControllerID(0), sender, groupMetricsExchange.Release(), 0, GetPipeConfigWithRetries());

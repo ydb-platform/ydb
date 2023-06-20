@@ -1,5 +1,6 @@
 #pragma once
 #include "granule.h"
+#include <ydb/core/tx/columnshard/counters/scan.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -9,7 +10,13 @@ private:
     std::set<ui64> GranulesInProcessing;
     i64 BlobsSize = 0;
     bool NotIndexedBatchesInitialized = false;
+    const NColumnShard::TConcreteScanCounters Counters;
 public:
+    TProcessingController(const NColumnShard::TConcreteScanCounters& counters)
+        : Counters(counters)
+    {
+    }
+
     void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
 
     NIndexedReader::TBatch* GetBatchInfo(const TBatchAddress& address);
@@ -18,11 +25,7 @@ public:
         return GranulesInProcessing.contains(granuleId);
     }
 
-    void Abort() {
-        GranulesWaiting.clear();
-        GranulesInProcessing.clear();
-        BlobsSize = 0;
-    }
+    void Abort();
 
     ui64 GetBlobsSize() const {
         return BlobsSize;
@@ -32,10 +35,7 @@ public:
         return GranulesInProcessing.size();
     }
 
-    void StartBlobProcessing(const ui64 granuleId, const TBlobRange& range) {
-        GranulesInProcessing.emplace(granuleId);
-        BlobsSize += range.Size;
-    }
+    void StartBlobProcessing(const ui64 granuleId, const TBlobRange& range);
 
     TGranule::TPtr ExtractReadyVerified(const ui64 granuleId);
 

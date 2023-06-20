@@ -4,28 +4,33 @@
 namespace NKikimr::NColumnShard {
 
 TValueAggregationAgent::TValueAggregationAgent(const TString& signalName, const TCommonCountersOwner& signalsOwner)
-    : ValueSignalSum(signalsOwner.GetValue("SUM/" + signalName))
-    , ValueSignalMin(signalsOwner.GetValue("MIN/" + signalName))
-    , ValueSignalMax(signalsOwner.GetValue("MAX/" + signalName))
+    : ValueSignalSum(signalsOwner.GetAggregationValue("SUM/" + signalName))
+    , ValueSignalMin(signalsOwner.GetAggregationValue("MIN/" + signalName))
+    , ValueSignalMax(signalsOwner.GetAggregationValue("MAX/" + signalName))
 {
 
 }
 
-bool TValueAggregationAgent::CalcAggregations(i64& sum, i64& minValue, i64& maxValue) const {
+bool TValueAggregationAgent::CalcAggregationsAndClean(i64& sum, i64& minValue, i64& maxValue) const {
     if (Values.empty()) {
         return false;
     }
     sum = 0;
     minValue = Values.front()->GetValue();
     maxValue = Values.front()->GetValue();
-    for (auto&& i : Values) {
-        const i64 v = i->GetValue();
-        sum += v;
-        if (minValue > v) {
-            minValue = v;
-        }
-        if (maxValue < v) {
-            maxValue = v;
+    for (auto it = Values.begin(); it != Values.end();) {
+        if (it->use_count() == 1) {
+            it = Values.erase(it);
+        } else {
+            const i64 v = (*it)->GetValue();
+            sum += v;
+            if (minValue > v) {
+                minValue = v;
+            }
+            if (maxValue < v) {
+                maxValue = v;
+            }
+            ++it;
         }
     }
     return true;
@@ -35,7 +40,7 @@ std::optional<NKikimr::NColumnShard::TSignalAggregations> TValueAggregationAgent
     i64 sum;
     i64 min;
     i64 max;
-    if (!CalcAggregations(sum, min, max)) {
+    if (!CalcAggregationsAndClean(sum, min, max)) {
         return {};
     }
     return TSignalAggregations(sum, min, max);
@@ -48,20 +53,16 @@ void TValueAggregationAgent::ResendStatus() const {
         ValueSignalMin->Set(aggr->Min);
         ValueSignalMax->Set(aggr->Max);
         ValueSignalSum->Set(aggr->Sum);
+    } else {
+        ValueSignalMin->Set(0);
+        ValueSignalMax->Set(0);
+        ValueSignalSum->Set(0);
     }
 }
 
-std::shared_ptr<NKikimr::NColumnShard::TValueAggregationClient> TValueAggregationAgent::GetClient(std::shared_ptr<TValueAggregationAgent> selfPtr) {
+std::shared_ptr<NKikimr::NColumnShard::TValueAggregationClient> TValueAggregationAgent::GetClient() {
     TGuard<TMutex> g(Mutex);
-    auto it = Values.emplace(Values.end(), nullptr);
-    auto result = std::make_shared<TValueAggregationClient>(selfPtr, it);
-    *it = result.get();
-    return result;
-}
-
-void TValueAggregationAgent::UnregisterClient(std::list<TValueAggregationClient*>::iterator it) {
-    TGuard<TMutex> g(Mutex);
-    Values.erase(it);
+    return *Values.emplace(Values.end(), std::make_shared<TValueAggregationClient>());
 }
 
 }

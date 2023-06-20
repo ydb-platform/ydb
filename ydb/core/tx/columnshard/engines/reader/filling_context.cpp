@@ -8,6 +8,8 @@ namespace NKikimr::NOlap::NIndexedReader {
 TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading)
     : ReadMetadata(readMetadata)
     , InternalReading(internalReading)
+    , Processing(owner.GetCounters())
+    , Result(owner.GetCounters())
     , Owner(owner)
     , Counters(owner.GetCounters())
 {

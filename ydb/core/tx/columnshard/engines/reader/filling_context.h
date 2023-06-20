@@ -25,7 +25,7 @@ private:
     std::set<ui32> FilterStageColumns;
     std::set<ui32> UsedColumns;
     IOrderPolicy::TPtr SortingPolicy;
-    NColumnShard::TScanCounters Counters;
+    NColumnShard::TConcreteScanCounters Counters;
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
     static constexpr ui32 GranulesCountProcessingLimit = 16;

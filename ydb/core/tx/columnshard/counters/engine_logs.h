@@ -57,7 +57,7 @@ public:
     }
 
     TDataClassCounters RegisterClient() const {
-        return TDataClassCounters(PortionsSize->GetClient(PortionsSize), PortionsCount->GetClient(PortionsCount));
+        return TDataClassCounters(PortionsSize->GetClient(), PortionsCount->GetClient());
     }
 };
 

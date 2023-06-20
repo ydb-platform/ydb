@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/reader/granule.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -8,7 +9,14 @@ protected:
     THashMap<ui64, TGranule::TPtr> GranulesToOut;
     std::set<ui64> ReadyGranulesAccumulator;
     i64 BlobsSize = 0;
+    const NColumnShard::TConcreteScanCounters Counters;
 public:
+    TResultController(const NColumnShard::TConcreteScanCounters& counters)
+        : Counters(counters)
+    {
+
+    }
+
     void Clear() {
         GranulesToOut.clear();
         BlobsSize = 0;

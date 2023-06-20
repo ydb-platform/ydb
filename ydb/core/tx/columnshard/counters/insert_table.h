@@ -36,7 +36,7 @@ public:
     }
 
     TPathIdClientCounters GetClient() const {
-        return TPathIdClientCounters(PathIdBytes->GetClient(PathIdBytes), PathIdChunks->GetClient(PathIdChunks));
+        return TPathIdClientCounters(PathIdBytes->GetClient(), PathIdChunks->GetClient());
     }
 };
 

@@ -17,6 +17,11 @@ protected:
     std::shared_ptr<TValueAggregationAgent> GetValueAutoAggregations(const TString& name) const;
     std::shared_ptr<TValueAggregationClient> GetValueAutoAggregationsClient(const TString& name) const;
 public:
+    const TString& GetModuleId() const {
+        return ModuleId;
+    }
+
+    NMonitoring::TDynamicCounters::TCounterPtr GetAggregationValue(const TString& name) const;
     NMonitoring::TDynamicCounters::TCounterPtr GetValue(const TString& name) const;
     NMonitoring::TDynamicCounters::TCounterPtr GetDeriviative(const TString& name) const;
     NMonitoring::THistogramPtr GetHistogram(const TString& name, NMonitoring::IHistogramCollectorPtr&& hCollector) const;

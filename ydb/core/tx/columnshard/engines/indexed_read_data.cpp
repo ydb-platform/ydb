@@ -444,7 +444,7 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
 }
 
 TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
-    const bool internalRead, const NColumnShard::TScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor)
+    const bool internalRead, const NColumnShard::TConcreteScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor)
     : Counters(counters)
     , TasksProcessor(tasksProcessor)
     , ReadMetadata(readMetadata)

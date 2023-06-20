@@ -10,12 +10,14 @@ class TValueAggregationAgent;
 
 class TValueAggregationClient: TNonCopyable {
 private:
-    std::shared_ptr<TValueAggregationAgent> Owner;
-    std::list<TValueAggregationClient*>::iterator PositionIterator;
     YDB_ACCESSOR(i64, Value, 0);
 public:
-    TValueAggregationClient(std::shared_ptr<TValueAggregationAgent> owner, std::list<TValueAggregationClient*>::iterator it);
-    ~TValueAggregationClient();
+    void Add(const i64 v) {
+        Value += v;
+    }
+    void Remove(const i64 v) {
+        Value -= v;
+    }
 };
 
 }

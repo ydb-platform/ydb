@@ -29,7 +29,7 @@ public:
                NOlap::TReadMetadata::TConstPtr readMetadata,
                const TInstant& deadline,
                const TActorId& columnShardActorId,
-               ui64 requestCookie, const TScanCounters& counters)
+               ui64 requestCookie, const TConcreteScanCounters& counters)
         : TabletId(tabletId)
         , DstActor(dstActor)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
@@ -294,7 +294,7 @@ IActor* CreateReadActor(ui64 tabletId,
                         NOlap::TReadMetadata::TConstPtr readMetadata,
                         const TInstant& deadline,
                         const TActorId& columnShardActorId,
-                        ui64 requestCookie, const TScanCounters& counters)
+                        ui64 requestCookie, const TConcreteScanCounters& counters)
 {
     return new TReadActor(tabletId, dstActor, std::move(event), readMetadata,
                           deadline, columnShardActorId, requestCookie, counters);

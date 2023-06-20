@@ -39,7 +39,7 @@ IActor* CreateReadActor(ui64 tabletId,
                         NOlap::TReadMetadata::TConstPtr readMetadata,
                         const TInstant& deadline,
                         const TActorId& columnShardActorId,
-                        ui64 requestCookie, const TScanCounters& counters);
+                        ui64 requestCookie, const TConcreteScanCounters& counters);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 
@@ -121,6 +121,7 @@ class TColumnShard
     friend class TTxNotifyTxCompletion;
     friend class TTxPlanStep;
     friend class TTxWrite;
+    friend class TTxCleanInserted;
     friend class TTxReadBase;
     friend class TTxRead;
     friend class TTxScan;

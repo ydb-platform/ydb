@@ -21,7 +21,7 @@ class TIndexedReadData {
 private:
     std::unique_ptr<NIndexedReader::TGranulesFillingContext> GranulesContext;
 
-    NColumnShard::TScanCounters Counters;
+    NColumnShard::TConcreteScanCounters Counters;
     NColumnShard::TDataTasksProcessorContainer TasksProcessor;
     TFetchBlobsQueue FetchBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
@@ -36,9 +36,9 @@ private:
 
 public:
     TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
-        const bool internalRead, const NColumnShard::TScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
+        const bool internalRead, const NColumnShard::TConcreteScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
 
-    const NColumnShard::TScanCounters& GetCounters() const noexcept {
+    const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
         return Counters;
     }
 
@@ -97,9 +97,13 @@ public:
     TBlobRange NextBlob() {
         Y_VERIFY(GranulesContext);
         auto* f = FetchBlobsQueue.front();
-        if (f && GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
+        if (!f) {
+            return TBlobRange();
+        }
+        if (GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
             return FetchBlobsQueue.pop_front();
         } else {
+            Counters.OnProcessingOverloaded();
             return TBlobRange();
         }
     }

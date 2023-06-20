@@ -2,6 +2,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <util/folder/path.h>
 
 namespace NKikimr::NColumnShard::NPrivate {
 namespace {
@@ -44,9 +45,10 @@ private:
 public:
     std::shared_ptr<TValueAggregationAgent> GetAggregation(const TString& signalName, const TCommonCountersOwner& signalsOwner) {
         TGuard<TMutex> g(Mutex);
-        auto it = Agents.find(signalName);
+        const TString agentId = TFsPath(signalsOwner.GetModuleId() + "/" + signalName).Fix().GetPath();
+        auto it = Agents.find(agentId);
         if (it == Agents.end()) {
-            it = Agents.emplace(signalName, std::make_shared<TValueAggregationAgent>(signalName, signalsOwner)).first;
+            it = Agents.emplace(agentId, std::make_shared<TValueAggregationAgent>(signalName, signalsOwner)).first;
             if (NActors::TlsActivationContext) {
                 NActors::TActivationContext::Register(new TRegularSignalBuilderActor(it->second));
             }

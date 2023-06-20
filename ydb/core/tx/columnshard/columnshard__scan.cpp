@@ -46,7 +46,7 @@ private:
 
 
 constexpr ui64 INIT_BATCH_ROWS = 1000;
-constexpr i64 DEFAULT_READ_AHEAD_BYTES = 100 * 1024 * 1024;
+constexpr i64 DEFAULT_READ_AHEAD_BYTES = 200 * 1024 * 1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
@@ -87,8 +87,7 @@ public:
         , ReadMetadataRanges(std::move(readMetadataList))
         , ReadMetadataIndex(0)
         , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
-        , ScanCountersPool(scanCountersPool)
-    {
+        , ScanCountersPool(scanCountersPool) {
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
 
@@ -138,9 +137,14 @@ private:
             if (!blobRange.BlobId.IsValid()) {
                 break;
             }
+            ScanCountersPool.Aggregations->AddFlightReadInfo(blobRange.Size);
             ++InFlightReads;
             InFlightReadBytes += blobRange.Size;
             ranges[blobRange.BlobId].emplace_back(blobRange);
+        }
+        Y_UNUSED(MaxReadAheadBytes);
+        if (InFlightReadBytes >= MaxReadAheadBytes) {
+            ScanCountersPool.OnReadingOverloaded();
         }
         if (!ranges.size()) {
             return true;
@@ -210,6 +214,7 @@ private:
 
         auto& event = *ev->Get();
         const auto& blobRange = event.BlobRange;
+        ScanCountersPool.Aggregations->RemoveFlightReadInfo(blobRange.Size);
         Stats.BlobReceived(blobRange, event.FromCache, event.ConstructTime);
 
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
@@ -587,7 +592,7 @@ private:
     const TSerializedTableRange TableRange;
     const TSmallVec<bool> SkipNullKeys;
     const TInstant Deadline;
-    TScanCounters ScanCountersPool;
+    TConcreteScanCounters ScanCountersPool;
 
     TActorId TimeoutActorId;
     TMaybe<TString> AbortReason;

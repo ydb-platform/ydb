@@ -4,31 +4,37 @@
 
 namespace NKikimr::NColumnShard {
 
-TScanCounters::TScanCounters(const TString& module) {
-    ::NMonitoring::TDynamicCounterPtr subGroup = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "columnshard");
+TScanCounters::TScanCounters(const TString& module)
+    : TBase(module)
+    , ProcessingOverload(TBase::GetDeriviative("ProcessingOverload"))
+    , ReadingOverload(TBase::GetDeriviative("ReadingOverload"))
+    , PortionBytes(TBase::GetDeriviative("PortionBytes"))
+    , FilterBytes(TBase::GetDeriviative("FilterBytes"))
+    , PostFilterBytes(TBase::GetDeriviative("PostFilterBytes"))
 
-    PortionBytes = subGroup->GetCounter(module + "/PortionBytes", true);
-    FilterBytes = subGroup->GetCounter(module + "/FilterBytes", true);
-    PostFilterBytes = subGroup->GetCounter(module + "/PostFilterBytes", true);
+    , AssembleFilterCount(TBase::GetDeriviative("AssembleFilterCount"))
 
-    AssembleFilterCount = subGroup->GetCounter(module + "/AssembleFilterCount", true);
+    , FilterOnlyCount(TBase::GetDeriviative("FilterOnlyCount"))
+    , FilterOnlyFetchedBytes(TBase::GetDeriviative("FilterOnlyFetchedBytes"))
+    , FilterOnlyUsefulBytes(TBase::GetDeriviative("FilterOnlyUsefulBytes"))
 
-    FilterOnlyCount = subGroup->GetCounter(module + "/FilterOnlyCount", true);
-    FilterOnlyFetchedBytes = subGroup->GetCounter(module + "/FilterOnlyFetchedBytes", true);
-    FilterOnlyUsefulBytes = subGroup->GetCounter(module + "/FilterOnlyUsefulBytes", true);
+    , EmptyFilterCount(TBase::GetDeriviative("EmptyFilterCount"))
+    , EmptyFilterFetchedBytes(TBase::GetDeriviative("EmptyFilterFetchedBytes"))
 
-    EmptyFilterCount = subGroup->GetCounter(module + "/EmptyFilterCount", true);
-    EmptyFilterFetchedBytes = subGroup->GetCounter(module + "/EmptyFilterFetchedBytes", true);
+    , OriginalRowsCount(TBase::GetDeriviative("OriginalRowsCount"))
+    , FilteredRowsCount(TBase::GetDeriviative("FilteredRowsCount"))
+    , SkippedBytes(TBase::GetDeriviative("SkippedBytes"))
 
-    OriginalRowsCount = subGroup->GetCounter(module + "/OriginalRowsCount", true);
-    FilteredRowsCount = subGroup->GetCounter(module + "/FilteredRowsCount", true);
-    SkippedBytes = subGroup->GetCounter(module + "/SkippedBytes", true);
+    , TwoPhasesCount(TBase::GetDeriviative("TwoPhasesCount"))
+    , TwoPhasesFilterFetchedBytes(TBase::GetDeriviative("TwoPhasesFilterFetchedBytes"))
+    , TwoPhasesFilterUsefulBytes(TBase::GetDeriviative("TwoPhasesFilterUsefulBytes"))
+    , TwoPhasesPostFilterFetchedBytes(TBase::GetDeriviative("TwoPhasesPostFilterFetchedBytes"))
+    , TwoPhasesPostFilterUsefulBytes(TBase::GetDeriviative("TwoPhasesPostFilterUsefulBytes"))
+{
+}
 
-    TwoPhasesCount = subGroup->GetCounter(module + "/TwoPhasesCount", true);
-    TwoPhasesFilterFetchedBytes = subGroup->GetCounter(module + "/TwoPhasesFilterFetchedBytes", true);
-    TwoPhasesFilterUsefulBytes = subGroup->GetCounter(module + "/TwoPhasesFilterUsefulBytes", true);
-    TwoPhasesPostFilterFetchedBytes = subGroup->GetCounter(module + "/TwoPhasesPostFilterFetchedBytes", true);
-    TwoPhasesPostFilterUsefulBytes = subGroup->GetCounter(module + "/TwoPhasesPostFilterUsefulBytes", true);
+std::shared_ptr<NKikimr::NColumnShard::TScanAggregations> TScanCounters::BuildAggregations() {
+    return std::make_shared<TScanAggregations>(GetModuleId());
 }
 
 }

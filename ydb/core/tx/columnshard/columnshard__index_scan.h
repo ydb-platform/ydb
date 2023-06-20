@@ -36,9 +36,9 @@ private:
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
     NColumnShard::TDataTasksProcessorContainer DataTasksProcessor;
-    NColumnShard::TScanCounters ScanCounters;
+    NColumnShard::TConcreteScanCounters ScanCounters;
 public:
-    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TScanCounters& scanCounters);
+    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TConcreteScanCounters& scanCounters);
     ~TColumnShardScanIterator();
 
     virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;

@@ -42,6 +42,7 @@ TGranule::TPtr TProcessingController::ExtractReadyVerified(const ui64 granuleId)
     BlobsSize -= result->GetBlobsDataSize();
     Y_VERIFY(BlobsSize >= 0);
     GranulesWaiting.erase(it);
+    Counters.Aggregations->RemoveGranuleProcessingInfo(result->GetBlobsDataSize());
     return result;
 }
 
@@ -61,7 +62,21 @@ TGranule::TPtr TProcessingController::GetGranule(const ui64 granuleId) {
 
 TGranule::TPtr TProcessingController::InsertGranule(TGranule::TPtr g) {
     Y_VERIFY(GranulesWaiting.emplace(g->GetGranuleId(), g).second);
+    Counters.Aggregations->AddGranuleProcessing();
     return g;
+}
+
+void TProcessingController::StartBlobProcessing(const ui64 granuleId, const TBlobRange& range) {
+    Counters.Aggregations->AddGranuleProcessingBytes(range.Size);
+    GranulesInProcessing.emplace(granuleId);
+    BlobsSize += range.Size;
+}
+
+void TProcessingController::Abort() {
+    GranulesWaiting.clear();
+    GranulesInProcessing.clear();
+    Counters.Aggregations->RemoveGranuleProcessingInfo(BlobsSize);
+    BlobsSize = 0;
 }
 
 }

@@ -5,7 +5,7 @@
 namespace NKikimr::NColumnShard {
 
 TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata,
-    NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TScanCounters& scanCounters)
+    NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TConcreteScanCounters& scanCounters)
     : ReadMetadata(readMetadata)
     , IndexedData(ReadMetadata, false, scanCounters, processor)
     , DataTasksProcessor(processor)

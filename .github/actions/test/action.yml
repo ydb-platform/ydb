@@ -49,12 +49,29 @@ runs:
       echo "PYTESTREPDIR=$(pwd)/ydb/tests/functional/test-results/xml" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
+      echo "ARTIFACTS_DIR=$(pwd)/artifacts" >> $GITHUB_ENV
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
-      echo "artifactsdir=$(pwd)/artifacts" >> $GITHUB_OUTPUT
       echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
       echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
       echo "logurlprefix=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_OUTPUT
       echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
+
+  - name: configure s3cmd
+    shell: bash
+    run: |
+      cat <<EOF > $WORKDIR/tmp/s3cfg
+      [default]
+      access_key = ${aws_key_id}
+      secret_key = ${aws_secret_access_key}
+      bucket_location = ru-central1
+      host_base = storage.yandexcloud.net
+      host_bucket = %(bucket)s.storage.yandexcloud.net
+      EOF
+      echo "S3CMD_CONFIG=$WORKDIR/tmp/s3cfg" >> $GITHUB_ENV
+      echo "S3_BUCKET_PATH=s3://${{ inputs.aws_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/" >> $GITHUB_ENV
+    env:
+      aws_key_id: ${{inputs.AWS_KEY_ID }}
+      aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
 
   - name: Install Node required for Testmo CLI
     uses: actions/setup-node@v3
@@ -117,7 +134,7 @@ runs:
               --output-junit $TESTREPDIR/suites/ctest_report.xml \
               -L '${{inputs.test_label_regexp}}' -E "${CTEST_SKIP_SHARDS:-}" | \
         sed -u -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}}) | \
+        tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}}) | \
         grep --line-buffered -E '(Test\s*#.*\*\*\*|\[FAIL\])|.*tests passed,.*tests failed out of' | \
         tee $WORKDIR/short.log || (
           RC=$?
@@ -132,8 +149,8 @@ runs:
     if: inputs.run_unit_tests == 'true'
     shell: bash
     run: |
-      tar -C $TESTREPDIR/ -czf ${{steps.init.outputs.artifactsdir}}/reports.tar.gz .
-      ls -la ${{steps.init.outputs.artifactsdir}}/reports.tar.gz
+      tar -C $TESTREPDIR/ -czf $ARTIFACTS_DIR/reports.tar.gz .
+      ls -la $ARTIFACTS_DIR/reports.tar.gz
       echo "[Unittest/CTest XML reports archive](${{steps.init.outputs.logurlprefix}}/reports.tar.gz)" >> $GITHUB_STEP_SUMMARY
 
   - name: postprocess xml reports
@@ -153,14 +170,14 @@ runs:
       .github/scripts/tests/ctest-postprocess.py \
         --filter-file ${{steps.init.outputs.testshardfilterfile}} \
         --decompress \
-        ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
+        $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
         $TESTREPDIR/suites/ctest_report.xml
 
       echo "::endgroup::"
 
       echo "::group::extract-logs"
 
-      mkdir ${{steps.init.outputs.artifactsdir}}/logs/
+      mkdir $ARTIFACTS_DIR/logs/
 
       .github/scripts/tests/attach-logs.py \
         --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
@@ -169,8 +186,8 @@ runs:
         --ctest-report $TESTREPDIR/suites/ctest_report.xml \
         --junit-reports-path $TESTREPDIR/unittests/ \
         --decompress \
-        ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.logfilename}} \
-        ${{steps.init.outputs.artifactsdir}}/logs/
+        $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
+        $ARTIFACTS_DIR/logs/
 
       echo "::endgroup::"
 
@@ -181,6 +198,14 @@ runs:
       .github/scripts/tests/generate-summary.py -t "#### CTest run test shard failures" $TESTREPDIR/suites/ctest_report.xml
       .github/scripts/tests/generate-summary.py -t "#### Unittest failures" $TESTREPDIR/unittests/
 
+
+  - name: sync test results to s3
+    if: always() && inputs.run_unit_tests == 'true'
+    shell: bash
+    run: |
+      echo "::group::s3-sync"
+      s3cmd sync -P --no-progress --stats --no-check-md5 -P $ARTIFACTS_DIR/ $S3_BUCKET_PATH
+      echo "::endgroup::"
 
   - name: Unit test history upload results
     if: always() && inputs.run_unit_tests == 'true' && inputs.testman_token
@@ -219,7 +244,7 @@ runs:
       echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
         -v --junit-xml=$PYTESTREPDIR/{}.xml {}" | \
         sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > ${{steps.init.outputs.artifactsdir}}/${{steps.init.outputs.pytest-logfilename}}) | \
+        tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
         grep -E '(FAILED|ERROR)\s*\[.*\]' | \
         tee $WORKDIR/pytest-short.log
 
@@ -244,17 +269,14 @@ runs:
     run: |
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
 
-  - name: Upload S3
-    uses: shallwefootball/s3-upload-action@master
-    if: always()
-    with:
-      aws_key_id: ${{inputs.AWS_KEY_ID }}
-      aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
-      aws_bucket: ${{inputs.aws_bucket}}
-      # FIXME: must be constant here
-      source_dir: artifacts
-      destination_dir: '${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}'
-      endpoint: ${{inputs.aws_endpoint}}
+  - name: sync test results to s3
+    if: always() && inputs.run_functional_tests == 'true'
+    shell: bash
+    run: |
+      echo "::group::s3-sync"
+      s3cmd sync -P --no-progress --stats --no-check-md5 -P $ARTIFACTS_DIR/ $S3_BUCKET_PATH
+      echo "::endgroup::"
+
   - name: finish
     shell: bash
     run: |

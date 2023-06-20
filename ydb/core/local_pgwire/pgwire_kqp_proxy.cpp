@@ -97,15 +97,20 @@ protected:
             if (q.StartsWith("SELECT")) {
                 Tag_ = "SELECT";
             }
-            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
-            request.SetQuery(ToPgSyntax(query, ConnectionParams_));
-            if (Connection_.Transaction.Status == 'I') {
-                request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-                request.MutableTxControl()->set_commit_tx(true);
-            } else if (Connection_.Transaction.Status == 'T') {
-                request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
+            if (q.StartsWith("CREATE") || q.StartsWith("ALTER") || q.StartsWith("DROP")) {
+                request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            } else {
+                request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+                if (Connection_.Transaction.Status == 'I') {
+                    request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+                    request.MutableTxControl()->set_commit_tx(true);
+                } else if (Connection_.Transaction.Status == 'T') {
+                    request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
+                }
             }
+            request.SetQuery(ToPgSyntax(query, ConnectionParams_));
         }
     }
 

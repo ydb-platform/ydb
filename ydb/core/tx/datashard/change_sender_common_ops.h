@@ -57,7 +57,7 @@ class IChangeSender {
 public:
     virtual ~IChangeSender() = default;
 
-    virtual void CreateSenders(const TVector<ui64>& partitionIds) = 0;
+    virtual void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) = 0;
     virtual void KillSenders() = 0;
     virtual IActor* CreateSender(ui64 partitionId) = 0;
     virtual void RemoveRecords() = 0;
@@ -89,6 +89,9 @@ class TBaseChangeSender: public IChangeSender {
         TVector<TEnqueuedRecord> Pending;
     };
 
+    void CreateMissingSenders(const TVector<ui64>& partitionIds);
+    void RecreateSenders(const TVector<ui64>& partitionIds);
+
     bool RequestRecords();
     void SendRecords();
 
@@ -103,7 +106,7 @@ protected:
         ActorOps->Send(DataShard.ActorId, new TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
     }
 
-    void CreateSenders(const TVector<ui64>& partitionIds) override;
+    void CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged = true) override;
     void KillSenders() override;
     void RemoveRecords() override;
 
@@ -134,6 +137,8 @@ private:
     TSet<TEnqueuedRecord> Enqueued;
     TSet<TRequestedRecord> PendingBody;
     TMap<ui64, TChangeRecord> PendingSent; // ui64 is order
+
+    TVector<ui64> GonePartitions;
 
 }; // TBaseChangeSender
 

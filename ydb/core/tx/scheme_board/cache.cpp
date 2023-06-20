@@ -1930,6 +1930,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.Kind = TableKind;
             entry.DomainInfo = DomainInfo;
 
+            if (Self) {
+                entry.GeneralVersion = Self->Info.GetVersion().GetGeneralVersion();
+            }
+
             if (!CheckColumns(context, entry, KeyColumnTypes, Columns)) {
                 return;
             }

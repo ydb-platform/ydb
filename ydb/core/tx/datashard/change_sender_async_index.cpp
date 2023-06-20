@@ -624,8 +624,11 @@ class TAsyncIndexChangeSenderMain
             return Retry();
         }
 
+        const bool versionChanged = !IndexTableVersion || IndexTableVersion != entry.GeneralVersion;
+        IndexTableVersion = entry.GeneralVersion;
+
         KeyDesc = std::move(entry.KeyDescription);
-        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()));
+        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
 
         Become(&TThis::StateMain);
     }
@@ -723,6 +726,7 @@ public:
         : TActorBootstrapped()
         , TBaseChangeSender(this, this, dataShard, indexPathId)
         , UserTableId(userTableId)
+        , IndexTableVersion(0)
     {
     }
 
@@ -751,6 +755,7 @@ private:
     TMap<TTag, TTag> TagMap; // from main to index
 
     TPathId IndexTablePathId;
+    ui64 IndexTableVersion;
     THolder<TKeyDesc> KeyDesc;
 
 }; // TAsyncIndexChangeSenderMain

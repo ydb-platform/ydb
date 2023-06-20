@@ -4,6 +4,7 @@ from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
+import os
 import pytest
 import logging
 import pyarrow as pa
@@ -97,7 +98,9 @@ DATA_PARQUET = pa.Table.from_arrays(ARRAYS, names=ARRAY_NAMES)
 
 
 def ydb_bin():
-    return yatest_common.binary_path("ydb/apps/ydb/ydb")
+    if os.getenv("YDB_CLI_BINARY"):
+        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
 def create_table(session, path):

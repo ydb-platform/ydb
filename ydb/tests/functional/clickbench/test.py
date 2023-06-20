@@ -9,10 +9,16 @@ from hamcrest import assert_that, is_
 encoder.FLOAT_REPR = lambda o: format(o, '{:e}')
 
 
+def ydb_bin():
+    if os.getenv("YDB_CLI_BINARY"):
+        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
+    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
+
+
 def run_cli(argv):
     return yatest.common.execute(
         [
-            yatest.common.binary_path("ydb/apps/ydb/ydb"),
+            ydb_bin(),
             "--endpoint",
             "grpc://" + os.getenv("YDB_ENDPOINT"),
             "--database",

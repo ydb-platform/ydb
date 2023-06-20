@@ -8,6 +8,7 @@ TEST_SRCS(
 )
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 TIMEOUT(600)
 SIZE(MEDIUM)
 

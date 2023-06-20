@@ -14,6 +14,7 @@ python ${source_root}/ydb/tests/oss/launch/generate_test_context.py --build-root
 export PYTHONPATH=${source_root}/ydb/public/sdk/python3:${source_root}:${source_root}/library/python/testing/yatest_common:${source_root}/library/python/testing:${source_root}/library/python/pytest/plugins:${source_root}/ydb/tests/oss/canonical
 
 export YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd"
+export YDB_CLI_BINARY="ydb/apps/ydb/ydb"
 export PYTEST_PLUGINS=ya,conftests,canonical
 export YA_TEST_CONTEXT_FILE=${testresults}/test.context
 export YDB_OPENSOURCE=yes

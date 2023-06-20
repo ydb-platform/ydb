@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 def backup_bin():
-    return yatest_common.binary_path("ydb/apps/ydb/ydb")
+    if os.getenv("YDB_CLI_BINARY"):
+        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+    raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
 def upsert_simple(session, full_path):

@@ -17,6 +17,8 @@ fn_shard_part_re = re.compile(r"-\d+$")
 def make_filename(n, *parts):
     fn = f'{"-".join(parts)}'
 
+    fn = re.sub(r"[^\w_-]", "", fn)
+
     if n > 0:
         fn = f"{fn}-{n}"
 

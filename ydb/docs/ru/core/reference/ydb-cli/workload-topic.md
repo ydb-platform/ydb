@@ -19,7 +19,7 @@
 Перед запуском нагрузки ее необходимо инициализировать. При инициализации будет создан топик `workload-topic` с указанными параметрами. Инициализация выполняется следующей командой:
 
 ```bash
-{{ ydb-cli }}  ydb [global options...] workload topic init [options...]
+{{ ydb-cli }} [global options...] workload topic init [options...]
 ```
 
 * `global options` — [глобальные параметры](commands/global-options.md).

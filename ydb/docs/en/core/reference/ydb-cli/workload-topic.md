@@ -19,7 +19,7 @@ To generate load against your topic:
 Before executing the load, you need to initialize it. During initialization, you will create a topic named `workload-topic` with the specified options. To initialize the load, run the command:
 
 ```bash
-{{ ydb-cli }}  ydb [global options...] workload topic init [options...]
+{{ ydb-cli }} [global options...] workload topic init [options...]
 ```
 
 * `global options`: [Global options](commands/global-options.md).

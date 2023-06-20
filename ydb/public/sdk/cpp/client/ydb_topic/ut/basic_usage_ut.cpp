@@ -20,6 +20,38 @@ namespace NYdb::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
 
+    Y_UNIT_TEST(MaxByteSizeEqualZero) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicClient client(setup->GetDriver());
+
+        auto writeSettings = TWriteSessionSettings()
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("group_id");
+        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+        UNIT_ASSERT(writeSession->Write("message"));
+        writeSession->Close();
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName("shared/user")
+            .AppendTopics(setup->GetTestTopic());
+        auto readSession = client.CreateReadSession(readSettings);
+
+        auto event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+        startPartitionSession.Confirm();
+
+        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvent(true, 0), TContractViolation);
+        UNIT_CHECK_GENERATED_EXCEPTION(readSession->GetEvents(true, Nothing(), 0), TContractViolation);
+
+        event = readSession->GetEvent(true, 1);
+        UNIT_ASSERT(event.Defined());
+
+        auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+        dataReceived.Commit();
+    }
+
     Y_UNIT_TEST(WriteAndReadSomeMessagesWithSyncCompression) {
 
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);

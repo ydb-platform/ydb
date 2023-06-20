@@ -1991,6 +1991,10 @@ template <bool UseMigrationProtocol>
 TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize)
 {
+    if (!maxByteSize) {
+        ThrowFatalError("the maxByteSize value must be greater than 0");
+    }
+
     TVector<TReadSessionEventInfo<UseMigrationProtocol>> eventInfos;
     const size_t maxCount = maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max();
     TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
@@ -2027,6 +2031,10 @@ template <bool UseMigrationProtocol>
 TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent>
 TReadSessionEventsQueue<UseMigrationProtocol>::GetEvent(bool block, size_t maxByteSize)
 {
+    if (!maxByteSize) {
+        ThrowFatalError("the maxByteSize value must be greater than 0");
+    }
+
     TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
     TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
 

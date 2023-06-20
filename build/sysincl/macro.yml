@@ -540,18 +540,26 @@
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set40_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set50.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/set/aux_/preprocessed/plain/set50_c.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/vector/AUX778076_DEQUE_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector0.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector10.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector20.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector30.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector40.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector50.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/vector/AUX778076_VECTOR_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector0.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector0_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector10.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector10_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector20.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector20_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector30.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector30_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector40.hpp
-      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector40_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector50.hpp
+    - BOOST_PP_STRINGIZE(boost/mpl/vector/AUX778076_VECTOR_C_HEADER):
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector0_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector10_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector20_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector30_c.hpp
+      - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector40_c.hpp
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/vector50_c.hpp
     - BOOST_PP_STRINGIZE(boost/mpl/vector/aux_/preprocessed/AUX778076_HEADER):
       - contrib/restricted/boost/mpl/include/boost/mpl/vector/aux_/preprocessed/typeof_based/vector10.hpp

@@ -186,8 +186,6 @@
       - contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_tags/cc_tag.hpp
     - BOOST_ABI_PREFIX: contrib/restricted/boost/config/include/boost/config/abi/msvc_prefix.hpp
     - BOOST_ABI_SUFFIX: contrib/restricted/boost/config/include/boost/config/abi/msvc_suffix.hpp
-    - BOOST_FT_loop: contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/master.hpp
-    - BOOST_FT_variate_file: contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_arity_loop.hpp
     - BOOST_PP_ASSIGN_SLOT(1): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot1.hpp
     - BOOST_TYPEOF_INCREMENT_REGISTRATION_GROUP(): contrib/restricted/boost/typeof/include/boost/typeof/incr_registration_group.hpp
     - BOOST_REGEX_USER_CONFIG: contrib/restricted/boost/regex/include/boost/regex/user.hpp
@@ -301,11 +299,48 @@
 #   boost/function_types/detail/pp_arity_loop.hpp does some extremely magical preprocessor magic
 #   which I have failed to compile and evalute.
 #
-#   Corresponding includes will not be resolved by ymake
+#   Corresponding includes might not be properly resolved by ymake
 - source_filter: "^contrib/restricted/boost/function_types"
   includes:
-    - BOOST_PP_ITERATE():
+    - BOOST_FT_AL_INCLUDE_FILE:
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/master.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/master.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/master.hpp
+    - BOOST_FT_AL_PREPROCESSED:
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity10_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity10_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity20_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity20_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity30_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity30_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity40_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity40_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity50_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/classifier_impl/arity50_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity10_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity10_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity20_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity20_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity30_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity30_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity40_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity40_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity50_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/components_impl/arity50_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity10_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity20_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity20_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity30_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity30_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity40_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity40_1.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity50_0.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/synthesize_impl/arity50_1.hpp
+    - BOOST_FT_loop:
       - contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/master.hpp
+      - contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/preprocessed.hpp
+    - BOOST_FT_variate_file: contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_arity_loop.hpp
+    - BOOST_PP_ITERATE(): contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/master.hpp
 
 - source_filter: "^contrib/restricted/boost/functional"
   includes:

@@ -13,6 +13,7 @@ ENDIF()
 PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx
+    ydb/public/api/grpc
 )
 
 YQL_LAST_ABI_VERSION()

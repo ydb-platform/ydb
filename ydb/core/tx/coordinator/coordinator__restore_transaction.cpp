@@ -99,6 +99,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         Self->Become(&TSelf::StateWork);
         Self->SignalTabletActive(ctx);
         Self->SchedulePlanTick(ctx);
+
+        if (!Self->Config.HaveProcessingParams) {
+            Self->RestoreProcessingParams(ctx);
+        }
     }
 };
 

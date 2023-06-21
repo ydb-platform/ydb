@@ -11,6 +11,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     TVector<TTabletId> Mediators;
     TVector<TTabletId> Coordinators;
     ui64 PlanResolution;
+    bool HaveProcessingParams = false;
     ui64 LastPlanned = 0;
     ui64 LastAcquired = 0;
 
@@ -47,11 +48,14 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
                 Mediators.swap(mediators);
                 Coordinators.clear();
                 PlanResolution = resolution;
-                if (rowset.HaveValue<Schema::DomainConfiguration::Config>()) {
-                    TProtoBox<NKikimrSubDomains::TProcessingParams> config(rowset.GetValue<Schema::DomainConfiguration::Config>());
+                HaveProcessingParams = false;
+                auto encodedConfig = rowset.GetValue<Schema::DomainConfiguration::Config>();
+                if (!encodedConfig.empty()) {
+                    TProtoBox<NKikimrSubDomains::TProcessingParams> config(encodedConfig);
                     for (ui64 coordinator : config.GetCoordinators()) {
                         Coordinators.push_back(coordinator);
                     }
+                    HaveProcessingParams = true;
                 }
             }
 
@@ -86,20 +90,6 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         return true;
     }
 
-    bool IsTabletInStaticDomain(const TAppData *appdata) {
-        const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-        Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
-        const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
-
-        for (auto domainCoordinatorId: domain.Coordinators) {
-            if (Self->TabletID() == domainCoordinatorId) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     void Complete(const TActorContext &ctx) override {
         Self->VolatileState.LastPlanned = LastPlanned;
         Self->VolatileState.LastSentStep = LastPlanned;
@@ -109,16 +99,18 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
                  "tablet# " << Self->TabletID() <<
                  " CreateTxInit Complete");
-            Self->Config.MediatorsVersion = Version;
+            Self->Config.Version = Version;
             Self->Config.Mediators = new TMediators(std::move(Mediators));
             Self->Config.Coordinators = Coordinators;
             Self->Config.Resolution = PlanResolution;
+            Self->Config.HaveProcessingParams = HaveProcessingParams;
+            Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 1 : 0);
             Self->Execute(Self->CreateTxRestoreTransactions(), ctx);
             return;
         }
 
         TAppData* appData = AppData(ctx);
-        if (IsTabletInStaticDomain(appData)) {
+        if (Self->IsTabletInStaticDomain(appData)) {
             LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
                  "tablet# " << Self->TabletID() <<
                  " CreateTxInit initialize himself");

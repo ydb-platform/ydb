@@ -177,6 +177,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
             EvReadStepUnsubscribed,
             EvReadStepUpdated,
             EvPipeServerDisconnected,
+            EvRestoredProcessingParams,
             EvEnd
         };
 
@@ -232,6 +233,14 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
             explicit TEvPipeServerDisconnected(const TActorId& serverId)
                 : ServerId(serverId)
+            { }
+        };
+
+        struct TEvRestoredProcessingParams : public TEventLocal<TEvRestoredProcessingParams, EvRestoredProcessingParams> {
+            NKikimrSubDomains::TProcessingParams Config;
+
+            explicit TEvRestoredProcessingParams(const NKikimrSubDomains::TProcessingParams& config)
+                : Config(config)
             { }
         };
     };
@@ -297,6 +306,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     struct TTxUnsubscribeReadStep;
 
     class TReadStepSubscriptionManager;
+    class TRestoreProcessingParamsActor;
 
     ITransaction* CreateTxInit();
     ITransaction* CreateTxRestoreTransactions();
@@ -313,23 +323,17 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     ITransaction* CreateTxStopGuard();
 
     struct TConfig {
-        ui64 MediatorsVersion;
+        ui64 Version = 0;
         TMediators::TPtr Mediators;
         TVector<TTabletId> Coordinators;
 
-        ui64 PlanAhead;
-        ui64 Resolution;
-        ui64 RapidSlotFlushSize;
+        ui64 PlanAhead = 0;
+        ui64 Resolution = 0;
+        ui64 RapidSlotFlushSize = 0;
 
-        bool Synthetic;
+        bool HaveProcessingParams = false;
 
-        TConfig()
-            : MediatorsVersion(0)
-            , PlanAhead(0)
-            , Resolution(0)
-            , RapidSlotFlushSize(0)
-            , Synthetic(false)
-        {}
+        TConfig() {}
     };
 
     struct TMediator {
@@ -492,6 +496,8 @@ private:
 
     TActorId ReadStepSubscriptionManager;
 
+    TActorId RestoreProcessingParamsActor;
+
     bool Stopping = false;
 
 #ifdef COORDINATOR_LOG_TO_FILE
@@ -505,6 +511,11 @@ private:
         if (ReadStepSubscriptionManager) {
             ctx.Send(ReadStepSubscriptionManager, new TEvents::TEvPoison);
             ReadStepSubscriptionManager = { };
+        }
+
+        if (RestoreProcessingParamsActor) {
+            ctx.Send(RestoreProcessingParamsActor, new TEvents::TEvPoison);
+            RestoreProcessingParamsActor = { };
         }
 
         for (TMediatorsIndex::iterator it = Mediators.begin(), end = Mediators.end(); it != end; ++it) {
@@ -524,6 +535,10 @@ private:
     void IcbRegister();
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
+
+    void SetCounter(NFlatTxCoordinator::ESimpleCounters counter, ui64 val) {
+        TabletCounters->Simple()[counter].Set(val);
+    }
 
     void IncCounter(NFlatTxCoordinator::ECumulativeCounters counter, ui64 num = 1) {
         TabletCounters->Cumulative()[counter].Increment(num);
@@ -602,6 +617,11 @@ private:
 
     void MaybeFlushAcquireReadStep(const TActorContext &ctx);
 
+    // Attempts to restore missing processing params
+    bool IsTabletInStaticDomain(TAppData *appData);
+    void RestoreProcessingParams(const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvRestoredProcessingParams::TPtr &ev, const TActorContext &ctx);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COORDINATOR_ACTOR;
@@ -626,6 +646,7 @@ public:
                 HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+                HFunc(TEvPrivate::TEvRestoredProcessingParams, Handle);
             )
 
     STFUNC_TABLET_DEF(StateWork,
@@ -645,6 +666,7 @@ public:
                 HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+                HFunc(TEvPrivate::TEvRestoredProcessingParams, Handle);
             )
 
    STFUNC_TABLET_IGN(StateBroken,)

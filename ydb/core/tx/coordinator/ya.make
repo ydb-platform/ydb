@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     coordinator.cpp
+    coordinator_hooks.cpp
     coordinator_impl.cpp
     coordinator__acquire_read_step.cpp
     coordinator__configure.cpp
@@ -12,6 +13,7 @@ SRCS(
     coordinator__monitoring.cpp
     coordinator__plan_step.cpp
     coordinator__read_step_subscriptions.cpp
+    coordinator__restore_params.cpp
     coordinator__restart_mediator.cpp
     coordinator__restore_transaction.cpp
     coordinator__schema.cpp

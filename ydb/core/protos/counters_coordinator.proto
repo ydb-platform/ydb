@@ -8,7 +8,7 @@ option (TabletTypeName) = "Coordinator"; // Used as prefix for all counters
 
 // Real coordinator counters are dynamic. Probably we should fix this?
 enum ESimpleCounters {
-    COUNTER_SIMPLE_IGNORE = 0;
+    COUNTER_MISSING_CONFIG = 0 [(CounterOpts) = {Name: "MissingConfig"}];
 }
 
 enum ECumulativeCounters {

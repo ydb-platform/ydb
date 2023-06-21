@@ -5,6 +5,7 @@
 
 #include <library/cpp/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/threading/future/future.h>
 
 namespace NKikimr {
     struct TAppData;
@@ -58,6 +59,25 @@ namespace NActors {
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 
         void SimulateSleep(TDuration duration);
+
+        template<class TResult>
+        inline TResult WaitFuture(NThreading::TFuture<TResult> f) {
+            if (!f.HasValue() && !f.HasException()) {
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return f.HasValue() || f.HasException();
+                };
+                options.FinalEvents.emplace_back([&](IEventHandle&) {
+                    return f.HasValue() || f.HasException();
+                });
+
+                this->DispatchEvents(options);
+
+                Y_VERIFY(f.HasValue() || f.HasException());
+            }
+
+            return f.ExtractValue();
+        }
 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
             const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0);

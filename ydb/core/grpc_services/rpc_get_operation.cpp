@@ -319,5 +319,10 @@ void DoGetOperationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProv
     f.RegisterActor(new TGetOperationRPC(p.release()));
 }
 
+template<>
+IActor* TEvGetOperationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TGetOperationRPC(msg);
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

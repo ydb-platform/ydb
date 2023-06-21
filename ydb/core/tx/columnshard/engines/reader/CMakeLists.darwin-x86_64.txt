@@ -28,6 +28,7 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   columnshard-hooks-abstract
   core-tx-program
   engines-reader-order_control
+  columnshard-engines-scheme
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(columnshard-engines-reader PRIVATE

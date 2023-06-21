@@ -3,6 +3,7 @@
 #include "filter_assembler.h"
 #include "postfilter_assembler.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 

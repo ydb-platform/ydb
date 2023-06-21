@@ -9,8 +9,10 @@
 add_subdirectory(insert_table)
 add_subdirectory(predicate)
 add_subdirectory(reader)
+add_subdirectory(scheme)
 add_subdirectory(storage)
 add_subdirectory(ut)
+add_subdirectory(writer)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

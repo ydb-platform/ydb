@@ -6,6 +6,7 @@
 #include <ydb/core/tx/ctor_logger.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/writer/put_status.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -136,38 +137,6 @@ public:
     ui32 GetGroup(const TLogoBlobID& blobId) const override {
         return TabletInfo->GroupFor(blobId.Channel(), blobId.Generation());
     }
-};
-
-class TPutStatus {
-public:
-    NKikimrProto::EReplyStatus GetPutStatus() const {
-        return PutStatus;
-    }
-
-    void SetPutStatus(NKikimrProto::EReplyStatus status) {
-        PutStatus = status;
-    }
-
-    void SetPutStatus(NKikimrProto::EReplyStatus status,
-                    THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels) {
-        PutStatus = status;
-        YellowMoveChannels = std::move(yellowMoveChannels);
-        YellowStopChannels = std::move(yellowStopChannels);
-    }
-
-    template <typename T>
-    void OnYellowChannels(T* executor) {
-        if (YellowMoveChannels.size() || YellowStopChannels.size()) {
-            executor->OnYellowChannels(
-                TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end()),
-                TVector<ui32>(YellowStopChannels.begin(), YellowStopChannels.end()));
-        }
-    }
-
-private:
-    NKikimrProto::EReplyStatus PutStatus = NKikimrProto::UNKNOWN;
-    THashSet<ui32> YellowMoveChannels;
-    THashSet<ui32> YellowStopChannels;
 };
 
 }

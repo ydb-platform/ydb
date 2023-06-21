@@ -39,6 +39,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
   tx-columnshard-engines
+  columnshard-engines-writer
   tx-columnshard-counters
   tx-columnshard-common
   core-tx-tiering

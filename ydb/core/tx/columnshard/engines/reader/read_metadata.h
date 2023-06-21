@@ -12,6 +12,7 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
 
 namespace NKikimr::NColumnShard {
 class TScanIteratorBase;

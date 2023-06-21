@@ -13,6 +13,7 @@
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/snapshot_scheme.h>
 
 namespace NKikimr::NOlap {
 

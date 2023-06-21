@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/program
     ydb/core/tx/columnshard/engines/reader/order_control
+    ydb/core/tx/columnshard/engines/scheme
 )
 
 GENERATE_ENUM_SERIALIZATION(read_metadata.h)

@@ -51,6 +51,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/columnshard/engines
+    ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/common
     ydb/core/tx/tiering

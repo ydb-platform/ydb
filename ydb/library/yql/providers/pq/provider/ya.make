@@ -24,9 +24,7 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
     ydb/library/yql/ast
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/structured_token
     ydb/library/yql/public/udf

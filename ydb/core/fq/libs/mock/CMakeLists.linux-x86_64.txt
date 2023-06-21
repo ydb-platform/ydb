@@ -33,8 +33,7 @@ target_link_libraries(fq-libs-mock PUBLIC
   yql-core-facade
   core-services-mounts
   dq-integration-transform
-  library-yql-minikql
-  yql-minikql-comp_nodes
+  minikql-comp_nodes-llvm
   providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes

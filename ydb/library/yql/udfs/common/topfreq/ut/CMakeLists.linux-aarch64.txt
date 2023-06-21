@@ -20,9 +20,7 @@ target_link_libraries(ydb-library-yql-udfs-common-topfreq-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   common-topfreq-static
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   udf-service-exception_policy
   yql-sql-pg_dummy
 )

@@ -14,8 +14,7 @@ target_compile_options(yql-minikql-datetime PRIVATE
 target_link_libraries(yql-minikql-datetime PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
 )
 target_sources(yql-minikql-datetime PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/datetime/datetime.cpp

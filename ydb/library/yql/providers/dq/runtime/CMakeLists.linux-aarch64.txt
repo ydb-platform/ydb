@@ -15,9 +15,7 @@ target_link_libraries(providers-dq-runtime PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   library-yql-utils
   yql-utils-log
   yql-utils-backtrace

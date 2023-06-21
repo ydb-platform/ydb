@@ -55,8 +55,7 @@ PEERDIR(
     ydb/library/yql/core/facade
     ydb/library/yql/core/services/mounts
     ydb/library/yql/dq/integration/transform
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/providers/clickhouse/provider
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes

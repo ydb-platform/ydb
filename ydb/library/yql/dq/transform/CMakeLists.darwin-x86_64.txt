@@ -16,8 +16,7 @@ target_link_libraries(yql-dq-transform PUBLIC
   yutil
   cpp-actors-core
   dq-integration-transform
-  yql-minikql-computation
-  library-yql-minikql
+  minikql-computation-llvm
   library-yql-utils
 )
 target_sources(yql-dq-transform PRIVATE

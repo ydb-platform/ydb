@@ -16,8 +16,7 @@ target_link_libraries(providers-ydb-comp_nodes PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-scheme
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
   providers-common-structured_token
   public-lib-experimental
   cpp-client-ydb_driver

@@ -24,9 +24,7 @@ PEERDIR(
     library/cpp/yson/node
     ydb/core/fq/libs/common
     ydb/library/yql/ast
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/providers/common/structured_token
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/core

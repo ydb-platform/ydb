@@ -15,7 +15,7 @@ target_link_libraries(providers-pq-async_io PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-minikql-computation
+  minikql-computation-llvm
   common-token_accessor-client
   yql-public-types
   yql-utils-log

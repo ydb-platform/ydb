@@ -16,7 +16,7 @@ target_link_libraries(providers-generic-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
   dq-actors-compute
-  yql-minikql-computation
+  minikql-computation-llvm
   common-token_accessor-client
   providers-generic-proto
   yql-public-types

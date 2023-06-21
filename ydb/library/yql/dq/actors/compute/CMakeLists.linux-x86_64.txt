@@ -23,8 +23,7 @@ target_link_libraries(dq-actors-compute PUBLIC
   yql-dq-proto
   yql-dq-runtime
   yql-dq-tasks
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   yql-public-issue
 )
 target_sources(dq-actors-compute PRIVATE

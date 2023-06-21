@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/public/types
     ydb/library/yql/utils/log

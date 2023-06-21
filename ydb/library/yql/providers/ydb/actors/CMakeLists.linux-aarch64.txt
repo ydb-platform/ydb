@@ -16,7 +16,7 @@ target_link_libraries(providers-ydb-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-scheme
-  yql-minikql-computation
+  minikql-computation-llvm
   common-token_accessor-client
   yql-public-types
   yql-utils-log

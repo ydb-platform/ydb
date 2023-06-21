@@ -9,8 +9,7 @@ PEERDIR(
     ydb/core/formats/arrow
     ydb/core/protos
     ydb/core/tablet_flat
-    ydb/library/yql/minikql/invoke_builtins
-    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/core/arrow_kernels/registry
 )
 

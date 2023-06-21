@@ -18,9 +18,7 @@ target_link_libraries(providers-pq-provider PUBLIC
   library-cpp-random_provider
   library-cpp-time_provider
   library-yql-ast
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   providers-common-db_id_async_resolver
   providers-common-structured_token
   yql-public-udf

@@ -33,7 +33,7 @@ target_link_libraries(core-testlib-basics PUBLIC
   core-tx-columnshard
   core-tx-scheme_board
   ydb-core-util
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   udf-service-exception_policy
 )
 target_sources(core-testlib-basics PRIVATE

@@ -21,10 +21,8 @@ target_link_libraries(ydb-library-binary_json-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-library-binary_json
-  library-yql-minikql
-  yql-minikql-computation
   yql-minikql-dom
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   udf-service-exception_policy
   core-issue-protos
   yql-sql-pg_dummy

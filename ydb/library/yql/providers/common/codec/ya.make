@@ -15,8 +15,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/providers/common/mkql
     library/cpp/yson/node

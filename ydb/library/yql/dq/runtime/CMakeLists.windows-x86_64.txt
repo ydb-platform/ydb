@@ -24,8 +24,7 @@ target_link_libraries(yql-dq-runtime PUBLIC
   libs-apache-arrow
   ydb-core-util
   ydb-library-mkql_proto
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   parser-pg_wrapper-interface
   yql-public-udf
   dq-actors-protos

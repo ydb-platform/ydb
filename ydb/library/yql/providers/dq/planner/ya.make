@@ -2,8 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/yql/core/services
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/dq/integration
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/tasks

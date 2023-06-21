@@ -18,8 +18,7 @@ target_link_libraries(core-tx-program PUBLIC
   core-formats-arrow
   ydb-core-protos
   ydb-core-tablet_flat
-  yql-minikql-invoke_builtins
-  yql-minikql-comp_nodes
+  minikql-comp_nodes-llvm
   core-arrow_kernels-registry
 )
 target_sources(core-tx-program PRIVATE

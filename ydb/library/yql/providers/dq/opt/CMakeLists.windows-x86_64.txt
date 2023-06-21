@@ -24,8 +24,7 @@ target_link_libraries(providers-dq-opt PUBLIC
   library-yql-core
   yql-core-peephole_opt
   yql-core-type_ann
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
   cpp-yson-node
 )
 target_sources(providers-dq-opt PRIVATE

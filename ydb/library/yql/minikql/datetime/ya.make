@@ -5,8 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/computation/llvm
 )
 
 YQL_LAST_ABI_VERSION()

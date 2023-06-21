@@ -2,8 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/scheme
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/providers/common/structured_token
     ydb/public/lib/experimental
     ydb/public/sdk/cpp/client/ydb_driver

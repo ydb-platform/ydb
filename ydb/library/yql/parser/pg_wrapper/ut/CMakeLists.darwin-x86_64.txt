@@ -100,10 +100,9 @@ target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   cpp-testing-unittest_main
   yql-parser-pg_wrapper
   yql-minikql-arrow
-  yql-minikql-computation
   yql-public-udf
   udf-service-exception_policy
-  yql-minikql-comp_nodes
+  minikql-comp_nodes-llvm
   yql-parser-pg_catalog
   yql-minikql-codegen
   library-cpp-resource

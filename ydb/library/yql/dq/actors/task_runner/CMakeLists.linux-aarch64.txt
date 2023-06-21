@@ -19,8 +19,7 @@ target_link_libraries(dq-actors-task_runner PUBLIC
   yql-dq-runtime
   yql-dq-common
   yql-dq-proto
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
   yql-utils-actors
   ydb-core-protos
 )

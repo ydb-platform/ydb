@@ -19,9 +19,7 @@ target_link_libraries(providers-ydb-provider PUBLIC
   cpp-yson-node
   fq-libs-common
   library-yql-ast
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   providers-common-structured_token
   common-token_accessor-client
   library-yql-core

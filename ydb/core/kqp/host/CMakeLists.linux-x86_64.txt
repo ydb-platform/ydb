@@ -22,7 +22,7 @@ target_link_libraries(core-kqp-host PUBLIC
   tx-long_tx_service-public
   library-yql-ast
   yql-core-services
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   library-yql-sql
   library-yql-core
   providers-common-codec

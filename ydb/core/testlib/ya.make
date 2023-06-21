@@ -78,7 +78,7 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/library/persqueue/topic_parser
     ydb/library/security
-    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli

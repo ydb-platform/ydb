@@ -21,8 +21,7 @@ target_compile_options(providers-common-codec PRIVATE
 target_link_libraries(providers-common-codec PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
   parser-pg_wrapper-interface
   providers-common-mkql
   cpp-yson-node

@@ -18,10 +18,8 @@ target_link_libraries(jsonpath-benchmark PUBLIC
   library-cpp-cpuid_check
   testing-benchmark-main
   library-cpp-json
-  library-yql-minikql
-  yql-minikql-computation
   yql-minikql-dom
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   yql-minikql-jsonpath
   yql-public-issue
   udf-service-exception_policy

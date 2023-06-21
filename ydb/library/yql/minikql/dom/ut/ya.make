@@ -12,7 +12,7 @@ IF (NOT WINDOWS)
     ENDIF()
 
     PEERDIR(
-        ydb/library/yql/minikql/computation
+        ydb/library/yql/minikql/computation/llvm
         ydb/library/yql/public/udf/service/exception_policy
     )
 

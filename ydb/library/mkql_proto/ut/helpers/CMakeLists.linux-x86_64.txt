@@ -15,10 +15,7 @@ target_link_libraries(mkql_proto-ut-helpers PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
+  minikql-comp_nodes-llvm
   cpp-testing-unittest
   contrib-libs-protobuf
 )

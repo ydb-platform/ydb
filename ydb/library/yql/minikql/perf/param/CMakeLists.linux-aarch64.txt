@@ -15,10 +15,7 @@ target_link_libraries(param PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
+  minikql-comp_nodes-llvm
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy

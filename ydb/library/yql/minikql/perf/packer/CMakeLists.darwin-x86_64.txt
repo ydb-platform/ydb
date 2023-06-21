@@ -15,10 +15,7 @@ target_link_libraries(packer PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
+  minikql-comp_nodes-llvm
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy

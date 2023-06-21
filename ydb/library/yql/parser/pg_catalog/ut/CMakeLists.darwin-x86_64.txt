@@ -21,10 +21,9 @@ target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-parser-pg_catalog
-  yql-minikql-computation
   yql-public-udf
   udf-service-exception_policy
-  yql-minikql-comp_nodes
+  minikql-comp_nodes-llvm
   yql-parser-pg_wrapper
 )
 target_link_options(ydb-library-yql-parser-pg_catalog-ut PRIVATE

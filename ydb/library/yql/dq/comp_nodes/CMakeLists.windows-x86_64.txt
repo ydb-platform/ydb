@@ -16,8 +16,7 @@ target_link_libraries(yql-dq-comp_nodes PUBLIC
   yutil
   cpp-actors-core
   dq-actors-compute
-  yql-minikql-computation
-  library-yql-minikql
+  minikql-computation-llvm
   library-yql-utils
 )
 target_sources(yql-dq-comp_nodes PRIVATE

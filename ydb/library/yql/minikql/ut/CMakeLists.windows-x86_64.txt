@@ -21,8 +21,7 @@ target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   cpp-testing-unittest_main
   library-yql-minikql
   libs-apache-arrow
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   yql-parser-pg_wrapper
   udf-service-exception_policy
 )

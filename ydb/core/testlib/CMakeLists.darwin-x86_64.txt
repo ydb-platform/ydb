@@ -74,7 +74,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   library-mkql_proto-protos
   library-persqueue-topic_parser
   ydb-library-security
-  yql-minikql-comp_nodes
+  minikql-comp_nodes-llvm
   udf-service-exception_policy
   public-lib-base
   lib-deprecated-kicli

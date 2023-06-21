@@ -24,9 +24,7 @@ target_link_libraries(providers-generic-provider PUBLIC
   yql-core-type_ann
   yql-dq-expr_nodes
   yql-dq-integration
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   providers-common-config
   providers-common-db_id_async_resolver
   providers-common-dq

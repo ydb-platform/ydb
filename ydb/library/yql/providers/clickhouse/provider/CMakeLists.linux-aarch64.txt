@@ -19,9 +19,7 @@ target_link_libraries(providers-clickhouse-provider PUBLIC
   library-cpp-random_provider
   library-cpp-time_provider
   library-yql-ast
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-minikql-computation
+  minikql-comp_nodes-llvm
   library-yql-core
   yql-core-type_ann
   yql-dq-expr_nodes

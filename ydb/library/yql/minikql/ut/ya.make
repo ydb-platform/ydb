@@ -29,8 +29,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/minikql/invoke_builtins
+    ydb/library/yql/minikql/invoke_builtins/llvm
     ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/exception_policy
 )

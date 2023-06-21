@@ -17,7 +17,7 @@ target_link_libraries(providers-solomon-async_io PUBLIC
   yutil
   cpp-json-easy_parse
   monlib-encode-json
-  yql-minikql-computation
+  minikql-computation-llvm
   common-token_accessor-client
   yql-public-types
   yql-public-udf

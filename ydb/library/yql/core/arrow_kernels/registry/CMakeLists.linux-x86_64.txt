@@ -17,8 +17,7 @@ target_link_libraries(core-arrow_kernels-registry PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
 )
 target_sources(core-arrow_kernels-registry PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/registry/registry.cpp

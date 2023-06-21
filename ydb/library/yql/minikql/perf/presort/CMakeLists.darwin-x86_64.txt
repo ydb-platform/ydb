@@ -16,9 +16,7 @@ target_link_libraries(presort PUBLIC
   yutil
   library-cpp-cpuid_check
   library-cpp-presort
-  library-yql-minikql
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
+  minikql-invoke_builtins-llvm
   yql-public-udf
   udf-service-exception_policy
   yql-sql-pg_dummy

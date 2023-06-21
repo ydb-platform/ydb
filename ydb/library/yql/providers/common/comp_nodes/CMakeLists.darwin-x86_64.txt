@@ -16,8 +16,7 @@ target_link_libraries(providers-common-comp_nodes PUBLIC
   yutil
   library-yql-ast
   yql-ast-serialize
-  library-yql-minikql
-  yql-minikql-computation
+  minikql-computation-llvm
   library-yql-core
   yql-core-type_ann
   providers-common-codec

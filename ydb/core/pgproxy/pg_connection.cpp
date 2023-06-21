@@ -316,6 +316,23 @@ protected:
     }
 
     void FinishHandshake() {
+        const auto& clientParams(InitialMessage->GetClientParams());
+        auto itOptions = clientParams.find("options");
+        if (itOptions != clientParams.end()) {
+            TStringBuf options(itOptions->second);
+            TStringBuf token;
+            while (options.NextTok(' ', token) && token == "-c") {
+                TStringBuf option;
+                if (options.NextTok(' ', option)) {
+                    TStringBuf name;
+                    TStringBuf value;
+                    if (option.NextTok('=', name)) {
+                        value = option;
+                        ServerParams[TString(name)] = TString(value);
+                    }
+                }
+            }
+        }
         for (const auto& [name, value] : ServerParams) {
             SendParameterStatus(name, value);
         }

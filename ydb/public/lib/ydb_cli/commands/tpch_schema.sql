@@ -11,7 +11,7 @@ CREATE TABLE `{path}customer` (
 )
 {partition_customer}
 WITH ({store}
-AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32)
+AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64)
 ;
 
 CREATE TABLE `{path}lineitem` (
@@ -35,7 +35,7 @@ CREATE TABLE `{path}lineitem` (
 )
 {partition_lineitem}
 WITH ({store}
-AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32)
+AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64)
 ;
 
 CREATE TABLE `{path}nation` (
@@ -64,7 +64,7 @@ CREATE TABLE `{path}orders` (
 )
 {partition_orders}
 WITH ({store}
-AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32)
+AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64)
 ;
 
 CREATE TABLE `{path}part` (
@@ -81,7 +81,7 @@ CREATE TABLE `{path}part` (
 )
 {partition_part}
 WITH ({store}
-AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32)
+AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64)
 ;
 
 CREATE TABLE `{path}partsupp` (
@@ -94,7 +94,7 @@ CREATE TABLE `{path}partsupp` (
 )
 {partition_partsupp}
 WITH ({store}
-AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32)
+AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64)
 ;
 
 CREATE TABLE `{path}region` (
@@ -120,5 +120,5 @@ CREATE TABLE `{path}supplier` (
 )
 {partition_supplier}
 WITH ({store}
-AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32)
+AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64)
 ;

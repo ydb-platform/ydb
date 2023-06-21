@@ -49,6 +49,7 @@ public:
 
     TVector<TString> GetQueries() const;
 
+    TString TablesPath;
     TString OutFilePath;
     ui32 IterationsCount;
     TString JsonReportFileName;

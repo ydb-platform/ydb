@@ -42,7 +42,9 @@ TVector<TString> TTpchCommandRun::GetQueries() const {
         const TString expectedFileName = "q" + ::ToString(getQueryNumber(queries.size())) + ".sql";
         Y_VERIFY(queryFileName == expectedFileName, "incorrect files naming. have to be q<number>.sql where number in [1, N], where N is requests count");
         TFileInput fInput(ExternalQueriesDir + "/" + expectedFileName);
-        queries.emplace_back(fInput.ReadAll());
+        auto query = fInput.ReadAll();
+        SubstGlobal(query, "{path}", TablesPath);
+        queries.emplace_back(query);
     }
     return queries;
 }
@@ -312,6 +314,15 @@ TTpchCommandRun::TTpchCommandRun()
 void TTpchCommandRun::Config(TConfig& config) {
     TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
+    config.Opts->AddLongOption('p', "path", "Folder name to create tables in")
+        .Optional()
+        .DefaultValue("")
+        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+            if (arg.StartsWith('/')) {
+                ythrow NLastGetopt::TUsageException() << "Path must be relative";
+            }
+            TablesPath = arg;
+        });
     config.Opts->AddLongOption("output", "Save queries output to file")
         .Optional()
         .RequiredArgument("FILE")

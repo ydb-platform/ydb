@@ -2,13 +2,15 @@
 
 #include "topic_workload_defines.h"
 
+#include "util/stream/format.h"
+
 using namespace NYdb::NConsoleClient;
 
 TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
     size_t writerCount, size_t readerCount,
     bool quiet, bool printTimestamp,
     ui32 windowDurationSec, ui32 totalDurationSec, ui32 warmupSec,
-    ui8 percentile,
+    double percentile,
     std::shared_ptr<std::atomic_bool> errorFlag)
     : WriterCount(writerCount)
     , ReaderCount(readerCount)
@@ -50,11 +52,10 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
     header << "\n";
 
     header << "#\t";
-    auto percentile = TStringBuilder() << "P" << (ui32)Percentile;
     if (WriterCount > 0)
-        header << "msg/s\tMB/s\t" << percentile << "(ms)\t\t" << percentile << "(msg)\t";
+        header << "msg/s\tMB/s\tpercentile,ms\tpercentile,msg\t";
     if (ReaderCount > 0)
-        header << percentile << "(msg)\t" << percentile << "(ms)\t\tmsg/s\tMB/s\t" << percentile << "(ms)";
+        header << "percentile,msg\tpercentile,ms\tmsg/s\tMB/s\tpercentile,ms";
     header << "\n";
 
     Cout << header << Flush;

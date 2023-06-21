@@ -82,8 +82,8 @@ void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
 {
     TClientCommand::Parse(config);
 
-    if (Percentile >= 100) {
-        throw TMisuseException() << "--percentile should be less than 100.";
+    if (Percentile > 100 || Percentile <= 0) {
+        throw TMisuseException() << "--percentile should be in range (0,100].";
     }
     if (Warmup >= Seconds) {
         throw TMisuseException() << "--warmup should be less than --seconds.";

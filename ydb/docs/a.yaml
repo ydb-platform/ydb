@@ -15,6 +15,7 @@ arcanum:
       roles:
       - "kikimr:@scope=development"
       - "kikimr:@scope=administration"
+      - "kikimr:@scope=projects_management"
       - "edition_90_ydb_cs:@scope=content"
     rules:
     - reviewers:

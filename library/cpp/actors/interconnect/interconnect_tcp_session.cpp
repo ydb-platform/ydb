@@ -463,6 +463,10 @@ namespace NActors {
 
     void TInterconnectSessionTCP::OnDisconnect(TEvSocketDisconnect::TPtr& ev) {
         if (ev->Sender == ReceiverId) {
+            if (ev->Get()->Reason == TDisconnectReason::EndOfStream() && !NumEventsInQueue && OutputCounter == LastConfirmed) {
+                return Terminate(ev->Get()->Reason);
+            }
+
             const bool wasConnected(Socket);
             LOG_INFO_IC_SESSION("ICS07", "socket disconnect %" PRIi64 " reason# %s", Socket ? i64(*Socket) : -1, ev->Get()->Reason.ToString().data());
             ReceiverId = TActorId(); // reset receiver actor id as we have no more receiver yet
@@ -700,7 +704,11 @@ namespace NActors {
                     : err ? err
                     : Sprintf("socket: %s", strerror(-r));
                 LOG_NOTICE_NET(Proxy->PeerNodeId, "%s", message.data());
-                ReestablishConnectionWithHandshake(r == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-r));
+                if (r == 0 && !NumEventsInQueue && LastConfirmed == OutputCounter) {
+                    Terminate(TDisconnectReason::EndOfStream());
+                } else {
+                    ReestablishConnectionWithHandshake(r == 0 ? TDisconnectReason::EndOfStream() : TDisconnectReason::FromErrno(-r));
+                }
                 return 0; // error indicator
             } else {
                 return -1; // temporary error

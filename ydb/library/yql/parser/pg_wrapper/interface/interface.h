@@ -10,3 +10,4 @@
 #include "parser.h"
 #include "type_desc.h"
 #include "utils.h"
+#include "optimizer.h"

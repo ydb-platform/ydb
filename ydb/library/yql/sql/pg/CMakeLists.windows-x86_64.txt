@@ -10,6 +10,8 @@ add_subdirectory(ut)
 
 add_library(yql-sql-pg)
 target_compile_options(yql-sql-pg PRIVATE
+  -Dpalloc0=yql_palloc0
+  -Dpfree=yql_pfree
   -D__thread=__declspec(thread)
   -Dfstat=microsoft_native_fstat
   -Dstat=microsoft_native_stat
@@ -30,5 +32,6 @@ target_link_libraries(yql-sql-pg PUBLIC
 )
 target_sources(yql-sql-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/optimizer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/utils.cpp
 )

@@ -35,6 +35,7 @@ SRCS(
     pg_kernels.2.cpp
     pg_kernels.3.cpp
     config.cpp
+    cost_mocks.cpp
 )
 
 IF (ARCH_X86_64)

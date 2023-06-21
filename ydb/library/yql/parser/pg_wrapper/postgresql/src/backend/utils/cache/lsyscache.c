@@ -1354,7 +1354,7 @@ op_input_types(Oid opno, Oid *lefttype, Oid *righttype)
  * is needed to check this --- by convention, pass the left input's data type.
  */
 bool
-op_mergejoinable(Oid opno, Oid inputtype)
+op_mergejoinable_original(Oid opno, Oid inputtype)
 {
 	bool		result = false;
 	HeapTuple	tp;
@@ -1405,7 +1405,7 @@ op_mergejoinable(Oid opno, Oid inputtype)
  * to check this --- by convention, pass the left input's data type.
  */
 bool
-op_hashjoinable(Oid opno, Oid inputtype)
+op_hashjoinable_original(Oid opno, Oid inputtype)
 {
 	bool		result = false;
 	HeapTuple	tp;
@@ -1549,7 +1549,7 @@ get_oprrest(Oid opno)
  *		Returns procedure id for computing selectivity of a join.
  */
 RegProcedure
-get_oprjoin(Oid opno)
+get_oprjoin_original(Oid opno)
 {
 	HeapTuple	tp;
 
@@ -1748,7 +1748,7 @@ func_strict(Oid funcid)
  *		Given procedure id, return the function's provolatile flag.
  */
 char
-func_volatile(Oid funcid)
+func_volatile_original(Oid funcid)
 {
 	HeapTuple	tp;
 	char		result;

@@ -18,7 +18,13 @@ ADDINCL(
 
 SRCS(
     pg_sql.cpp
+    optimizer.cpp
     utils.cpp
+)
+
+CFLAGS(
+    -Dpalloc0=yql_palloc0
+    -Dpfree=yql_pfree
 )
 
 IF (OS_WINDOWS)

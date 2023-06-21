@@ -10,6 +10,8 @@ add_subdirectory(ut)
 
 add_library(yql-sql-pg)
 target_compile_options(yql-sql-pg PRIVATE
+  -Dpalloc0=yql_palloc0
+  -Dpfree=yql_pfree
   -DUSE_CURRENT_UDF_ABI_VERSION
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
@@ -27,5 +29,6 @@ target_link_libraries(yql-sql-pg PUBLIC
 )
 target_sources(yql-sql-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/optimizer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/utils.cpp
 )

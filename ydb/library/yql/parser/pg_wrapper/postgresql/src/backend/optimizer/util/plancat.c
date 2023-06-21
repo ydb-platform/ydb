@@ -1964,7 +1964,7 @@ function_selectivity(PlannerInfo *root,
  * In some usages root might be NULL, too.
  */
 void
-add_function_cost(PlannerInfo *root, Oid funcid, Node *node,
+add_function_cost_original(PlannerInfo *root, Oid funcid, Node *node,
 				  QualCost *cost)
 {
 	HeapTuple	proctup;

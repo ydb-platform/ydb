@@ -68,15 +68,15 @@ public:
     template <class TFilter>
     std::optional<ui64> GetGranuleForCompaction(const TFilter& filter) const {
         if (!GranuleCompactionPrioritySorting.size()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granules_for_compaction");
             return {};
         }
         const TInstant now = TInstant::Now();
         std::optional<ui64> reserve;
         TInstant reserveInstant;
         for (auto it = GranuleCompactionPrioritySorting.rbegin(); it != GranuleCompactionPrioritySorting.rend(); ++it) {
-            auto itSorting = GranuleCompactionPrioritySorting.rbegin();
-            Y_VERIFY(itSorting->second.size());
-            for (auto&& i : itSorting->second) {
+            Y_VERIFY(it->second.size());
+            for (auto&& i : it->second) {
                 if (filter(i)) {
                     if (it->first.GetNextAttemptInstant() > now) {
                         if (!reserve || reserveInstant > it->first.GetNextAttemptInstant()) {

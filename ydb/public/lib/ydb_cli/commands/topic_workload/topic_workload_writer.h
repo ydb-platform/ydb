@@ -18,19 +18,20 @@ namespace NYdb {
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
             std::shared_ptr<std::atomic<bool>> ErrorFlag;
             std::shared_ptr<std::atomic_uint> StartedCount;
+            const std::vector<TString>& GeneratedMessages;
             TString TopicName;
             size_t ByteRate;
             ui32 ProducerThreadCount;
             ui32 WriterIdx;
             TString ProducerId;
             ui32 PartitionId;
-            size_t MessageSize;
             ui32 Codec = 0;
         };
 
         class TTopicWorkloadWriterWorker {
         public:
             static void WriterLoop(TTopicWorkloadWriterParams&& params);
+            static std::vector<TString> GenerateMessages(size_t messageSize);
         private:
             TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);
             ~TTopicWorkloadWriterWorker();
@@ -53,7 +54,6 @@ namespace NYdb {
             bool WaitForInitSeqNo();
 
             TString GetGeneratedMessage() const;
-            void GenerateMessages();
 
             TInstant GetCreateTimestamp() const;
 
@@ -63,9 +63,6 @@ namespace NYdb {
             ui64 BytesWritten = 0;
             std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
             TInstant StartTimestamp;
-
-            std::vector<TString> GeneratedMessages;
-
 
             TMaybe<NTopic::TContinuationToken> ContinuationToken;
 

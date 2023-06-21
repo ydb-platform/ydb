@@ -103,6 +103,7 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
 
     StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Warmup, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
+    std::vector<TString> generatedMessages = TTopicWorkloadWriterWorker::GenerateMessages(MessageSize);
 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
     ui32 partitionCount = describeTopicResult.GetTotalPartitionsCount();
@@ -140,13 +141,13 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
             .StatsCollector = StatsCollector,
             .ErrorFlag = ErrorFlag,
             .StartedCount = producerStartedCount,
+            .GeneratedMessages = generatedMessages,
             .TopicName = TopicName,
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
             .ProducerThreadCount = ProducerThreadCount,
             .WriterIdx = writerIdx,
             .ProducerId = TGUID::CreateTimebased().AsGuidString(),
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
-            .MessageSize = MessageSize,
             .Codec = Codec};
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(std::move(writerParams)); }));

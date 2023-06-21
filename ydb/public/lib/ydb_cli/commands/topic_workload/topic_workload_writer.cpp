@@ -12,7 +12,6 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
 
 {
     Closed = std::make_shared<std::atomic<bool>>(false);
-    GenerateMessages();
     CreateWorker();
 }
 
@@ -39,18 +38,20 @@ void TTopicWorkloadWriterWorker::Close() {
 
 const size_t GENERATED_MESSAGES_COUNT = 32;
 
-void TTopicWorkloadWriterWorker::GenerateMessages() {
+std::vector<TString> TTopicWorkloadWriterWorker::GenerateMessages(size_t messageSize) {
+    std::vector<TString> generatedMessages;
     TStringBuilder res;
     for (size_t i = 0; i < GENERATED_MESSAGES_COUNT; i++) {
         res.clear();
-        while (res.Size() < Params.MessageSize)
+        while (res.Size() < messageSize)
             res << RandomNumber<ui64>(UINT64_MAX);
-        GeneratedMessages.push_back(res);
+        generatedMessages.push_back(res);
     }
+    return generatedMessages;
 }
 
 TString TTopicWorkloadWriterWorker::GetGeneratedMessage() const {
-    return GeneratedMessages[MessageId % GENERATED_MESSAGES_COUNT];
+    return Params.GeneratedMessages[MessageId % GENERATED_MESSAGES_COUNT];
 }
 
 TInstant TTopicWorkloadWriterWorker::GetCreateTimestamp() const {

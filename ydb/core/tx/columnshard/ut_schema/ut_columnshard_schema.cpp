@@ -1329,7 +1329,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(RebootOneColdTier) {
         TestExport(true);
     }
-#if 0 // TODO
+
     Y_UNIT_TEST(ExportAfterFail) {
         TestExport(false, 1);
     }
@@ -1337,7 +1337,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(RebootExportAfterFail) {
         TestExport(true, 1);
     }
-#endif
+
     Y_UNIT_TEST(ForgetAfterFail) {
         TestExport(false, 2);
     }

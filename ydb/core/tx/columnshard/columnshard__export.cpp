@@ -19,7 +19,7 @@ public:
 
 private:
     TEvPrivate::TEvExport::TPtr Ev;
-    THashSet<NOlap::TEvictedBlob> BlobsToForget;
+    THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
 };
 
 
@@ -75,7 +75,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
                 evict = Self->BlobManager->GetDropped(blobId, meta);
                 Y_VERIFY(evict.State == EEvictState::EXTERN);
 
-                BlobsToForget.emplace(std::move(evict));
+                BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
             } else {
                 LOG_S_ERROR("Unknown blob exported '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
             }
@@ -101,9 +101,6 @@ void TTxExportFinish::Complete(const TActorContext& ctx) {
     if (!BlobsToForget.empty()) {
         Self->ForgetBlobs(ctx, BlobsToForget);
     }
-
-    Y_VERIFY(Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
-    --Self->ActiveEvictions;
 }
 
 
@@ -111,7 +108,6 @@ void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& 
     auto& msg = *ev->Get();
     auto status = msg.Status;
 
-    Y_VERIFY(ActiveEvictions, "Unexpected active evictions count at tablet %lu", TabletID());
     ui64 exportNo = msg.ExportNo;
     auto& tierName = msg.TierName;
 
@@ -121,7 +117,6 @@ void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& 
     } else if (status == NKikimrProto::ERROR && msg.Blobs.empty()) {
         LOG_S_WARN("Export (fail): id " << exportNo << " tier '" << tierName << "' error: "
             << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
-        --ActiveEvictions;
     } else {
         // There's no atomicity needed here. Allow partial export
         if (status == NKikimrProto::ERROR) {

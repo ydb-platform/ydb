@@ -98,7 +98,8 @@ public:
     virtual bool LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) = 0;
     virtual TEvictedBlob GetEvicted(const TUnifiedBlobId& blob, TEvictMetadata& meta) = 0;
     virtual TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) = 0;
-    virtual void GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const = 0;
+    virtual void GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const = 0;
+    virtual void GetReexportBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const = 0;
     virtual bool HasExternBlobs() const = 0;
 };
 
@@ -248,7 +249,8 @@ public:
     bool LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) override;
     TEvictedBlob GetEvicted(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
     TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
-    void GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const override;
+    void GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const override;
+    void GetReexportBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const override;
 
     bool HasExternBlobs() const override {
         return EvictedBlobs.size() || DroppedEvictedBlobs.size();

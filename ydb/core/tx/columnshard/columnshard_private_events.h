@@ -137,16 +137,36 @@ struct TEvPrivate {
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TMap<TString, TString> ErrorStrings;
 
-        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TBlobDataMap&& tierBlobs)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, const THashSet<TUnifiedBlobId>& blobIds)
             : ExportNo(exportNo)
             , TierName(tierName)
-            , Blobs(std::move(tierBlobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
             Y_VERIFY(pathId);
-            Y_VERIFY(!Blobs.empty());
-            InitDstBlobIds(pathId);
+            Y_VERIFY(!blobIds.empty());
+
+            for (auto& blobId : blobIds) {
+                Blobs.emplace(blobId, TString());
+                SrcToDstBlobs[blobId] = blobId.MakeS3BlobId(pathId);
+            }
+        }
+
+        explicit TEvExport(ui64 exportNo, const TString& tierName, const THashSet<NOlap::TEvictedBlob>& evictSet)
+            : ExportNo(exportNo)
+            , TierName(tierName)
+        {
+            Y_VERIFY(ExportNo);
+            Y_VERIFY(!TierName.empty());
+            Y_VERIFY(!evictSet.empty());
+
+            for (auto& evict : evictSet) {
+                Y_VERIFY(evict.IsEvicting());
+                Y_VERIFY(evict.ExternBlob.IsS3Blob());
+
+                Blobs.emplace(evict.Blob, TString());
+                SrcToDstBlobs[evict.Blob] = evict.ExternBlob;
+            }
         }
 
         TEvExport(TEvPrivate::TEvExport::TPtr& ev, TActorId dstActor)
@@ -157,12 +177,6 @@ struct TEvPrivate {
             , SrcToDstBlobs(std::move(ev->Get()->SrcToDstBlobs))
         {
             Y_VERIFY(DstActor);
-        }
-
-        void InitDstBlobIds(ui64 pathId) {
-            for (auto& [srcBlobId, _] : Blobs) {
-                SrcToDstBlobs[srcBlobId] = srcBlobId.MakeS3BlobId(pathId);
-            }
         }
 
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {

@@ -679,16 +679,26 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
     return {};
 }
 
-void TBlobManager::GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const {
+void TBlobManager::GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const {
     TStringBuilder strBlobs;
-    for (auto& [evict, _] : DroppedEvictedBlobs) {
+    for (auto& [evict, meta] : DroppedEvictedBlobs) {
         if (evict.State != EEvictState::EVICTING) {
             strBlobs << "'" << evict.Blob.ToStringNew() << "' ";
-            cleanup.insert(evict);
+            auto& tierName = meta.GetTierName();
+            tierBlobs[tierName].emplace(evict);
         }
     }
     if (!strBlobs.empty()) {
-        LOG_S_NOTICE("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);
+        LOG_S_DEBUG("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);
+    }
+}
+
+void TBlobManager::GetReexportBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const {
+    for (auto& [evict, meta] : EvictedBlobs) {
+        if (evict.State == EEvictState::EVICTING) {
+            auto& tierName = meta.GetTierName();
+            tierBlobs[tierName].emplace(evict);
+        }
     }
 }
 

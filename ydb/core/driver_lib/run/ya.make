@@ -80,6 +80,7 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/kafka_proxy
     ydb/core/kqp
     ydb/core/kqp/rm_service
     ydb/core/load_test

@@ -63,6 +63,8 @@
 
 #include <ydb/core/health_check/health_check.h>
 
+#include <ydb/core/kafka_proxy/kafka_proxy.h>
+
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -2840,9 +2842,7 @@ void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSet
     );
 
     NPG::TListenerSettings settings;
-    if (Config.GetLocalPgWireConfig().HasListeningPort()) {
-        settings.Port = Config.GetLocalPgWireConfig().GetListeningPort();
-    }
+    settings.Port = Config.GetLocalPgWireConfig().GetListeningPort();
     if (Config.GetLocalPgWireConfig().HasSslCertificate()) {
         settings.SslCertificatePem = Config.GetLocalPgWireConfig().GetSslCertificate();
     }
@@ -2852,6 +2852,27 @@ void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSet
         TActorSetupCmd(NPG::CreatePGListener(MakePollerActorId(), NLocalPgWire::CreateLocalPgWireProxyId(), settings),
             TMailboxType::HTSwap, appData->UserPoolId)
     );
+}
+
+TKafkaProxyServiceInitializer::TKafkaProxyServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+        NKafka::TListenerSettings settings;
+        settings.Port = Config.GetKafkaProxyConfig().GetListeningPort();
+        if (Config.GetKafkaProxyConfig().HasSslCertificate()) {
+            settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
+        }
+
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings),
+                TMailboxType::HTSwap, appData->UserPoolId)
+        );
+    }
 }
 
 } // namespace NKikimrServicesInitializers

@@ -6,10 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
-add_library(ydb-core-kafkaproxy)
-target_link_libraries(ydb-core-kafkaproxy PUBLIC
+add_library(ydb-core-raw_socket)
+target_link_libraries(ydb-core-raw_socket PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
@@ -17,7 +17,6 @@ target_link_libraries(ydb-core-kafkaproxy PUBLIC
   ydb-core-base
   ydb-core-protos
 )
-target_sources(ydb-core-kafkaproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kafkaproxy/kafka_messages.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kafkaproxy/kafka_messages_int.cpp
+target_sources(ydb-core-raw_socket PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/raw_socket/sock_listener.cpp
 )

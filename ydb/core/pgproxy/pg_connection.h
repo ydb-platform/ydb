@@ -1,11 +1,14 @@
 #pragma once
 
 #include <library/cpp/actors/core/actor.h>
-#include "pg_proxy_config.h"
-#include "pg_proxy_impl.h"
+#include <ydb/core/raw_socket/sock_config.h>
+#include <ydb/core/raw_socket/sock_impl.h>
 
 namespace NPG {
 
-NActors::IActor* CreatePGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const NActors::TActorId& databaseProxy);
+using namespace NKikimr::NRawSocket;
 
-}
+NActors::IActor* CreatePGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
+                                    const NActors::TActorId& databaseProxy);
+
+} // namespace NPG

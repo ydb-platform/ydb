@@ -8,17 +8,18 @@
 
 add_subdirectory(ut)
 
-add_library(ydb-core-kafkaproxy)
-target_link_libraries(ydb-core-kafkaproxy PUBLIC
-  contrib-libs-linux-headers
+add_library(ydb-core-kafka_proxy)
+target_link_libraries(ydb-core-kafka_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
   cpp-actors-protos
   ydb-core-base
   ydb-core-protos
+  ydb-core-raw_socket
 )
-target_sources(ydb-core-kafkaproxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kafkaproxy/kafka_messages.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kafkaproxy/kafka_messages_int.cpp
+target_sources(ydb-core-kafka_proxy PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp
 )

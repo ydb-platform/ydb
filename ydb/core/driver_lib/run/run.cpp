@@ -1592,6 +1592,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalPgWireServiceInitializer(runConfig));
     }
 
+    if (serviceMask.EnableKafkaProxy) {
+        sil->AddServiceInitializer(new TKafkaProxyServiceInitializer(runConfig));
+    }
+
     return sil;
 }
 

@@ -585,7 +585,21 @@ TEST(Serialization, TKafkaFloat64_PresentVersion_NotTaggedVersion) {
     }
 }
 
+TEST(Serialization, RequestHeader_reference) {
+    ui8 reference[] = {0x00, 0x12, 0x00, 0x00, 0x7F, 0x6F, 0x6F, 0x68, 0x00, 0x0A, 0x70, 0x72, 0x6F, 0x64, 0x75, 0x63, 
+                     0x65, 0x72, 0x2D, 0x31};
 
+    std::stringstream sb;
+    sb.write((char*)reference, sizeof(reference));
+
+    TReadProcessor processor(sb);
+    TRequestHeaderData result;
+    processor.Read(&result, 1);
+
+    EXPECT_EQ(result.RequestApiKey, 0x12);
+    EXPECT_EQ(result.RequestApiVersion, 0x00);
+    EXPECT_EQ(result.ClientId, "producer-1");
+}
 
 TEST(Serialization, ProduceRequestData_reference) {
     // original kafka serialized value (java implementation)

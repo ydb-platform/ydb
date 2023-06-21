@@ -66,6 +66,7 @@ target_link_libraries(run PUBLIC
   core-kesus-proxy
   core-kesus-tablet
   ydb-core-keyvalue
+  ydb-core-kafka_proxy
   ydb-core-kqp
   core-kqp-rm_service
   ydb-core-load_test

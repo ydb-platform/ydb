@@ -1788,6 +1788,13 @@ message TLocalPgWireConfig {
     optional string SslCertificate = 5;
 }
 
+message TKafkaProxyConfig {
+    optional bool EnableKafkaProxy = 1 [default = true];
+
+    optional int32 ListeningPort = 2 [default = 9092];
+    optional string SslCertificate = 3;
+}
+
 message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
@@ -1861,6 +1868,7 @@ message TAppConfig {
     optional TColumnShardConfig ColumnShardConfig = 66;
     optional TLocalPgWireConfig LocalPgWireConfig = 69;
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
+    optional TKafkaProxyConfig KafkaProxyConfig = 71;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

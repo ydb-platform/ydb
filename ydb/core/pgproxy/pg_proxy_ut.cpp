@@ -5,7 +5,6 @@
 #include <library/cpp/actors/testlib/test_runtime.h>
 
 #include <ydb/core/pgproxy/pg_proxy.h>
-#include <ydb/core/pgproxy/pg_listener.h>
 #include <ydb/core/pgproxy/pg_log.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
 #include <ydb/core/protos/services.pb.h>
@@ -13,11 +12,15 @@
 #include <util/network/socket.h>
 #include <util/string/hex.h>
 
+#include "pg_listener.h"
+
 #ifdef NDEBUG
 #define Ctest Cnull
 #else
 #define Ctest Cerr
 #endif
+
+using namespace NKikimr::NRawSocket;
 
 class TTestActorRuntime : public NActors::TTestActorRuntimeBase {
 public:

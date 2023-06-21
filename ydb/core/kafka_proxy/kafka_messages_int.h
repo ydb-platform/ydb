@@ -14,6 +14,8 @@
 namespace NKafka {
 namespace NPrivate {
 
+static constexpr TKafkaInt32 MAX_RECORDS_SIZE = 1 << 28; // 256Mb
+
 struct TKafkaBoolDesc {
     static constexpr bool Default = true;
     static constexpr bool Nullable = false;
@@ -484,12 +486,14 @@ public:
             } else {
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
             }
+        } else if (length > MAX_RECORDS_SIZE) {
+            ythrow yexception() << "records fields " << Meta::Name << " has invalid length " << length;
         }
 
         value = TKafkaRawBytes();
         value->Resize(length);
         return TReadDemand(value->data(), length);
-    }
+    } 
 
 private:
     bool WasRead;

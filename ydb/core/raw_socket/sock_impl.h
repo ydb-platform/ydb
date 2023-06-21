@@ -1,11 +1,11 @@
 #pragma once
 
 #include <library/cpp/actors/interconnect/poller_actor.h>
-#include "pg_proxy_config.h"
-#include "pg_sock64.h"
-#include "pg_proxy_ssl.h"
+#include "sock_config.h"
+#include "sock64.h"
+#include "sock_ssl.h"
 
-namespace NPG {
+namespace NKikimr::NRawSocket {
 
 struct TEndpointInfo {
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
@@ -98,4 +98,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NRawSocket

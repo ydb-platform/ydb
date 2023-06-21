@@ -3,34 +3,37 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <util/network/sock.h>
-#include "pg_proxy.h"
-#include "pg_listener.h"
-#include "pg_proxy_impl.h"
-#include "pg_proxy_config.h"
-#include "pg_sock64.h"
-#include "pg_connection.h"
-#include "pg_log_impl.h"
+#include <ydb/core/protos/services.pb.h>
 
-namespace NPG {
+#include "sock_listener.h"
+#include "sock_config.h"
+#include "sock64.h"
+
+namespace NKikimr::NRawSocket {
 
 using namespace NActors;
 
-class TPGListener : public TActorBootstrapped<TPGListener>, TNetworkConfig {
+class TSocketListener: public TActorBootstrapped<TSocketListener>, TNetworkConfig {
 public:
-    using TBase = NActors::TActor<TPGListener>;
-    using TThis = TPGListener;
+    using TBase = TActor<TSocketListener>;
+    using TThis = TSocketListener;
+
     TActorId Poller;
-    TActorId DatabaseProxy;
     TListenerSettings Settings;
+    TConnectionCreator ConnectionCreator;
+    NKikimrServices::EServiceKikimr Service;
+
     TIntrusivePtr<TSocketDescriptor> Socket;
-    NActors::TPollerToken::TPtr PollerToken;
+    TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
 
-    TPGListener(const TActorId& poller, const TActorId& databaseProxy, const TListenerSettings& settings)
+    TSocketListener(const TActorId& poller, const TListenerSettings& settings, const TConnectionCreator& connectionCreator,
+                    NKikimrServices::EServiceKikimr service)
         : Poller(poller)
-        , DatabaseProxy(databaseProxy)
         , Settings(settings)
-    {}
+        , ConnectionCreator(connectionCreator)
+        , Service(service) {
+    }
 
     STATEFN(StateWorking) {
         switch (ev->GetTypeRewrite()) {
@@ -54,14 +57,15 @@ public:
 
             err = Socket->Listen(LISTEN_QUEUE);
             if (err == 0) {
-                BLOG_D("Listening on " << bindAddress->ToString() << (endpoint->SecureContext ? " (ssl)" : ""));
+                LOG_INFO_S(*NActors::TlsActivationContext, Service,
+                           "Listening on " << bindAddress->ToString() << (endpoint->SecureContext ? " (ssl)" : ""));
                 Socket->SetNonBlock();
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
             }
         }
-        BLOG_ERROR("Failed to listen on " << bindAddress->ToString());
+        LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString());
         //abort();
         PassAway();
     }
@@ -84,7 +88,7 @@ public:
             if (!socket) {
                 break;
             }
-            NActors::IActor* connectionSocket = CreatePGConnection(socket, addr, DatabaseProxy);
+            NActors::IActor* connectionSocket = ConnectionCreator(socket, addr);
             NActors::TActorId connectionId = Register(connectionSocket);
             Send(Poller, new TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
@@ -97,9 +101,9 @@ public:
     }
 };
 
-
-NActors::IActor* CreatePGListener(const TActorId& poller, const TActorId& databaseProxy, const TListenerSettings& settings) {
-    return new TPGListener(poller, databaseProxy, settings);
+NActors::IActor* CreateSocketListener(const NActors::TActorId& poller, const TListenerSettings& settings,
+                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service) {
+    return new TSocketListener(poller, settings, connectionCreator, service);
 }
 
-}
+} // namespace NKikimr::NRawSocket

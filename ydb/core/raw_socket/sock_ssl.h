@@ -7,7 +7,7 @@
 #include <memory>
 #include <util/generic/string.h>
 
-namespace NPG {
+namespace NKikimr::NRawSocket {
 
 struct TSslHelpers {
     struct TSslDeleter {
@@ -210,4 +210,4 @@ struct TSslLayer : TSslHelpers {
     }
 };
 
-}
+} // namespace NKikimr::NRawSocket

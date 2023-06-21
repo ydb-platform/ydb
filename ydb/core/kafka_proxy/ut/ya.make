@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kafkaproxy
+    ydb/core/kafka_proxy
 )
 
 END()

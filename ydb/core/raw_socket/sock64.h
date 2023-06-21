@@ -3,9 +3,9 @@
 #include <optional>
 #include <util/network/sock.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
-#include "pg_proxy_ssl.h"
+#include "sock_ssl.h"
 
-namespace NPG {
+namespace NKikimr::NRawSocket {
 
 class TInet64StreamSocket : public TStreamSocket {
     using TBase = TStreamSocket;
@@ -194,4 +194,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NRawSocket

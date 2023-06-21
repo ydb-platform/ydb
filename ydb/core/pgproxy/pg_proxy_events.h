@@ -2,10 +2,12 @@
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
-#include "pg_proxy_config.h"
+#include <ydb/core/raw_socket/sock_config.h>
 #include "pg_proxy_types.h"
 
 namespace NPG {
+
+using namespace NKikimr::NRawSocket;
 
 struct TEvPGEvents {
     enum EEv {

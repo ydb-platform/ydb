@@ -363,7 +363,7 @@ private:
             if (InflightBuffer.size() >= MaxRequestsInflight) {
                 skipReason << "MaxRequestsInflight ";
             }
-            SINK_LOG_D(skipReason);
+            SINK_LOG_T(skipReason);
             return false;
         }
 

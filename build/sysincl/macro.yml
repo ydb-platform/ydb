@@ -30,9 +30,14 @@
     - Y_UCRT_INCLUDE_NEXT(wchar.h)
     - Y_UCRT_INCLUDE_NEXT(wctype.h)
 
-    # BOOST_PP_INCLUDE_SELF() SHOULD be always be resolved into the same file it is included from.
-    # Hence this file was already parsed and empty resolving is equivalent to providing the actual resolution for it.
-    - BOOST_PP_INCLUDE_SELF()
+    # BOOST_PP_INCLUDE_SELF() is defined in boost/preprocessor/iteration/detail/self.hpp
+    # It works as follows:
+    # The user defines BOOST_PP_INDIRECT_SELF containing current file name.
+    # Then it #includes BOOST_PP_INCLUDE_SELF() which indirectly includes  the file pointed by BOOST_PP_INDIRECT_SELF.
+    #
+    # Hence BOOST_PP_INDIRECT_SELF SHOULD BE already parsed and empty resolving is equivalent to providing the actual resolution for it.
+    - BOOST_PP_INCLUDE_SELF(): contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/self.hpp
+    - BOOST_PP_INDIRECT_SELF
 
     # BOOST_PP_UPDATE_COUNTER() is defined in boost/preprocessor/slot/counter.hpp
     # It is unclear why the author used macro include at all.
@@ -184,8 +189,6 @@
     - BOOST_FT_loop: contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/master.hpp
     - BOOST_FT_variate_file: contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_arity_loop.hpp
     - BOOST_PP_ASSIGN_SLOT(1): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot1.hpp
-    - BOOST_PP_INCLUDE_SELF(): contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/self.hpp
-    - BOOST_PP_LOCAL_ITERATE(): contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/local.hpp
     - BOOST_TYPEOF_INCREMENT_REGISTRATION_GROUP(): contrib/restricted/boost/typeof/include/boost/typeof/incr_registration_group.hpp
     - BOOST_REGEX_USER_CONFIG: contrib/restricted/boost/regex/include/boost/regex/user.hpp
     - BOOST_USER_CONFIG: contrib/restricted/boost/config/include/boost/config/user.hpp

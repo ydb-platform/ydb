@@ -26,7 +26,7 @@ TStringBuf Prefix(int level) {
 void PrettyPrintVar(TStringBuilder& b, const IOptimizer::TOutput& output, IOptimizer::TVarId varId) {
     const auto& [relno, varno] = varId;
     auto varName = output.Input
-        ? output.Input->Rels[relno-1].TargetVars[varno-1].name
+        ? output.Input->Rels[relno-1].TargetVars[varno-1].Name
         : '\0';
     if (!varName) {
         b << "(" << relno << "," << varno << ")";
@@ -39,13 +39,13 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
     TStringBuf prefix = Prefix(level);
     const auto& node = output.Nodes[id];
     switch (node.Mode) {
-        case IOptimizer::EJoinType::UNKNOWN: b << prefix <<  " Node\n"; break;
-        case IOptimizer::EJoinType::INNER: b << prefix <<  " Inner Join\n"; break;
+        case IOptimizer::EJoinType::Unknown: b << prefix <<  " Node\n"; break;
+        case IOptimizer::EJoinType::Inner: b << prefix <<  " Inner Join\n"; break;
         default: b << prefix <<  " Unknown\n"; break;
     }
     switch (node.Strategy) {
-        case IOptimizer::EJoinStrategy::HASH: b << prefix <<  " Hash Strategy\n"; break;
-        case IOptimizer::EJoinStrategy::LOOP: b << prefix <<  " Loop Strategy\n"; break;
+        case IOptimizer::EJoinStrategy::Hash: b << prefix <<  " Hash Strategy\n"; break;
+        case IOptimizer::EJoinStrategy::Loop: b << prefix <<  " Loop Strategy\n"; break;
         default: break;
     }
     if (!node.Rels.empty())

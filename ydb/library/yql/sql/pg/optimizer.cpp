@@ -61,9 +61,9 @@ Var* MakeVar(int varno, int relno) {
 
 RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno) {
     RelOptInfo* rel = makeNode(RelOptInfo);
-    rel->rows = r.rows;
-    rel->tuples = r.rows;
-    rel->pages = r.rows;
+    rel->rows = r.Rows;
+    rel->tuples = r.Rows;
+    rel->pages = r.Rows;
     rel->allvisfrac = 1.0;
     rel->relid = relno;
     rel->amflags = 1.0;
@@ -82,9 +82,9 @@ RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno) {
 
     Path* p = makeNode(Path);
     p->pathtype = T_SeqScan;
-    p->rows = r.rows;
+    p->rows = r.Rows;
     p->startup_cost = 0;
-    p->total_cost = r.total_cost;
+    p->total_cost = r.TotalCost;
     p->pathtarget = t;
     p->parent = rel;
 
@@ -185,12 +185,12 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
     }
 
     if (path->type != T_Path) {
-        node.Mode = EJoinType::INNER;
-        node.Strategy = EJoinStrategy::UNKNOWN;
+        node.Mode = EJoinType::Inner;
+        node.Strategy = EJoinStrategy::Unknown;
         if (path->type == T_HashPath) {
-            node.Strategy = EJoinStrategy::HASH;
+            node.Strategy = EJoinStrategy::Hash;
         } else if (path->type == T_NestPath) {
-            node.Strategy = EJoinStrategy::LOOP;
+            node.Strategy = EJoinStrategy::Loop;
         } else {
             ythrow yexception() << "Uknown pathtype " << (int)path->type;
         }

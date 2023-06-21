@@ -11,12 +11,12 @@ struct IOptimizer {
     using TVarId = std::tuple<int, int>;
 
     struct TVar {
-        char name = 0; // debug name: 'a', 'b', 'c', ...
+        char Name = 0; // debug name: 'a', 'b', 'c', ...
     };
 
     struct TRel {
-        double rows = 0;
-        double total_cost = 0;
+        double Rows = 0;
+        double TotalCost = 0;
 
         std::vector<TVar> TargetVars;
     };
@@ -31,19 +31,19 @@ struct IOptimizer {
     };
 
     enum class EJoinType {
-        UNKNOWN,
-        INNER
+        Unknown,
+        Inner
     };
 
     enum class EJoinStrategy {
-        UNKNOWN,
-        HASH,
-        LOOP
+        Unknown,
+        Hash,
+        Loop
     };
 
     struct TJoinNode {
-        EJoinType Mode = EJoinType::UNKNOWN;
-        EJoinStrategy Strategy = EJoinStrategy::UNKNOWN;
+        EJoinType Mode = EJoinType::Unknown;
+        EJoinStrategy Strategy = EJoinStrategy::Unknown;
         // only a = b supported yet
         TVarId LeftVar = {};
         TVarId RightVar = {};

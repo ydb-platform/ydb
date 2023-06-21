@@ -38,10 +38,10 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     template <class TLevelSegment>
     struct THullSegLoaded : public TEventLocal<THullSegLoaded<TLevelSegment>, TEvBlobStorage::EvHullSegLoaded> {
-        TLevelSegment *LevelSegment;
+        TIntrusivePtr<TLevelSegment> LevelSegment;
 
-        THullSegLoaded(TLevelSegment *seg)
-            : LevelSegment(seg)
+        THullSegLoaded(TIntrusivePtr<TLevelSegment> seg)
+            : LevelSegment(std::move(seg))
         {}
     };
 
@@ -105,7 +105,7 @@ namespace NKikimr {
 
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
-        TLevelSegment *LevelSegment;
+        TIntrusivePtr<TLevelSegment> LevelSegment;
         TActorId Recipient;
         TString Origin;
         bool FirstRead;
@@ -163,7 +163,7 @@ namespace NKikimr {
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;
             TSmallBlobChunkIdxExtractor<TMemRec> chunkIdxExtr;
-            TMemIterator it(LevelSegment);
+            TMemIterator it(LevelSegment.Get());
             it.SeekToFirst();
             bool first = true;
             TKey prevKey;
@@ -295,13 +295,13 @@ namespace NKikimr {
         TLevelSegmentLoader(
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
-                TLevelSegment *levelSegment,
+                TIntrusivePtr<TLevelSegment> levelSegment,
                 const TActorId &recipient,
                 const TString &origin)
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)
-            , LevelSegment(levelSegment)
+            , LevelSegment(std::move(levelSegment))
             , Recipient(recipient)
             , Origin(origin)
             , FirstRead(true)
@@ -309,7 +309,7 @@ namespace NKikimr {
             , RestToReadOutbound(0)
             , Chunks()
         {
-            const TDiskPart& entry = levelSegment->GetEntryPoint();
+            const TDiskPart& entry = LevelSegment->GetEntryPoint();
             Y_VERIFY_DEBUG(!entry.Empty());
         }
     };
@@ -322,17 +322,15 @@ namespace NKikimr {
     struct THullSegmentsLoaded : public TEventLocal<THullSegmentsLoaded<TKey, TMemRec>, TEvBlobStorage::EvHullSegmentsLoaded> {
         typedef ::NKikimr::TOrderedLevelSegments<TKey, TMemRec> TOrderedLevelSegments;
         typedef ::NKikimr::TUnorderedLevelSegments<TKey, TMemRec> TUnorderedLevelSegments;
-        TOrderedLevelSegments *OrderedSegs;
-        TUnorderedLevelSegments *UnorderedSegs;
+        TIntrusivePtr<TOrderedLevelSegments> OrderedSegs;
+        TIntrusivePtr<TUnorderedLevelSegments> UnorderedSegs;
 
-        THullSegmentsLoaded(TOrderedLevelSegments *segs)
-            : OrderedSegs(segs)
-            , UnorderedSegs(nullptr)
+        THullSegmentsLoaded(TIntrusivePtr<TOrderedLevelSegments> segs)
+            : OrderedSegs(std::move(segs))
         {}
 
-        THullSegmentsLoaded(TUnorderedLevelSegments *segs)
-            : OrderedSegs(NULL)
-            , UnorderedSegs(segs)
+        THullSegmentsLoaded(TIntrusivePtr<TUnorderedLevelSegments> segs)
+            : UnorderedSegs(std::move(segs))
         {}
     };
 
@@ -352,7 +350,7 @@ namespace NKikimr {
 
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
-        TOrderedLevelSegments *Segs;
+        TIntrusivePtr<TOrderedLevelSegments> Segs;
         TActorId Recipient;
         ui32 Pos;
         ui32 Size;
@@ -369,7 +367,7 @@ namespace NKikimr {
                 ++Pos;
             } else {
                 Y_VERIFY_DEBUG(Pos == Size);
-                ctx.Send(Recipient, new THullSegmentsLoaded(Segs));
+                ctx.Send(Recipient, new THullSegmentsLoaded(std::move(Segs)));
                 TThis::Die(ctx);
             }
         }
@@ -403,12 +401,12 @@ namespace NKikimr {
         TOrderedLevelSegmentsLoader(
                 const TVDiskContextPtr vctx,
                 const TPDiskCtxPtr pdiskCtx,
-                TOrderedLevelSegments *levelSegmentVec,
+                TIntrusivePtr<TOrderedLevelSegments> levelSegmentVec,
                 const TActorId &recipient)
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)
-            , Segs(levelSegmentVec)
+            , Segs(std::move(levelSegmentVec))
             , Recipient(recipient)
             , Pos(0)
             , Size(Segs->Segments.size())
@@ -433,7 +431,7 @@ namespace NKikimr {
 
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
-        TUnorderedLevelSegments *Segs;
+        TIntrusivePtr<TUnorderedLevelSegments> Segs;
         TActorId Recipient;
         TIterator Pos;
         TIterator End;
@@ -447,7 +445,7 @@ namespace NKikimr {
                 NActors::TActorId aid = ctx.Register(actor.Release());
                 ActiveActors.Insert(aid);
             } else {
-                ctx.Send(Recipient, new THullSegmentsLoaded(Segs));
+                ctx.Send(Recipient, new THullSegmentsLoaded(std::move(Segs)));
                 TThis::Die(ctx);
             }
         }
@@ -482,11 +480,11 @@ namespace NKikimr {
         TUnorderedLevelSegmentsLoader(
                 const TVDiskContextPtr &vctx,
                 const TPDiskCtxPtr &pdiskCtx,
-                TUnorderedLevelSegments *segs, const TActorId &recipient)
+                TIntrusivePtr<TUnorderedLevelSegments> segs, const TActorId &recipient)
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)
-            , Segs(segs)
+            , Segs(std::move(segs))
             , Recipient(recipient)
             , Pos(Segs->Segments.begin())
             , End(Segs->Segments.end())
@@ -510,7 +508,7 @@ namespace NKikimr {
     // TLevelIndexLoader
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec, EHullDbType type>
-    class TLevelIndexLoader : public TActorBootstrapped< TLevelIndexLoader<TKey, TMemRec, type>> {
+    class TLevelIndexLoader : public TActorBootstrapped<TLevelIndexLoader<TKey, TMemRec, type>> {
         typedef ::NKikimr::TLevelIndexLoader<TKey, TMemRec, type> TThis;
         typedef ::NKikimr::TLevelIndex<TKey, TMemRec> TLevelIndex;
         typedef ::NKikimr::TLevelSegmentLoader<TKey, TMemRec> TLevelSegmentLoader;
@@ -521,7 +519,7 @@ namespace NKikimr {
 
         const TVDiskContextPtr VCtx;
         const TPDiskCtxPtr PDiskCtx;
-        TLevelIndex *LevelIndex;
+        TIntrusivePtr<TLevelIndex> LevelIndex;
         TActorId Recipient;
         TSstIterator It;
         TActiveActors ActiveActors;
@@ -574,12 +572,12 @@ namespace NKikimr {
         TLevelIndexLoader(
                 const TVDiskContextPtr vctx,
                 const TPDiskCtxPtr pdiskCtx,
-                TLevelIndex *levelIndex,
+                TIntrusivePtr<TLevelIndex> levelIndex,
                 const TActorId &recipient)
             : TActorBootstrapped<TThis>()
             , VCtx(vctx)
             , PDiskCtx(pdiskCtx)
-            , LevelIndex(levelIndex)
+            , LevelIndex(std::move(levelIndex))
             , Recipient(recipient)
             , It(LevelIndex->CurSlice.Get(), LevelIndex->CurSlice->Level0CurSstsNum())
         {}

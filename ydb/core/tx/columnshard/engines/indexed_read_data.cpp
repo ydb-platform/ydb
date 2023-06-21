@@ -464,4 +464,18 @@ void TIndexedReadData::Abort() {
     GranulesContext->Abort();
 }
 
+NKikimr::NOlap::TBlobRange TIndexedReadData::ExtractNextBlob() {
+    Y_VERIFY(GranulesContext);
+    auto* f = FetchBlobsQueue.front();
+    if (!f) {
+        return TBlobRange();
+    }
+    if (!f->GetGranuleId() || GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
+        return FetchBlobsQueue.pop_front();
+    } else {
+        Counters.OnProcessingOverloaded();
+        return TBlobRange();
+    }
+}
+
 }

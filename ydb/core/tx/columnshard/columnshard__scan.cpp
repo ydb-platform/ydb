@@ -87,7 +87,9 @@ public:
         , ReadMetadataRanges(std::move(readMetadataList))
         , ReadMetadataIndex(0)
         , Deadline(TInstant::Now() + (timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT))
-        , ScanCountersPool(scanCountersPool) {
+        , ScanCountersPool(scanCountersPool)
+        , Stats(ScanCountersPool)
+    {
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
 
@@ -211,7 +213,6 @@ private:
             "Scan " << ScanActorId << " blobs response:"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
         --InFlightReads;
-
         auto& event = *ev->Get();
         const auto& blobRange = event.BlobRange;
         ScanCountersPool.Aggregations->RemoveFlightReadInfo(blobRange.Size);
@@ -356,8 +357,7 @@ private:
             NextReadMetadata();
         }
 
-        const size_t MIN_READY_RESULTS_IN_QUEUE = 3;
-        if (ScanIterator && ScanIterator->ReadyResultsCount() < MIN_READY_RESULTS_IN_QUEUE) {
+        if (ScanIterator) {
             // Make read-ahead requests for the subsequent blobs
             ReadNextBlob();
         }
@@ -609,12 +609,19 @@ private:
         ui64 Bytes = 0;
         TDuration ReadingDurationSum;
         TDuration ReadingDurationMax;
+        NMonitoring::THistogramPtr DurationsCounter;
     public:
+        TBlobStats(const NMonitoring::THistogramPtr durationsCounter)
+            : DurationsCounter(durationsCounter)
+        {
+
+        }
         void Received(const NBlobCache::TBlobRange& br, const TDuration d) {
             ReadingDurationSum += d;
             ReadingDurationMax = Max(ReadingDurationMax, d);
             ++PartsCount;
             Bytes += br.Size;
+            DurationsCounter->Collect(d.MilliSeconds());
         }
         TString DebugString() const {
             TStringBuilder sb;
@@ -644,6 +651,13 @@ private:
         THashMap<TString, TInstant> SectionFirst;
         THashMap<TString, TInstant> SectionLast;
     public:
+
+        TScanStats(const TConcreteScanCounters& counters)
+            : CacheBlobs(counters.HistogramCacheBlobsDuration)
+            , MissBlobs(counters.HistogramMissCacheBlobsDuration)
+        {
+
+        }
 
         TString DebugString() const {
             const TInstant now = TInstant::Now();

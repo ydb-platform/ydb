@@ -87,7 +87,7 @@ std::vector<NKikimr::NOlap::NIndexedReader::TGranule::TPtr> TGranulesFillingCont
     const ui32 sizeBefore = Result.GetCount();
     auto result = SortingPolicy->DetachReadyGranules(Result);
     if (sizeBefore == Result.GetCount()) {
-        Y_VERIFY(InternalReading || CheckBufferAvailable());
+        Y_VERIFY(InternalReading || CheckBufferAvailable() || Processing.GetProcessingGranulesCount());
     }
     return result;
 }

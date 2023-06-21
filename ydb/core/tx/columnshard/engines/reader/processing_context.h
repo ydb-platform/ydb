@@ -21,6 +21,10 @@ public:
 
     NIndexedReader::TBatch* GetBatchInfo(const TBatchAddress& address);
 
+    ui32 GetProcessingGranulesCount() const {
+        return GranulesInProcessing.size();
+    }
+
     bool IsInProgress(const ui64 granuleId) const {
         return GranulesInProcessing.contains(granuleId);
     }

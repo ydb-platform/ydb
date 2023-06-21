@@ -94,19 +94,7 @@ public:
         return FetchBlobsQueue.size();
     }
 
-    TBlobRange NextBlob() {
-        Y_VERIFY(GranulesContext);
-        auto* f = FetchBlobsQueue.front();
-        if (!f) {
-            return TBlobRange();
-        }
-        if (GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
-            return FetchBlobsQueue.pop_front();
-        } else {
-            Counters.OnProcessingOverloaded();
-            return TBlobRange();
-        }
-    }
+    TBlobRange ExtractNextBlob();
 
 private:
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(

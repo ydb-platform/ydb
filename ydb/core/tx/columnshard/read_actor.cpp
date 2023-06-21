@@ -174,7 +174,7 @@ public:
 
         IndexedData.InitRead(notIndexed);
         while (IndexedData.HasMoreBlobs()) {
-            const auto blobRange = IndexedData.NextBlob();
+            const auto blobRange = IndexedData.ExtractNextBlob();
             WaitIndexed.insert(blobRange);
             IndexedBlobs.emplace(blobRange);
         }

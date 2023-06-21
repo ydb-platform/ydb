@@ -62,13 +62,15 @@ TGranule::TPtr TProcessingController::GetGranule(const ui64 granuleId) {
 
 TGranule::TPtr TProcessingController::InsertGranule(TGranule::TPtr g) {
     Y_VERIFY(GranulesWaiting.emplace(g->GetGranuleId(), g).second);
-    Counters.Aggregations->AddGranuleProcessing();
     return g;
 }
 
 void TProcessingController::StartBlobProcessing(const ui64 granuleId, const TBlobRange& range) {
     Counters.Aggregations->AddGranuleProcessingBytes(range.Size);
-    GranulesInProcessing.emplace(granuleId);
+    if (GranulesInProcessing.emplace(granuleId).second) {
+        Y_VERIFY(GranulesWaiting.contains(granuleId));
+        Counters.Aggregations->AddGranuleProcessing();
+    }
     BlobsSize += range.Size;
 }
 

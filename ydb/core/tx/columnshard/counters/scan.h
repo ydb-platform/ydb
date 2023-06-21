@@ -116,6 +116,9 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterFetchedBytes;
     NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterUsefulBytes;
 
+    NMonitoring::THistogramPtr HistogramCacheBlobsDuration;
+    NMonitoring::THistogramPtr HistogramMissCacheBlobsDuration;
+
     TScanCounters(const TString& module = "Scan");
 
     void OnProcessingOverloaded() {

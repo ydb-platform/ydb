@@ -23,6 +23,7 @@ void TDistributor::Bootstrap() {
     for (ui32 i = 0; i < workersCount; ++i) {
         Workers.emplace_back(Register(new TWorker()));
     }
+    Counters.AvailableWorkersCount->Set(Workers.size());
     Counters.WorkersCountLimit->Set(Workers.size());
     Counters.WaitingQueueSizeLimit->Set(Config.GetQueueSizeLimit());
     Become(&TDistributor::StateMain);

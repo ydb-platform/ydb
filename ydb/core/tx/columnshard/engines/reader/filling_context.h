@@ -29,7 +29,7 @@ private:
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
     static constexpr ui32 GranulesCountProcessingLimit = 16;
-    static constexpr ui64 ExpectedBytesForGranule = 200 * 1024 * 1024;
+    static constexpr ui64 ExpectedBytesForGranule = 50 * 1024 * 1024;
     static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
     bool CheckBufferAvailable() const;
 public:

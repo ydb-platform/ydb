@@ -259,12 +259,21 @@ struct TGetTLDKernelExec : public TUnaryKernelExec<TGetTLDKernelExec> {
 };
 END_SIMPLE_ARROW_UDF(TGetTLD, TGetTLDKernelExec::Do);
 
-SIMPLE_UDF(TGetDomainLevel, ui64(TAutoMap<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TGetDomainLevel, ui64(TAutoMap<char*>)) {
     Y_UNUSED(valueBuilder);
     std::vector<std::string_view> parts;
     StringSplitter(GetOnlyHost(args[0].AsStringRef())).Split('.').AddTo(&parts);
     return TUnboxedValuePod(ui64(parts.size()));
 }
+struct TGetDomainLevelKernelExec : public TUnaryKernelExec<TGetDomainLevelKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        std::vector<std::string_view> parts;
+        StringSplitter(GetOnlyHost(arg.AsStringRef())).Split('.').AddTo(&parts);
+        return sink(TBlockItem(ui64(parts.size())));
+    }
+};
+END_SIMPLE_ARROW_UDF(TGetDomainLevel, TGetDomainLevelKernelExec::Do);
 
 SIMPLE_UDF_OPTIONS(TGetSignificantDomain, char*(TAutoMap<char*>, TOptional<TListType<char*>>),
                     builder.OptionalArgs(1)) {

@@ -37,7 +37,7 @@ void TChangeRecord::SerializeToProto(NKikimrChangeExchange::TChangeRecord& recor
 }
 
 static auto ParseBody(const TString& protoBody) {
-    NKikimrChangeExchange::TChangeRecord::TDataChange body;
+    NKikimrChangeExchange::TDataChange body;
     Y_VERIFY(body.ParseFromArray(protoBody.data(), protoBody.size()));
     return body;
 }
@@ -115,7 +115,7 @@ static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeInfo type) {
 }
 
 static void SerializeJsonKey(TUserTable::TCPtr schema, NJson::TJsonValue& key,
-    const NKikimrChangeExchange::TChangeRecord::TDataChange::TSerializedCells& in)
+    const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
 {
     Y_VERIFY(in.TagsSize() == schema->KeyColumnIds.size());
     for (size_t i = 0; i < schema->KeyColumnIds.size(); ++i) {
@@ -134,7 +134,7 @@ static void SerializeJsonKey(TUserTable::TCPtr schema, NJson::TJsonValue& key,
 }
 
 static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& value,
-    const NKikimrChangeExchange::TChangeRecord::TDataChange::TSerializedCells& in)
+    const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
 {
     TSerializedCellVec cells;
     Y_VERIFY(TSerializedCellVec::TryParse(in.GetData(), cells));
@@ -169,19 +169,19 @@ void TChangeRecord::SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTime
 
     const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
     switch (body.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kUpsert:
             json["update"].SetType(NJson::JSON_MAP);
             if (!hasAnyImage) {
                 SerializeJsonValue(Schema, json["update"], body.GetUpsert());
             }
             break;
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+        case NKikimrChangeExchange::TDataChange::kReset:
             json["reset"].SetType(NJson::JSON_MAP);
             if (!hasAnyImage) {
                 SerializeJsonValue(Schema, json["reset"], body.GetReset());
             }
             break;
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
+        case NKikimrChangeExchange::TDataChange::kErase:
             json["erase"].SetType(NJson::JSON_MAP);
             break;
         default:
@@ -203,7 +203,7 @@ static void ExtendJson(NJson::TJsonValue& value, const NJson::TJsonValue& ext) {
 }
 
 static void ToAttributeValues(TUserTable::TCPtr schema, NJson::TJsonValue& value,
-    const NKikimrChangeExchange::TChangeRecord::TDataChange::TSerializedCells& in)
+    const NKikimrChangeExchange::TDataChange::TSerializedCells& in)
 {
     TSerializedCellVec cells;
     Y_VERIFY(TSerializedCellVec::TryParse(in.GetData(), cells));
@@ -315,15 +315,15 @@ void TChangeRecord::SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, cons
     }
 
     switch (body.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+        case NKikimrChangeExchange::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kReset:
             if (newAndOldImages) {
                 json["eventName"] = body.HasOldImage() ? "MODIFY" : "INSERT";
             } else {
                 json["eventName"] = "MODIFY";
             }
             break;
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
+        case NKikimrChangeExchange::TDataChange::kErase:
             json["eventName"] = "REMOVE";
             break;
         default:

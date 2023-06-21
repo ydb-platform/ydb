@@ -119,24 +119,24 @@ private:
 }; // TTxChangeExchangeHandshake
 
 class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
-    static NTable::ERowOp GetRowOperation(const NKikimrChangeExchange::TChangeRecord::TDataChange& record) {
+    static NTable::ERowOp GetRowOperation(const NKikimrChangeExchange::TDataChange& record) {
         switch (record.GetRowOperationCase()) {
-            case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+            case NKikimrChangeExchange::TDataChange::kUpsert:
                 return NTable::ERowOp::Upsert;
-            case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
+            case NKikimrChangeExchange::TDataChange::kErase:
                 return NTable::ERowOp::Erase;
-            case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+            case NKikimrChangeExchange::TDataChange::kReset:
                 return NTable::ERowOp::Reset;
             default:
                 return NTable::ERowOp::Absent;
         }
     }
 
-    static auto& GetValue(const NKikimrChangeExchange::TChangeRecord::TDataChange& record) {
+    static auto& GetValue(const NKikimrChangeExchange::TDataChange& record) {
         switch (record.GetRowOperationCase()) {
-            case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+            case NKikimrChangeExchange::TDataChange::kUpsert:
                 return record.GetUpsert();
-            case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+            case NKikimrChangeExchange::TDataChange::kReset:
                 return record.GetReset();
             default:
                 Y_FAIL_S("Unexpected row operation: " << static_cast<ui32>(record.GetRowOperationCase()));

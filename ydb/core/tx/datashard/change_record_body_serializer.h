@@ -7,7 +7,7 @@
 namespace NKikimr::NDataShard {
 
 class TChangeRecordBodySerializer {
-    using TDataChange = NKikimrChangeExchange::TChangeRecord::TDataChange;
+    using TDataChange = NKikimrChangeExchange::TDataChange;
     using TSerializedCells = TDataChange::TSerializedCells;
 
     static void SerializeCells(TSerializedCells& out,

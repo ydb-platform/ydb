@@ -264,7 +264,7 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
 void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
-    NKikimrChangeExchange::TChangeRecord::TDataChange body;
+    NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
     Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
 }

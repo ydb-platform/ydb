@@ -164,7 +164,7 @@ struct TStructRecord {
         << " }";
     }
 
-    static TStructRecord Parse(const NKikimrChangeExchange::TChangeRecord::TDataChange& proto,
+    static TStructRecord Parse(const NKikimrChangeExchange::TDataChange& proto,
             const THashMap<NTable::TTag, TString>& tagToName)
     {
         TStructRecord record;
@@ -174,13 +174,13 @@ struct TStructRecord {
         });
 
         switch (proto.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kUpsert:
             record.Rop = NTable::ERowOp::Upsert;
             Parse(proto.GetUpsert(), tagToName, [&record](const TString& name, ui32 value) {
                 record.Update.emplace(name, value);
             });
             break;
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
+        case NKikimrChangeExchange::TDataChange::kErase:
             record.Rop = NTable::ERowOp::Erase;
             break;
         default:
@@ -204,7 +204,7 @@ struct TStructRecord {
     }
 
     static TStructRecord Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
-        NKikimrChangeExchange::TChangeRecord::TDataChange proto;
+        NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
         return Parse(proto, tagToName);
     }
@@ -212,7 +212,7 @@ struct TStructRecord {
 private:
     using TInserter = std::function<void(const TString&, ui32)>;
 
-    static void Parse(const NKikimrChangeExchange::TChangeRecord::TDataChange::TSerializedCells& proto,
+    static void Parse(const NKikimrChangeExchange::TDataChange::TSerializedCells& proto,
             const THashMap<NTable::TTag, TString>& tagToName, TInserter inserter)
     {
         TSerializedCellVec serialized;

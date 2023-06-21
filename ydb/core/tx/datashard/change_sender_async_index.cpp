@@ -138,14 +138,14 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         AdjustTags(*record.MutableAsyncIndex());
     }
 
-    void AdjustTags(NKikimrChangeExchange::TChangeRecord::TDataChange& record) const {
+    void AdjustTags(NKikimrChangeExchange::TDataChange& record) const {
         AdjustTags(*record.MutableKey()->MutableTags());
 
         switch (record.GetRowOperationCase()) {
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kUpsert:
             AdjustTags(*record.MutableUpsert()->MutableTags());
             break;
-        case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+        case NKikimrChangeExchange::TDataChange::kReset:
             AdjustTags(*record.MutableReset()->MutableTags());
             break;
         default:

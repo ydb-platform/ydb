@@ -3,37 +3,37 @@ import "google/protobuf/empty.proto";
 package NKikimrChangeExchange;
 option java_package = "ru.yandex.kikimr.proto";
 
-message TChangeRecord {
-    message TDataChange {
-        message TSerializedCells {
-            // Column tags
-            repeated uint32 Tags = 1; 
-            // Serialized values (TSerializedCellVec)
-            optional bytes Data = 2;
-        }
-
-        /* key columns */
-        optional TSerializedCells Key = 1;
-
-        /* value columns (doesn't include key columns) */
-        // old image
-        optional TSerializedCells OldImage = 2;
-        // new image
-        optional TSerializedCells NewImage = 3;
-        // Row operation
-        // Cells (if any) can be empty if:
-        // - there is no change in data-columns of AsyncIndex;
-        // - there is no need to save update to Cdc Stream (e.g. in "keys only" mode).
-        oneof RowOperation {
-            // apply specified values
-            TSerializedCells Upsert = 4;
-            // remove entire row
-            google.protobuf.Empty Erase = 5;
-            // reset all columns & apply specified values
-            TSerializedCells Reset = 6;
-        }
+message TDataChange {
+    message TSerializedCells {
+        // Column tags
+        repeated uint32 Tags = 1; 
+        // Serialized values (TSerializedCellVec)
+        optional bytes Data = 2;
     }
 
+    /* key columns */
+    optional TSerializedCells Key = 1;
+
+    /* value columns (doesn't include key columns) */
+    // old image
+    optional TSerializedCells OldImage = 2;
+    // new image
+    optional TSerializedCells NewImage = 3;
+    // Row operation
+    // Cells (if any) can be empty if:
+    // - there is no change in data-columns of AsyncIndex;
+    // - there is no need to save update to Cdc Stream (e.g. in "keys only" mode).
+    oneof RowOperation {
+        // apply specified values
+        TSerializedCells Upsert = 4;
+        // remove entire row
+        google.protobuf.Empty Erase = 5;
+        // reset all columns & apply specified values
+        TSerializedCells Reset = 6;
+    }
+}
+
+message TChangeRecord {
     optional uint64 Order = 1;
     optional uint64 Group = 2;
     optional uint64 Step = 3;

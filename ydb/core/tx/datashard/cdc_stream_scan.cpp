@@ -245,7 +245,7 @@ public:
                 continue;
             }
 
-            NKikimrChangeExchange::TChangeRecord::TDataChange body;
+            NKikimrChangeExchange::TDataChange body;
             switch (it->second.Mode) {
                 case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
                     Serialize(body, ERowOp::Upsert, key, keyTags, {});

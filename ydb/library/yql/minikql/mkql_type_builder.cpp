@@ -1478,6 +1478,7 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
         return true;
     case NUdf::EDataSlot::String:
     case NUdf::EDataSlot::Yson:
+    case NUdf::EDataSlot::JsonDocument:
         type = arrow::binary();
         return true;
     case NUdf::EDataSlot::Utf8:

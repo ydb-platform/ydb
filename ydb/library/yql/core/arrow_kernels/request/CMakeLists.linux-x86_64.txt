@@ -18,6 +18,8 @@ target_link_libraries(core-arrow_kernels-request PUBLIC
   library-yql-ast
   library-yql-minikql
   providers-common-mkql
+  library-yql-core
+  library-yql-sql
 )
 target_sources(core-arrow_kernels-request PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/arrow_kernels/request/request.cpp

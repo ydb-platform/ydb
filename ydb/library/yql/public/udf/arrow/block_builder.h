@@ -1121,6 +1121,7 @@ inline std::unique_ptr<TArrayBuilderBase> MakeArrayBuilderImpl(
             return std::make_unique<TFixedSizeArrayBuilder<double, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::JsonDocument:
             return std::make_unique<TStringArrayBuilder<arrow::BinaryType, Nullable>>(typeInfoHelper, type, pool, maxLen);
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:

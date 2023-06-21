@@ -23,6 +23,8 @@ PEERDIR(
     ydb/library/yql/sql/pg_dummy
     ydb/library/yql/core/arrow_kernels/request
     ydb/core/testlib/default
+
+    ydb/library/yql/udfs/common/json2
 )
 
 YQL_LAST_ABI_VERSION()

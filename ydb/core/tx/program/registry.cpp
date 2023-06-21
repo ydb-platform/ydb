@@ -7,7 +7,8 @@
 namespace NKikimr::NOlap {
 
 bool TKernelsRegistry::Parse(const TString& serialized) {
-    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
+    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
+    NMiniKQL::FillStaticModules(*functionRegistry);
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();
     auto kernels =  NYql::LoadKernels(serialized, *functionRegistry, nodeFactory);
     Kernels.swap(kernels);

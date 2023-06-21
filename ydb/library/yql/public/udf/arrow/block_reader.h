@@ -385,6 +385,7 @@ std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHe
             return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional);
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::JsonDocument:
             return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType>(isOptional);
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:

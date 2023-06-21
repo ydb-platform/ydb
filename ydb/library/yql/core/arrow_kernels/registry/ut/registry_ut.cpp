@@ -139,5 +139,28 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
                 ctx.template MakeType<TDataExprType>(EDataSlot::Bool)));
             return b.JsonExists(blockJsonType, scalarUtf8Type, blockOptBoolType);
         });
+
+        TestOne([](auto& b,auto& ctx) {
+            auto blockOptJsonType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TOptionalExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::JsonDocument)));
+            auto scalarUtf8Type = ctx.template MakeType<TScalarExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::Utf8));
+            auto blockOptBoolType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TOptionalExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::Bool)));
+            return b.JsonExists(blockOptJsonType, scalarUtf8Type, blockOptBoolType);
+        });
+
+        TestOne([](auto& b,auto& ctx) {
+            auto blockJsonType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::JsonDocument));
+            auto scalarUtf8Type = ctx.template MakeType<TScalarExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::Utf8));
+            auto blockOptBoolType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TOptionalExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::Bool)));
+            return b.JsonExists(blockJsonType, scalarUtf8Type, blockOptBoolType);
+        });
     }
 }

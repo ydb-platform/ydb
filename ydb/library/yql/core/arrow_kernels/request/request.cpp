@@ -2,6 +2,7 @@
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NYql {
 
@@ -91,7 +92,10 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const s
 
 ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType) {
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
-    auto exists = Pb_.Udf("Json2.SqlExists");
+
+    bool isBinaryJson = (RemoveOptionalType(arg1Type->Cast<TBlockExprType>()->GetItemType())->Cast<TDataExprType>()->GetSlot() == EDataSlot::JsonDocument);
+
+    auto exists = Pb_.Udf(isBinaryJson ? "Json2.JsonDocumentSqlExists" : "Json2.SqlExists");
     auto parse = Pb_.Udf("Json2.Parse");
     auto compilePath = Pb_.Udf("Json2.CompilePath");
     auto outType = MakeType(retType);
@@ -100,7 +104,7 @@ ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, cons
     auto scalarApply = Pb_.ScalarApply({arg1, arg2}, [&](const auto& args) {
         auto json = args[0];
         auto processJson = [&](auto unpacked) {
-            auto input = Pb_.NewOptional(Pb_.Apply(parse, { unpacked }));
+            auto input = Pb_.NewOptional(isBinaryJson ? unpacked : Pb_.Apply(parse, { unpacked }));
             auto path = Pb_.Apply(compilePath, { args[1] });
             auto dictType = Pb_.NewDictType(Pb_.NewDataType(NUdf::EDataSlot::Utf8), Pb_.NewResourceType("JsonNode"), false);
             return Pb_.Apply(exists, { input, path, Pb_.NewDict(dictType, {}), Pb_.NewOptional(Pb_.NewDataLiteral(false)) });

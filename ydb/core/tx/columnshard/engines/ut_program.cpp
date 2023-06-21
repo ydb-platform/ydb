@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/program/program.h>
+#include <ydb/core/formats/arrow/converter.h>
 
 #include <ydb/library/yql/core/arrow_kernels/request/request.h>
 #include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
@@ -37,12 +38,13 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     class TKernelsWrapper {
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> Reg;
-        NYql::TKernelRequestBuilder ReqBuilder;
+        std::unique_ptr<NYql::TKernelRequestBuilder> ReqBuilder;
         public:
-            TKernelsWrapper()
-                : Reg(CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry()))
-                , ReqBuilder((*Reg)) {
-
+            TKernelsWrapper() {
+                auto reg = CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
+                NMiniKQL::FillStaticModules(*reg);
+                Reg.Reset(reg.Release());
+                ReqBuilder = std::make_unique<NYql::TKernelRequestBuilder>(*Reg);
             }
 
             ui32 Add(NYql::TKernelRequestBuilder::EBinaryOp operation) {
@@ -51,21 +53,21 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                     {
                         NYql::TExprContext ctx;
                         auto blockInt32Type = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int32));
-                        return ReqBuilder.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Add, blockInt32Type, blockInt32Type, blockInt32Type);
+                        return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Add, blockInt32Type, blockInt32Type, blockInt32Type);
                     }
                     case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
                     {
                         NYql::TExprContext ctx;
                         auto blockStringType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
                         auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
-                        return ReqBuilder.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockBoolType);
+                        return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockBoolType);
                     }
                     case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
                     {
                         NYql::TExprContext ctx;
                         auto blockStringType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
                         auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
-                        return ReqBuilder.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockBoolType);
+                        return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockBoolType);
                     }
                     default:
                         Y_FAIL("Not implemented");
@@ -73,8 +75,21 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                 }
             } 
 
+            ui32 AddJsonExists(bool isBinaryType = true) {
+                NYql::TExprContext ctx;
+                auto blockOptJsonType = ctx.template MakeType<NYql::TBlockExprType>(
+                    ctx.template MakeType<NYql::TOptionalExprType>(
+                    ctx.template MakeType<NYql::TDataExprType>(isBinaryType ? NYql::EDataSlot::JsonDocument : NYql::EDataSlot::Json)));
+                auto scalarStringType = ctx.template MakeType<NYql::TScalarExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
+                auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(
+                    ctx.template MakeType<NYql::TOptionalExprType>(
+                    ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool)));
+
+                return ReqBuilder->JsonExists(blockOptJsonType, scalarStringType, blockBoolType);
+            }
+
             TString Serialize() {
-                return ReqBuilder.Serialize();
+                return ReqBuilder->Serialize();
             }            
     };
 
@@ -214,6 +229,75 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             auto expected = result.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
         }
+    }
+
+    void JsonExistsImpl(bool isBinaryType) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            auto* constantProto = command->MutableAssign()->MutableConstant();
+            constantProto->SetText("$.key");
+            command->MutableAssign()->MutableColumn()->SetName("json_path");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("json_data");
+            functionProto->AddArguments()->SetName("json_path");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_LENGTH);
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
+        TKernelsWrapper kernels;
+        kernels.AddJsonExists(isBinaryType);
+        const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+       
+        TProgramContainer program;
+        TString errors;
+        UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Utf8) }}));
+        NJson::TJsonValue testJson;
+        testJson["key"] = "value";
+        updates.AddRow().Add<std::string>(testJson.GetStringRobust());
+        updates.AddRow().Add<std::string>(NJson::TJsonValue(NJson::JSON_ARRAY).GetStringRobust());
+
+        auto batch = updates.BuildArrow();
+        Cerr << batch->ToString() << Endl;
+
+        if (isBinaryType) {
+            THashMap<TString, NScheme::TTypeInfo> cc;
+            cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
+            batch = NArrow::ConvertColumns(batch, cc);
+            Cerr << batch->ToString() << Endl;
+        }
+        auto res = program.ApplyProgram(batch);
+        UNIT_ASSERT_C(res.ok(), res.ToString());
+
+        TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+        result.AddRow().Add<ui8>(1);
+        result.AddRow().Add<ui8>(0);
+
+        auto expected = result.BuildArrow();
+        UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+    }
+
+    Y_UNIT_TEST(JsonExists) {
+        JsonExistsImpl(false);
+    }
+
+    Y_UNIT_TEST(JsonExistsBinary) {
+        JsonExistsImpl(true);
     }
 
     Y_UNIT_TEST(SimpleFunction) {

@@ -9,7 +9,7 @@ meta:
 links:
   - title: Getting started
     description: Deploy your cluster and perform basic operations with data
-    href: administration/quickstart
+    href: getting_started/quickstart
   - title: Concepts
     description: How YDB works, its features and available usage modes
     href: concepts/

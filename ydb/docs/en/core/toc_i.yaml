@@ -2,8 +2,8 @@ items:
 # Header
 - name: Contents
   href: index.yaml
-- name: Getting started
-  href: administration/quickstart.md
+- name: Quick start
+  href: getting_started/quickstart.md
 # - name: Getting started
 #   hidden: true
 #   include: { mode: link, path: getting_started/toc_p.yaml }

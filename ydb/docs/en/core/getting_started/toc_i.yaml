@@ -1,4 +1,6 @@
 items:
+- name: Quick start
+  href: quickstart.md
 - name: Creating a database
   href: create_db.md
 - include: { mode: link, path: _includes/index/toc_network.yaml }

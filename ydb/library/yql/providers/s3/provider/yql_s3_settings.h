@@ -43,21 +43,21 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     THashMap<TString, TString> Tokens;
     std::unordered_map<TString, TS3ClusterSettings> Clusters;
 
-    ui64 FileSizeLimit;
-    ui64 BlockFileSizeLimit;
+    ui64 FileSizeLimit = 0;
+    ui64 BlockFileSizeLimit = 0;
     std::unordered_map<TString, ui64> FormatSizeLimits;
-    ui64 MaxFilesPerQuery;
-    ui64 MaxDiscoveryFilesPerQuery;
-    ui64 MaxDirectoriesAndFilesPerQuery;
-    ui64 MinDesiredDirectoriesOfFilesPerQuery;
-    ui64 MaxReadSizePerQuery;
-    ui64 MaxInflightListsPerQuery;
-    ui64 ListingCallbackThreadCount;
-    ui64 ListingCallbackPerThreadQueueSize;
-    ui64 RegexpCacheSize;
-    bool AllowLocalFiles;
-    bool AllowConcurrentListings;
-    ui64 GeneratorPathsLimit;
+    ui64 MaxFilesPerQuery = 0;
+    ui64 MaxDiscoveryFilesPerQuery = 0;
+    ui64 MaxDirectoriesAndFilesPerQuery = 0;
+    ui64 MinDesiredDirectoriesOfFilesPerQuery = 0;
+    ui64 MaxReadSizePerQuery = 0;
+    ui64 MaxInflightListsPerQuery = 0;
+    ui64 ListingCallbackThreadCount = 0;
+    ui64 ListingCallbackPerThreadQueueSize = 0;
+    ui64 RegexpCacheSize = 0;
+    bool AllowLocalFiles = false;
+    bool AllowConcurrentListings = false;
+    ui64 GeneratorPathsLimit = 0;
 };
 
 } // NYql

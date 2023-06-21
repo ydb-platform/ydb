@@ -110,6 +110,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_import.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_import_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_keep_alive.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_keyvalue.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_kh_describe.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_kh_snapshots.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_kqp_base.cpp

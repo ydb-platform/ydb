@@ -7,6 +7,7 @@ RECURSE(
     discovery
     fq
     kesus
+    keyvalue
     lib
     local_discovery
     maintenance

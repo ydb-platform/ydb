@@ -46,6 +46,7 @@ SRCS(
     rpc_import.cpp
     rpc_import_data.cpp
     rpc_keep_alive.cpp
+    rpc_keyvalue.cpp
     rpc_kh_describe.cpp
     rpc_kh_snapshots.cpp
     rpc_kqp_base.cpp

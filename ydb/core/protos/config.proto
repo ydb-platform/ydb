@@ -1882,7 +1882,6 @@ message TCompatibilityRule {
         Test1 = 1;
         Test2 = 2;
         Interconnect = 3;
-        VDisk = 4;
     }
 
     optional string Build = 1;

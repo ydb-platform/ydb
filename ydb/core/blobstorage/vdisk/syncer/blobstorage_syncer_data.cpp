@@ -254,7 +254,6 @@ namespace NKikimr {
         s.Signature = SyncerDataSignature;
         Neighbors->Serialize(&s.Proto, info);
         LocalSyncerState.Serialize(s.Proto.MutableLocalGuidInfo());
-        s.Proto.MutableCompatibilityInfo()->CopyFrom(CurrentCompatibilityInfo);
     }
 
     TString TSyncerData::Serialize(const TBlobStorageGroupInfo *info) const {
@@ -270,11 +269,6 @@ namespace NKikimr {
             Y_VERIFY(status);
             LocalSyncerState.Parse(proto.GetLocalGuidInfo());
             Neighbors->Parse(proto);
-
-            if (proto.HasCompatibilityInfo()) {
-                StoredCompatibilityInfo.emplace();
-                StoredCompatibilityInfo->CopyFrom(proto.GetCompatibilityInfo());
-            }
         }
     }
 
@@ -307,16 +301,6 @@ namespace NKikimr {
         }
     }
 
-    bool TSyncerData::CheckCompatibility(TString& errorReason) {
-        if (StoredCompatibilityInfo) {
-            return TCompatibilityInfo::CheckCompatibility(&*StoredCompatibilityInfo,
-                    (ui32)NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
-        } else {
-            return TCompatibilityInfo::CheckCompatibility(TCompatibilityInfo::GetUnknown(),
-                    (ui32)NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
-        }
-    }
-
     TSyncerData::TSyncerData(const TString &logPrefix,
                              const TActorId &notifyId,
                              const TVDiskIdShort &selfVDisk,
@@ -328,7 +312,6 @@ namespace NKikimr {
                                                   top))
         , LocalSyncerState()
         , NotifyId(notifyId)
-        , CurrentCompatibilityInfo(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
     {
         TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
         ParseWOSignature(serProto);
@@ -345,7 +328,6 @@ namespace NKikimr {
                                                   top))
         , LocalSyncerState()
         , NotifyId(notifyId)
-        , CurrentCompatibilityInfo(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
     {
         TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
         ParseWOSignature(serProto);
@@ -355,34 +337,30 @@ namespace NKikimr {
                                       const TActorId &notifyId,
                                       const TVDiskIdShort &selfVDisk,
                                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                      const TString &entryPoint,
-                                      TString& errorReason) {
+                                      const TString &entryPoint) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
             TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
             n.ParseWOSignature(serProto);
-            return n.CheckCompatibility(errorReason);
-        } catch (yexception e) {
-            errorReason = e.what();
+        } catch (yexception) {
             return false;
         }
+        return true;
     }
 
     bool TSyncerData::CheckEntryPoint(const TString &logPrefix,
                                       const TActorId &notifyId,
                                       const TVDiskIdShort &selfVDisk,
                                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                      const TContiguousSpan &entryPoint,
-                                      TString& errorReason) {
+                                      const TContiguousSpan &entryPoint) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
             TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint)); //FIXME(innokentii) unnecessary copy
             n.ParseWOSignature(serProto);
-            return n.CheckCompatibility(errorReason);
-        } catch (yexception e) {
-            errorReason = e.what();
+        } catch (yexception) {
             return false;
         }
+        return true;
     }
 
     // Convert from old entry point format to protobuf format

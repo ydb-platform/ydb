@@ -373,11 +373,9 @@ namespace NKikimr {
                 // read existing one
                 LocRecCtx->RecovInfo->EmptySyncer = false;
                 const TRcBuf &entryPoint = it->second.Data;
-                TString errorReason;
                 if (!TSyncerData::CheckEntryPoint(LocRecCtx->VCtx->VDiskLogPrefix, SkeletonId,
-                                                  LocRecCtx->VCtx->ShortSelfVDisk, LocRecCtx->VCtx->Top, entryPoint, errorReason)) {
-                    SignalErrorAndDie(ctx, NKikimrProto::ERROR,
-                            TStringBuilder() << "Entry point for Syncer check failed, ErrorReason# " << errorReason);
+                                                  LocRecCtx->VCtx->ShortSelfVDisk, LocRecCtx->VCtx->Top, entryPoint)) {
+                    SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for Syncer check failed");
                     return false;
                 }
                 LocRecCtx->SyncerData = MakeIntrusive<TSyncerData>(

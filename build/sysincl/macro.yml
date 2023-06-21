@@ -38,6 +38,10 @@
     # It is unclear why the author used macro include at all.
     - BOOST_PP_UPDATE_COUNTER(): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/counter.hpp
 
+    # BOOST_PP_LOCAL_ITERATE() is defined in boost/preprocessor/iterator/local.hpp
+    # It is unclear why the author used macro include at all.
+    - BOOST_PP_LOCAL_ITERATE(): contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/local.hpp
+
     # BOOST_PROTO_LOCAL_ITERATE() is defined in boost/proto/repeat.hpp
     # It looks litke the macro include was chosen for the stylistic purposed and the value is not meant to be redefined
     - BOOST_PROTO_LOCAL_ITERATE(): contrib/restricted/boost/proto/include/boost/proto/repeat.hpp

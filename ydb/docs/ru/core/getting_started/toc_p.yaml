@@ -2,5 +2,3 @@ items:
 - name: Обзор
   href: index.md
 - include: { mode: link, path: toc_i.yaml }
-- name: Как дорабатывать документацию
-  include: { mode: link, path: ../how_to_edit_docs/toc_p.yaml }

@@ -116,33 +116,22 @@ void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
 
 void TTopicWorkloadStatsCollector::CollectThreadEvents(ui32 windowIt)
 {
-    for (auto& queue : WriterEventQueues) {
-        TTopicWorkloadStats::WriterEventRef event;
+    CollectThreadEvents(windowIt, WriterEventQueues);
+    CollectThreadEvents(windowIt, ReaderEventQueues);
+    CollectThreadEvents(windowIt, LagEventQueues);
+}
+
+template<class T>
+void TTopicWorkloadStatsCollector::CollectThreadEvents(ui32 windowIt, TEventQueues<T>& queues)
+{
+    for (auto& queue : queues) {
+        THolder<T> event;
         while (queue->Dequeue(&event)) {
-            if (windowIt <= WarmupSec)
+            if (windowIt <= WarmupSec) {
                 continue;
-            WindowStats->AddWriterEvent(*event);
-            TotalStats.AddWriterEvent(*event);
-        }
-    }
-    for (auto& queue : ReaderEventQueues)
-    {
-        TTopicWorkloadStats::ReaderEventRef event;
-        while (queue->Dequeue(&event)) {
-            if (windowIt <= WarmupSec)
-                continue;
-            WindowStats->AddReaderEvent(*event);
-            TotalStats.AddReaderEvent(*event);
-        }
-    }
-    for (auto& queue : LagEventQueues)
-    {
-        TTopicWorkloadStats::LagEventRef event;
-        while (queue->Dequeue(&event)) {
-            if (windowIt <= WarmupSec)
-                continue;
-            WindowStats->AddLagEvent(*event);
-            TotalStats.AddLagEvent(*event);
+            }
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
         }
     }
 }
@@ -157,18 +146,21 @@ ui64 TTopicWorkloadStatsCollector::GetTotalWriteMessages() const {
 
 void TTopicWorkloadStatsCollector::AddWriterEvent(size_t writerIdx, const TTopicWorkloadStats::WriterEvent& event)
 {
-    auto ref = MakeHolder<TTopicWorkloadStats::WriterEvent>(event);
-    WriterEventQueues[writerIdx]->Enqueue(ref);
+    AddEvent(writerIdx, WriterEventQueues, event);
 }
 
 void TTopicWorkloadStatsCollector::AddReaderEvent(size_t readerIdx, const TTopicWorkloadStats::ReaderEvent& event)
 {
-    auto ref = MakeHolder<TTopicWorkloadStats::ReaderEvent>(event);
-    ReaderEventQueues[readerIdx]->Enqueue(ref);
+    AddEvent(readerIdx, ReaderEventQueues, event);
 }
 
 void TTopicWorkloadStatsCollector::AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event)
 {
-    auto ref = MakeHolder<TTopicWorkloadStats::LagEvent>(event);
-    LagEventQueues[readerIdx]->Enqueue(ref);
+    AddEvent(readerIdx, LagEventQueues, event);
+}
+
+template<class T>
+void TTopicWorkloadStatsCollector::AddEvent(size_t index, TEventQueues<T>& queues, const T& event)
+{
+    queues[index]->Enqueue(MakeHolder<T>(event));
 }

@@ -15,7 +15,7 @@ TTopicWorkloadStats::TTopicWorkloadStats()
 {
 }
 
-void TTopicWorkloadStats::AddWriterEvent(const WriterEvent& event)
+void TTopicWorkloadStats::AddEvent(const WriterEvent& event)
 {
     WriteMessages++;
     WriteBytes += event.MessageSize;
@@ -23,14 +23,14 @@ void TTopicWorkloadStats::AddWriterEvent(const WriterEvent& event)
     InflightMessagesHist.RecordValue(Min(event.InflightMessages, HighestTrackableMessageCount));
 }
 
-void TTopicWorkloadStats::AddReaderEvent(const ReaderEvent& event)
+void TTopicWorkloadStats::AddEvent(const ReaderEvent& event)
 {
     ReadMessages++;
     ReadBytes += event.MessageSize;
     FullTimeHist.RecordValue(Min(event.FullTime, HighestTrackableTime));
 }
 
-void TTopicWorkloadStats::AddLagEvent(const LagEvent& event)
+void TTopicWorkloadStats::AddEvent(const LagEvent& event)
 {
     LagMessagesHist.RecordValue(Min(event.LagMessages, HighestTrackableMessageCount));
     LagTimeHist.RecordValue(Min(event.LagTime, HighestTrackableTime));

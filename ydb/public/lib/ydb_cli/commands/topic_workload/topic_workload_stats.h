@@ -27,9 +27,9 @@ namespace NYdb {
 
             TTopicWorkloadStats();
 
-            void AddWriterEvent(const WriterEvent& event);
-            void AddReaderEvent(const ReaderEvent& event);
-            void AddLagEvent(const LagEvent& event);
+            void AddEvent(const WriterEvent& event);
+            void AddEvent(const ReaderEvent& event);
+            void AddEvent(const LagEvent& event);
 
             ui64 WriteBytes;
             ui64 WriteMessages;

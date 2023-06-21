@@ -30,7 +30,15 @@ namespace NYdb {
             ui64 GetTotalWriteMessages() const;
 
         private:
+            template<class T>
+            using TEventQueues = std::vector<THolder<TAutoLockFreeQueue<T>>>;
+
             void CollectThreadEvents(ui32 windowIt);
+            template<class T>
+            void CollectThreadEvents(ui32 windowIt, TEventQueues<T>& queues);
+
+            template<class T>
+            static void AddEvent(size_t index, TEventQueues<T>& queues, const T& event);
 
             void PrintWindowStats(ui32 windowIt);
             void PrintStats(TMaybe<ui32> windowIt) const;
@@ -38,9 +46,9 @@ namespace NYdb {
             size_t WriterCount;
             size_t ReaderCount;
 
-            std::vector<THolder<TAutoLockFreeQueue<TTopicWorkloadStats::WriterEvent>>> WriterEventQueues;
-            std::vector<THolder<TAutoLockFreeQueue<TTopicWorkloadStats::ReaderEvent>>> ReaderEventQueues;
-            std::vector<THolder<TAutoLockFreeQueue<TTopicWorkloadStats::LagEvent>>> LagEventQueues;
+            TEventQueues<TTopicWorkloadStats::WriterEvent> WriterEventQueues;
+            TEventQueues<TTopicWorkloadStats::ReaderEvent> ReaderEventQueues;
+            TEventQueues<TTopicWorkloadStats::LagEvent> LagEventQueues;
 
             bool Quiet;
             bool PrintTimestamp;

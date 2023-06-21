@@ -104,7 +104,7 @@ TDocumentConfig Resolve(
 /**
  * Converts YAML representation to ProtoBuf
  */
-NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown = false);
+NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown = false, bool preTransform = true);
 
 /**
  * TLabel is a representation of label for config resolution

@@ -416,6 +416,44 @@ public:
     }
 };
 
+class TClientCommandConvertFromYaml: public TClientCommandConfig {
+    TString Request;
+    TString Domain;
+public:
+    TClientCommandConvertFromYaml()
+        : TClientCommandConfig("convert-from-yaml", {}, "Convert config-item from yaml format")
+    {
+    }
+
+    void Config(TConfig &config) override
+    {
+        TClientCommand::Config(config);
+        config.Opts->AddLongOption("domain", "domain where config will be applied")
+            .RequiredArgument("<DOMAIN>").StoreResult(&Domain).Required();
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<CONFIGURE-YAML>", "Console configure request yaml");
+    }
+
+    void Parse(TConfig& config) override
+    {
+        TClientCommand::Parse(config);
+
+        Request = TUnbufferedFileInput(config.ParseResult->GetFreeArgs()[0]).ReadAll();
+    }
+
+    int Run(TConfig &) override
+    {
+        auto item = NYamlConfig::DumpYamlConfigItem(Request, Domain);
+        NKikimrConsole::TConfigureRequest req;
+        req.AddActions()->MutableAddConfigItem()->MutableConfigItem()->CopyFrom(item);
+        TString result;
+        google::protobuf::TextFormat::PrintToString(req, &result);
+        Cout << result;
+
+        return 0;
+    }
+};
+
 class TClientCommandConsoleConfigs : public TClientCommandTree {
 public:
     TClientCommandConsoleConfigs()
@@ -424,6 +462,7 @@ public:
         AddCommand(std::make_unique<TClientCommandConsoleConfigsLoad>());
         AddCommand(std::make_unique<TClientCommandConsoleConfigsDumpYaml>());
         AddCommand(std::make_unique<TClientCommandConvertToYaml>());
+        AddCommand(std::make_unique<TClientCommandConvertFromYaml>());
         AddCommand(std::make_unique<TClientCommandConsoleConfigsUpdate>());
     }
 };

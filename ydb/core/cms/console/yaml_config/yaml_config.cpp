@@ -428,7 +428,7 @@ bool Fit(
     return true;
 }
 
-NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown) {
+NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUnknown, bool preTransform) {
     TStringStream sstr;
 
     sstr << NFyaml::TJsonEmitter(node);
@@ -439,7 +439,9 @@ NKikimrConfig::TAppConfig YamlToProto(const NFyaml::TNodeRef& node, bool allowUn
 
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
-    NKikimr::NYaml::TransformConfig(json, true);
+    if (preTransform) {
+        NKikimr::NYaml::TransformConfig(json, true);
+    }
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
 

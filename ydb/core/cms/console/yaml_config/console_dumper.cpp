@@ -6,6 +6,8 @@
 #include <ydb/core/cms/console/util/config_index.h>
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
 
+#include <regex>
+
 namespace NYamlConfig {
 
 using namespace NKikimr;
@@ -452,6 +454,141 @@ config: {}
     res << outDoc;
 
     return {!domainItemsByOrder.empty(), res.Str()};
+}
+
+bool CheckYamlMarkedForMergeOverwriteRepeated(NFyaml::TNodeRef &node) {
+    auto rootMap = node.Map();
+    for (auto &child : rootMap) {
+        auto value = child.Value();
+        if (value.Type() == NFyaml::ENodeType::Mapping) {
+            if (value.Tag() != "!inherit") {
+                return false;
+            }
+            if (!CheckYamlMarkedForMergeOverwriteRepeated(value)) {
+                return false;
+            }
+        } else if (value.Type() == NFyaml::ENodeType::Sequence) {
+            if (value.Tag() != "") {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool CheckYamlMarkedForMerge(NFyaml::TNodeRef &node) {
+    auto rootMap = node.Map();
+    for (auto &child : rootMap) {
+        auto value = child.Value();
+        if (value.Type() == NFyaml::ENodeType::Mapping) {
+            if (value.Tag() != "!inherit") {
+                return false;
+            }
+            if (!CheckYamlMarkedForMerge(value)) {
+                return false;
+            }
+        } else if (value.Type() == NFyaml::ENodeType::Sequence) {
+            if (value.Tag() != "!append") {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool CheckYamlMarkedForOverwrite(NFyaml::TNodeRef &node) {
+    auto rootMap = node.Map();
+    for (auto &child : rootMap) {
+        auto value = child.Value();
+        if (value.Type() == NFyaml::ENodeType::Mapping) {
+            if (value.Tag() != "") {
+                return false;
+            }
+        } else if (value.Type() == NFyaml::ENodeType::Sequence) {
+            if (value.Tag() != "") {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+NKikimrConsole::TConfigItem DumpYamlConfigItem(const TString &cItem, const TString &domain) {
+    NKikimrConsole::TConfigItem item;
+    auto doc = NFyaml::TDocument::Parse(cItem);
+    auto root = doc.Root();
+    Y_VERIFY(root.Type() == NFyaml::ENodeType::Sequence, "Root has to be sequence");
+    auto rootSeq = root.Sequence();
+
+    Y_VERIFY(rootSeq.size() == 1, "Only single-element configs are supported");
+    auto selectorNode = rootSeq.at(0);
+
+    Y_VERIFY(selectorNode.Type() == NFyaml::ENodeType::Mapping, "Selector has to be mapping");
+    auto configMap = selectorNode.Map();
+
+    auto descNode = configMap["description"];
+    auto selectorsNode = configMap["selector"];
+    auto configNode = configMap["config"];
+    Y_VERIFY(descNode && selectorsNode && configNode, "Selector should have description, selector and config fields");
+
+    Y_VERIFY(descNode.Type() == NFyaml::ENodeType::Scalar, "Description has to be scalar");
+    auto desc = descNode.Scalar();
+
+    std::regex cookieRegex("cookie=(\\S+)");
+    auto cookieBegin = std::sregex_iterator(desc.begin(), desc.end(), cookieRegex);
+    TString cookie = desc;
+    if (std::distance(cookieBegin, std::sregex_iterator()) == 1) {
+        cookie = cookieBegin->str().substr(strlen("cookie="), std::string::npos);
+    }
+    item.SetCookie(cookie.c_str());
+
+    std::regex msRegex("merge_strategy=(\\S+)");
+    auto msBegin = std::sregex_iterator(desc.begin(), desc.end(), msRegex);
+    auto nStrategies = std::distance(msBegin, std::sregex_iterator());
+    Y_VERIFY(nStrategies <= 1, "Description should have exactly one merge_strategy");
+    auto mergeStrategy = NKikimrConsole::TConfigItem::MERGE;
+    if (nStrategies) {
+        auto ms = msBegin->str().substr(strlen("merge_strategy="), std::string::npos);
+        if (ms == "MERGE") {
+            mergeStrategy = NKikimrConsole::TConfigItem::MERGE;
+        } else if (ms == "MERGE_OVERWRITE_REPEATED") {
+            mergeStrategy = NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED;
+        } else if (ms == "OVERWRITE") {
+            mergeStrategy = NKikimrConsole::TConfigItem::OVERWRITE;
+        } else {
+            Y_VERIFY(false, "Incorrect merge_strategy in description");
+        }
+    }
+    item.SetMergeStrategy(mergeStrategy);
+
+    Y_VERIFY(selectorsNode.Type() == NFyaml::ENodeType::Mapping, "Selectors field has to be mapping");
+    auto selectorsMap = selectorsNode.Map();
+    Y_VERIFY(selectorsMap.size() <= 1, "Selectors should have zero or exactly one selectors");
+    if (selectorsMap.size() == 1) {
+        Y_VERIFY(selectorsMap["tenant"] && selectorsMap["tenant"].Type() == NFyaml::ENodeType::Scalar, "The only supported selector is tenant");
+        auto tenant = selectorsMap["tenant"].Scalar();
+        Y_VERIFY(tenant.StartsWith(domain + "/"), "Tenant should be in domain");
+        item.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
+    }
+
+    Y_VERIFY(configNode.Type() == NFyaml::ENodeType::Mapping, "Config has to be mapping");
+    switch (mergeStrategy) {
+        case NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED:
+            Y_VERIFY(CheckYamlMarkedForMergeOverwriteRepeated(configNode), "Inheritance tags doesn't match choosen merge strategy");
+        break;
+        case NKikimrConsole::TConfigItem::MERGE:
+            Y_VERIFY(CheckYamlMarkedForMerge(configNode), "Inheritance tags doesn't match choosen merge strategy");
+        break;
+        default:
+            Y_VERIFY(CheckYamlMarkedForOverwrite(configNode), "Inheritance tags doesn't match choosen merge strategy");
+    }
+    auto config = YamlToProto(configNode, true, false);
+    item.MutableConfig()->CopyFrom(config);
+
+    auto kind = DetectConfigItemKind(item);
+    item.SetKind(kind);
+
+    return item;
 }
 
 } // namespace NYamlConfig

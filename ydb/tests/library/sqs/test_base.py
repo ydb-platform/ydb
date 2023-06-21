@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import os
 import itertools
 import logging
 import time
@@ -69,7 +70,9 @@ HAS_QUEUES_PARAMS = {
 
 
 def get_sqs_client_path():
-    return yatest_common.binary_path("ydb/core/ymq/client/bin/sqs")
+    if os.getenv("SQS_CLIENT_BINARY"):
+        return yatest_common.binary_path(os.getenv("SQS_CLIENT_BINARY"))
+    raise RuntimeError("SQS_CLIENT_BINARY enviroment variable is not specified")
 
 
 def to_bytes(v):

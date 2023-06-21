@@ -15,6 +15,7 @@ export PYTHONPATH=${source_root}/ydb/public/sdk/python3:${source_root}:${source_
 
 export YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd"
 export YDB_CLI_BINARY="ydb/apps/ydb/ydb"
+export SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs"
 export PYTEST_PLUGINS=ya,conftests,canonical
 export YA_TEST_CONTEXT_FILE=${testresults}/test.context
 export YDB_OPENSOURCE=yes

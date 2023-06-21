@@ -16,7 +16,7 @@ To generate load against your topic:
 
 ## Initializing a load test {#init}
 
-Before executing the load, you need to initialize it. During initialization, you will create a topic named `workload-topic` with the specified options. To initialize the load, run the command:
+Before executing the load, you need to initialize it. During initialization, you will create a topic named `workload-topic` with the specified options. To initialize the load, run the following command:
 
 ```bash
 {{ ydb-cli }} [global options...] workload topic init [options...]

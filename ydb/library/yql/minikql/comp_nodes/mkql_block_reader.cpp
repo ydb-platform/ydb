@@ -28,7 +28,7 @@ public:
         return NUdf::TUnboxedValuePod(item.As<T>());
     }
 
-    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
         if constexpr (Nullable) {
             if (!value) {
                 return {};
@@ -64,7 +64,7 @@ public:
         }
     }
 
-    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
         if constexpr (Nullable) {
             if (!value) {
                 return {};
@@ -115,7 +115,7 @@ public:
         return result;
     }
 
-    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
         if constexpr (Nullable) {
             if (!value) {
                 return {};
@@ -158,7 +158,7 @@ public:
         return Inner->MakeValue(item.GetOptionalValue(), holderFactory).MakeOptional();
     }
 
-    TBlockItem MakeItem(NUdf::TUnboxedValuePod value) const final {
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
         if (!value) {
             return {};
         }

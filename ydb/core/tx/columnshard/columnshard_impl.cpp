@@ -1011,7 +1011,9 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashMap<TString,
             }
         }
 
-        ForgetTierBlobs(ctx, tierName, std::move(tierBlobs));
+        if (tierBlobs.size()) {
+            ForgetTierBlobs(ctx, tierName, std::move(tierBlobs));
+        }
     }
 
     if (strBlobs.size()) {

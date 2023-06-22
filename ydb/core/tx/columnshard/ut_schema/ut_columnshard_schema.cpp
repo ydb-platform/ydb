@@ -404,6 +404,9 @@ public:
     TCounters ForgetCounters;
     ui32 CaptureReadEvents = 0;
     std::vector<TAutoPtr<IEventHandle>> CapturedReads;
+    ui32 CaptureEvictResponse = 0;
+    ui32 CaptureForgetResponse = 0;
+    std::vector<TAutoPtr<IEventHandle>> CapturedResponses;
     bool BlockForgets = false;
 
     void WaitEvents(TTestBasicRuntime& runtime, const TDuration& timeout, ui32 waitExports, ui32 waitForgets,
@@ -460,6 +463,14 @@ public:
         CapturedReads.clear();
     }
 
+    void ResendCapturedResponses(TTestBasicRuntime& runtime) {
+        for (auto& cev : CapturedResponses) {
+            Cerr << "RESEND S3_RESPONSE" << Endl;
+            runtime.Send(cev.Release());
+        }
+        CapturedResponses.clear();
+    }
+
     void BlockForgetsTillReboot() {
         BlockForgets = true;
     }
@@ -507,10 +518,24 @@ public:
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectRequest>(ev)) {
             ss << "S3_REQ(put " << ++Counters->ExportCounters.Request << "):";
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
+            if (Counters->CaptureEvictResponse) {
+                Cerr << "CAPTURE S3_RESPONSE(put)" << Endl;
+                --Counters->CaptureEvictResponse;
+                Counters->CapturedResponses.push_back(ev.Release());
+                return true;
+            }
+
             ss << "S3_RESPONSE(put " << ++Counters->ExportCounters.Response << "):";
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(ev)) {
             ss << "S3_REQ(delete " << ++Counters->ForgetCounters.Request << "):";
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
+            if (Counters->CaptureForgetResponse) {
+                Cerr << "CAPTURE S3_RESPONSE(delete)" << Endl;
+                --Counters->CaptureForgetResponse;
+                Counters->CapturedResponses.push_back(ev.Release());
+                return true;
+            }
+
             ss << "S3_RESPONSE(delete " << ++Counters->ForgetCounters.Response << "):";
         } else if (auto* msg = TryGetPrivateEvent<NBlobCache::TEvBlobCache::TEvReadBlobRange>(ev)) {
             if (Counters->CaptureReadEvents) {
@@ -535,7 +560,9 @@ public:
 
 std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TString>& blobs,
                                              const std::vector<TTestSchema::TTableSpecials>& specs,
-                                             const THashSet<ui32>& exportSteps, const THashSet<ui32>& forgetSteps)
+                                             const THashSet<ui32>& exportSteps,
+                                             const THashSet<ui32>& forgetSteps,
+                                             std::optional<ui32> eventLoss = {})
 {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -651,6 +678,23 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             deplayedForgets = 0;
         }
 
+        if (eventLoss) {
+            if (*eventLoss == i) {
+                if (numExports) {
+                    counter.CaptureEvictResponse = 1;
+                    deplayedExports += numExports;
+                    numExports = 0;
+                } else if (numForgets) {
+                    counter.CaptureForgetResponse = reboots ? 2 : 1;
+                    deplayedForgets += numForgets;
+                    numForgets = 0;
+                }
+            } else {
+                // Check there would be no troubles with delayed responses
+                counter.ResendCapturedResponses(runtime);
+            }
+        }
+
         // Read crossed with eviction (start)
         if (!misconfig) {
             auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
@@ -665,8 +709,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
 
-        Cerr << (hasColdEviction ? "Cold" : "Hot")
-            << " tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size()
+        Cerr << "-- " << (hasColdEviction ? "COLD" : "HOT")
+            << " TIERING(" << i << ") num tiers: " << specs[i].Tiers.size()
             << ", exports: " << numExports << ", forgets: " << numForgets
             << ", delayed exports: " << deplayedExports << ", delayed forgets: " << deplayedForgets << Endl;
 
@@ -705,6 +749,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         if (numForgets) {
             UNIT_ASSERT(hasColdEviction);
             if (reboots) {
+                Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
                 RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
                 ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
             }
@@ -752,6 +797,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         UNIT_ASSERT(numBatches < 100);
 
         if (reboots) {
+            Cerr << "REBOOT(" << i << ")" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     }
@@ -896,7 +942,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
 }
 
 std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec, bool reboots,
-                                                    std::optional<ui32> misconfig) {
+                                                    std::optional<ui32> misconfig, std::optional<ui32> loss) {
     const std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     ui32 overlapSize = 0;
@@ -920,7 +966,7 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
         alters[*misconfig].Tiers[0].S3->SetEndpoint("nowhere"); // clear special "fake" endpoint
     }
 
-    auto rowsBytes = TestTiers(reboots, blobs, alters, {1}, {2, 3});
+    auto rowsBytes = TestTiers(reboots, blobs, alters, {1}, {2, 3}, loss);
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
@@ -978,7 +1024,7 @@ void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
     TestTiersAndTtl(spec, reboot, initial);
 }
 
-void TestExport(bool reboot, std::optional<ui32> misconfig = {}) {
+void TestExport(bool reboot, std::optional<ui32> misconfig = {}, std::optional<ui32> loss = {}) {
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
 
@@ -990,7 +1036,7 @@ void TestExport(bool reboot, std::optional<ui32> misconfig = {}) {
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    TestOneTierExport(spec, reboot, misconfig);
+    TestOneTierExport(spec, reboot, misconfig, loss);
 }
 
 void TestDrop(bool reboots) {
@@ -1346,8 +1392,21 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestExport(true, 2);
     }
 
-    // TODO: ExportLostS3Answer
-    // TODO: ForgetLostS3Answer
+    Y_UNIT_TEST(ExportWithLostAnswer) {
+        TestExport(false, {}, 1);
+    }
+
+    Y_UNIT_TEST(RebootExportWithLostAnswer) {
+        TestExport(true, {}, 1);
+    }
+
+    Y_UNIT_TEST(ForgetWithLostAnswer) {
+        TestExport(false, {}, 2);
+    }
+
+    Y_UNIT_TEST(RebootForgettWithLostAnswer) {
+        TestExport(true, {}, 2);
+    }
 
     // TODO: LastTierBorderIsTtl = false
 

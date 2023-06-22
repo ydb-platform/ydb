@@ -47,14 +47,8 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
                 continue; // not exported
             }
 
-#if 0 // TODO: SELF_CACHED logic
-            NOlap::TEvictedBlob evict{
-                .State = EEvictState::SELF_CACHED,
-                .Blob = blobId,
-                .ExternBlob = externId
-            };
-            Self->BlobManager->UpdateOneToOne(std::move(evict), blobManagerDb, dropped);
-#else
+            // TODO: SELF_CACHED logic
+
             NOlap::TEvictedBlob evict{
                 .State = EEvictState::EXTERN,
                 .Blob = blobId,
@@ -79,9 +73,6 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
             } else {
                 LOG_S_ERROR("Unknown blob exported '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
             }
-
-            // TODO: delete not present in S3 for sure (avoid race between export and forget)
-#endif
         }
     }
 

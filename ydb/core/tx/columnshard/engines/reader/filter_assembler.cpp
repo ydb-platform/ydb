@@ -1,5 +1,6 @@
 #include "filter_assembler.h"
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -25,9 +26,12 @@ bool TAssembleFilter::DoExecuteImpl() {
         if (AllowEarlyFilter) {
             Filter = std::make_shared<NArrow::TColumnFilter>(Filter->CombineSequentialAnd(*earlyFilter));
             if (!earlyFilter->Apply(batch)) {
+                NYDBTest::TControllers::GetColumnShardController()->OnAfterFilterAssembling(batch);
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
                 FilteredBatch = nullptr;
                 return true;
+            } else {
+                NYDBTest::TControllers::GetColumnShardController()->OnAfterFilterAssembling(batch);
             }
         } else if (BatchesOrderPolicy->NeedNotAppliedEarlyFilter()) {
             EarlyFilter = earlyFilter;

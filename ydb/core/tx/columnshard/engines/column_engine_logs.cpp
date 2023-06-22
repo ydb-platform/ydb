@@ -3,6 +3,7 @@
 #include "index_logic_logs.h"
 #include "indexed_read_data.h"
 
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/formats/arrow/one_batch_input_stream.h>
 #include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
 #include <ydb/library/conclusion/status.h>
@@ -464,7 +465,7 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
             return {};
         }
     }
-
+    NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
     Y_VERIFY(!changes->SwitchedPortions.empty());
     return changes;
 }

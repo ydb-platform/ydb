@@ -1338,6 +1338,38 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(expectedYson, ysonResult);
     }
 
+    Y_UNIT_TEST(CheckEarlyFilterOnEmptySelect) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
+        ui32 rowsCount = 0;
+        {
+            ui32 i = 0;
+            const ui32 rowsPack = 20;
+            const TInstant start = Now();
+            while (!csController->HasCompactions() && Now() - start < TDuration::Seconds(100)) {
+                WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * rowsPack, rowsPack);
+                ++i;
+                rowsCount += rowsPack;
+            }
+        }
+        Sleep(TDuration::Seconds(10));
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT * FROM `/Root/olapStore/olapTable`
+            WHERE uid='dsfdfsd'
+            LIMIT 10;
+        )");
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        Cerr << csController->GetFilteredRecordsCount().Val() << Endl;
+        Y_VERIFY(csController->GetFilteredRecordsCount().Val() * 10 <= rowsCount);
+        UNIT_ASSERT(rows.size() == 0);
+    }
+
     Y_UNIT_TEST(ExtractRanges) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

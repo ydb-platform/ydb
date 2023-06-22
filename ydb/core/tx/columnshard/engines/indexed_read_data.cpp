@@ -94,18 +94,8 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
             }
             continue;
         }
-#if 0 // optimization
-        auto deduped = SliceSortedBatches(slices, description);
-        for (auto& batch : deduped) {
-            if (batch && batch->num_rows()) {
-                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
-                out.push_back(batch);
-            }
-        }
-#else
         auto batch = NArrow::CombineSortedBatches(slices, description);
         out.push_back(batch);
-#endif
     }
 
     return out;

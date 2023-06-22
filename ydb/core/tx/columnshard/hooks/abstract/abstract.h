@@ -7,6 +7,12 @@
 namespace NKikimr::NOlap::NIndexedReader {
 class IOrderPolicy;
 }
+namespace NKikimr::NOlap {
+class TColumnEngineChanges;
+}
+namespace arrow {
+class RecordBatch;
+}
 
 namespace NKikimr::NYDBTest {
 
@@ -17,12 +23,24 @@ protected:
     virtual bool DoOnSortingPolicy(std::shared_ptr<NOlap::NIndexedReader::IOrderPolicy> /*policy*/) {
         return true;
     }
+    virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
+        return true;
+    }
+    virtual bool DoOnStartCompaction(const std::shared_ptr<NOlap::TColumnEngineChanges>& /*changes*/) {
+        return true;
+    }
 public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
     bool OnSortingPolicy(std::shared_ptr<NOlap::NIndexedReader::IOrderPolicy> policy) {
         OnSortingPolicyCounter.Inc();
         return DoOnSortingPolicy(policy);
+    }
+    bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
+        return DoOnAfterFilterAssembling(batch);
+    }
+    bool OnStartCompaction(const std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+        return DoOnStartCompaction(changes);
     }
 };
 

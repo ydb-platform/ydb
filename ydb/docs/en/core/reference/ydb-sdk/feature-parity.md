@@ -21,11 +21,11 @@
 | Load balancing across all nodes of a particular DC/availability zone (for example, “a”, “vla”) | \+ | \+ | \+ | ? | \- | \- | \- |
 | Load balancing across all nodes of all local DCs | \+ | \+ | \+ | ? | \- | \- | \- |
 | **Credentials providers** |
-| Anonymous (default) | \+ | \+ | \+ | \+ | \+ | ? | \+ |
-| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \- |
-| Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- |
-| Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Anonymous (default) | \+ | \+ | \+ | \+ | \+ | ? | \+ | \+ |
+| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \- | \- |
+| Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- | \+ |
+| Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | **Working with Table service sessions** |
 | Session pool | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Limit the number of concurrent sessions on the client) | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
@@ -40,17 +40,17 @@
 | Graceful session shutdown support ("session-close" in "x-ydb-server-hints" metadata means to "forget" a session and not use it again) | \+ | \+ | \+ | \+ | \- |
 | Support for server-side load balancing of sessions (a CreateSession request must contain the "session-balancer" value in the "x-ydb-client-capabilities" metadata header) | \+ | \+ | \+ | \- | \- |
 | **Support for YDB data types** |
-| Int/Uint(8,16,32,64) | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Int128, UInt128 (not available publicly?) | \- | \- | \- | \- | \- | \- | \- |
-| Float,Double | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Bool | \+ | \+ | \+ | \+ | \+ | \- | \+ |
+| Int/Uint(8,16,32,64) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Int128, UInt128 (not available publicly?) | \- | \- | \- | \- | \- | \- | \- | \- |
+| Float,Double | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Bool | \+ | \+ | \+ | \+ | \+ | \- | \+ | \+ |
 | String, Bytes | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Utf8, Text | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Utf8, Text | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | NULL,Optional,Void | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Struct | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| List | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Struct | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| List | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Set | ? | ? | \- | ? | ? | ? | ? |
-| Tuple | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Tuple | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Variant\<Struct\>,Variant\<Tuple\> | \+ | \+ | \+ | \+ | \+ | \+ | \- |
 | Date,DateTime,Timestamp,Interval | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | TzDate,TzDateTime,TzTimestamp | \+ | \+ | \+ | \+ | \+ | \+ | \- |

@@ -502,7 +502,7 @@ struct TModifyPermissionsSettings {
         Revoke
     };
 
-    EAction Action;
+    EAction Action = EAction::Grant;
     THashSet<TString> Permissions;
     THashSet<TString> Pathes;
     THashSet<TString> Roles;

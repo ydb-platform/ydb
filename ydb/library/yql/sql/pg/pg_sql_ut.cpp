@@ -351,4 +351,18 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         auto actualParamToTypes = GetParamNameToPgType(*res.Root);
         UNIT_ASSERT_VALUES_EQUAL(expectedParamToType, actualParamToTypes);
     }
+    
+    Y_UNIT_TEST(DropTableStmt) {
+        auto res = PgSqlToYql("drop table plato.Input");
+        TString program = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let world (Write! world (DataSink '"yt" '"plato") (Key '('tablescheme (String '"input"))) (Void) '('('mode 'drop))))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(program);
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
 }

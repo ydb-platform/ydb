@@ -171,8 +171,8 @@ public:
         bool InjectRead = false;
     };
 
-    struct TWriteRangeDesc {
-        TAstNode* Sink = nullptr;
+    struct TReadWriteKeyExprs {
+        TAstNode* SinkOrSource = nullptr;
         TAstNode* Key = nullptr;
     };
 
@@ -925,8 +925,8 @@ public:
             return nullptr;
         }
 
-        auto insertDesc = ParseWriteRangeVar(value->relation);
-        if (!insertDesc.Sink) {
+        const auto [sink, key] = ParseWriteRangeVar(value->relation);
+        if (!sink || !key) {
             return nullptr;
         }
 
@@ -962,8 +962,8 @@ public:
             L(
                 A("Write!"),
                 A("world"),
-                insertDesc.Sink,
-                insertDesc.Key,
+                sink,
+                key,
                 select,
                 writeOptions
             )
@@ -1338,32 +1338,46 @@ public:
 
     [[nodiscard]]
     TAstNode* ParseDropStmt(const DropStmt* value) {
-        if (value->removeType != OBJECT_VIEW) {
-            AddError("Not supported object type for DROP");
-            return nullptr;
-        }
-
-        // behavior and concurrent don't matter here
+        TVector<const List*> nameListNodes;
         for (int i = 0; i < ListLength(value->objects); ++i) {
             auto object = ListNodeNth(value->objects, i);
             if (NodeTag(object) != T_List) {
                 NodeNotImplemented(value, object);
                 return nullptr;
             }
+            auto nameListNode = CAST_NODE(List, object);
+            nameListNodes.push_back(nameListNode);
+        }
 
-            auto lst = CAST_NODE(List, object);
-            if (ListLength(lst) != 1) {
-                AddError("Expected view name");
+        switch (value->removeType) {
+            case OBJECT_VIEW: {
+                return ParseDropViewStmt(value, nameListNodes);
+            }
+            case OBJECT_TABLE: {
+                return ParseDropTableStmt(value, nameListNodes);
+            }
+            default: {
+                AddError("Not supported object type for DROP");
                 return nullptr;
             }
+        }
+    }
+    
+    TAstNode* ParseDropViewStmt(const DropStmt* value, const TVector<const List*>& names) {
+        // behavior and concurrent don't matter here
 
-            auto nameNode = ListNodeNth(lst, 0);
+        for (const auto& nameList : names) {
+            if (ListLength(nameList) != 1) {
+                AddError("Expected view name");
+            }
+            const auto nameNode = ListNodeNth(nameList, 0);
+
             if (NodeTag(nameNode) != T_String) {
                 NodeNotImplemented(value, nameNode);
                 return nullptr;
             }
-
-            auto name = StrVal(nameNode);
+            
+            const auto name = StrVal(nameNode);
             auto it = Views.find(name);
             if (!value->missing_ok && it == Views.end()) {
                 AddError(TStringBuilder() << "View not found: '" << name << "'");
@@ -1372,6 +1386,61 @@ public:
 
             if (it != Views.end()) {
                 Views.erase(it);
+            }
+        }
+
+        return Statements.back();
+    } 
+    
+    TAstNode* ParseDropTableStmt(const DropStmt* value, const TVector<const List*>& names) {
+        if (value->behavior == DROP_CASCADE) {
+            AddError("CASCADE is not implemented");
+            return nullptr;
+        }
+
+        for (const auto& nameList : names) {
+            const auto getSchemaAndTableName = [] (const List* nameList) -> std::tuple<TStringBuf, TStringBuf> {
+                switch (ListLength(nameList)) {
+                    case 2: {
+                        const auto clusterName = StrVal(ListNodeNth(nameList, 0));
+                        const auto tableName = StrVal(ListNodeNth(nameList, 1));
+                        return {clusterName, tableName};
+                    }
+                    case 1: {
+                        const auto tableName = StrVal(ListNodeNth(nameList, 0));
+                        return {"", tableName};
+                    }
+                    default: {
+                        return {"", ""};
+                    }
+                }
+            };
+
+            const auto [clusterName, tableName] = getSchemaAndTableName(nameList);
+            const auto [sink, key] = ParseQualifiedRelationName(
+                /* catalogName */ "", 
+                clusterName, 
+                tableName, 
+                /* isSink */ true, 
+                /* isScheme */ true
+            );
+
+            for (const auto& name : names) {
+                Statements.push_back(L(
+                    A("let"),
+                    A("world"),
+                    L(
+                        A("Write!"),
+                        A("world"),
+                        sink,
+                        key,
+                        L(A("Void")),
+                        QL(
+                            QL(QA("mode"), QA("drop"))
+                        )
+                    )
+                ));
+                
             }
         }
 
@@ -1654,46 +1723,56 @@ public:
         return true;
     }
 
-    TWriteRangeDesc ParseWriteRangeVar(const RangeVar* value, bool isScheme = false) {
-        AT_LOCATION(value);
-        if (StrLength(value->catalogname) > 0) {
-            AddError("catalogname is not supported");
-            return {};
-        }
+    TAstNode* BuildClusterSinkOrSourceExpression(
+        bool isSink, const TStringBuf schemaname) {
+      const auto p = Settings.ClusterMapping.FindPtr(schemaname);
+      if (!p) {
+        AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
+        return nullptr;
+      }
 
-        if (StrLength(value->relname) == 0) {
-            AddError("relname should be specified");
-            return {};
-        }
+      return L(isSink ? A("DataSink") : A("DataSource"), QAX(*p), QAX(schemaname.Data()));
+    }
 
-        if (value->alias) {
-            AddError("alias is not supported");
-            return {};
-        }
+    TAstNode* BuildTableKeyExpression(const TStringBuf relname,
+                                      bool isScheme = false) {
+        return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
+                            L(A("String"), QAX(TablePathPrefix + relname))));
+    }
 
-        const char* schemaname = (value->schemaname) ? value->schemaname : Settings.DefaultCluster.Data();
-        auto p = Settings.ClusterMapping.FindPtr(schemaname);
-        if (!p) {
-            AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
-            return {};
-        }
+    TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
+                                                  const TStringBuf schemaname,
+                                                  const TStringBuf relname,
+                                                  bool isSink, bool isScheme) {
+      if (!catalogname.Empty()) {
+        AddError("catalogname is not supported");
+        return {};
+      }
+      if (relname.Empty()) {
+        AddError("relname should be specified");
+        return {};
+      }
 
-        auto sink = L(A("DataSink"), QAX(*p), QAX(schemaname));
-        auto key = L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"), L(A("String"), QAX(TablePathPrefix + value->relname))));
-        return { sink, key };
+      const auto cluster = !schemaname.Empty() ? schemaname : Settings.DefaultCluster;
+      const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
+      const auto key = BuildTableKeyExpression(relname, isScheme);
+      return {sinkOrSource, key};
+    }
+
+    TReadWriteKeyExprs ParseWriteRangeVar(const RangeVar *value,
+                                          bool isScheme = false) {
+      if (value->alias) {
+        AddError("alias is not supported");
+        return {};
+      }
+
+      return ParseQualifiedRelationName(value->catalogname, value->schemaname,
+                                        value->relname,
+                                        /* isSink */ true, isScheme);
     }
 
     TFromDesc ParseRangeVar(const RangeVar* value) {
         AT_LOCATION(value);
-        if (StrLength(value->catalogname) > 0) {
-            AddError("catalogname is not supported");
-            return {};
-        }
-
-        if (StrLength(value->relname) == 0) {
-            AddError("relname should be specified");
-            return {};
-        }
 
         const TView* view = nullptr;
         if (StrLength(value->schemaname) == 0) {
@@ -1734,21 +1813,35 @@ public:
             return { s, alias, colnames, true };
         }
 
-        const char* schemaname = (value->schemaname) ? value->schemaname : Settings.DefaultCluster.Data();
-        auto p = Settings.ClusterMapping.FindPtr(schemaname);
-        if (!p) {
-            AddError(TStringBuilder() << "Unknown cluster: " << schemaname);
+
+        const auto [source, key] = ParseQualifiedRelationName(
+            value->catalogname, value->schemaname, value->relname,
+            /* isSink */ false,
+            /* isScheme */ false);
+        if (source == nullptr || key == nullptr) {
             return {};
         }
-
-        auto source = L(A("DataSource"), QAX(*p), QAX(schemaname));
-        return { L(A("Read!"), A("world"), source, L(A("Key"),
-            QL(QA("table"), L(A("String"), QAX(TablePathPrefix + value->relname)))),
+        const auto readExpr = L(
+            A("Read!"), 
+            A("world"), 
+            source,  
+            key,
             L(A("Void")),
-            QL()), alias, colnames, true };
+            QL()
+        ); 
+        return { 
+            readExpr,
+            alias, 
+            colnames, 
+            /* injectRead */ true,
+        };
     }
 
     TAstNode* BuildBindingSource(const RangeVar* value) {
+        if (StrLength(value->relname) == 0) {
+            AddError("relname should be specified");
+        }
+
         const TString binding = value->relname;
         NSQLTranslation::TBindingInfo bindingInfo;
         if (const auto& error = ExtractBindingInfo(Settings, binding, bindingInfo)) {

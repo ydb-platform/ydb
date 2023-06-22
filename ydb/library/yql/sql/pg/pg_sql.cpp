@@ -1394,7 +1394,7 @@ public:
 
             auto arg = ListNodeNth(value->args, 0);
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
-                auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                TString rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
                 Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
                     QA(TString(rawStr == "true" ? "" : "Disable") + TString((name == "useblocks") ? "UseBlocks" : "PgEmitAggApply")))));

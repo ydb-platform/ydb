@@ -159,3 +159,23 @@ A YDB CLI binary can be found at:
 ydb/apps/ydb/ydb
 ```
 
+# How to run tests
+
+## YDB CLI
+
+### Ctest
+
+To build YDB CLI tests execute:
+```bash
+ninja ydb/public/lib/ydb_cli/all
+```
+
+To run tests execute:
+```bash
+cd ydb/public/lib/ydb_cli/
+ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure
+```
+
+### Pytest
+
+To launch YDB CLI python tests run `ydb_cli` test suite via [pytest](ydb/tests/functional/README.md)

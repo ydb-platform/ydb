@@ -140,7 +140,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
 
 ## Build
 
-To build all binary artifacts (server YDBD, client YDB, unittest binaries) run::
+To build all binary artifacts (server YDBD, client YDB, unittest binaries) run:
 ```bash
 ninja
 ```

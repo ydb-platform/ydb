@@ -800,8 +800,6 @@ private:
             Counters->ReportSqlVersion(Settings.DbCounters, *queryResult.SqlVersion);
         }
 
-        FillTxInfo(responseEv->Record);
-
         auto& stats = queryResult.QueryStats;
         stats.SetDurationUs(queryDuration.MicroSeconds());
         stats.SetWorkerCpuTimeUs(QueryState->CpuTime.MicroSeconds());
@@ -924,11 +922,18 @@ private:
         AddQueryIssues(*ev.MutableResponse(), issues);
 
         if (replyResults) {
+            auto resp = ev.MutableResponse();
             for (auto& result : queryResult.Results) {
                 // If we have result it must be allocated on protobuf arena
                 Y_ASSERT(result->GetArena());
-                Y_ASSERT(ev.MutableResponse()->GetArena() == result->GetArena());
-                ev.MutableResponse()->AddResults()->Swap(result);
+                Y_ASSERT(resp->GetArena() == result->GetArena());
+                resp->AddResults()->Swap(result);
+            }
+        } else {
+            auto resp = ev.MutableResponse();
+            for (auto& result : queryResult.ResultSetsMeta) {
+                auto ydbRes = resp->AddYdbResults();
+                ydbRes->mutable_columns()->Swap(result.mutable_columns());
             }
         }
 
@@ -977,11 +982,6 @@ private:
         }
 
         YQL_ENSURE(!replyQueryId);
-    }
-
-    void FillTxInfo(TEvKqp::TProtoArenaHolder<NKikimrKqp::TEvQueryResponse>& record) {
-        Y_UNUSED(record);
-        return;
     }
 
     void MakeNewQueryState() {

@@ -14,7 +14,6 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/provider
     ydb/core/tx/long_tx_service/public
-    ydb/library/yql/ast
     ydb/library/yql/core/services
     ydb/library/yql/minikql/invoke_builtins/llvm
     ydb/library/yql/sql

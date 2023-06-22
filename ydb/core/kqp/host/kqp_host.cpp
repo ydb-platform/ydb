@@ -8,7 +8,6 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
-#include <ydb/library/yql/ast/yql_type_string.h>
 #include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
@@ -35,6 +34,14 @@ using namespace NYql::NNodes;
 using namespace NThreading;
 
 namespace {
+
+void FillColumnMeta(const NKqpProto::TKqpPhyQuery& phyQuery, IKqpHost::TQueryResult& queryResult) {
+    const auto& bindings = phyQuery.GetResultBindings();
+    for (const auto& binding: bindings) {
+        auto meta = queryResult.ResultSetsMeta.Add();
+        meta->CopyFrom(binding.GetResultSetMeta());
+    }
+}
 
 void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&& stats) {
     // NOTE: Do not add duration & compilation stats as they are computed for the
@@ -294,11 +301,8 @@ public:
         YQL_ENSURE(ExecuteCtx.QueryResults.size() == 1);
         queryResult = std::move(ExecuteCtx.QueryResults[0]);
         queryResult.QueryPlan = queryResult.PreparingQuery->GetPhysicalQuery().GetQueryPlan();
-        auto& bindings = queryResult.PreparingQuery->GetPhysicalQuery().GetResultBindings();
-        for (const auto& binding: bindings) {
-            auto meta = queryResult.ResultSetsMeta.Add();
-            meta->CopyFrom(binding.GetResultSetMeta());
-        }
+
+        FillColumnMeta(queryResult.PreparingQuery->GetPhysicalQuery(), queryResult);
     }
 
 private:
@@ -323,6 +327,8 @@ public:
     void FillResult(TResult& prepareResult) const override {
         YQL_ENSURE(QueryCtx->PrepareOnly);
         YQL_ENSURE(QueryCtx->PreparingQuery);
+
+        FillColumnMeta(QueryCtx->PreparingQuery->GetPhysicalQuery(), prepareResult);
 
         // TODO: it's a const function, why do we move from class members?
         prepareResult.PreparingQuery = std::move(QueryCtx->PreparingQuery);
@@ -1245,6 +1251,9 @@ private:
                 TQueryResult explainResult;
                 explainResult.SetSuccess();
                 YQL_ENSURE(prepared.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+
+                FillColumnMeta(prepared.PreparingQuery->GetPhysicalQuery(), explainResult);
+
                 explainResult.QueryPlan = std::move(prepared.QueryPlan);
                 explainResult.QueryAst = std::move(*prepared.PreparingQuery->MutablePhysicalQuery()->MutableQueryAst());
                 explainResult.SqlVersion = prepared.SqlVersion;

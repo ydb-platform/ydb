@@ -1250,6 +1250,16 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_topsort_topsort_pk.sql-result_sets_/topsort_topsort_pk.sql.results"
         }
     },
+    "test_sql.TestCanonicalFolder1.test_case[udfs/math.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_udfs_math.sql-plan_/udfs_math.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[udfs/math.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_udfs_math.sql-result_sets_/udfs_math.sql.results"
+        }
+    },
     "test_sql.TestCanonicalFolder1.test_case[write/delete_by_pk.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_write_delete_by_pk.sql-plan_/write_delete_by_pk.sql.plan"

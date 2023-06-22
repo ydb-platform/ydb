@@ -137,7 +137,7 @@ namespace NMonitoring {
     //  | vptr | RefsCount | BucketsCount | Bound1 | Value1 |   ...   | BoundN | ValueN |
     //  +------+-----------+--------------+--------+--------+-       -+--------+--------+
     //
-    class TExplicitHistogramSnapshot: public IHistogramSnapshot, private TNonCopyable {
+    class alignas(TBucketValue) TExplicitHistogramSnapshot: public IHistogramSnapshot, private TNonCopyable {
     public:
         static TIntrusivePtr<TExplicitHistogramSnapshot> New(ui32 bucketsCount) {
             size_t bucketsSize = bucketsCount * sizeof(TBucket);

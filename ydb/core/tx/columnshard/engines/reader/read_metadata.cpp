@@ -1,6 +1,7 @@
 #include "read_metadata.h"
 #include "order_control/default.h"
 #include "order_control/pk_with_limit.h"
+#include "order_control/not_sorted.h"
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
@@ -219,8 +220,10 @@ NIndexedReader::IOrderPolicy::TPtr TReadMetadata::DoBuildSortingPolicy() const {
             return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
         }
         return std::make_shared<NIndexedReader::TPKSortingWithLimit>(this->shared_from_this());
-    } else {
+    } else if (IsSorted()) {
         return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
+    } else {
+        return std::make_shared<NIndexedReader::TNonSorting>(this->shared_from_this());
     }
 }
 

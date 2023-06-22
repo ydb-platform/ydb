@@ -79,6 +79,28 @@ public:
         return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
     }
 
+    ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
+    {
+        Y_UNUSED(id);
+        Y_VERIFY(groupId.Index < PageCollections.size());
+        return PageCollections[groupId.Index]->Id.Channel();
+    }
+
+    ui8 GetPageChannel(ELargeObj lob, ui64 ref) const override
+    {
+        if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
+            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+        }
+
+        if (lob == ELargeObj::Extern) {
+            auto bounds = Pseudo.Get()->PageCollection->Bounds(ref);
+            auto glob = Pseudo.Get()->PageCollection->Glob(bounds.Lo.Blob);
+            return glob.Logo.Channel();
+        } else {
+            return PageCollections.at(Groups).Get()->Id.Channel();
+        }
+    }
+
     TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const override
     {
         return new TPartStore(*this, epoch);

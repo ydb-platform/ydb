@@ -124,6 +124,8 @@ namespace NTable {
         virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
         virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
+        virtual ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
+        virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
         const NPage::TIndex& GetGroupIndex(NPage::TGroupId groupId) const noexcept {
             if (!groupId.Historic) {

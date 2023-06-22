@@ -19,66 +19,51 @@ public:
     {}
 
     void Add(THolder<TScreenedPartIndexIterator> pi) {
+        Y_VERIFY(pi->IsValid());
         Iterators.PushBack(std::move(pi));
         TScreenedPartIndexIterator* it = Iterators.back();
-        if (it->IsValid()) {
-            NextRowCount += it->GetRowCountDelta();
-            NextDataSize += it->GetDataSizeDelta();
-            Heap.push(it);
-        }
+        Heap.push(it);
     }
 
-    bool IsValid() const {
-        return !Heap.empty() || CurrentKeyValid;
-    }
-
-    void Next() {
-        ui64 lastRowCount = RowCount;
-        ui64 lastDataSize = DataSize;
-        Y_VERIFY(IsValid());
+    /**
+     * @return true when we haven't reached the end and have current key 
+     * @return false when we have reached the end and don't have current key
+     */
+    bool Next(TPartDataStats& stats) {
+        ui64 lastRowCount = stats.RowCount;
+        ui64 lastDataSize = stats.DataSize.Size;
 
         while (!Heap.empty()) {
-            RowCount = NextRowCount;
-            DataSize = NextDataSize;
             TScreenedPartIndexIterator* it = Heap.top();
             Heap.pop();
-            TDbTupleRef key = it->GetCurrentKey();
-            TString serialized = TSerializedCellVec::Serialize({key.Columns, key.ColumnCount});
-            CurrentKey = TSerializedCellVec(serialized);
-            CurrentKeyValid = true;
-            TDbTupleRef currentKeyTuple(KeyColumns->BasicTypes().data(), CurrentKey.GetCells().data(), CurrentKey.GetCells().size());
 
-            if (MoveIterator(it))
+            // makes key copy
+            TSerializedCellVec serialized = TSerializedCellVec(TSerializedCellVec::Serialize({it->GetCurrentKey().Columns, it->GetCurrentKey().ColumnCount}));
+            TDbTupleRef key(KeyColumns->BasicTypes().data(), serialized.GetCells().data(), serialized.GetCells().size());
+
+            if (MoveIterator(it, stats))
                 Heap.push(it);
 
-            while (!Heap.empty() && CompareKeys(currentKeyTuple, Heap.top()->GetCurrentKey()) == 0) {
+            // guarantees that all results will be different
+            while (!Heap.empty() && CompareKeys(key, Heap.top()->GetCurrentKey()) == 0) {
                 it = Heap.top();
                 Heap.pop();
 
-                if (MoveIterator(it))
+                if (MoveIterator(it, stats))
                     Heap.push(it);
             }
 
-            if (RowCount != lastRowCount && DataSize != lastDataSize) {
-                return;
+            if (stats.RowCount != lastRowCount && stats.DataSize.Size != lastDataSize) {
+                break;
             }
         }
 
-        RowCount = NextRowCount;
-        DataSize = NextDataSize;
-        CurrentKeyValid = false;
+        return !Heap.empty();
     }
 
     TDbTupleRef GetCurrentKey() const {
-        return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.GetCells().data(), CurrentKey.GetCells().size());
-    }
-
-    ui64 GetCurrentRowCount() const {
-        return RowCount;
-    }
-
-    ui64 GetCurrentDataSize() const {
-        return DataSize;
+        Y_VERIFY(!Heap.empty());
+        return Heap.top()->GetCurrentKey();
     }
 
 private:
@@ -94,23 +79,14 @@ private:
         }
     };
 
-    bool MoveIterator(TScreenedPartIndexIterator* it) {
-        it->Next();
-        NextRowCount += it->GetRowCountDelta();
-        NextDataSize += it->GetDataSizeDelta();
-
+    bool MoveIterator(TScreenedPartIndexIterator* it, TPartDataStats& stats) {
+        it->Next(stats);
         return it->IsValid();
     }
 
     TIntrusiveConstPtr<TKeyCellDefaults> KeyColumns;
     THolderVector<TScreenedPartIndexIterator> Iterators;
     TPriorityQueue<TScreenedPartIndexIterator*, TSmallVec<TScreenedPartIndexIterator*>, TIterKeyGreater> Heap;
-    TSerializedCellVec CurrentKey;
-    ui64 RowCount = 0;
-    ui64 DataSize = 0;
-    ui64 NextRowCount = 0;
-    ui64 NextDataSize = 0;
-    bool CurrentKeyValid = false;
 };
 
 struct TBucket {
@@ -122,13 +98,15 @@ using THistogram = TVector<TBucket>;
 
 struct TStats {
     ui64 RowCount = 0;
-    ui64 DataSize = 0;
+    TPartDataSize DataSize = { };
+    TPartDataSize IndexSize = { };
     THistogram RowCountHistogram;
     THistogram DataSizeHistogram;
 
     void Clear() {
         RowCount = 0;
-        DataSize = 0;
+        DataSize = { };
+        IndexSize = { };
         RowCountHistogram.clear();
         DataSizeHistogram.clear();
     }
@@ -136,6 +114,7 @@ struct TStats {
     void Swap(TStats& other) {
         std::swap(RowCount, other.RowCount);
         std::swap(DataSize, other.DataSize);
+        std::swap(IndexSize, other.IndexSize);
         RowCountHistogram.swap(other.RowCountHistogram);
         DataSizeHistogram.swap(other.DataSizeHistogram);
     }

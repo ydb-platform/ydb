@@ -405,16 +405,18 @@ struct TShardedTableOptions {
     using TSelf = TShardedTableOptions;
 
     struct TColumn {
-        TColumn(const TString& name, const TString& type, bool isKey, bool notNull)
+        TColumn(const TString& name, const TString& type, bool isKey, bool notNull, TString family = {})
             : Name(name)
             , Type(type)
             , IsKey(isKey)
-            , NotNull(notNull) {}
+            , NotNull(notNull)
+            , Family(family) {}
 
         TString Name;
         TString Type;
         bool IsKey;
         bool NotNull;
+        TString Family;
     };
 
     struct TIndex {
@@ -439,6 +441,13 @@ struct TShardedTableOptions {
         TMaybe<TString> AwsRegion;
     };
 
+    struct TFamily {
+        TString Name;
+        TString LogPoolKind;
+        TString SysLogPoolKind;
+        TString DataPoolKind;
+    };
+
     using TAttributes = THashMap<TString, TString>;
 
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \
@@ -456,6 +465,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(EShadowDataMode, ShadowData, EShadowDataMode::Default);
     TABLE_OPTION(TVector<TColumn>, Columns, (TVector<TColumn>{{"key", "Uint32", true, false}, {"value", "Uint32", false, false}}));
     TABLE_OPTION(TVector<TIndex>, Indexes, {});
+    TABLE_OPTION(TVector<TFamily>, Families, {});
     TABLE_OPTION(ui64, Followers, 0);
     TABLE_OPTION(bool, FollowerPromotion, false);
     TABLE_OPTION(bool, ExternalStorage, false);

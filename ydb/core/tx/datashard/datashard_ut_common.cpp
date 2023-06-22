@@ -1087,6 +1087,11 @@ static ui64 RunSchemeTx(
 
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, viaActorSystem);
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+
+    for (auto i : ev->Get()->Record.GetIssues()) {
+        Cerr << "Issue: " << i.AsJSON() << Endl;
+    }
+
     UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), expectedStatus);
 
     return ev->Get()->Record.GetTxId();
@@ -1123,6 +1128,15 @@ void CreateShardedTable(
         if (column.IsKey) {
             desc->AddKeyColumnNames(column.Name);
         }
+        col->SetFamilyName(column.Family);
+    }
+
+    for (const auto& family : opts.Families_) {
+        auto fam = desc->MutablePartitionConfig()->AddColumnFamilies();
+        if (family.Name) fam->SetName(family.Name);
+        if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
+        if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
+        if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
     }
 
     for (const auto& index : opts.Indexes_) {

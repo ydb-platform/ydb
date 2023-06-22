@@ -86,6 +86,7 @@ private:
         NTable::TSizeEnv szEnv;
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
         NTable::BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, &szEnv);
+        Y_VERIFY_DEBUG(IndexSize == ev->Stats.IndexSize.Size);
 
         ctx.Send(ReplyTo, ev.Release());
 
@@ -163,7 +164,7 @@ public:
             return true;
 
         const NTable::TStats& stats = tableInfo.Stats.DataStats;
-        Result->Record.MutableTableStats()->SetDataSize(stats.DataSize + memSize);
+        Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
         Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
         FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
         FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
@@ -246,7 +247,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
         tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
 
-        dataSize += tableInfo.Stats.DataStats.DataSize;
+        dataSize += tableInfo.Stats.DataStats.DataSize.Size;
 
         tableInfo.Stats.SearchHeight = ev->Get()->SearchHeight;
 
@@ -355,7 +356,7 @@ public:
             const ui64 MaxBuckets = 500;
 
             if (ti.second->Stats.DataSizeResolution &&
-                ti.second->Stats.DataStats.DataSize / ti.second->Stats.DataSizeResolution <= MaxBuckets)
+                ti.second->Stats.DataStats.DataSize.Size / ti.second->Stats.DataSizeResolution <= MaxBuckets)
             {
                 dataSizeResolution = ti.second->Stats.DataSizeResolution;
             }

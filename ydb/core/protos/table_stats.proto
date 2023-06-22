@@ -10,6 +10,12 @@ message THistogram {
     repeated THistogramBucket Buckets = 1;
 }
 
+message TChannelStats {
+    optional uint32 Channel = 1;
+    optional uint64 DataSize = 2;
+    optional uint64 IndexSize = 3;
+}
+
 message TTableStats {
     optional uint64 DataSize = 1; // both inMem and ondisk
     optional uint64 RowCount = 2; // both inMem and ondisk
@@ -47,4 +53,6 @@ message TTableStats {
 
     // i.e. this shard lent to other shards
     optional bool HasLoanedParts = 29;
+
+    repeated TChannelStats Channels = 30;
 }

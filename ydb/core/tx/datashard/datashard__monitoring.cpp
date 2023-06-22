@@ -83,7 +83,7 @@ public:
             if (pr.second->Stats.StatsUpdateTime) {
                 auto &stats = *rec.MutableStats();
                 stats.SetRowCount(pr.second->Stats.DataStats.RowCount);
-                stats.SetDataSize(pr.second->Stats.DataStats.DataSize);
+                stats.SetDataSize(pr.second->Stats.DataStats.DataSize.Size);
                 stats.SetLastAccessTime(pr.second->Stats.AccessTime.ToStringLocalUpToSeconds());
                 stats.SetLastUpdateTime(pr.second->Stats.UpdateTime.ToStringLocalUpToSeconds());
                 stats.SetLastStatsUpdateTime(Self->LastDbStatsUpdateTime.ToStringLocalUpToSeconds());

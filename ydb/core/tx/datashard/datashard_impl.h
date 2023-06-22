@@ -2994,9 +2994,29 @@ protected:
             ev->Record.SetGeneration(Executor()->Generation());
             ev->Record.SetRound(StatsReportRound++);
             ev->Record.MutableTableStats()->SetRowCount(ti.Stats.DataStats.RowCount + ti.Stats.MemRowCount);
-            ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize + ti.Stats.MemDataSize);
-            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
-            ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.IndexSize);
+
+            ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize.Size + ti.Stats.MemDataSize);
+            ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.DataStats.IndexSize.Size);
+            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);            
+
+            TMap<ui8, std::tuple<ui64, ui64>> channels; // Channel -> (DataSize, IndexSize)
+            for (size_t channel = 0; channel < ti.Stats.DataStats.DataSize.ByChannel.size(); channel++) {
+                if (ti.Stats.DataStats.DataSize.ByChannel[channel]) {
+                    std::get<0>(channels[channel]) = ti.Stats.DataStats.DataSize.ByChannel[channel];
+                }
+            }
+            for (size_t channel = 0; channel < ti.Stats.DataStats.IndexSize.ByChannel.size(); channel++) {
+                if (ti.Stats.DataStats.IndexSize.ByChannel[channel]) {
+                    std::get<1>(channels[channel]) = ti.Stats.DataStats.IndexSize.ByChannel[channel];
+                }
+            }
+            for (auto p : channels) {
+                auto item = ev->Record.MutableTableStats()->AddChannels();
+                item->SetChannel(p.first);
+                item->SetDataSize(std::get<0>(p.second));
+                item->SetIndexSize(std::get<1>(p.second));
+            }
+
             ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
             ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());
 

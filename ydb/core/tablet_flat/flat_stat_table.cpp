@@ -11,10 +11,12 @@ void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
 
     stats.Clear();
 
+    TPartDataStats stIterStats = { };
     TStatsIterator stIter(subset.Scheme->Keys);
 
     // Make index iterators for all parts
     for (auto& pi : subset.Flatten) {
+        stats.IndexSize.Add(pi->IndexesRawSize, pi->Label.Channel());
         TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(pi, subset.Scheme->Keys, pi->Small);
         if (iter->IsValid()) {
             stIter.Add(iter);
@@ -23,12 +25,9 @@ void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
 
     ui64 prevRows = 0;
     ui64 prevSize = 0;
-    for (; stIter.IsValid(); stIter.Next()) {
-        stats.RowCount = stIter.GetCurrentRowCount();
-        stats.DataSize = stIter.GetCurrentDataSize();
-
-        const bool nextRowsBucket = (stats.RowCount >= prevRows + rowCountResolution);
-        const bool nextSizeBucket = (stats.DataSize >= prevSize + dataSizeResolution);
+    while (stIter.Next(stIterStats)) {
+        const bool nextRowsBucket = (stIterStats.RowCount >= prevRows + rowCountResolution);
+        const bool nextSizeBucket = (stIterStats.DataSize.Size >= prevSize + dataSizeResolution);
 
         if (!nextRowsBucket && !nextSizeBucket)
             continue;
@@ -37,18 +36,18 @@ void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
         TString serializedKey = TSerializedCellVec::Serialize(TConstArrayRef<TCell>(currentKey.Columns, currentKey.ColumnCount));
 
         if (nextRowsBucket) {
-            stats.RowCountHistogram.push_back({serializedKey, stats.RowCount});
-            prevRows = stats.RowCount;
+            prevRows = stIterStats.RowCount;
+            stats.RowCountHistogram.push_back({serializedKey, prevRows});
         }
 
         if (nextSizeBucket) {
-            stats.DataSizeHistogram.push_back({serializedKey, stats.DataSize});
-            prevSize = stats.DataSize;
+            prevSize = stIterStats.DataSize.Size;
+            stats.DataSizeHistogram.push_back({serializedKey, prevSize});
         }
     }
 
-    stats.RowCount = stIter.GetCurrentRowCount();
-    stats.DataSize = stIter.GetCurrentDataSize();
+    stats.RowCount = stIterStats.RowCount;
+    stats.DataSize = std::move(stIterStats.DataSize);
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {

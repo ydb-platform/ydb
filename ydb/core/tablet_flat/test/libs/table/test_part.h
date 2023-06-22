@@ -51,6 +51,20 @@ namespace NTest {
             return Store->GetPage(groupId.Index, id)->size();
         }
 
+        ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
+        {
+            Y_UNUSED(id);
+            Y_UNUSED(groupId);
+            return 0;
+        }
+
+        ui8 GetPageChannel(ELargeObj lob, ui64 ref) const override
+        {
+            Y_UNUSED(lob);
+            Y_UNUSED(ref);
+            return 0;
+        }
+
         TIntrusiveConstPtr<NTable::TPart> CloneWithEpoch(NTable::TEpoch epoch) const override
         {
             return new TPartStore(*this, epoch);

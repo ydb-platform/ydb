@@ -1167,8 +1167,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
     if (Config.HasTracingConfig()) {
         const auto& tracing = Config.GetTracingConfig();
-        setup->LocalServices.emplace_back(NWilson::MakeWilsonUploaderId(), TActorSetupCmd(NWilson::CreateWilsonUploader(
-            tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA()), TMailboxType::ReadAsFilled, appData->BatchPoolId));
+        setup->LocalServices.emplace_back(
+            NWilson::MakeWilsonUploaderId(),
+            TActorSetupCmd(NWilson::CreateWilsonUploader(tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA(), tracing.GetServiceName()),
+            TMailboxType::ReadAsFilled, appData->BatchPoolId));
     }
 }
 

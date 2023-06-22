@@ -19,6 +19,6 @@ namespace NWilson {
         return NActors::TActorId(0, TStringBuf("WilsonUpload", 12));
     }
 
-    NActors::IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA);
+    NActors::IActor *CreateWilsonUploader(TString host, ui16 port, TString rootCA, TString serviceName);
 
 } // NWilson

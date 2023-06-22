@@ -1742,6 +1742,7 @@ message TTracingConfig {
     optional string Host = 1;
     optional uint32 Port = 2;
     optional string RootCA = 3;
+    optional string ServiceName = 4;
 }
 
 message TFailureInjectionConfig {

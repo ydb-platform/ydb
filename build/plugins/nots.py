@@ -137,6 +137,7 @@ def on_peerdir_ts_resource(unit, *resources):
     for tool in resources:
         if tool == "nodejs":
             dirs.append(os.path.join("build", "platform", tool, str(nodejs_version)))
+            _set_resource_vars(unit, erm_json, "nodejs", nodejs_version)
         elif erm_json.is_resource_multiplatform(tool):
             v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
             sb_resources = [
@@ -145,11 +146,14 @@ def on_peerdir_ts_resource(unit, *resources):
             nodejs_dir = "NODEJS_{}".format(nodejs_version.major)
             if len(sb_resources) > 0:
                 dirs.append(os.path.join("build", "external_resources", tool, str(v), nodejs_dir))
+                _set_resource_vars(unit, erm_json, tool, v, nodejs_version.major)
             else:
                 unit.message(["WARN", "Missing {}@{} for {}".format(tool, str(v), nodejs_dir)])
         else:
             v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
             dirs.append(os.path.join("build", "external_resources", tool, str(v)))
+            _set_resource_vars(unit, erm_json, tool, v, nodejs_version.major)
+
 
     unit.onpeerdir(dirs)
 
@@ -183,11 +187,6 @@ def on_ts_configure(unit, tsconfig_path):
     unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
 
     _setup_eslint(unit)
-
-
-@_with_report_configure_error
-def on_set_external_resources(unit):
-    _setup_external_resources(unit)
 
 
 def _get_ts_test_data_dirs(unit):
@@ -377,27 +376,8 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         unit.set_property(["DART_DATA", data])
 
 
-def _setup_external_resources(unit):
-    pm = _create_pm(unit)
-    pj = pm.load_package_json_from_dir(pm.sources_path)
-    erm_json = _create_erm_json(unit)
-
-    nodejs_version = _select_matching_version(erm_json, "nodejs", pj.get_nodejs_version())
-
-    # Add NodeJS vars
-    _set_resource_vars(unit, erm_json, "nodejs", pj.get_nodejs_version())
-
-    # Add NPM-packages vars
-    for tool in erm_json.list_npm_packages():
-        version_range = pj.get_dep_specifier(tool)
-        _set_resource_vars(unit, erm_json, tool, version_range, nodejs_version.major)
-
-
-def _set_resource_vars(unit, erm_json, resource_name, version_range, nodejs_major=None):
-    # type: (any, ErmJsonLite, str, str|None, int|None) -> None
-
-    # example: Version(12, 18, 4) | Version(7, 0, 4)
-    version = _select_matching_version(erm_json, resource_name, version_range)
+def _set_resource_vars(unit, erm_json, resource_name, version, nodejs_major=None):
+    # type: (any, ErmJsonLite, Version, str|None, int|None) -> None
 
     # example: hermione -> HERMIONE, super-package -> SUPER_PACKAGE
     canon_resource_name = _canonize_resource_name(resource_name)

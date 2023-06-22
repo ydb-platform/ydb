@@ -5,14 +5,14 @@ from ydb.tests.library.harness.util import LogLevels
 
 from common import find_sql_tests, diff_sql
 
-from yatest.common import execute
+import yatest.common
 
 import os
 import pytest
 import re
 
-
-DATA_PATH = yatest_common.source_path('ydb/tests/functional/postgresql/cases')
+arcadia_root = yatest.common.source_path('')
+DATA_PATH = os.path.join(arcadia_root, yatest.common.test_source_path('cases'))
 
 
 def get_unique_path_case(sub_folder, file):
@@ -58,7 +58,7 @@ def execute_binary(binary_name, cmd, wait, join_stderr=False):
     stderr_file = stdout_file
     if not join_stderr:
         stderr_file = open(stderr, 'w')
-    process = execute(
+    process = yatest.common.execute(
         cmd,
         stdin=stdin_file,
         stderr=stderr_file,

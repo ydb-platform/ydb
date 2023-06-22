@@ -14,6 +14,7 @@ from concurrent import futures
 
 from hamcrest import assert_that, is_, equal_to, raises, none
 import ydb.tests.library.common.yatest_common as yatest_common
+from yatest.common import source_path, test_source_path
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -62,7 +63,8 @@ def get_token(length=10):
 
 
 def get_source_path(*args):
-    return yatest_common.source_path(os.path.join("ydb/tests/functional/suite_tests", *args))
+    arcadia_root = source_path('')
+    return os.path.join(arcadia_root, test_source_path(os.path.join(*args)))
 
 
 def is_empty_line(line):

@@ -1,6 +1,6 @@
 # App in PHP
 
-This page contains a detailed description of the code of a test app that is available as part of the {{ ydb-short-name }} [PHP SDK](https://github.com/yandex-cloud/ydb-php-sdk).
+This page contains a detailed description of the code of a test app that is available as part of the {{ ydb-short-name }} [PHP SDK](https://github.com/ydb-platform/ydb-php-sdk).
 
 {% include [addition.md](auxilary/addition.md) %}
 
@@ -11,7 +11,7 @@ App code snippet for driver initialization:
 ```php
 <?php
 
-use YandexCloud\Ydb\Ydb;
+use YdbPlatform\Ydb\Ydb;
 
 $config = [
     // ...

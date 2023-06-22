@@ -275,23 +275,25 @@ private:
     }
 
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src, 
-        TFieldsLineage& dst, const TString& newTransforms = "") {
-        auto root = &expr;
-        while (root->IsCallable("Just")) {
-            root = &root->Head();
-        }
-
-        if (root == &arg) {
-            dst.StructItems.ConstructInPlace();
-            for (const auto& f : *src.Fields) {
-                (*dst.StructItems)[f.first] = f.second.Items;
+        TFieldsLineage& dst, bool produceStruct, const TString& newTransforms = "") {
+        if (produceStruct) {
+            auto root = &expr;
+            while (root->IsCallable("Just")) {
+                root = &root->Head();
             }
-        } else if (root->IsCallable("AsStruct")) {
-            dst.StructItems.ConstructInPlace();
-            for (const auto& x : root->Children()) {
-                auto fieldName = x->Head().Content();
-                auto& s = (*dst.StructItems)[fieldName];
-                MergeLineageFromUsedFields(x->Tail(), arg, src, s, newTransforms);
+
+            if (root == &arg) {
+                dst.StructItems.ConstructInPlace();
+                for (const auto& f : *src.Fields) {
+                    (*dst.StructItems)[f.first] = f.second.Items;
+                }
+            } else if (root->IsCallable("AsStruct")) {
+                dst.StructItems.ConstructInPlace();
+                for (const auto& x : root->Children()) {
+                    auto fieldName = x->Head().Content();
+                    auto& s = (*dst.StructItems)[fieldName];
+                    MergeLineageFromUsedFields(x->Tail(), arg, src, s, newTransforms);
+                }
             }
         }
 
@@ -354,7 +356,7 @@ private:
                 newTransforms = "Copy";
             }
 
-            MergeLineageFromUsedFields(expr, arg, innerLineage, res, newTransforms);
+            MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, newTransforms);
         }
     }
 
@@ -389,11 +391,12 @@ private:
                     // merge all used fields from init/update handlers
                     auto initHandler = payload->Child(1)->Child(1);
                     auto updateHandler = payload->Child(1)->Child(2);
-                    MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, source);
-                    MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, source);
+                    MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, source, false);
+                    MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, source, false);
                 } else if (payload->Child(1)->IsCallable("AggApply")) {
                     auto extractHandler = payload->Child(1)->Child(2);
-                    MergeLineageFromUsedFields(extractHandler->Tail(), extractHandler->Head().Head(), innerLineage, source);
+                    bool produceStruct = payload->Child(1)->Head().Content() == "some";
+                    MergeLineageFromUsedFields(extractHandler->Tail(), extractHandler->Head().Head(), innerLineage, source, produceStruct);
                 } else {
                     lineage.Fields.Clear();
                     return;
@@ -485,12 +488,13 @@ private:
                         continue;
                     } else if (list->Tail().IsCallable({"Lag","Lead","Rank","DenseRank"})) {
                         const auto& lambda = list->Tail().Child(1);
-                        MergeLineageFromUsedFields(lambda->Tail(), lambda->Head().Head(), innerLineage, res);
+                        bool produceStruct = list->Tail().IsCallable({"Lag","Lead"});
+                        MergeLineageFromUsedFields(lambda->Tail(), lambda->Head().Head(), innerLineage, res, produceStruct);
                     } else if (list->Tail().IsCallable("WindowTraits")) {
                         const auto& initHandler = list->Tail().Child(1);
                         const auto& updateHandler = list->Tail().Child(2);
-                        MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res);
-                        MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res);
+                        MergeLineageFromUsedFields(initHandler->Tail(), initHandler->Head().Head(), innerLineage, res, false);
+                        MergeLineageFromUsedFields(updateHandler->Tail(), updateHandler->Head().Head(), innerLineage, res, false);
                     } else {
                         lineage.Fields.Clear();
                         return;

@@ -122,7 +122,7 @@ public:
     };
 
     struct TExecutorInfo {
-        ui64 CacheSize = 384 * 1024;
+        ui64 CacheSize = 384 * 1024; // (DEPRECATED)
         bool AllowLogBatching = false;
         bool LogFastTactic = true;
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);

@@ -136,8 +136,6 @@ public:
     };
 
 public:
-    TPrivatePageCache(const TCacheCacheConfig &cacheConfig);
-
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     TPage::TWaitQueuePtr ForgetPageCollection(TLogoBlobID id);
 
@@ -166,7 +164,6 @@ public:
     void UpdateSharedBody(TInfo *collectionInfo, ui32 pageId, TSharedPageRef shared);
     void DropSharedBody(TInfo *collectionInfo, ui32 pageId);
 
-    void UpdateCacheSize(ui64 cacheSize);
     TPage::TWaitQueuePtr ProvideBlock(NSharedCache::TEvResult::TLoaded&& loaded, TInfo *collectionInfo);
     THashMap<TLogoBlobID, TIntrusivePtr<TInfo>> DetachPrivatePageCache();
     THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> GetPrepareSharedTouched();

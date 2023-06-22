@@ -259,7 +259,7 @@ message TPartitionConfig {
     optional string NamedCompactionPolicy = 1; // One of the predefined policies
     optional TCompactionPolicy CompactionPolicy = 2; // Customized policy
     optional uint64 FollowerCount = 3;
-    optional uint64 ExecutorCacheSize = 4; // Cache size for the whole tablet including all user and system tables
+    optional uint64 ExecutorCacheSize = 4; // (DEPRECATED) Cache size for the whole tablet including all user and system tables
     optional bool AllowFollowerPromotion = 5 [default = true]; // if true followers can upgrade to leader, if false followers only handle reads
     optional uint64 TxReadSizeLimit = 6; // Maximum size in bytes that is allowed to be read by a single Tx
     //optional bool CrossDataCenterFollowers = 7; // deprecated -> CrossDataCenterFollowerCount

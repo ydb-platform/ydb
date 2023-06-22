@@ -460,10 +460,6 @@ class TExecutor
     bool HadFollowerAttached = false;
     bool NeedFollowerSnapshot = false;
 
-    TCacheCacheConfig::TCounterPtr CounterCacheFresh;
-    TCacheCacheConfig::TCounterPtr CounterCacheWarm;
-    TCacheCacheConfig::TCounterPtr CounterCacheStaging;
-
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
     TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;

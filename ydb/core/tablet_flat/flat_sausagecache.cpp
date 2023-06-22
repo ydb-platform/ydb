@@ -40,12 +40,6 @@ TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     }
 }
 
-TPrivatePageCache::TPrivatePageCache(const TCacheCacheConfig &cacheConfig)
-{
-    // todo: clean up
-    (void)cacheConfig;
-}
-
 void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
     auto itpair = PageCollections.insert(decltype(PageCollections)::value_type(info->Id, info));
     Y_VERIFY(itpair.second, "double registration of page collection is forbidden. logic flaw?");
@@ -510,11 +504,6 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
         }
         TryEraseIfUnnecessary(page);
     }
-}
-
-void TPrivatePageCache::UpdateCacheSize(ui64 cacheSize) {
-    // todo: clean up
-    (void)cacheSize;
 }
 
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(

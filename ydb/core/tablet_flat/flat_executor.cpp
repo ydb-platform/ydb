@@ -145,8 +145,7 @@ void TExecutor::Broken() {
 
 void TExecutor::RecreatePageCollectionsCache() noexcept
 {
-    TCacheCacheConfig cacheConfig(Scheme().Executor.CacheSize, CounterCacheFresh, CounterCacheStaging, CounterCacheWarm);
-    PrivatePageCache = MakeHolder<TPrivatePageCache>(cacheConfig);
+    PrivatePageCache = MakeHolder<TPrivatePageCache>();
 
     Stats->PacksMetaBytes = 0;
 
@@ -324,10 +323,6 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Y_VERIFY(!CompactionLogic);
 
-    CounterCacheFresh = new NMonitoring::TCounterForPtr;
-    CounterCacheStaging = new NMonitoring::TCounterForPtr;
-    CounterCacheWarm = new NMonitoring::TCounterForPtr;
-
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
@@ -375,10 +370,6 @@ void TExecutor::Active(const TActorContext &ctx) {
     CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
-
-    CounterCacheFresh = new NMonitoring::TCounterForPtr;
-    CounterCacheStaging = new NMonitoring::TCounterForPtr;
-    CounterCacheWarm = new NMonitoring::TCounterForPtr;
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
 
@@ -1888,7 +1879,6 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
 
         if (auto alter = std::move(change->Scheme)) {
             LogicAlter->WriteLog(*commit, std::move(alter));
-            PrivatePageCache->UpdateCacheSize(Scheme().Executor.CacheSize);
             auto reflectResult = CompactionLogic->ReflectSchemeChanges();
 
             ReadResourceProfile();
@@ -3399,9 +3389,6 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::DB_INDEX_BYTES].Set(dbCounters.Parts.IndexBytes);
                 Counters->Simple()[TExecutorCounters::DB_OTHER_BYTES].Set(dbCounters.Parts.OtherBytes);
                 Counters->Simple()[TExecutorCounters::DB_BYKEY_BYTES].Set(dbCounters.Parts.ByKeyBytes);
-                Counters->Simple()[TExecutorCounters::CACHE_FRESH_SIZE].Set(CounterCacheFresh->Val());
-                Counters->Simple()[TExecutorCounters::CACHE_STAGING_SIZE].Set(CounterCacheStaging->Val());
-                Counters->Simple()[TExecutorCounters::CACHE_WARM_SIZE].Set(CounterCacheWarm->Val());
                 Counters->Simple()[TExecutorCounters::USED_TABLET_MEMORY].Set(UsedTabletMemory);
             }
 
@@ -3944,9 +3931,6 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                 CompactionLogic->OutputHtml(str, *scheme, cgi);
 
             TAG(TH3) {str << "Page collection cache:";}
-            DIV_CLASS("row") {str << "fresh bytes: " << CounterCacheFresh->Val(); }
-            DIV_CLASS("row") {str << "staging bytes: " << CounterCacheStaging->Val(); }
-            DIV_CLASS("row") {str << "warm bytes: " << CounterCacheWarm->Val(); }
             DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().TotalCollections; }
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
             DIV_CLASS("row") {str << "Total bytes in local cache: " << PrivatePageCache->GetStats().TotalPinnedBody; }

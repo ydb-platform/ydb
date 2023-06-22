@@ -85,7 +85,7 @@ namespace NS_LightRWLock {
     }
 #endif
 
-#if defined(_x86_64_) || defined(_i386_) || defined (__aarch64__) || defined (__powerpc64__)
+#if defined(_x86_64_) || defined(_i386_) || defined (__aarch64__) || defined (__arm__) || defined (__powerpc64__)
     static bool AtomicLockHighByte(volatile int& item) {
         union TA {
             int x;

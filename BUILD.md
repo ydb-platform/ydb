@@ -172,7 +172,7 @@ ninja ydb/public/lib/ydb_cli/all
 To run tests execute:
 ```bash
 cd ydb/public/lib/ydb_cli/
-ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure
+ctest --timeout 1200 --force-new-ctest-process --output-on-failure
 ```
 
 ### Functional tests

@@ -179,4 +179,4 @@ ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure
 
 Before launch tests you need to build YDB CLI and YDB server binaries. 
 Also you can save [ydbd](https://ydb.tech/en/docs/downloads/#ydb-server) binary file and use it.
-To launch YDB CLI python tests run `ydb_cli` test suite via [pytest](ydb/tests/functional/README.md)
+To launch YDB CLI python tests run `ydb_cli` test suite via pytest according to this [instruction](ydb/tests/functional/README.md).

@@ -511,7 +511,9 @@ public:
 
             NKikimrMiniKQL::TType kikimrProto;
 
-            NYql::ExportTypeToKikimrProto(*type, kikimrProto, ctx);
+            if (!NYql::ExportTypeToKikimrProto(*type, kikimrProto, ctx)) {
+                return false;
+            }
 
             auto resultMeta = queryBindingProto.MutableResultSetMeta();
 

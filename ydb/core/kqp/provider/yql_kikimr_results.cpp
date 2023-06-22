@@ -5,8 +5,6 @@
 #include <ydb/library/uuid/uuid.h>
 
 #include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 namespace NYql {
@@ -477,6 +475,29 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
         case ETypeAnnotationKind::Void: {
             protoType.SetKind(NKikimrMiniKQL::ETypeKind::Void);
             return true;
+        }
+
+        case ETypeAnnotationKind::Null: {
+            protoType.SetKind(NKikimrMiniKQL::ETypeKind::Null);
+            return true;
+        }
+
+        case ETypeAnnotationKind::EmptyList: {
+            protoType.SetKind(NKikimrMiniKQL::ETypeKind::EmptyList);
+            return true;
+        }
+
+        case ETypeAnnotationKind::EmptyDict: {
+            protoType.SetKind(NKikimrMiniKQL::ETypeKind::EmptyDict);
+            return true;
+        }
+
+        case ETypeAnnotationKind::Tagged: {
+            auto taggedType = type.Cast<TTaggedExprType>();
+            protoType.SetKind(NKikimrMiniKQL::ETypeKind::Tagged);
+            auto target = protoType.MutableTagged();
+            target->SetTag(TString(taggedType->GetTag()));
+            return ExportTypeToKikimrProto(*taggedType->GetBaseType(), *target->MutableItem(), ctx);
         }
 
         case ETypeAnnotationKind::Data: {

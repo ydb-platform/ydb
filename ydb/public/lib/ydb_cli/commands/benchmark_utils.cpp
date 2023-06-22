@@ -30,7 +30,7 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
 
     ColdTime = ServerTimings[0];
 
-    if (ServerTimings.size() >= 1) {
+    {
         ui32 sum = 0;
         for (const auto& timing : ServerTimings) {
             if (Max < timing) {
@@ -43,15 +43,13 @@ TTestInfo::TTestInfo(std::vector<TDuration>&& clientTimings, std::vector<TDurati
         }
 
         Mean = static_cast<double>(sum) / static_cast<double>(ServerTimings.size());
-        if (ServerTimings.size() > 1) {
-            double variance = 0;
-            for (const auto& timing : ServerTimings) {
-                double diff = (Mean - timing.MilliSeconds());
-                variance += diff * diff;
-            }
-            variance = variance / static_cast<double>(ServerTimings.size() - 1);
-            Std = sqrt(variance);
+        double variance = 0;
+        for (const auto& timing : ServerTimings) {
+            double diff = (Mean - timing.MilliSeconds());
+            variance += diff * diff;
         }
+        variance = variance / static_cast<double>(ServerTimings.size());
+        Std = sqrt(variance);
     }
 
     double totalDiff = 0;

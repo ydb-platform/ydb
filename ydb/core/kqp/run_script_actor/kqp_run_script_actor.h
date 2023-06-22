@@ -9,6 +9,6 @@ namespace NKikimr::NKqp {
 struct TEvKqpRunScriptActor {
 };
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration);
+NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration);
 
 } // namespace NKikimr::NKqp

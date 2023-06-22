@@ -35,4 +35,7 @@ NActors::IActor* CreateScriptExecutionFinisher(
     NYql::TIssues issues
 );
 
+// Updates lease deadline in database.
+NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, const TInstant& leaseDeadline);
+
 } // namespace NKikimr::NKqp

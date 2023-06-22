@@ -29,6 +29,7 @@ namespace {
 
 constexpr ui64 RESULT_SIZE_LIMIT = 10_MB;
 constexpr int RESULT_ROWS_LIMIT = 1000;
+constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
 
 class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     enum class ERunState {
@@ -40,16 +41,18 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         Finished,
     };
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration)
+    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration)
         : ExecutionId(executionId)
         , Request(request)
         , Database(database)
         , LeaseGeneration(leaseGeneration)
+        , LeaseDuration(leaseDuration)
     {}
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
+        Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(1));
         Become(&TRunScriptActor::StateFunc);
     }
 
@@ -65,6 +68,7 @@ private:
         hFunc(TEvKqp::TEvCancelQueryResponse, Handle);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, Handle);
         hFunc(TEvScriptExecutionFinished, Handle);
+        hFunc(TEvScriptLeaseUpdateResponse, Handle);
     )
 
     void SendToKqpProxy(THolder<NActors::IEventBase> ev) {
@@ -121,10 +125,28 @@ private:
     }
 
     // TODO: remove this after there will be a normal way to store results and generate execution id
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == 1) {
+            if (!IsLeaseUpdateRunning) {
+                RegisterWithSameMailbox(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, TInstant::Now() + LeaseDuration));
+                IsLeaseUpdateRunning = true;
+            }
+
+            Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(1));
+            return;
+        }
+
         if (RunState == ERunState::Created) {
             RunState = ERunState::Running;
             CreateSession();
+        }
+    }
+
+    void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Finish(ev->Get()->Status);
+        } else {
+            IsLeaseUpdateRunning = false;
         }
     }
 
@@ -330,7 +352,9 @@ private:
     const NKikimrKqp::TEvQueryRequest Request;
     const TString Database;
     const ui64 LeaseGeneration;
+    const TDuration LeaseDuration;
     TString SessionId;
+    bool IsLeaseUpdateRunning = false;
     ERunState RunState = ERunState::Created;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
 
@@ -342,8 +366,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration);
+NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration) {
+    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration);
 }
 
 } // namespace NKikimr::NKqp

@@ -134,6 +134,7 @@ struct TKqpScriptExecutionEvents {
         EvGetScriptExecutionOperationResponse,
         EvListScriptExecutionOperations,
         EvListScriptExecutionOperationsResponse,
+        EvScriptLeaseUpdateResponse,
         EvCancelScriptExecutionOperation,
         EvCancelScriptExecutionOperationResponse,
         EvScriptExecutionFinished,

@@ -390,11 +390,11 @@ private:
 
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
-    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration = TDuration::Zero())
+    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration)
         : ExecutionId(executionId)
         , RunScriptActorId(runScriptActorId)
         , Request(req)
-        , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
+        , LeaseDuration(leaseDuration)
     {
     }
 
@@ -494,8 +494,9 @@ private:
 };
 
 struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExecutionActor> {
-    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev)
+    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, TDuration leaseDuration = TDuration::Zero())
         : Event(std::move(ev))
+        , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
     {
     }
 
@@ -505,8 +506,8 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
         ExecutionId = CreateGuidAsString();
 
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1));
-        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record));
+        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration));
+        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, LeaseDuration));
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
@@ -527,6 +528,105 @@ private:
     TEvKqp::TEvScriptRequest::TPtr Event;
     TString ExecutionId;
     NActors::TActorId RunScriptActorId;
+    TDuration LeaseDuration;
+};
+
+class TScriptLeaseUpdater : public TQueryBase {
+public:
+    TScriptLeaseUpdater(const TString& database, const TString& executionId, const TInstant& leaseDeadline) 
+        : Database(database)
+        , ExecutionId(executionId)
+        , LeaseDeadline(leaseDeadline)
+    {}
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $lease_deadline AS Datetime;
+            
+            UPDATE `.metadata/script_execution_leases`
+            SET lease_deadline=$lease_deadline
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$lease_deadline")
+                .Datetime(LeaseDeadline)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Owner, new TEvScriptLeaseUpdateResponse(status, std::move(issues)));
+    }
+
+private:
+    const TString Database;
+    const TString ExecutionId;
+    const TInstant LeaseDeadline;
+};
+
+class TScriptLeaseUpdateActor : public TActorBootstrapped<TScriptLeaseUpdateActor> {
+    static constexpr ui32 MAX_NUMBER_OF_ATTEMPTS = 5;
+
+public:
+    TScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, const TInstant& leaseDeadline)
+        : RunScriptActorId(runScriptActorId)
+        , Database(database)
+        , ExecutionId(executionId)
+        , LeaseDeadline(leaseDeadline)
+    {}
+
+    void CreateScriptLeaseUpdater() {
+        Register(new TScriptLeaseUpdater(Database, ExecutionId, LeaseDeadline));
+    }
+
+    void Bootstrap() {
+        CreateScriptLeaseUpdater();
+        Become(&TScriptLeaseUpdateActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvScriptLeaseUpdateResponse, Handle);
+    )
+
+    void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
+        NumberOfAttempts += 1;
+        Response = std::move(ev);
+        
+        if (Response->Get()->Status == Ydb::StatusIds::SUCCESS || NumberOfAttempts == MAX_NUMBER_OF_ATTEMPTS) {
+            Reply();
+            return;
+        }
+
+        CreateScriptLeaseUpdater();
+    }
+
+    void Reply() {
+        Send(RunScriptActorId, Response->Release().Release());
+        PassAway();
+    }
+
+private:
+    TActorId RunScriptActorId;
+    TString Database;
+    TString ExecutionId;
+    TInstant LeaseDeadline;
+    TEvScriptLeaseUpdateResponse::TPtr Response;
+    ui32 NumberOfAttempts = 0;
 };
 
 class TScriptExecutionFinisherBase : public TQueryBase {
@@ -1351,6 +1451,9 @@ NActors::IActor* CreateGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorReques
     return new TGetRunScriptActorActor(std::move(ev));
 }
 
+NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, const TInstant& leaseDeadline) {
+    return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDeadline);
+}
 
 namespace NPrivate {
 
@@ -1363,4 +1466,5 @@ NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TStr
 }
 
 } // namespace NPrivate
+
 } // namespace NKikimr::NKqp

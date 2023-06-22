@@ -66,6 +66,17 @@ struct TEvListScriptExecutionOperationsResponse : public NActors::TEventLocal<TE
     std::vector<Ydb::Operations::Operation> Operations;
 };
 
+struct TEvScriptLeaseUpdateResponse : public NActors::TEventLocal<TEvScriptLeaseUpdateResponse, TKqpScriptExecutionEvents::EvScriptLeaseUpdateResponse> {
+    TEvScriptLeaseUpdateResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Status(status)
+        , Issues(std::move(issues))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
 struct TEvCancelScriptExecutionOperation : public NActors::TEventLocal<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {
     explicit TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
         : Database(database)

@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     kqp_resource_tracker.cpp
     kqp_resource_estimation.cpp
+    kqp_resource_info_exchanger.cpp
     kqp_rm_service.cpp
     kqp_snapshot_manager.cpp
 )
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/node_whiteboard
+    ydb/core/util
 )
 
 YQL_LAST_ABI_VERSION()

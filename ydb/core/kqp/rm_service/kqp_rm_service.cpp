@@ -10,7 +10,9 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/resource_broker.h>
 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -131,14 +133,14 @@ struct TEvPrivate {
 };
 
 class TKqpResourceManager : public IKqpResourceManager {
-
 public:
 
     TKqpResourceManager(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TIntrusivePtr<TKqpCounters> counters)
         : Config(config)
         , Counters(counters)
         , ExecutionUnitsResource(Config.GetComputeActorsCount())
-        , ScanQueryMemoryResource(Config.GetQueryMemoryLimit()) {
+        , ScanQueryMemoryResource(Config.GetQueryMemoryLimit())
+        , PublishResourcesByExchanger(Config.GetEnablePublishResourcesByExchanger()) {
 
     }
 
@@ -149,6 +151,13 @@ public:
         ActorSystem = actorSystem;
         SelfId = selfId;
         UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes());
+
+        if (PublishResourcesByExchanger) {
+            ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
+            auto exchanger = CreateKqpResourceInfoExchangerActor(Counters, ResourceSnapshotState);
+            ResourceInfoExchanger = ActorSystem->Register(exchanger);
+            return;
+        }
     }
 
     bool AllocateResources(ui64 txId, ui64 taskId, const TKqpResourcesRequest& resources,
@@ -540,6 +549,15 @@ public:
 
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
+        if (PublishResourcesByExchanger) {
+            std::shared_ptr<const TVector<NKikimrKqp::TKqpNodeResources>> infos;
+            with_lock (ResourceSnapshotState->Lock) {
+                infos = ResourceSnapshotState->Snapshot;
+            }
+            TVector<NKikimrKqp::TKqpNodeResources> resources = *infos;
+            callback(std::move(resources));
+            return;
+        }
         auto ev = MakeHolder<TEvPrivate::TEvTakeResourcesSnapshot>();
         ev->Callback = std::move(callback);
         TAutoPtr<IEventHandle> handle = new IEventHandle(SelfId, SelfId, ev.Release());
@@ -622,6 +640,11 @@ public:
 
     // pattern cache for different actors
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;
+
+    // state for resource info exchanger
+    std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
+    bool PublishResourcesByExchanger;
+    TActorId ResourceInfoExchanger = TActorId();
 };
 
 struct TResourceManagers {
@@ -645,10 +668,11 @@ public:
     }
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId, 
+        TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
         : ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
+        , PublishResourcesByExchanger(config.GetEnablePublishResourcesByExchanger())
     {
         ResourceManager = std::make_shared<TKqpResourceManager>(config, counters);
     }
@@ -945,6 +969,13 @@ private:
 private:
     void PassAway() override {
         ToBroker(new TEvResourceBroker::TEvNotifyActorDied);
+        if (ResourceManager->ResourceInfoExchanger) {
+            Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
+        }
+        if (WbState.BoardPublisherActorId) {
+
+            Send(WbState.BoardPublisherActorId, new TEvents::TEvPoison);
+        }
         TActor::PassAway();
     }
 
@@ -982,19 +1013,6 @@ private:
             return;
         }
 
-        if (WbState.BoardPublisherActorId) {
-            LOG_I("Kill previous board publisher for '" << WbState.BoardPath
-                << "' at " << WbState.BoardPublisherActorId << ", reason: " << reason);
-            Send(WbState.BoardPublisherActorId, new TEvents::TEvPoison);
-        }
-
-        WbState.BoardPublisherActorId = TActorId();
-
-        if (WbState.StateStorageGroupId == std::numeric_limits<ui32>::max()) {
-            LOG_E("Can not find default state storage group for database " << WbState.Tenant);
-            return;
-        }
-
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
         payload.SetTimestamp(now.Seconds());
@@ -1015,6 +1033,29 @@ private:
             auto* pool = payload.MutableMemory()->Add();
             pool->SetPool(EKqpMemoryPool::ScanQuery);
             pool->SetAvailable(ResourceManager->ScanQueryMemoryResource.Available());
+        }
+
+        if (PublishResourcesByExchanger) {
+            LOG_I("Send to publish resource usage for "
+                << "reason: " << reason
+                << ", payload: " << payload.ShortDebugString());
+            WbState.LastPublishTime = now;
+            Send(ResourceManager->ResourceInfoExchanger,
+                new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
+            return;
+        }
+
+        if (WbState.BoardPublisherActorId) {
+            LOG_I("Kill previous board publisher for '" << WbState.BoardPath
+                << "' at " << WbState.BoardPublisherActorId << ", reason: " << reason);
+            Send(WbState.BoardPublisherActorId, new TEvents::TEvPoison);
+        }
+
+        WbState.BoardPublisherActorId = TActorId();
+
+        if (WbState.StateStorageGroupId == std::numeric_limits<ui32>::max()) {
+            LOG_E("Can not find default state storage group for database " << WbState.Tenant);
+            return;
         }
 
         auto boardPublisher = CreateBoardPublishActor(WbState.BoardPath, payload.SerializeAsString(), SelfId(),
@@ -1047,13 +1088,15 @@ private:
     TActorId WhiteBoardService;
 
     std::shared_ptr<TKqpResourceManager> ResourceManager;
+
+    bool PublishResourcesByExchanger;
 };
 
 } // namespace NRm
 
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker, 
+    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
     return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources));

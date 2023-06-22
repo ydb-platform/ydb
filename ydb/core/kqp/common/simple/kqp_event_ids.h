@@ -141,5 +141,12 @@ struct TKqpScriptExecutionEvents {
     };
 };
 
+struct TKqpResourceInfoExchangerEvents {
+    enum EKqpResourceInfoExchangerEvents {
+        EvPublishResource = EventSpaceBegin(TKikimrEvents::ES_KQP) + 600,
+        EvSendResources,
+    };
+};
+
 } // namespace NKqp
 } // namespace NKikimr

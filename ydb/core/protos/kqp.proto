@@ -515,6 +515,12 @@ message TEvCancelKqpTasksRequest {
 message TEvCancelKqpTasksResponse {
 }
 
+message TResourceExchangeBoardData {
+    optional NActorsProto.TActorId Owner = 1;
+    optional bytes Ulid = 2;
+    optional NActorsProto.TActorId Publisher = 3;
+}
+
 message TKqpNodeResources {
     optional NActorsProto.TActorId ResourceManagerActorId = 2; // legacy
     optional uint32 AvailableComputeActors = 4; // legacy
@@ -627,6 +633,17 @@ message TEvFetchScriptResultsResponse {
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional uint64 ResultSetIndex = 3;
     optional Ydb.ResultSet ResultSet = 4;
+}
+
+message TResourceExchangeNodeData {
+    optional TKqpNodeResources Resources = 1;
+    optional TResourceExchangeBoardData ResourceExchangeBoardData = 2;
+    optional uint64 Round = 3;
+}
+
+message TResourceExchangeSnapshot {
+    optional bool NeedResending = 1;
+    repeated TResourceExchangeNodeData Snapshot = 2;
 }
 
 // Request that is sent to run script actor to cancel execution and write finish status to database.

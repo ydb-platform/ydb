@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.h>
 
@@ -94,7 +95,7 @@ public:
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
     virtual ui32 GetNodeId() {
-        return 0; 
+        return 0;
     }
 };
 
@@ -103,6 +104,29 @@ NActors::IActor* CreateTakeResourcesSnapshotActor(
     const TString& boardPath, ui32 stateStorageGroupId,
     std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>&& callback);
 
+
+struct TResourceSnapshotState {
+    std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> Snapshot;
+    TMutex Lock;
+};
+
+struct TEvKqpResourceInfoExchanger {
+    struct TEvPublishResource : public TEventLocal<TEvPublishResource,
+        TKqpResourceInfoExchangerEvents::EvPublishResource>
+    {
+        const NKikimrKqp::TKqpNodeResources Resources;
+        TEvPublishResource(NKikimrKqp::TKqpNodeResources resources) : Resources(std::move(resources)) {
+        }
+    };
+
+    struct TEvSendResources : public TEventPB<TEvSendResources, NKikimrKqp::TResourceExchangeSnapshot,
+        TKqpResourceInfoExchangerEvents::EvSendResources>
+    {};
+};
+
+NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,
+    std::shared_ptr<TResourceSnapshotState> resourceSnapshotState);
+
 } // namespace NRm
 
 struct TKqpProxySharedResources {
@@ -110,7 +134,7 @@ struct TKqpProxySharedResources {
 };
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {}, 
+    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr);
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

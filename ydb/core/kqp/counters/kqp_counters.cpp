@@ -757,6 +757,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmNotEnoughComputeActors = KqpGroup->GetCounter("RM/NotEnoughComputeActors", true);
     RmExtraMemAllocs = KqpGroup->GetCounter("RM/ExtraMemAllocs", true);
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
+    RmSnapshotLatency = KqpGroup->GetHistogram(
+        "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     /* Spilling */
     SpillingWriteBlobs = KqpGroup->GetCounter("Spilling/WriteBlobs", true);

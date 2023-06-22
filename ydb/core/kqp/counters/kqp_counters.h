@@ -356,6 +356,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
+    NMonitoring::THistogramPtr RmSnapshotLatency;
 
     // Spilling counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;

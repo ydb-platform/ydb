@@ -1126,6 +1126,7 @@ message TTableServiceConfig {
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
         optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
+        optional bool EnablePublishResourcesByExchanger = 18 [default = false];
     }
 
     message TSpillingServiceConfig {

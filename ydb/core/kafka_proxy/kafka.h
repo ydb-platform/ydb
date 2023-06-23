@@ -4,12 +4,12 @@
 #include <optional>
 #include <ostream>
 
+#include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/library/yql/public/decimal/yql_wide_int.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 #include <util/system/types.h>
-
 
 namespace NKafka {
 
@@ -48,30 +48,36 @@ using TKafkaUuid = NYql::TWide<ui64>;
 using TKafkaFloat64 = double;
 using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;
-using TKafkaRawBytes = TBuffer;
+using TKafkaRawBytes = TArrayRef<const char>;
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
 using TKafkaRecords = std::optional<TKafkaRawBytes>;
 
-
 using TKafkaVersion = i16;
 
+using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter;
 
-void ErrorOnUnexpectedEnd(std::istream& is);
+template <typename T>
+void NormalizeNumber(T& value) {
+#ifndef WORDS_BIGENDIAN
+    char* b = (char*)&value;
+    char* e = b + sizeof(T) - 1;
+    while (b < e) {
+        std::swap(*b, *e);
+        ++b;
+        --e;
+    }
+#endif
+}
 
 class TKafkaWritable {
 public:
-    TKafkaWritable(std::ostream& os) : Os(os) {};
+    TKafkaWritable(TWritableBuf& buffer)
+        : Buffer(buffer){};
 
-    template<typename T>
+    template <typename T>
     TKafkaWritable& operator<<(const T val) {
-        char* v = (char*)&val;
-#ifdef WORDS_BIGENDIAN
-        Os.write(v, sizeof(T));
-#else
-        for(i8 i = sizeof(T) - 1; 0 <= i; --i) {
-            Os.write(v + i, sizeof(char));
-        }
-#endif
+        NormalizeNumber(val);
+        write((const char*)&val, sizeof(T));
         return *this;
     };
 
@@ -82,62 +88,71 @@ public:
     void writeUnsignedVarint(TKafkaUint32 val);
     void writeVarint(TKafkaInt32 val);
     void writeVarint(TKafkaInt64 val);
+    void write(const char* val, size_t length);
 
 private:
-    std::ostream& Os;
+    TWritableBuf& Buffer;
 };
 
 class TKafkaReadable {
 public:
-    TKafkaReadable(std::istream& is): Is(is) {};
+    TKafkaReadable(const TBuffer& is)
+        : Is(is)
+        , Position(0) {
+    }
 
-    template<typename T>
+    template <typename T>
     TKafkaReadable& operator>>(T& val) {
         char* v = (char*)&val;
-#ifdef WORDS_BIGENDIAN
-        Is.read(v, sizeof(T));
-#else
-        for(i8 i = sizeof(T) - 1; 0 <= i; --i) {
-            Is.read(v + i, sizeof(char));
-        }
-#endif
-        ErrorOnUnexpectedEnd(Is);
+        read(v, sizeof(T));
+        NormalizeNumber(val);
         return *this;
     };
 
     TKafkaReadable& operator>>(TKafkaUuid& val);
 
-    void read(char* val, int length);
+    void read(char* val, size_t length);
+    char get();
     ui32 readUnsignedVarint();
+    TArrayRef<const char> Bytes(size_t length);
 
-    void skip(int length);
+    void skip(size_t length);
 
 private:
-    std::istream& Is;
-};
+    void checkEof(size_t length);
 
+    const TBuffer& Is;
+    size_t Position;
+};
 
 struct TReadDemand {
     constexpr TReadDemand()
         : Buffer(nullptr)
-        , Length(0)
-    {}
+        , Length(0) {
+    }
 
     constexpr TReadDemand(char* buffer, size_t length)
         : Buffer(buffer)
-        , Length(length)
-    {}
+        , Length(length) {
+    }
 
     constexpr TReadDemand(size_t length)
         : Buffer(nullptr)
-        , Length(length)
-    {}
+        , Length(length) {
+    }
 
-    char* GetBuffer() const { return Buffer; }
-    size_t GetLength() const { return Length; }
-    explicit operator bool() const { return 0 < Length; }
-    bool Skip() const { return nullptr == Buffer; }
-
+    char* GetBuffer() const {
+        return Buffer;
+    }
+    size_t GetLength() const {
+        return Length;
+    }
+    explicit operator bool() const {
+        return 0 < Length;
+    }
+    bool Skip() const {
+        return nullptr == Buffer;
+    }
 
     char* Buffer;
     size_t Length;
@@ -145,32 +160,23 @@ struct TReadDemand {
 
 static constexpr TReadDemand NoDemand;
 
-class TReadContext {
-public:
-    virtual ~TReadContext() = default;
-    virtual TReadDemand Next() = 0;
-};
-
-
 class TMessage {
 public:
     virtual ~TMessage() = default;
 
     virtual i32 Size(TKafkaVersion version) const = 0;
-    //virtual void Read(TKafkaReadable& readable, TKafkaVersion version) = 0;
+    virtual void Read(TKafkaReadable& readable, TKafkaVersion version) = 0;
     virtual void Write(TKafkaWritable& writable, TKafkaVersion version) const = 0;
-    virtual std::unique_ptr<TReadContext> CreateReadContext(TKafkaVersion version) = 0;
 
     bool operator==(const TMessage& other) const = default;
 };
 
-class TApiMessage : public TMessage {
+class TApiMessage: public TMessage {
 public:
     ~TApiMessage() = default;
 
     virtual i16 ApiKey() const = 0;
 };
-
 
 std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey);
 std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey);

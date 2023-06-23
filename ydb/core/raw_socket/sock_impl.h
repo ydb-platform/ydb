@@ -98,4 +98,51 @@ public:
     }
 };
 
+class TBufferedWriter {
+public:
+    TBufferedWriter(TSocketDescriptor* socket, size_t size)
+        : Socket(socket)
+        , Buffer(size) {
+    }
+
+    void write(const char* src, size_t length) {
+        size_t possible = std::min(length, Buffer.Avail());
+        if (possible > 0) {
+            Buffer.Append(src, possible);
+        }
+        if (0 == Buffer.Avail()) {
+            flush();
+        }
+        size_t left = length - possible;
+        if (left > Buffer.Size()) {
+            Socket->Send(src + possible, left);
+        } else if (left > 0) {
+            Buffer.Append(src + possible, left);
+        }
+    }
+
+    void flush() {
+        if (Buffer.Size() > 0) {
+            Socket->Send(Buffer.Data(), Buffer.Size());
+            Buffer.Clear();
+        }
+    }
+
+    const char* Data() {
+        return Buffer.Data();
+    }
+
+    const TBuffer& GetBuffer() {
+        return Buffer;
+    }
+
+    size_t Size() {
+        return Buffer.Size();
+    }
+
+private:
+    TSocketDescriptor* Socket;
+    TBuffer Buffer;
+};
+
 } // namespace NKikimr::NRawSocket

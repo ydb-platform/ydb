@@ -116,11 +116,9 @@ public:
     };
     ClientIdMeta::Type ClientId;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return HEADER; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TRequestHeaderData& other) const = default;
@@ -158,11 +156,9 @@ public:
     };
     CorrelationIdMeta::Type CorrelationId;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return HEADER; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TResponseHeaderData& other) const = default;
@@ -242,10 +238,8 @@ public:
             };
             RecordsMeta::Type Records;
             
-            class TReadContext;
-            
             i32 Size(TKafkaVersion version) const override;
-            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TPartitionProduceData& other) const = default;
@@ -290,10 +284,8 @@ public:
         };
         PartitionDataMeta::Type PartitionData;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TTopicProduceData& other) const = default;
@@ -376,11 +368,9 @@ public:
     };
     TopicDataMeta::Type TopicData;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return PRODUCE; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TProduceRequestData& other) const = default;
@@ -473,10 +463,8 @@ public:
                 };
                 BatchIndexErrorMessageMeta::Type BatchIndexErrorMessage;
                 
-                class TReadContext;
-                
                 i32 Size(TKafkaVersion version) const override;
-                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TBatchIndexAndErrorMessage& other) const = default;
@@ -616,10 +604,8 @@ public:
             };
             ErrorMessageMeta::Type ErrorMessage;
             
-            class TReadContext;
-            
             i32 Size(TKafkaVersion version) const override;
-            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TPartitionProduceResponse& other) const = default;
@@ -664,10 +650,8 @@ public:
         };
         PartitionResponsesMeta::Type PartitionResponses;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TTopicProduceResponse& other) const = default;
@@ -712,11 +696,9 @@ public:
     };
     ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return PRODUCE; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TProduceResponseData& other) const = default;
@@ -873,10 +855,8 @@ public:
             };
             PartitionMaxBytesMeta::Type PartitionMaxBytes;
             
-            class TReadContext;
-            
             i32 Size(TKafkaVersion version) const override;
-            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TFetchPartition& other) const = default;
@@ -940,10 +920,8 @@ public:
         };
         PartitionsMeta::Type Partitions;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TFetchTopic& other) const = default;
@@ -1019,10 +997,8 @@ public:
         };
         PartitionsMeta::Type Partitions;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TForgottenTopic& other) const = default;
@@ -1240,11 +1216,9 @@ public:
     };
     RackIdMeta::Type RackId;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return FETCH; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TFetchRequestData& other) const = default;
@@ -1337,10 +1311,8 @@ public:
                 };
                 EndOffsetMeta::Type EndOffset;
                 
-                class TReadContext;
-                
                 i32 Size(TKafkaVersion version) const override;
-                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TEpochEndOffset& other) const = default;
@@ -1396,10 +1368,8 @@ public:
                 };
                 LeaderEpochMeta::Type LeaderEpoch;
                 
-                class TReadContext;
-                
                 i32 Size(TKafkaVersion version) const override;
-                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TLeaderIdAndEpoch& other) const = default;
@@ -1455,10 +1425,8 @@ public:
                 };
                 EpochMeta::Type Epoch;
                 
-                class TReadContext;
-                
                 i32 Size(TKafkaVersion version) const override;
-                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TSnapshotId& other) const = default;
@@ -1514,10 +1482,8 @@ public:
                 };
                 FirstOffsetMeta::Type FirstOffset;
                 
-                class TReadContext;
-                
                 i32 Size(TKafkaVersion version) const override;
-                std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+                void Read(TKafkaReadable& readable, TKafkaVersion version) override;
                 void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
                 
                 bool operator==(const TAbortedTransaction& other) const = default;
@@ -1732,10 +1698,8 @@ public:
             };
             RecordsMeta::Type Records;
             
-            class TReadContext;
-            
             i32 Size(TKafkaVersion version) const override;
-            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TPartitionData& other) const = default;
@@ -1799,10 +1763,8 @@ public:
         };
         PartitionsMeta::Type Partitions;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TFetchableTopicResponse& other) const = default;
@@ -1885,11 +1847,9 @@ public:
     };
     ResponsesMeta::Type Responses;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return FETCH; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TFetchResponseData& other) const = default;
@@ -1958,10 +1918,8 @@ public:
         };
         NameMeta::Type Name;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TMetadataRequestTopic& other) const = default;
@@ -2044,11 +2002,9 @@ public:
     };
     IncludeTopicAuthorizedOperationsMeta::Type IncludeTopicAuthorizedOperations;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return METADATA; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TMetadataRequestData& other) const = default;
@@ -2155,10 +2111,8 @@ public:
         };
         RackMeta::Type Rack;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TMetadataResponseBroker& other) const = default;
@@ -2324,10 +2278,8 @@ public:
             };
             OfflineReplicasMeta::Type OfflineReplicas;
             
-            class TReadContext;
-            
             i32 Size(TKafkaVersion version) const override;
-            std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+            void Read(TKafkaReadable& readable, TKafkaVersion version) override;
             void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
             
             bool operator==(const TMetadataResponsePartition& other) const = default;
@@ -2448,10 +2400,8 @@ public:
         };
         TopicAuthorizedOperationsMeta::Type TopicAuthorizedOperations;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TMetadataResponseTopic& other) const = default;
@@ -2573,11 +2523,9 @@ public:
     };
     ClusterAuthorizedOperationsMeta::Type ClusterAuthorizedOperations;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return METADATA; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TMetadataResponseData& other) const = default;
@@ -2634,11 +2582,9 @@ public:
     };
     ClientSoftwareVersionMeta::Type ClientSoftwareVersion;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return API_VERSIONS; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TApiVersionsRequestData& other) const = default;
@@ -2726,10 +2672,8 @@ public:
         };
         MaxVersionMeta::Type MaxVersion;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TApiVersion& other) const = default;
@@ -2804,10 +2748,8 @@ public:
         };
         MaxVersionMeta::Type MaxVersion;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TSupportedFeatureKey& other) const = default;
@@ -2882,10 +2824,8 @@ public:
         };
         MinVersionLevelMeta::Type MinVersionLevel;
         
-        class TReadContext;
-        
         i32 Size(TKafkaVersion version) const override;
-        std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+        void Read(TKafkaReadable& readable, TKafkaVersion version) override;
         void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
         bool operator==(const TFinalizedFeatureKey& other) const = default;
@@ -3031,11 +2971,9 @@ public:
     };
     ZkMigrationReadyMeta::Type ZkMigrationReady;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return API_VERSIONS; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TApiVersionsResponseData& other) const = default;
@@ -3130,11 +3068,9 @@ public:
     };
     ProducerEpochMeta::Type ProducerEpoch;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return INIT_PRODUCER_ID; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TInitProducerIdRequestData& other) const = default;
@@ -3229,11 +3165,9 @@ public:
     };
     ProducerEpochMeta::Type ProducerEpoch;
     
-    class TReadContext;
-    
     i16 ApiKey() const override { return INIT_PRODUCER_ID; };
     i32 Size(TKafkaVersion version) const override;
-    std::unique_ptr<NKafka::TReadContext> CreateReadContext(TKafkaVersion version) override /*{ return new TReadContext(*this, version); }*/;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TInitProducerIdResponseData& other) const = default;

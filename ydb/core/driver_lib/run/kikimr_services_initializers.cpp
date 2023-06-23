@@ -2871,7 +2871,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
     }

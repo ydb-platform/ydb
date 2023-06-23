@@ -2,19 +2,13 @@
 
 namespace NKafka {
 
-void ErrorOnUnexpectedEnd(std::istream& is) {
-    if (is.eof()) {
-        ythrow yexception() << "unexpected end of stream";
-    }
-}
-
 TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawBytes& val) {
-    Os.write(val.data(), val.size());
+    write(val.data(), val.size());
     return *this;
 }
 
 TKafkaWritable& TKafkaWritable::operator<<(const TKafkaRawString& val) {
-    Os.write(val.data(), val.length());
+    write(val.data(), val.length());
     return *this;
 }
 
@@ -28,10 +22,15 @@ TKafkaWritable& TKafkaWritable::operator<<(const TKafkaUuid& val) {
 void TKafkaWritable::writeUnsignedVarint(TKafkaUint32 value) {
     while ((value & 0xffffff80) != 0L) {
         ui8 b = (ui8) ((value & 0x7f) | 0x80);
-        Os << b;
+        write((const char*)&b, sizeof(b));
         value >>= 7;
     }
-    Os << (ui8) value;
+    ui8 b = (ui8) value;
+    write((const char*)&b, sizeof(b));
+}
+
+void TKafkaWritable::write(const char* val, size_t length) {
+    Buffer.write(val, length);
 }
 
 TKafkaReadable& TKafkaReadable::operator>>(TKafkaUuid& val) {
@@ -45,17 +44,30 @@ TKafkaReadable& TKafkaReadable::operator>>(TKafkaUuid& val) {
 }
 
 
-void TKafkaReadable::read(char* val, int length) {
-    Is.read(val, length);
-    ErrorOnUnexpectedEnd(Is);
+void TKafkaReadable::read(char* val, size_t length) {
+    checkEof(length);
+    memcpy(val, Is.Data() + Position, length);
+    Position += length;
+}
+
+char TKafkaReadable::get() {
+    char r;
+    read(&r, sizeof(r));
+    return r;
+}
+
+TArrayRef<const char> TKafkaReadable::Bytes(size_t length) {
+    checkEof(length);
+    TArrayRef<const char> r(Is.Data() + Position, length);
+    Position += length;
+    return r;
 }
 
 ui32 TKafkaReadable::readUnsignedVarint() {
     ui32 value = 0;
     ui32 i = 0;
     ui16 b;
-    while (((b = Is.get()) & 0x80) != 0) {
-        ErrorOnUnexpectedEnd(Is);
+    while (((b = get()) & 0x80) != 0) {
 
         value |= ((ui32)(b & 0x7f)) << i;
         i += 7;
@@ -64,21 +76,19 @@ ui32 TKafkaReadable::readUnsignedVarint() {
         }
     }
 
-    ErrorOnUnexpectedEnd(Is);
-
     value |= b << i;
     return value;
 }
 
-void TKafkaReadable::skip(int length) {
-    char buffer[64];
-    while (length) {
-        int l = std::min(length, 64);
-        Is.read(buffer, l);
-        length -= l;
-    }
+void TKafkaReadable::skip(size_t length) {
+    checkEof(length);
+    Position += length;
+}
 
-    ErrorOnUnexpectedEnd(Is);
+void TKafkaReadable::checkEof(size_t length) {
+    if (Position + length > Is.Size()) {
+        ythrow yexception() << "unexpected end of stream";
+    }
 }
 
 } // namespace NKafka

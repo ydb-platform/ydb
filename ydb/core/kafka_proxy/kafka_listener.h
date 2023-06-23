@@ -7,11 +7,11 @@ namespace NKafka {
 
 using namespace NKikimr::NRawSocket;
 
-inline NActors::IActor* CreateKafkaListener(const NActors::TActorId& poller, const TListenerSettings& settings = {.Port = 9092}) {
+inline NActors::IActor* CreateKafkaListener(const NActors::TActorId& poller, const TListenerSettings& settings, const NKikimrConfig::TKafkaProxyConfig& config) {
     return CreateSocketListener(
         poller, settings,
-        [](TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address) {
-            return CreateKafkaConnection(socket, address);
+        [=](TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address) {
+            return CreateKafkaConnection(socket, address, config);
         },
         NKikimrServices::EServiceKikimr::KAFKA_PROXY);
 }

@@ -273,6 +273,28 @@ TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue
     }
 }
 
+template<typename TOut>
+Y_FORCE_INLINE bool ExportTupleTypeToKikimrProto(const TTupleExprType* type, TOut out, TExprContext& ctx) {
+    for (const auto itemType : type->GetItems()) {
+        if (!ExportTypeToKikimrProto(*itemType, *out->AddElement(), ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<typename TOut>
+Y_FORCE_INLINE bool ExportStructTypeToKikimrProto(const TStructExprType* type, TOut out, TExprContext& ctx) {
+    for (const auto itemType : type->GetItems()) {
+        auto outMember = out->AddMember();
+        outMember->SetName(TString(itemType->GetName()));
+        if (!ExportTypeToKikimrProto(*itemType->GetItemType(), *outMember->MutableType(), ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer, const NKikimrMiniKQL::TResult& result,
@@ -524,15 +546,29 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
             return ExportTypeToKikimrProto(*itemType, *protoType.MutableOptional()->MutableItem(), ctx);
         }
 
+        case ETypeAnnotationKind::Variant: {
+            const auto varType = type.Cast<TVariantExprType>();
+            const auto underlyingType = varType->GetUnderlyingType();
+            protoType.SetKind(NKikimrMiniKQL::ETypeKind::Variant);
+            auto variantOut = protoType.MutableVariant();
+            if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+                const auto tupleType = underlyingType->Cast<TTupleExprType>();
+                return ExportTupleTypeToKikimrProto(tupleType, variantOut->MutableTupleItems(), ctx);
+            } else if (underlyingType->GetKind() == ETypeAnnotationKind::Struct) {
+                const auto structType = underlyingType->Cast<TStructExprType>();
+                return ExportStructTypeToKikimrProto(structType, variantOut->MutableStructItems(), ctx);
+            } else {
+                ctx.AddError(TIssue(TPosition(), TStringBuilder()
+                    << "Unsupported type annotation underlying variant kind: "
+                    << underlyingType->GetKind()));
+                return false;
+            }
+        }
+
         case ETypeAnnotationKind::Tuple: {
             protoType.SetKind(NKikimrMiniKQL::ETypeKind::Tuple);
-            auto& protoTuple = *protoType.MutableTuple();
-            for (auto& itemType : type.Cast<TTupleExprType>()->GetItems()) {
-                if (!ExportTypeToKikimrProto(*itemType, *protoTuple.AddElement(), ctx)) {
-                    return false;
-                }
-            }
-            return true;
+            auto protoTuple = protoType.MutableTuple();
+            return ExportTupleTypeToKikimrProto(type.Cast<TTupleExprType>(), protoTuple, ctx);
         }
 
         case ETypeAnnotationKind::List: {
@@ -543,16 +579,8 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
 
         case ETypeAnnotationKind::Struct: {
             protoType.SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-            auto& protoStruct = *protoType.MutableStruct();
-            for (auto& member : type.Cast<TStructExprType>()->GetItems()) {
-                auto& protoMember = *protoStruct.AddMember();
-                protoMember.SetName(TString(member->GetName()));
-                if (!ExportTypeToKikimrProto(*member->GetItemType(), *protoMember.MutableType(), ctx)) {
-                    return false;
-                }
-            }
-
-            return true;
+            auto protoStruct = protoType.MutableStruct();
+            return ExportStructTypeToKikimrProto(type.Cast<TStructExprType>(), protoStruct, ctx);
         }
 
         case ETypeAnnotationKind::Dict: {
@@ -579,7 +607,7 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
             return true;
         }
         default: {
-            ctx.AddError(TIssue(TPosition(), TStringBuilder() << "Unsupported protobuf type: " << type));
+            ctx.AddError(TIssue(TPosition(), TStringBuilder() << "Unsupported type annotation node: " << type));
             return false;
         }
     }

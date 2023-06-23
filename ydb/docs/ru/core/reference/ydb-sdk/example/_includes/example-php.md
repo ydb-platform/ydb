@@ -11,7 +11,7 @@
 ```php
 <?php
 
-use YandexCloud\Ydb\Ydb;
+use YdbPlatform\Ydb\Ydb;
 
 $config = [
     // ...

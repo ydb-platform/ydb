@@ -1162,6 +1162,7 @@ public:
             hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
             hFunc(TEvPrivate::TEvCloseIdleSessions, Handle);
             hFunc(TEvPrivate::TEvScriptExecutionsTablesCreationFinished, Handle);
+            hFunc(NKqp::TEvForgetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
@@ -1361,6 +1362,10 @@ private:
 
     void Handle(TEvPrivate::TEvScriptExecutionsTablesCreationFinished::TPtr&) {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+    }
+
+    void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
+        Register(CreateForgetScriptExecutionOperationActor(std::move(ev)));
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {

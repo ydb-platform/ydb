@@ -897,6 +897,121 @@ private:
     NActors::TActorId RunScriptActorId;
 };
 
+class TForgetScriptExecutionOperationActor : public TQueryBase {
+public:
+    explicit TForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev)
+        : Request(std::move(ev)) 
+    {
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+
+            SELECT
+                operation_status,
+                execution_status
+            FROM `.metadata/script_executions`
+            WHERE database = $database AND execution_id = $execution_id;
+
+            SELECT
+                lease_deadline
+            FROM `.metadata/script_execution_leases`
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        TMaybe<TString> maybeExecutionId = ScriptExecutionIdFromOperation(Request->Get()->OperationId);
+        Y_ENSURE(maybeExecutionId, "No execution id specified");
+        ExecutionId = *maybeExecutionId;
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Request->Get()->Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build();
+
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+        SetQueryResultHandler(&TForgetScriptExecutionOperationActor::OnGetInfo);
+    }
+
+    void OnGetInfo() {
+        if (ResultSets.size() != 2) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (result.RowsCount() == 0) {
+            Finish(Ydb::StatusIds::NOT_FOUND, "No such execution");
+            return;
+        }
+
+        result.TryNextRow();
+
+        const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+
+        TStringBuilder sql;
+        sql << R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+
+            DELETE
+            FROM `.metadata/script_executions`
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TResultSetParser deadlineResult(ResultSets[1]);
+        if (deadlineResult.RowsCount() != 0) {
+            deadlineResult.TryNextRow();
+            TMaybe<TInstant> leaseDeadline = deadlineResult.ColumnParser(0).GetOptionalTimestamp();
+            if (!leaseDeadline) {
+                // existing row with empty lease???
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state");
+                return;
+            }
+            if (*leaseDeadline >= TInstant::Now()) {
+                if (!operationStatus) {
+                    Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Operation is still running");
+                    return;
+                }
+            }
+            sql << R"(
+                DELETE
+                FROM `.metadata/script_execution_leases`
+                WHERE database = $database AND execution_id = $execution_id;
+
+            )";
+        }
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Request->Get()->Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build();
+        
+        RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
+        SetQueryResultHandler(&TForgetScriptExecutionOperationActor::OnForgetOperation);
+    }
+
+    void OnForgetOperation() {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Send(Request->Sender, new TEvForgetScriptExecutionOperationResponce(status, std::move(issues)));
+    }
+
+private:
+    TEvForgetScriptExecutionOperation::TPtr Request;
+    TString ExecutionId;
+    NYql::TIssues Issues;
+};
+
 class TGetScriptExecutionOperationActor : public TScriptExecutionFinisherBase {
 public:
     explicit TGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev)
@@ -1433,6 +1548,10 @@ NActors::IActor* CreateScriptExecutionFinisher(
     NYql::TIssues issues)
 {
     return new TScriptExecutionFinisher(executionId, database, leaseGeneration, operationStatus, execStatus, std::move(issues));
+}
+
+NActors::IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev) {
+    return new TForgetScriptExecutionOperationActor(std::move(ev));
 }
 
 NActors::IActor* CreateGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev) {

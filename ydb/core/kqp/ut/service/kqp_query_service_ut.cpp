@@ -332,6 +332,120 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL(ops, listedOps);
     }
 
+    Y_UNIT_TEST(ForgetScriptExecution) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        NYdb::NOperation::TOperationClient client(kikimr.GetDriver());
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(42).ExtractValueSync();
+        UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
+        UNIT_ASSERT(list.GetList().empty());
+
+        constexpr ui64 ScriptExecutionsCount = 100;
+        std::set<TString> ops;
+        for (ui64 i = 0; i < ScriptExecutionsCount; ++i) {
+            auto scriptExecutionOperation = db.ExecuteScript(R"(
+                SELECT 42
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+            ops.emplace(scriptExecutionOperation.Metadata().ExecutionId);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ops.size(), ScriptExecutionsCount);
+
+        std::set<TString> listedOps;
+        ui64 listed = 0;
+        std::set<TString> rememberedOps = ops;
+        bool forgetNextOperation = true;
+        list = client.List<NYdb::NQuery::TScriptExecutionOperation>(ScriptExecutionsCount).ExtractValueSync();
+        UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
+        UNIT_ASSERT(list.GetList().size() == ScriptExecutionsCount);
+        for (const auto& op : list.GetList()) {
+            ++listed;
+            UNIT_ASSERT_C(listedOps.emplace(op.Metadata().ExecutionId).second, op.Metadata().ExecutionId);
+            if (forgetNextOperation) {
+                auto status = client.Forget(op.Id()).ExtractValueSync();
+                UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::SUCCESS || status.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED ||
+                          status.GetStatus() == NYdb::EStatus::ABORTED, status.GetIssues().ToString());
+                if (status.GetStatus() == NYdb::EStatus::SUCCESS) {
+                    rememberedOps.erase(op.Metadata().ExecutionId);
+                }
+            }
+            forgetNextOperation = !forgetNextOperation;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(listed, ScriptExecutionsCount);
+        UNIT_ASSERT_EQUAL(ops, listedOps);
+
+        std::set<TString> listedOpsAfterForget;
+        list = client.List<NYdb::NQuery::TScriptExecutionOperation>(ScriptExecutionsCount, {}).ExtractValueSync();
+        UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
+        for (const auto& op : list.GetList()) {
+            UNIT_ASSERT_C(listedOpsAfterForget.emplace(op.Metadata().ExecutionId).second, op.Metadata().ExecutionId);
+        }
+        
+        UNIT_ASSERT_EQUAL(rememberedOps, listedOpsAfterForget);
+    }
+
+    Y_UNIT_TEST(ForgetScriptExecutionOnLongQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        // TODO: really long query
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+        TStatus forgetStatus = {EStatus::STATUS_UNDEFINED, NYql::TIssues()};
+        while (forgetStatus.GetStatus() != NYdb::EStatus::SUCCESS) {
+            forgetStatus = opClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
+            UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS || forgetStatus.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED ||
+                          forgetStatus.GetStatus() == NYdb::EStatus::ABORTED, forgetStatus.GetIssues().ToString());
+        }
+        UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS, forgetStatus.GetIssues().ToString());
+        forgetStatus = opClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::NOT_FOUND, forgetStatus.GetIssues().ToString());
+        
+    }
+
+    Y_UNIT_TEST(ForgetScriptExecutionRace) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+        WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+
+        std::vector<NYdb::TAsyncStatus> forgetFutures(3);
+        for (auto& f : forgetFutures) {
+            f = opClient.Forget(scriptExecutionOperation.Id());
+        }
+
+        i32 successCount = 0;
+        for (auto& f : forgetFutures) {
+            auto forgetStatus = f.ExtractValueSync();
+            UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS || forgetStatus.GetStatus() == NYdb::EStatus::NOT_FOUND ||
+                          forgetStatus.GetStatus() == NYdb::EStatus::ABORTED, forgetStatus.GetIssues().ToString());
+            if (forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS) {
+                ++successCount;
+            }
+        }
+
+        UNIT_ASSERT(successCount == 1);
+
+        auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
+        auto forgetStatus = opClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(op.Status().GetStatus() == NYdb::EStatus::NOT_FOUND, op.Status().GetStatus());
+        UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::NOT_FOUND, forgetStatus.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(CancelScriptExecution) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

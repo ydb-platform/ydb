@@ -13,6 +13,28 @@
 
 namespace NKikimr::NKqp {
 
+struct TEvForgetScriptExecutionOperation : public NActors::TEventLocal<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
+    explicit TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+        : Database(database)
+        , OperationId(id)
+    {
+    }
+
+    TString Database;
+    NOperationId::TOperationId OperationId;
+};
+
+struct TEvForgetScriptExecutionOperationResponce : public NActors::TEventLocal<TEvForgetScriptExecutionOperationResponce, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponce> {
+    TEvForgetScriptExecutionOperationResponce(Ydb::StatusIds::StatusCode status,  NYql::TIssues issues) 
+        : Status(status)
+        , Issues(issues)
+    {
+    }
+    
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
 struct TEvGetScriptExecutionOperation : public NActors::TEventLocal<TEvGetScriptExecutionOperation, TKqpScriptExecutionEvents::EvGetScriptExecutionOperation> {
     explicit TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
         : Database(database)

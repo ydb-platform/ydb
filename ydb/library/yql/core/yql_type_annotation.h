@@ -308,6 +308,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool IsConstraintCheckEnabled() const {
         return DisableConstraintCheck.find(TConstraint::Name()) == DisableConstraintCheck.end();
     }
+
+    void Reset();
 };
 
 template <> inline

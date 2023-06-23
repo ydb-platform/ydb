@@ -47,6 +47,16 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     return true;
 }
 
+void TTypeAnnotationContext::Reset() {
+    UdfImports.clear();
+    UdfModules.clear();
+    NodeToOperationId.clear();
+    EvaluationInProgress = 0;
+    ExpectedTypes.clear();
+    ExpectedConstraints.clear();
+    ExpectedColumnOrders.clear();
+}
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder) {
     TStringStream ss;
     if (columnOrder) {

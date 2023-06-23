@@ -1095,6 +1095,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             for (auto source : TypeCtx_->DataSources) {
                 source->Reset();
             }
+            TypeCtx_->Reset();
             CleanupLastSession();
 
             std::function<void(const TIssuePtr& issue)> toInfo = [&](const TIssuePtr& issue) {

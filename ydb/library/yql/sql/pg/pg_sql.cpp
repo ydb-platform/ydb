@@ -4,7 +4,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/utils.h>
-#include <ydb/library/yql/parser/pg_wrapper/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -218,7 +218,7 @@ public:
             Provider = provider;
             break;
         }
-        
+
         for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
             auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
             ParamNameToTypeOid[paramName] = Settings.PgParameterTypeOids[i];
@@ -947,7 +947,7 @@ public:
             }
         }
 
-        const auto select = (value->selectStmt) 
+        const auto select = (value->selectStmt)
             ? ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true, targetColumns)
             : L(A("Void"));
         if (!select) {
@@ -1362,7 +1362,7 @@ public:
             }
         }
     }
-    
+
     TAstNode* ParseDropViewStmt(const DropStmt* value, const TVector<const List*>& names) {
         // behavior and concurrent don't matter here
 
@@ -1376,7 +1376,7 @@ public:
                 NodeNotImplemented(value, nameNode);
                 return nullptr;
             }
-            
+
             const auto name = StrVal(nameNode);
             auto it = Views.find(name);
             if (!value->missing_ok && it == Views.end()) {
@@ -1390,8 +1390,8 @@ public:
         }
 
         return Statements.back();
-    } 
-    
+    }
+
     TAstNode* ParseDropTableStmt(const DropStmt* value, const TVector<const List*>& names) {
         if (value->behavior == DROP_CASCADE) {
             AddError("CASCADE is not implemented");
@@ -1418,10 +1418,10 @@ public:
 
             const auto [clusterName, tableName] = getSchemaAndTableName(nameList);
             const auto [sink, key] = ParseQualifiedRelationName(
-                /* catalogName */ "", 
-                clusterName, 
-                tableName, 
-                /* isSink */ true, 
+                /* catalogName */ "",
+                clusterName,
+                tableName,
+                /* isSink */ true,
                 /* isScheme */ true
             );
 
@@ -1440,7 +1440,7 @@ public:
                         )
                     )
                 ));
-                
+
             }
         }
 
@@ -1630,7 +1630,7 @@ public:
         ));
         return Statements.back();
     }
-    
+
     TMaybe<TString> GetConfigVariable(const TString& varName) {
         if (varName == "server_version") {
             return GetPostgresServerVersionStr();
@@ -1652,7 +1652,7 @@ public:
         }
 
         const auto columnName = QAX(varName);
-        const auto varValueNode = 
+        const auto varValueNode =
             L(A("PgConst"), QAX(*varValue), L(A("PgType"), QA("text")));
 
         const auto lambda = L(A("lambda"), QL(), varValueNode);
@@ -1822,17 +1822,17 @@ public:
             return {};
         }
         const auto readExpr = L(
-            A("Read!"), 
-            A("world"), 
-            source,  
+            A("Read!"),
+            A("world"),
+            source,
             key,
             L(A("Void")),
             QL()
-        ); 
-        return { 
+        );
+        return {
             readExpr,
-            alias, 
-            colnames, 
+            alias,
+            colnames,
             /* injectRead */ true,
         };
     }

@@ -88,6 +88,7 @@ CFLAGS(
     -Dpg_mode_mask=yql_pg_mode_mask
     -Dpg_strong_random=yql_pg_strong_random
     -Dpg_strong_random_init=yql_pg_strong_random_init
+    -DScanKeywordBareLabel=yql_ScanKeywordBareLabel
     -DScanKeywordCategories=yql_ScanKeywordCategories
     -DScanKeywords=yql_ScanKeywords
     -Dscram_ClientKey=yql_scram_ClientKey

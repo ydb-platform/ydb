@@ -27,7 +27,6 @@ target_link_libraries(yql-sql-pg PUBLIC
   library-yql-ast
   library-yql-core
   yql-parser-pg_catalog
-  yql-parser-pg_wrapper
   yql-sql-settings
 )
 target_sources(yql-sql-pg PRIVATE

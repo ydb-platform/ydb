@@ -24,6 +24,7 @@ target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
   contrib-libs-fmt
   udf-service-exception_policy
   library-yql-sql
+  yql-parser-pg_wrapper
 )
 target_sources(ydb-library-yql-sql-pg-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql_ut.cpp

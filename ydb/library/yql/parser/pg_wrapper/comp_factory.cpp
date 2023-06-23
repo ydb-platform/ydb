@@ -1,5 +1,5 @@
 #include <ydb/library/yql/parser/pg_wrapper/interface/interface.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_block_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
@@ -2450,7 +2450,7 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
     if (desc.PassByValue) {
         return arrow::MakeScalar((uint64_t)ScalarDatumFromPod(value));
     } else {
-        auto ptr = (const char*)PointerDatumFromPod(value);        
+        auto ptr = (const char*)PointerDatumFromPod(value);
         ui32 size;
         if (desc.TypeLen == -1) {
             auto ptr = (const text*)PointerDatumFromPod(value);
@@ -2904,9 +2904,9 @@ public:
     TPgCompare(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
     {
-        Zero(FInfoLess);        
-        Zero(FInfoCompare);        
-        Zero(FInfoEquals);        
+        Zero(FInfoLess);
+        Zero(FInfoCompare);
+        Zero(FInfoEquals);
 
         auto lessProcId = TypeDesc.LessProcId;
         auto compareProcId = TypeDesc.CompareProcId;
@@ -2928,7 +2928,7 @@ public:
             fmgr_info(equalProcId, &FInfoEquals);
             Y_ENSURE(!FInfoEquals.fn_retset);
             Y_ENSURE(FInfoEquals.fn_addr);
-            Y_ENSURE(FInfoEquals.fn_nargs == 2);        
+            Y_ENSURE(FInfoEquals.fn_nargs == 2);
         }
 
         Y_ENSURE(compareProcId);
@@ -3275,7 +3275,7 @@ public:
         memcpy(ret, value, len);
         return PointerDatumToPod((Datum)ret);
     }
-    
+
     NUdf::TUnboxedValue MakeText(const char* value) const override {
         auto len = GetFullVarSize((const text*)value);
         char* ret = (char*)palloc(len);

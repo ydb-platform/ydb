@@ -1,4 +1,5 @@
-#include "parser.h"
+#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
+
 #include "arena_ctx.h"
 
 #include <util/generic/scope.h>

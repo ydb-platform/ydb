@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include "mkql_computation_node_impl.h"
+#include "mkql_computation_node_holders.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 

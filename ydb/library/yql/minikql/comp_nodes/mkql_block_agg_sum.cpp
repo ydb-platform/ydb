@@ -1,9 +1,9 @@
 #include "mkql_block_agg_sum.h"
-#include "mkql_block_builder.h"
 
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
+#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
@@ -613,7 +613,7 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
     auto dataType = UnpackOptionalData(argType, isOptional);
     bool isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
 
-    
+
     TType* sumRetType = nullptr;
     const auto& typeInfo = NYql::NUdf::GetDataTypeInfo(*dataType->GetDataSlot());
     if (typeInfo.Features & NYql::NUdf::EDataTypeFeatures::SignedIntegralType) {
@@ -694,7 +694,7 @@ public:
         , ArgColumn_(argColumn)
         , OutputType_(outputType)
     {}
-    
+
     std::unique_ptr<typename TTag::TAggregator> Make(TComputationContext& ctx) const final {
         return std::make_unique<TAvgBlockAggregator<TTag, TIn>>(FilterColumn_, ArgColumn_, OutputType_, ctx);
     }

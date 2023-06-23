@@ -1,7 +1,8 @@
 #include "mkql_block_top.h"
-#include "mkql_block_impl.h"
-#include "mkql_block_reader.h"
-#include "mkql_block_builder.h"
+
+#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 
 #include <ydb/library/yql/public/udf/arrow/block_item_comparator.h>
 

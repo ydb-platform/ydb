@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-kqp-ut-pg PUBLIC
   kqp-ut-common
   udf-service-exception_policy
   yql-sql-pg
+  yql-parser-pg_wrapper
 )
 target_link_options(ydb-core-kqp-ut-pg PRIVATE
   -ldl

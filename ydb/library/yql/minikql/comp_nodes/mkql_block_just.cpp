@@ -1,6 +1,6 @@
 #include "mkql_block_just.h"
-#include "mkql_block_impl.h"
 
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>

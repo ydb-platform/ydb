@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-kqp-run_script_actor-ut PUBLIC
   ydb-core-kqp
   kqp-ut-common
   yql-sql-pg
+  yql-parser-pg_wrapper
   cpp-client-ydb_operation
   client-ydb_types-operation
 )

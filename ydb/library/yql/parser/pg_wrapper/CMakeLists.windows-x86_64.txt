@@ -97,6 +97,7 @@ target_compile_options(yql-parser-pg_wrapper PRIVATE
   -Dpg_mode_mask=yql_pg_mode_mask
   -Dpg_strong_random=yql_pg_strong_random
   -Dpg_strong_random_init=yql_pg_strong_random_init
+  -DScanKeywordBareLabel=yql_ScanKeywordBareLabel
   -DScanKeywordCategories=yql_ScanKeywordCategories
   -DScanKeywords=yql_ScanKeywords
   -Dscram_ClientKey=yql_scram_ClientKey
@@ -132,7 +133,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-cpp-yson
   library-yql-core
   yql-minikql-arrow
-  minikql-comp_nodes-llvm
+  minikql-computation-llvm
   yql-parser-pg_catalog
   providers-common-codec
   yql-public-issue

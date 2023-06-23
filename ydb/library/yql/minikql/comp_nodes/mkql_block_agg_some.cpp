@@ -3,8 +3,8 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_block_builder.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_block_reader.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

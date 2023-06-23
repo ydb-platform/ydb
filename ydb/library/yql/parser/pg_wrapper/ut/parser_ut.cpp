@@ -1,4 +1,4 @@
-#include <ydb/library/yql/parser/pg_wrapper/parser.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/raw_parser.h>
 
 #include <util/stream/str.h>
 #include <util/system/thread.h>

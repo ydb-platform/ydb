@@ -11,15 +11,12 @@ SRCS(
     mkql_block_agg_minmax.cpp
     mkql_block_agg_some.cpp
     mkql_block_agg_sum.cpp
-    mkql_block_builder.cpp
     mkql_block_coalesce.cpp
     mkql_block_if.cpp
-    mkql_block_impl.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp
     mkql_block_compress.cpp
     mkql_block_func.cpp
-    mkql_block_reader.cpp
     mkql_block_skiptake.cpp
     mkql_block_top.cpp
     mkql_block_tuple.cpp

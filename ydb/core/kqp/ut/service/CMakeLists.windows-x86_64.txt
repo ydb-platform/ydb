@@ -23,6 +23,7 @@ target_link_libraries(ydb-core-kqp-ut-service PUBLIC
   cpp-threading-local_executor
   kqp-ut-common
   yql-sql-pg
+  yql-parser-pg_wrapper
   cpp-client-ydb_operation
   client-ydb_types-operation
 )

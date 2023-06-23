@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg
+    ydb/library/yql/parser/pg_wrapper
     ydb/public/sdk/cpp/client/ydb_operation
     ydb/public/sdk/cpp/client/ydb_types/operation
 )

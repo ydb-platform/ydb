@@ -193,7 +193,7 @@ struct TConverterTraits {
                 ret->SetPgBuilder(pgBuilder);
                 return ret;
             }
-        }        
+        }
     }
 };
 

@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-kqp-ut-opt PUBLIC
   ydb-core-kqp
   kqp-ut-common
   yql-sql-pg
+  yql-parser-pg_wrapper
   re2_udf
 )
 target_link_options(ydb-core-kqp-ut-opt PRIVATE

@@ -1,5 +1,6 @@
 #include "mkql_block_tuple.h"
-#include "mkql_block_impl.h"
+
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>

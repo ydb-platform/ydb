@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-tablet_flat-ut_pg PUBLIC
   test-libs-table
   udf-service-exception_policy
   yql-sql-pg
+  yql-parser-pg_wrapper
 )
 target_link_options(ydb-core-tablet_flat-ut_pg PRIVATE
   -ldl

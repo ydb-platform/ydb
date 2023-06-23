@@ -1,6 +1,9 @@
 SRCDIR(ydb/library/yql/minikql/computation)
 
 SRCS(
+    mkql_block_builder.cpp
+    mkql_block_impl.cpp
+    mkql_block_reader.cpp
     mkql_computation_node.cpp
     mkql_computation_node_codegen.cpp
     mkql_computation_node_graph.cpp

@@ -94,7 +94,7 @@ namespace NKikimr::NHttpProxy {
                       " incoming request from [" << context.SourceAddress << "]" <<
                       " request [" << context.MethodName << "]" <<
                       " url [" << context.Request->URL << "]" <<
-                      " database [" << context.DatabaseName << "]" <<
+                      " database [" << context.DatabasePath << "]" <<
                       " requestId: " << context.RequestId);
 
         try {

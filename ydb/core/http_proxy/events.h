@@ -41,7 +41,6 @@ namespace NKikimr::NHttpProxy {
             EvUpdateDatabasesEvent,
             EvListEndpointsRequest,
             EvListEndpointsResponse,
-            EvError,
             EvErrorWithIssue,
             EvCounter,
             EvHistCounter,
@@ -120,10 +119,13 @@ namespace NKikimr::NHttpProxy {
 
             TString SerializedUserToken;
 
-            TEvToken(const TString& serviceAccountId, const TString& iamToken, const TString& serializedUserToken = "")
+            TDatabase Database;
+
+            TEvToken(const TString& serviceAccountId, const TString& iamToken, const TString& serializedUserToken, const TDatabase& database)
             : ServiceAccountId(serviceAccountId)
             , IamToken(iamToken)
             , SerializedUserToken(serializedUserToken)
+            , Database(database)
             {}
         };
 
@@ -131,25 +133,17 @@ namespace NKikimr::NHttpProxy {
             TEvClientReady() {}
         };
 
-        struct TEvError : public TEventLocal<TEvError, EvError> {
-            NYdb::EStatus Status;
-            TString Response;
-
-            TEvError(const NYdb::EStatus status, const TString& response)
-            : Status(status)
-            , Response(response)
-            {}
-        };
-
         struct TEvErrorWithIssue : public TEventLocal<TEvErrorWithIssue, EvErrorWithIssue> {
             NYdb::EStatus Status;
             size_t IssueCode;
             TString Response;
+            TDatabase Database;
 
-            TEvErrorWithIssue(const NYdb::EStatus status, const TString& response,  size_t issueCode=0)
+            TEvErrorWithIssue(const NYdb::EStatus status, const TString& response, const TDatabase& database, size_t issueCode)
             : Status(status)
             , IssueCode(issueCode)
             , Response(response)
+            , Database(database)
             {}
         };
     };

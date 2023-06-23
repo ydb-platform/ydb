@@ -28,12 +28,12 @@ TVector<std::pair<TString, TString>> BuildLabels(const TString& method, const TH
                 {"name", name}};
     }
     if (method.empty()) {
-        return {{"database", httpContext.DatabaseName}, {"cloud_id", httpContext.CloudId},
+        return {{"database", httpContext.DatabasePath}, {"cloud_id", httpContext.CloudId},
                 {"folder_id", httpContext.FolderId}, {"database_id", httpContext.DatabaseId},
                 {"topic", httpContext.StreamName}, {"name", name}};
 
     }
-    return {{"database", httpContext.DatabaseName}, {"method", method}, {"cloud_id", httpContext.CloudId},
+    return {{"database", httpContext.DatabasePath}, {"method", method}, {"cloud_id", httpContext.CloudId},
             {"folder_id", httpContext.FolderId}, {"database_id", httpContext.DatabaseId},
             {"topic", httpContext.StreamName}, {"name", name}};
 }

@@ -28,7 +28,9 @@ namespace NKikimr::NDataStreams::V1 {
     TString GetSerializedData(const TPutRecordsItem& item) {
         NKikimrPQClient::TDataChunk proto;
 
-        proto.SetIp(item.Ip);
+        //TODO: get ip from client, not grpc;
+        // proto.SetIp(item.Ip);
+
         proto.SetCodec(0); // NPersQueue::CODEC_RAW
         proto.SetData(item.Data);
 

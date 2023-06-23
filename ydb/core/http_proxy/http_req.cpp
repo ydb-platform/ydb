@@ -143,17 +143,17 @@ namespace NKikimr::NHttpProxy {
     }
 
     template<class TProto>
-    TString TruncateStreamName(const TProto& req, const TString& database)
+    TString TruncateStreamName(const TProto& req, const TString& databasePath)
     {
         constexpr bool has_stream_name = requires(const TProto& t) {
             t.stream_name();
         };
 
         if constexpr (has_stream_name) {
-            Y_VERIFY(req.stream_name().StartsWith(database));
-            return req.stream_name().substr(database.size(), -1);
+            Y_VERIFY(req.stream_name().StartsWith(databasePath));
+            return req.stream_name().substr(databasePath.size(), -1);
         }
-        return ExtractStreamNameWithoutProtoField<TProto>(req).substr(database.size(), -1);
+        return ExtractStreamNameWithoutProtoField<TProto>(req).substr(databasePath.size(), -1);
     }
 
     constexpr TStringBuf IAM_HEADER = "x-yacloud-subjecttoken";
@@ -231,7 +231,6 @@ namespace NKikimr::NHttpProxy {
                     HFunc(TEvents::TEvWakeup, HandleTimeout);
                     HFunc(TEvServerlessProxy::TEvClientReady, HandleClientReady);
                     HFunc(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult, Handle);
-                    HFunc(TEvServerlessProxy::TEvError, HandleError);
                     HFunc(TEvServerlessProxy::TEvErrorWithIssue, HandleErrorWithIssue);
                     HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
@@ -247,7 +246,7 @@ namespace NKikimr::NHttpProxy {
                 RequestState = StateAuthorization;
 
                 auto request = MakeHolder<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
-                request->DatabasePath = HttpContext.DatabaseName;
+                request->DatabasePath = HttpContext.DatabasePath;
 
                 ctx.Send(MakeTenantDiscoveryID(), std::move(request));
             }
@@ -256,17 +255,17 @@ namespace NKikimr::NHttpProxy {
                 RequestState = StateListEndpoints;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "create client to '" << HttpContext.DiscoveryEndpoint <<
-                              "' database: '" << HttpContext.DatabaseName <<
+                              "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
                 auto clientSettings = NYdb::TCommonClientSettings()
                         .DiscoveryEndpoint(HttpContext.DiscoveryEndpoint)
-                        .Database(HttpContext.DatabaseName)
+                        .Database(HttpContext.DatabasePath)
                         .AuthToken(HttpContext.IamToken)
                         .DiscoveryMode(NYdb::EDiscoveryMode::Async);
 
-                if (!HttpContext.DatabaseName.empty() && !HttpContext.ServiceConfig.GetTestMode()) {
-                    clientSettings.Database(HttpContext.DatabaseName);
+                if (!HttpContext.DatabasePath.empty() && !HttpContext.ServiceConfig.GetTestMode()) {
+                    clientSettings.Database(HttpContext.DatabasePath);
                 }
                 Y_VERIFY(!Client);
                 Client.Reset(new TDataStreamsClient(*HttpContext.Driver, clientSettings));
@@ -285,10 +284,10 @@ namespace NKikimr::NHttpProxy {
                 RequestState = StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
-                              "' database: '" << HttpContext.DatabaseName <<
+                              "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
-                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabaseName,
+                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabasePath,
                                                             HttpContext.SerializedUserToken, ctx.ActorSystem());
                 RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
                                     (const NThreading::TFuture<TProtoResponse>& future) {
@@ -313,7 +312,7 @@ namespace NKikimr::NHttpProxy {
                 RequestState = StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
-                              "' database: '" << HttpContext.DatabaseName <<
+                              "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
                 Y_VERIFY(Client);
@@ -345,6 +344,23 @@ namespace NKikimr::NHttpProxy {
                 Y_UNUSED(ev);
             }
 
+            void TryUpdateDbInfo(const TDatabase& db, const TActorContext& ctx) {
+                if (db.Path) {
+                    HttpContext.DatabasePath = db.Path;
+                    HttpContext.DatabaseId = db.Id;
+                    HttpContext.CloudId = db.CloudId;
+                    HttpContext.FolderId = db.FolderId;
+                    if (ExtractStreamName<TProtoRequest>(Request).StartsWith(HttpContext.DatabasePath + "/")) {
+                        HttpContext.StreamName =
+                            TruncateStreamName<TProtoRequest>(Request, HttpContext.DatabasePath + "/");
+                    } else {
+                        HttpContext.StreamName = ExtractStreamName<TProtoRequest>(Request);
+                    }
+
+                }
+                ReportInputCounters(ctx);
+            }
+
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
                 HttpContext.ServiceAccountId = ev->Get()->ServiceAccountId;
                 HttpContext.IamToken = ev->Get()->IamToken;
@@ -353,15 +369,14 @@ namespace NKikimr::NHttpProxy {
                 if (HttpContext.Driver) {
                     SendYdbDriverRequest(ctx);
                 } else {
+                    TryUpdateDbInfo(ev->Get()->Database, ctx);
                     SendGrpcRequestNoDriver(ctx);
                 }
             }
 
-            void HandleError(TEvServerlessProxy::TEvError::TPtr& ev, const TActorContext& ctx) {
-                ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Response);
-            }
 
             void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
                 ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
             }
 
@@ -377,6 +392,20 @@ namespace NKikimr::NHttpProxy {
                               {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
                               {"name", "api.http.errors_per_second"}}
                          });
+
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{
+                             1, true, true,
+                            {{"database", HttpContext.DatabasePath},
+                              {"method", Method},
+                              {"cloud_id", HttpContext.CloudId},
+                              {"folder_id", HttpContext.FolderId},
+                              {"database_id", HttpContext.DatabaseId},
+                              {"topic", HttpContext.StreamName},
+                              {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
+                              {"name", "api.http.data_streams.response.count"}}
+                         });
+
                 HttpContext.ResponseData.Status = status;
                 HttpContext.ResponseData.ErrorText = errorText;
                 HttpContext.DoReply(ctx, issueCode);
@@ -384,6 +413,24 @@ namespace NKikimr::NHttpProxy {
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
+            }
+
+            void ReportInputCounters(const TActorContext& ctx) {
+
+                if (InputCountersReported) {
+                    return;
+                }
+                InputCountersReported = true;
+
+                FillInputCustomMetrics<TProtoRequest>(Request, HttpContext, ctx);
+                /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{1, true, true,
+                             BuildLabels(Method, HttpContext, "api.http.requests_per_second", setStreamPrefix)
+                         });
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{1, true, true,
+                             BuildLabels(Method, HttpContext, "api.http.data_streams.request.count")
+                         });
             }
 
             void Handle(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult::TPtr ev,
@@ -394,25 +441,15 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.CloudId = db->CloudId;
                     HttpContext.DatabaseId = db->Id;
                     HttpContext.DiscoveryEndpoint = db->Endpoint;
-                    HttpContext.DatabaseName = db->Path;
+                    HttpContext.DatabasePath = db->Path;
 
-                    if (ExtractStreamName<TProtoRequest>(Request).StartsWith(HttpContext.DatabaseName + "/")) {
+                    if (ExtractStreamName<TProtoRequest>(Request).StartsWith(HttpContext.DatabasePath + "/")) {
                         HttpContext.StreamName =
-                            TruncateStreamName<TProtoRequest>(Request, HttpContext.DatabaseName + "/");
+                            TruncateStreamName<TProtoRequest>(Request, HttpContext.DatabasePath + "/");
                     } else {
                         HttpContext.StreamName = ExtractStreamName<TProtoRequest>(Request);
                     }
-
-                    FillInputCustomMetrics<TProtoRequest>(Request, HttpContext, ctx);
-                    /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
-                             new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.http.requests_per_second", setStreamPrefix)
-                             });
-                    ctx.Send(MakeMetricsServiceID(),
-                             new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.http.data_streams.request.count")
-                             });
-                    //TODO: add api.http.request.count
+                    ReportInputCounters(ctx);
                     CreateClient(ctx);
                     return;
                 }
@@ -441,7 +478,6 @@ namespace NKikimr::NHttpProxy {
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ReportLatencyCounters(ctx);
-
                     /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{1, true, true,
                                  BuildLabels(Method, HttpContext, "api.http.success_per_second", setStreamPrefix)
@@ -449,7 +485,7 @@ namespace NKikimr::NHttpProxy {
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,
-                                {{"database", HttpContext.DatabaseName},
+                                {{"database", HttpContext.DatabasePath},
                                   {"method", Method},
                                   {"cloud_id", HttpContext.CloudId},
                                   {"folder_id", HttpContext.FolderId},
@@ -506,17 +542,17 @@ namespace NKikimr::NHttpProxy {
                 } catch (const std::exception& e) {
                     LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
                                   "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
-                                  "database '" << HttpContext.DatabaseName << "'");
+                                  "database '" << HttpContext.DatabasePath << "'");
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
-                if (HttpContext.DatabaseName.empty()) {
-                    HttpContext.DatabaseName = ExtractStreamName<TProtoRequest>(Request);
+                if (HttpContext.DatabasePath.empty()) {
+                    HttpContext.DatabasePath = ExtractStreamName<TProtoRequest>(Request);
                 }
 
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
                               "got new request from [" << HttpContext.SourceAddress << "] " <<
-                              "database '" << HttpContext.DatabaseName << "' " <<
+                              "database '" << HttpContext.DatabasePath << "' " <<
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
                 // Use Signature or no sdk mode - then need to auth anyway
@@ -554,6 +590,7 @@ namespace NKikimr::NHttpProxy {
             THolder<TDataStreamsClient> Client;
 
             TActorId AuthActor;
+            bool InputCountersReported = false;
         };
 
     private:
@@ -653,9 +690,9 @@ namespace NKikimr::NHttpProxy {
             SourceAddress = address;
         }
 
-        DatabaseName = Request->URL;
-        if (DatabaseName == "/") {
-           DatabaseName = "";
+        DatabasePath = Request->URL;
+        if (DatabasePath == "/") {
+           DatabasePath = "";
         }
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
@@ -869,7 +906,7 @@ namespace NKikimr::NHttpProxy {
             , ServiceConfig(context.ServiceConfig)
             , IamToken(context.IamToken)
             , Authorize(!context.Driver)
-            , Database(context.DatabaseName)
+            , DatabasePath(context.DatabasePath)
             , StreamName(context.StreamName)
         {
         }
@@ -896,7 +933,7 @@ namespace NKikimr::NHttpProxy {
         void SendDescribeRequest(const TActorContext& ctx) {
             auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = NKikimr::SplitPath(Database);
+            entry.Path = NKikimr::SplitPath(DatabasePath);
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.SyncVersion = false;
             schemeCacheRequest->ResultSet.emplace_back(entry);
@@ -907,7 +944,7 @@ namespace NKikimr::NHttpProxy {
             const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
             if (navigate->ErrorCount) {
                 return ReplyWithError(
-                    ctx, NYdb::EStatus::SCHEME_ERROR, TStringBuilder() << "Database with path '" << Database << "' doesn't exists",
+                    ctx, NYdb::EStatus::SCHEME_ERROR, TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists",
                     NYds::EErrorCodes::NOT_FOUND
                 );
             }
@@ -917,6 +954,7 @@ namespace NKikimr::NHttpProxy {
                 FolderId = description.GetPQTabletConfig().GetYcFolderId();
                 CloudId = description.GetPQTabletConfig().GetYcCloudId();
                 DatabaseId = description.GetPQTabletConfig().GetYdbDatabaseId();
+                DatabasePath = description.GetPQTabletConfig().GetYdbDatabasePath();
             }
             for (const auto& attr : navigate->ResultSet.front().Attributes) {
                 if (attr.first == "folder_id") FolderId = attr.second;
@@ -935,7 +973,7 @@ namespace NKikimr::NHttpProxy {
             if (ev->Get()->Error) {
                 return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED, ev->Get()->Error.Message);
             };
-            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken));
+            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
             LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
 
@@ -1067,7 +1105,7 @@ namespace NKikimr::NHttpProxy {
 
         void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText,
                             NYds::EErrorCodes issueCode = NYds::EErrorCodes::GENERIC_ERROR) {
-            ctx.Send(Sender, new TEvServerlessProxy::TEvErrorWithIssue(status, errorText, static_cast<size_t>(issueCode)));
+            ctx.Send(Sender, new TEvServerlessProxy::TEvErrorWithIssue(status, errorText, {"", DatabaseId, DatabasePath, CloudId, FolderId}, static_cast<size_t>(issueCode)));
             TBase::Die(ctx);
         }
 
@@ -1090,7 +1128,7 @@ namespace NKikimr::NHttpProxy {
             Y_VERIFY(!ev->Get()->Response.iam_token().empty());
 
             ctx.Send(Sender,
-                     new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token()));
+                     new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token(), "", {}));
 
             LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "IAM token generated");
 
@@ -1126,7 +1164,7 @@ namespace NKikimr::NHttpProxy {
         TString FolderId;
         TString CloudId;
         TString DatabaseId;
-        TString Database;
+        TString DatabasePath;
         TString StreamName;
     };
 

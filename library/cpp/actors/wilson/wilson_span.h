@@ -43,8 +43,8 @@ namespace NWilson {
         AUTO_END = 1,
     };
 
-    Y_DECLARE_FLAGS(TFlags, EFlags)
-    Y_DECLARE_OPERATORS_FOR_FLAGS(TFlags)
+    Y_DECLARE_FLAGS(TFlags, EFlags);
+    Y_DECLARE_OPERATORS_FOR_FLAGS(TFlags);
 
     class TSpan {
         struct TData {

@@ -228,8 +228,8 @@ enum class TYdbOperation : ui32 {
     ModifyPermission     = 1 << 22
 };
 
-Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation)
-Y_DECLARE_OPERATORS_FOR_FLAGS(TYdbOperations)
+Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
+Y_DECLARE_OPERATORS_FOR_FLAGS(TYdbOperations);
 
 const TYdbOperations& KikimrSchemeOps();
 const TYdbOperations& KikimrDataOps();

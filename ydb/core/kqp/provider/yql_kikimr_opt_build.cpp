@@ -70,8 +70,8 @@ enum class TPrimitiveYdbOperation : ui32 {
     Write = 1 << 1
 };
 
-Y_DECLARE_FLAGS(TPrimitiveYdbOperations, TPrimitiveYdbOperation)
-Y_DECLARE_OPERATORS_FOR_FLAGS(TPrimitiveYdbOperations)
+Y_DECLARE_FLAGS(TPrimitiveYdbOperations, TPrimitiveYdbOperation);
+Y_DECLARE_OPERATORS_FOR_FLAGS(TPrimitiveYdbOperations);
 
 struct TKiExploreTxResults {
     struct TKiQueryBlock {

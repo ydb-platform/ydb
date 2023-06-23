@@ -370,7 +370,7 @@ namespace NKikimr::NBlobDepot {
             REVERSE = 4,
         };
 
-        Y_DECLARE_FLAGS(TScanFlags, EScanFlags)
+        Y_DECLARE_FLAGS(TScanFlags, EScanFlags);
 
         struct TScanRange {
             TKey Begin;
@@ -719,7 +719,7 @@ namespace NKikimr::NBlobDepot {
         void ExecuteConfirmGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep);
     };
 
-    Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags)
+    Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags);
 
 } // NKikimr::NBlobDepot
 

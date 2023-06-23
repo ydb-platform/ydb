@@ -30,6 +30,7 @@ public:
     ui32 Udf(const TString& name, bool isPolymorphic, const std::vector<const TTypeAnnotationNode*>& argTypes, const TTypeAnnotationNode* retType);
     // (json/json?,utf8)->bool/bool?
     ui32 JsonExists(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
+    ui32 JsonValue(const TTypeAnnotationNode* arg1Type, const TTypeAnnotationNode* arg2Type, const TTypeAnnotationNode* retType);
     TString Serialize();
 
 private:

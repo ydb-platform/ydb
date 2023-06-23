@@ -88,6 +88,19 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                 return ReqBuilder->JsonExists(blockOptJsonType, scalarStringType, blockBoolType);
             }
 
+            ui32 AddJsonValue(bool isBinaryType = true, NYql::EDataSlot resultType = NYql::EDataSlot::Utf8) {
+                NYql::TExprContext ctx;
+                auto blockOptJsonType = ctx.template MakeType<NYql::TBlockExprType>(
+                    ctx.template MakeType<NYql::TOptionalExprType>(
+                    ctx.template MakeType<NYql::TDataExprType>(isBinaryType ? NYql::EDataSlot::JsonDocument : NYql::EDataSlot::Json)));
+                auto scalarStringType = ctx.template MakeType<NYql::TScalarExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
+                auto blockResultType = ctx.template MakeType<NYql::TBlockExprType>(
+                    ctx.template MakeType<NYql::TOptionalExprType>(
+                    ctx.template MakeType<NYql::TDataExprType>(resultType)));
+
+                return ReqBuilder->JsonValue(blockOptJsonType, scalarStringType, blockResultType);
+            }
+
             TString Serialize() {
                 return ReqBuilder->Serialize();
             }            
@@ -298,6 +311,156 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
     Y_UNIT_TEST(JsonExistsBinary) {
         JsonExistsImpl(true);
+    }
+
+    void JsonValueImpl(bool isBinaryType, NYql::EDataSlot resultType) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            auto* constantProto = command->MutableAssign()->MutableConstant();
+            constantProto->SetText("$.key");
+            command->MutableAssign()->MutableColumn()->SetName("json_path");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("json_data");
+            functionProto->AddArguments()->SetName("json_path");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_LENGTH);
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
+        TKernelsWrapper kernels;
+        kernels.AddJsonValue(isBinaryType, resultType);
+        const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+       
+        TProgramContainer program;
+        TString errors;
+        UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Utf8) }}));
+        {
+            NJson::TJsonValue testJson;
+            testJson["key"] = "value";
+            updates.AddRow().Add<std::string>(testJson.GetStringRobust());
+        }
+        {
+            NJson::TJsonValue testJson;
+            testJson["key"] = 10;
+            updates.AddRow().Add<std::string>(testJson.GetStringRobust());
+        }
+        {
+            NJson::TJsonValue testJson;
+            testJson["key"] = 0.1;
+            updates.AddRow().Add<std::string>(testJson.GetStringRobust());
+        }
+        {
+            NJson::TJsonValue testJson;
+            testJson["key"] = false;
+            updates.AddRow().Add<std::string>(testJson.GetStringRobust());
+        }
+        {
+            NJson::TJsonValue testJson;
+            testJson["another"] = "value";
+            updates.AddRow().Add<std::string>(testJson.GetStringRobust());
+        }
+        {
+            updates.AddRow().Add<std::string>(NJson::TJsonValue(NJson::JSON_ARRAY).GetStringRobust());
+        }
+
+        auto batch = updates.BuildArrow();
+        Cerr << batch->ToString() << Endl;
+
+        if (isBinaryType) {
+            THashMap<TString, NScheme::TTypeInfo> cc;
+            cc["json_data"] = TTypeInfo(NTypeIds::JsonDocument);
+            batch = NArrow::ConvertColumns(batch, cc);
+            Cerr << batch->ToString() << Endl;
+        }
+
+        auto res = program.ApplyProgram(batch);
+        UNIT_ASSERT_C(res.ok(), res.ToString());
+
+        Cerr << "Check output for " << resultType << Endl;
+        if (resultType == NYql::EDataSlot::Utf8) {
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Utf8)) }));
+        
+            result.AddRow().Add<std::string>("value");
+            result.AddRow().Add<std::string>("10");
+            result.AddRow().Add<std::string>("0.1");
+            result.AddRow().Add<std::string>("false");
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        } else if (resultType == NYql::EDataSlot::Bool) {
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+        
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            result.AddRow().Add<ui8>(0);
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        } else if (resultType == NYql::EDataSlot::Int64 || resultType == NYql::EDataSlot::Uint64) {
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Int64)) }));
+        
+            result.AddRow().AddNull();
+            result.AddRow().Add<i64>(10);
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        } else if (resultType == NYql::EDataSlot::Double || resultType == NYql::EDataSlot::Float) {
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Double)) }));
+        
+            result.AddRow().AddNull();
+            result.AddRow().Add<double>(10);
+            result.AddRow().Add<double>(0.1);
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+            result.AddRow().AddNull();
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        } else {
+            Y_FAIL("Not implemented");
+        }
+    }
+
+    Y_UNIT_TEST(JsonValue) {
+        JsonValueImpl(false, NYql::EDataSlot::Utf8);
+        JsonValueImpl(false, NYql::EDataSlot::Bool);
+        JsonValueImpl(false, NYql::EDataSlot::Int64);
+        JsonValueImpl(false, NYql::EDataSlot::Uint64);
+        JsonValueImpl(false, NYql::EDataSlot::Float);
+        JsonValueImpl(false, NYql::EDataSlot::Double);
+    }
+
+    Y_UNIT_TEST(JsonValueBinary) {
+        JsonValueImpl(true, NYql::EDataSlot::Utf8);
+        JsonValueImpl(true, NYql::EDataSlot::Bool);
+        JsonValueImpl(true, NYql::EDataSlot::Int64);
+        JsonValueImpl(true, NYql::EDataSlot::Uint64);
+        JsonValueImpl(true, NYql::EDataSlot::Float);
+        JsonValueImpl(true, NYql::EDataSlot::Double);
     }
 
     Y_UNIT_TEST(SimpleFunction) {

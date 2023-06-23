@@ -163,4 +163,47 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
             return b.JsonExists(blockJsonType, scalarUtf8Type, blockOptBoolType);
         });
     }
+
+    void TesJsonValueImpl(EDataSlot jsonType, NYql::EDataSlot resultType) {
+        TestOne([&](auto& b,auto& ctx) {
+            auto blockJsonType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TDataExprType>(jsonType));
+            auto scalarUtf8Type = ctx.template MakeType<TScalarExprType>(
+                ctx.template MakeType<TDataExprType>(EDataSlot::Utf8));
+            auto blockOptType = ctx.template MakeType<TBlockExprType>(
+                ctx.template MakeType<TOptionalExprType>(
+                ctx.template MakeType<TDataExprType>(resultType)));
+            return b.JsonValue(blockJsonType, scalarUtf8Type, blockOptType);
+        });
+    }
+
+    Y_UNIT_TEST(TestJsonValueUtf8) {
+        TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Utf8);
+        TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Utf8);
+    }
+
+    Y_UNIT_TEST(TestJsonValueBool) {
+        TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Bool);
+        TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Bool);
+    }
+
+    Y_UNIT_TEST(TestJsonValueInt64) {
+        TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Int64);
+        TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Int64);
+    }
+
+    Y_UNIT_TEST(TestJsonValueUint64) {
+        TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Uint64);
+        TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Uint64);
+    }
+
+    Y_UNIT_TEST(TestJsonValueFloat) {;
+        TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Float);
+        TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Float);
+    }
+
+    Y_UNIT_TEST(TestJsonValueDouble) {;
+        TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Double);
+        TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Double);
+    }
 }

@@ -93,7 +93,7 @@ TStored TCompatibilityInfo::MakeStored(ui32 componentId, const TCurrent* current
                 newRule->SetBuild(rule.GetBuild());
             }
             newRule->MutableUpperLimit()->CopyFrom(rule.GetUpperLimit());
-            newRule->MutableBottomLimit()->CopyFrom(rule.GetBottomLimit());
+            newRule->MutableLowerLimit()->CopyFrom(rule.GetLowerLimit());
             newRule->SetForbidden(rule.GetForbidden());
         }
     }
@@ -226,7 +226,7 @@ bool CheckRule(std::optional<TString> build, const NKikimrConfig::TYdbVersion* v
         }
     }
     
-    return (!rule.HasBottomLimit() || CompareVersions(*version, rule.GetBottomLimit()) > -1) &&
+    return (!rule.HasLowerLimit() || CompareVersions(*version, rule.GetLowerLimit()) > -1) &&
             (!rule.HasUpperLimit() || CompareVersions(*version, rule.GetUpperLimit()) < 1);
 }
 

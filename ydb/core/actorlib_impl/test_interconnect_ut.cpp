@@ -769,9 +769,9 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                 nbsRule->SetBuild("nbs");
                 nbsRule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
 
-                auto* bottomLimit = nbsRule->MutableBottomLimit();
-                bottomLimit->SetYear(22);
-                bottomLimit->SetMajor(4);
+                auto* lowerLimit = nbsRule->MutableLowerLimit();
+                lowerLimit->SetYear(22);
+                lowerLimit->SetMajor(4);
 
                 nbsRule->MutableUpperLimit()->CopyFrom(*version);
 
@@ -798,9 +798,9 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                 auto* rule = node0->AddCanLoadFrom();
                 rule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
 
-                auto* bottomLimit = rule->MutableBottomLimit();
-                bottomLimit->SetYear(22);
-                bottomLimit->SetMajor(5);
+                auto* lowerLimit = rule->MutableLowerLimit();
+                lowerLimit->SetYear(22);
+                lowerLimit->SetMajor(5);
 
                 rule->MutableUpperLimit()->CopyFrom(*version);
 

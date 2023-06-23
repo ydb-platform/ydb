@@ -40,7 +40,7 @@ public:
 
         struct TCompatibilityRule {
             std::optional<std::string> Build;
-            std::optional<TYdbVersion> BottomLimit;
+            std::optional<TYdbVersion> LowerLimit;
             std::optional<TYdbVersion> UpperLimit;
             std::optional<ui32> ComponentId;
             std::optional<bool> Forbidden;
@@ -50,8 +50,8 @@ public:
                 if (Build) {
                     res.SetBuild(Build->data());
                 }
-                if (BottomLimit) {
-                    res.MutableBottomLimit()->CopyFrom(BottomLimit->ToPB());
+                if (LowerLimit) {
+                    res.MutableLowerLimit()->CopyFrom(LowerLimit->ToPB());
                 }
                 if (UpperLimit) {
                     res.MutableUpperLimit()->CopyFrom(UpperLimit->ToPB());

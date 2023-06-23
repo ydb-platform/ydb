@@ -1899,7 +1899,7 @@ message TCompatibilityRule {
     }
 
     optional string Build = 1;
-    optional TYdbVersion BottomLimit = 2;
+    optional TYdbVersion LowerLimit = 2;
     optional TYdbVersion UpperLimit = 3;
 
     // don't use enum, because stored data can have values from newer YDB versions,

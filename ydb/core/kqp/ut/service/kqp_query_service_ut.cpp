@@ -167,6 +167,20 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
+    Y_UNIT_TEST(ExecuteQueryWrite) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            UPSERT INTO TwoShard (Key, Value2) VALUES(0, 101);
+
+            SELECT Value2 FROM TwoShard WHERE Key = 0;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[[101]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(ExplainQuery) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         {
             TPartDataStats stats = { };
             // TScreenedPartIndexIterator without screen previously was TPartIndexIterator
-            TScreenedPartIndexIterator idxIter(TPartView{part, nullptr, nullptr}, scheme->Keys, nullptr);
+            TScreenedPartIndexIterator idxIter(TPartView{part, nullptr, nullptr}, scheme->Keys, nullptr, nullptr);
             sizes.clear();
 
             while (idxIter.IsValid()) {
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen,
                             TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> {
             TPartDataStats stats = { };
-            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, scheme->Keys, std::move(frames));
+            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, scheme->Keys, std::move(frames), nullptr);
 
             while (idxIter.IsValid()) {
                 TDbTupleRef key = idxIter.GetCurrentKey();
@@ -302,8 +302,8 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         TPartDataStats stats = { };
         TStatsIterator stIter(lay2.RowScheme()->Keys);
-        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, lay2.RowScheme()->Keys, nullptr));
-        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, lay2.RowScheme()->Keys, nullptr));
+        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, lay2.RowScheme()->Keys, nullptr, nullptr));
+        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, lay2.RowScheme()->Keys, nullptr, nullptr));
 
 
 

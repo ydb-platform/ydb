@@ -118,11 +118,13 @@ private:
 // if page start key is not screened then the whole previous page is added to stats
 class TScreenedPartIndexIterator {
 public:
-    TScreenedPartIndexIterator(TPartView partView, TIntrusiveConstPtr<TKeyCellDefaults> keyColumns, TIntrusiveConstPtr<NPage::TFrames> small)
+    TScreenedPartIndexIterator(TPartView partView, TIntrusiveConstPtr<TKeyCellDefaults> keyColumns, 
+            TIntrusiveConstPtr<NPage::TFrames> small, TIntrusiveConstPtr<NPage::TFrames> large)
         : Part(std::move(partView.Part))
         , KeyColumns(std::move(keyColumns))
         , Screen(std::move(partView.Screen))
         , Small(std::move(small))
+        , Large(std::move(large))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {
         Pos = Part->Index->Begin();
@@ -181,8 +183,13 @@ public:
             }
         }
 
-        if (rowCount && Small) {
-            AddSmallSize(stats.DataSize);
+        if (rowCount) {
+            if (Small) {
+                AddBlobsSize(stats.DataSize, Small.Get(), ELargeObj::Outer, PrevSmallPage);
+            }
+            if (Large) {
+                AddBlobsSize(stats.DataSize, Large.Get(), ELargeObj::Extern, PrevLargePage);
+            }
         }
 
         FillKey();
@@ -265,17 +272,17 @@ private:
     }
 
 private:
-    void AddSmallSize(TPartDataSize& stats) noexcept {
+    void AddBlobsSize(TPartDataSize& stats, const NPage::TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
         const auto row = GetLastRowId();
         const auto end = GetCurrentRowId();
 
-        PrevSmallPage = Small->Lower(row, PrevSmallPage, Max<ui32>());
+        prevPage = frames->Lower(row, prevPage, Max<ui32>());
 
-        while (auto &rel = Small->Relation(PrevSmallPage)) {
+        while (auto &rel = frames->Relation(prevPage)) {
             if (rel.Row < end) {
-                auto channel = Part->GetPageChannel(ELargeObj::Outer, PrevSmallPage);
+                auto channel = Part->GetPageChannel(lob, prevPage);
                 stats.Add(rel.Size, channel);
-                ++PrevSmallPage;
+                ++prevPage;
             } else if (!rel.IsHead()) {
                 Y_FAIL("Got unaligned NPage::TFrames head record");
             } else {
@@ -306,9 +313,11 @@ private:
     TSmallVec<TGroupState> HistoryGroups;
     TIntrusiveConstPtr<TScreen> Screen;
     TIntrusiveConstPtr<NPage::TFrames> Small;    /* Inverted index for small blobs   */
+    TIntrusiveConstPtr<NPage::TFrames> Large;    /* Inverted index for large blobs   */
     size_t CurrentHoleIdx = 0;
     TScreen::THole CurrentHole;
     ui32 PrevSmallPage = 0;
+    ui32 PrevLargePage = 0;
 };
 
 }}

@@ -446,6 +446,9 @@ struct TShardedTableOptions {
         TString LogPoolKind;
         TString SysLogPoolKind;
         TString DataPoolKind;
+        TString ExternalPoolKind;
+        ui64 DataThreshold = 0;
+        ui64 ExternalThreshold = 0;
     };
 
     using TAttributes = THashMap<TString, TString>;

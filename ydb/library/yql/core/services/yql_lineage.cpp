@@ -35,7 +35,7 @@ public:
         });
 
         TStringStream s;
-        NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Text);
+        NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
         writer.OnBeginMap();
         writer.OnKeyedItem("Reads");
         writer.OnBeginList();

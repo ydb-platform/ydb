@@ -1061,9 +1061,10 @@ message ReadRowsRequest {
     string session_id = 1;
     // Path to table to read
     string path = 2;
-    // Keys to read
+    // Keys to read. Must be a list of structs where each stuct is a key
+    // for one requested row and should contain all key columns
     TypedValue keys = 3;
-    // Output columns
+    // Output columns. If empty all columns will be requested
     repeated string columns = 4;
 }
 

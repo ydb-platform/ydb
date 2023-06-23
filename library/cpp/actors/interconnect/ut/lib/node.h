@@ -22,7 +22,7 @@ public:
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
           TChannelsConfig channelsSettings = TChannelsConfig(),
           ui32 numDynamicNodes = 0, ui32 numThreads = 1,
-          TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr) {
+          TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = 512 * 1024) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -43,7 +43,7 @@ public:
         common->Settings.DeadPeer = deadPeerTimeout;
         common->Settings.CloseOnIdle = TDuration::Minutes(1);
         common->Settings.SendBufferDieLimitInMB = 512;
-        common->Settings.TotalInflightAmountOfData = 512 * 1024;
+        common->Settings.TotalInflightAmountOfData = inflight;
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->OutgoingHandshakeInflightLimit = 3;
 

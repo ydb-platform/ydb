@@ -17,8 +17,7 @@ namespace NYdb {
 
         private:
             TString TopicName;
-            ui32 Seconds;
-            ui32 Warmup;
+            ui32 WarmupSec;
             double Percentile;
             
             ui32 ConsumerThreadCount;

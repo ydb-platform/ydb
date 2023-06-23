@@ -16,8 +16,7 @@ namespace NYdb {
             virtual int Run(TConfig& config) override;
         private:
             TString TopicName;
-            ui32 Seconds;
-            ui32 Warmup;
+            ui32 WarmupSec;
             double Percentile;
 
             size_t MessageRate;

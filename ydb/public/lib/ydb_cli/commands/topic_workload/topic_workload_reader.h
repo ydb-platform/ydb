@@ -11,7 +11,7 @@
 namespace NYdb {
     namespace NConsoleClient {
         struct TTopicWorkloadReaderParams {
-            size_t Seconds;
+            size_t TotalSec;
             NYdb::TDriver* Driver;
             std::shared_ptr<TLog> Log;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;

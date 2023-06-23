@@ -53,8 +53,8 @@ namespace NYdb {
             bool Quiet;
             bool PrintTimestamp;
 
-            double WindowDurationSec;
-            double TotalDurationSec;
+            double WindowSec;
+            double TotalSec;
             double WarmupSec;
 
             double Percentile;

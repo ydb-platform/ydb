@@ -11,7 +11,6 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
     , StatsCollector(params.StatsCollector)
 
 {
-    Closed = std::make_shared<std::atomic<bool>>(false);
     CreateWorker();
 }
 
@@ -19,15 +18,6 @@ TTopicWorkloadWriterWorker::~TTopicWorkloadWriterWorker()
 {
     if (WriteSession)
         WriteSession->Close();
-}
-
-void TTopicWorkloadWriterWorker::CreateWorker() {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
-
-    if (WriteSession)
-        WriteSession->Close();
-
-    CreateTopicWorker();
 }
 
 void TTopicWorkloadWriterWorker::Close() {
@@ -90,7 +80,9 @@ bool TTopicWorkloadWriterWorker::WaitForInitSeqNo()
 }
 
 void TTopicWorkloadWriterWorker::Process() {
-    const TInstant endTime = TInstant::Now() + TDuration::Seconds(Params.Seconds);
+    Sleep(TDuration::Seconds((float)Params.WarmupSec * Params.WriterIdx / Params.ProducerThreadCount));
+    
+    const TInstant endTime = TInstant::Now() + TDuration::Seconds(Params.TotalSec);
 
     StartTimestamp = Now();
     WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "StartTimestamp " << StartTimestamp);
@@ -212,8 +204,8 @@ bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
     return false;
 }
 
-void TTopicWorkloadWriterWorker::CreateTopicWorker() {
-    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, "Creating writer worker...");
+void TTopicWorkloadWriterWorker::CreateWorker() {
+    WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
     Y_VERIFY(Params.Driver);
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);

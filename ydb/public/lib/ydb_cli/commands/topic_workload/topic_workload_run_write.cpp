@@ -35,11 +35,11 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config) {
 
     // Common params
     config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
-        .DefaultValue(10)
-        .StoreResult(&Seconds);
+        .DefaultValue(60)
+        .StoreResult(&TotalSec);
     config.Opts->AddLongOption('w', "window", "Output window duration in seconds.")
         .DefaultValue(1)
-        .StoreResult(&WindowDurationSec);
+        .StoreResult(&WindowSec);
     config.Opts->AddLongOption('q', "quiet", "Quiet mode. Doesn't print statistics each second.")
         .StoreTrue(&Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
@@ -48,8 +48,8 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config) {
         .DefaultValue(50)
         .StoreResult(&Percentile);
     config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
-        .DefaultValue(1)
-        .StoreResult(&Warmup);
+        .DefaultValue(5)
+        .StoreResult(&WarmupSec);
     config.Opts->AddLongOption("topic", "Topic name.")
         .DefaultValue(TOPIC)
         .StoreResult(&TopicName);
@@ -85,7 +85,7 @@ void TCommandWorkloadTopicRunWrite::Parse(TConfig& config)
     if (Percentile > 100 || Percentile <= 0) {
         throw TMisuseException() << "--percentile should be in range (0,100].";
     }
-    if (Warmup >= Seconds) {
+    if (WarmupSec >= TotalSec) {
         throw TMisuseException() << "--warmup should be less than --seconds.";
     }
 }
@@ -94,7 +94,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
     Log = std::make_shared<TLog>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     Log->SetFormatter(GetPrefixLogFormatter(""));
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, 0, Quiet, PrintTimestamp, WindowDurationSec, Seconds, Warmup, Percentile, ErrorFlag);
+    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, 0, Quiet, PrintTimestamp, WindowSec, TotalSec, WarmupSec, Percentile, ErrorFlag);
     StatsCollector->PrintHeader();
     std::vector<TString> generatedMessages = TTopicWorkloadWriterWorker::GenerateMessages(MessageSize);
 
@@ -107,7 +107,8 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
     auto producerStartedCount = std::make_shared<std::atomic_uint>();
     for (ui32 writerIdx = 0; writerIdx < ProducerThreadCount; ++writerIdx) {
         TTopicWorkloadWriterParams writerParams{
-            .Seconds = Seconds,
+            .TotalSec = TotalSec,
+            .WarmupSec = WarmupSec,
             .Driver = Driver.get(),
             .Log = Log,
             .StatsCollector = StatsCollector,

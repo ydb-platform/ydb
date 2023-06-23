@@ -44,12 +44,12 @@ protected:
     std::unique_ptr<NYdb::TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
 
-    size_t Seconds;
+    size_t TotalSec;
     size_t Threads;
     unsigned int ClientTimeoutMs;
     unsigned int OperationTimeoutMs;
     unsigned int CancelAfterTimeoutMs;
-    unsigned int WindowDurationSec;
+    unsigned int WindowSec;
     bool Quiet;
     bool PrintTimestamp;
 

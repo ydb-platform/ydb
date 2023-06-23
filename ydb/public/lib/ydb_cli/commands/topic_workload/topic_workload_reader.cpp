@@ -34,7 +34,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams&& params) {
 
     (*params.StartedCount)++;
 
-    const TInstant endTime = Now() + TDuration::Seconds(params.Seconds + 3);
+    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
 
     while (Now() < endTime && !*params.ErrorFlag) {
         TInstant st = TInstant::Now();

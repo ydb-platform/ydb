@@ -12,7 +12,8 @@ namespace NYdb {
     namespace NConsoleClient {
 
         struct TTopicWorkloadWriterParams {
-            size_t Seconds;
+            size_t TotalSec;
+            ui32 WarmupSec;
             NYdb::TDriver* Driver;
             std::shared_ptr<TLog> Log;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
@@ -41,8 +42,6 @@ namespace NYdb {
             void Process();
 
             void CreateWorker();
-
-            void CreateTopicWorker();
 
             bool ProcessAckEvent(const NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
 

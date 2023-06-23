@@ -16,8 +16,8 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
     , ReaderCount(readerCount)
     , Quiet(quiet)
     , PrintTimestamp(printTimestamp)
-    , WindowDurationSec(windowDurationSec)
-    , TotalDurationSec(totalDurationSec)
+    , WindowSec(windowDurationSec)
+    , TotalSec(totalDurationSec)
     , WarmupSec(warmupSec)
     , Percentile(percentile)
     , ErrorFlag(errorFlag)
@@ -63,9 +63,9 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
 
 void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
     auto StartTime = Now();
-    auto StopTime = StartTime + TDuration::Seconds(TotalDurationSec + 1);
+    auto StopTime = StartTime + TDuration::Seconds(TotalSec + 1);
     int windowIt = 1;
-    auto windowDuration = TDuration::Seconds(WindowDurationSec);
+    auto windowDuration = TDuration::Seconds(WindowSec);
     while (Now() < StopTime && !*ErrorFlag) {
         if (Now() > StartTime + windowIt * windowDuration && !*ErrorFlag) {
             CollectThreadEvents(windowIt);
@@ -91,7 +91,7 @@ void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
         return;
 
     const auto& stats = windowIt.Empty() ? TotalStats : *WindowStats;
-    double seconds = windowIt.Empty() ? TotalDurationSec : WindowDurationSec;
+    double seconds = windowIt.Empty() ? TotalSec - WarmupSec : WindowSec;
     TString totalIt = windowIt.Empty() ? "Total" : std::to_string(windowIt.GetRef());
 
     Cout << totalIt;

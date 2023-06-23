@@ -11,19 +11,14 @@ namespace NYdb {
                 ui64 WriteTime;
                 ui64 InflightMessages;
             };
-            typedef THolder<WriterEvent> WriterEventRef;
-
             struct ReaderEvent {
                 ui64 MessageSize;
                 ui64 FullTime;
             };
-            typedef THolder<ReaderEvent> ReaderEventRef;
-
             struct LagEvent {
                 ui64 LagMessages;
                 ui64 LagTime;
             };
-            typedef THolder<LagEvent> LagEventRef;
 
             TTopicWorkloadStats();
 

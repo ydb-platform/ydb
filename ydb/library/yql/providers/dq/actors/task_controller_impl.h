@@ -543,8 +543,7 @@ public:
 
         for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
             auto actorId = ActorIdFromProto(actorIds[i]);
-            NYql::NDqProto::TDqTask& task = tasks[i];
-            Tasks.emplace_back(NDq::TDqTaskSettings(&task), actorId);
+            const auto& task = Tasks.emplace_back(NDq::TDqTaskSettings(&tasks[i]), actorId).first;
             ActorIds.emplace(task.GetId(), actorId);
             TaskIds.emplace(actorId, task.GetId());
             Yql::DqsProto::TTaskMeta taskMeta;

@@ -900,7 +900,8 @@
 
 - source_filter: "^contrib/libs/esp-idf"
   includes:
-      - MBEDTLS_CONFIG_FILE: contrib/libs/esp-idf/components/mbedtls/port/include/mbedtls/esp_config.h
+    - LWIP_HOOK_FILENAME: contrib/libs/esp-idf/components/lwip/port/esp32/include/lwip_default_hooks.h
+    - MBEDTLS_CONFIG_FILE: contrib/libs/esp-idf/components/mbedtls/port/include/mbedtls/esp_config.h
 
 - source_filter: "^contrib/libs/sparsehash/src/sparsehash"
   includes:

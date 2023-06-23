@@ -2,11 +2,11 @@ UNITTEST_FOR(ydb/core/driver_lib/version)
 
 SRCS(version_ut.cpp)
 
+TIMEOUT(300)
+SIZE(MEDIUM)
+
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/actors/interconnect
-    library/cpp/svnversion
-    ydb/core/protos
+    ydb/core/driver_lib/version
 )
 
 END()

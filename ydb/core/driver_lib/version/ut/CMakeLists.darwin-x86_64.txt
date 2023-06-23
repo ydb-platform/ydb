@@ -17,10 +17,6 @@ target_link_libraries(ydb-core-driver_lib-version-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   version
-  contrib-libs-protobuf
-  cpp-actors-interconnect
-  library-cpp-svnversion
-  ydb-core-protos
 )
 target_link_options(ydb-core-driver_lib-version-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
@@ -56,7 +52,7 @@ set_yunittest_property(
   ydb-core-driver_lib-version-ut
   PROPERTY
   LABELS
-  SMALL
+  MEDIUM
 )
 set_yunittest_property(
   TEST
@@ -64,6 +60,13 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-core-driver_lib-version-ut
+  PROPERTY
+  TIMEOUT
+  300
 )
 target_allocator(ydb-core-driver_lib-version-ut
   system_allocator

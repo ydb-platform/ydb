@@ -3,6 +3,8 @@
 #include <library/cpp/actors/interconnect/interconnect_common.h>
 #include <ydb/core/protos/config.pb.h>
 
+namespace NKikimr {
+
 class TCompatibilityInfo {
     friend class TCompatibilityInfoTest;
     using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
@@ -120,6 +122,7 @@ public:
 
     static NKikimrConfig::TStoredCompatibilityInfo MakeStored(NKikimrConfig::TCompatibilityRule::EComponentId componentId);
 
+    // pass nullptr if stored CompatibilityInfo is absent
     static bool CheckCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
             ui32 componentId, TString& errorReason);
     static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
@@ -149,3 +152,5 @@ extern TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION;
 
 void CheckVersionTag();
 TString GetBranchName(TString url);
+
+} // namespace NKikimr

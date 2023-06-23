@@ -5,6 +5,7 @@
 using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
 using TStored = NKikimrConfig::TStoredCompatibilityInfo;
 
+namespace NKikimr {
 
 /////////////////////////////////////////////////////////////
 // Global definitions
@@ -157,9 +158,9 @@ i32 CompareVersions(const NKikimrConfig::TYdbVersion& left, const NKikimrConfig:
     return 0;
 }
 
-// If StoredCompatibilityInfo is not present, we:
-// compare current to UnknownYdbRelease, if current version is stable, otherwise
-// we consider versions compatible
+// If stored CompatibilityInfo is not present, we:
+// - compare current to UnknownYdbRelease if current is stable version
+// - consider versions compatible otherwise
 bool CheckNonPresent(const TCurrent* current, ui32 componentId, TString& errorReason) {
     Y_VERIFY(current);
     if (!current->HasYdbVersion()) {
@@ -168,7 +169,7 @@ bool CheckNonPresent(const TCurrent* current, ui32 componentId, TString& errorRe
     const auto* lastUnsupported = TCompatibilityInfo::GetUnknown();
     Y_VERIFY(lastUnsupported);
     TString errorReason1;
-    if (!TCompatibilityInfo::CheckCompatibility(current, lastUnsupported, componentId, errorReason1)) {
+    if (!TCompatibilityInfo::CheckCompatibility(lastUnsupported, componentId, errorReason1)) {
         errorReason = "No stored YDB version found, last unsupported release is incompatible: " + errorReason1;
         return false;
     } else {
@@ -275,7 +276,6 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
             }
         }
     }
-
 
     if (permitted) {
         return true;
@@ -518,7 +518,7 @@ void CheckVersionTag() {
 using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
 
 bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
-            const TOldFormat& stored, ui32 componentId, TString& errorReason) {
+        const TOldFormat& stored, ui32 componentId, TString& errorReason) {
     Y_VERIFY(current);
 
     std::optional<TString> storedBuild;
@@ -612,4 +612,6 @@ bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompati
 
 bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& stored, ui32 componentId, TString& errorReason) {
     return CheckCompatibility(GetCurrent(), stored, componentId, errorReason);
+}
+
 }

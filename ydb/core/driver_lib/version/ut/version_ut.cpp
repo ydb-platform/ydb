@@ -2,6 +2,8 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include "ut_helpers.h"
 
+using namespace NKikimr;
+
 Y_UNIT_TEST_SUITE(VersionParser) {
     Y_UNIT_TEST(Basic) {
         UNIT_ASSERT_VALUES_EQUAL(GetBranchName("svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia"), "trunk");

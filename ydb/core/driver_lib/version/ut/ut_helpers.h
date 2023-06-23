@@ -1,5 +1,7 @@
 #include <ydb/core/driver_lib/version/version.h>
 
+namespace NKikimr {
+    
 class TCompatibilityInfoTest {
 public:
     TCompatibilityInfoTest() = delete;
@@ -8,3 +10,5 @@ public:
         TCompatibilityInfo::Reset(newCurrent);
     }
 };
+
+}

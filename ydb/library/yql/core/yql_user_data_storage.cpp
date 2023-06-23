@@ -55,6 +55,7 @@ void TUserDataStorage::SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessi
 
 void TUserDataStorage::SetUserDataTable(TUserDataTable data) {
      UserData_ = std::move(data);
+     FillUserDataUrls();
 }
 
 void TUserDataStorage::AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block) {

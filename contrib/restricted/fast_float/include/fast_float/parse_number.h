@@ -166,6 +166,7 @@ from_chars_result_t<UC> from_chars_advanced(UC const * first, UC const * last,
   if (!pns.valid) {
     return detail::parse_infnan(first, last, value);
   }
+
   answer.ec = std::errc(); // be optimistic
   answer.ptr = pns.lastmatch;
   // The implementation of the Clinger's fast path is convoluted because

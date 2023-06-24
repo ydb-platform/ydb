@@ -12,6 +12,7 @@
 #include <util/string/builder.h>
 #include <util/thread/lfstack.h>
 #include <array>
+#include <span>
 
 namespace NActors {
 
@@ -77,7 +78,7 @@ namespace NActors {
 
         void SetSerializingEvent(const IEventBase *event);
         void Abort();
-        std::pair<TChunk*, TChunk*> FeedBuf(void* data, size_t size);
+        std::span<TChunk> FeedBuf(void* data, size_t size);
         bool IsComplete() const {
             return !Event;
         }
@@ -102,7 +103,7 @@ namespace NActors {
     protected:
         void DoRun() override;
         void Resume();
-        bool Produce(const void *data, size_t size);
+        void Produce(const void *data, size_t size);
 
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
@@ -111,9 +112,7 @@ namespace NActors {
         TContMachineContext *BufFeedContext = nullptr;
         char *BufferPtr;
         size_t SizeRemain;
-        static constexpr size_t MaxChunks = 16;
-        TChunk Chunks[MaxChunks];
-        size_t NumChunks = 0;
+        std::vector<TChunk> Chunks;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
         bool AbortFlag;

@@ -61,8 +61,8 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
             TString bmChunkedSerialized;
             while (!chunker.IsComplete()) {
                 auto range = chunker.FeedBuf(&buf1[0], sizeof(buf1));
-                for (auto p = range.first; p != range.second; ++p) {
-                    bmChunkedSerialized.append(p->first, p->second);
+                for (auto [data, size] : range) {
+                    bmChunkedSerialized.append(data, size);
                 }
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);

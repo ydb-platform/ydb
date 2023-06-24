@@ -193,9 +193,11 @@ namespace NActors {
                 if (!out.size()) {
                     break;
                 }
-                const auto [first, last] = Chunker.FeedBuf(out.data(), out.size());
-                for (auto p = first; p != last; ++p) {
-                    addChunk(p->first, p->second, false);
+                ui32 bytesFed = 0;
+                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
+                    addChunk(buffer, size, false);
+                    bytesFed += size;
+                    Y_VERIFY(bytesFed <= out.size());
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {

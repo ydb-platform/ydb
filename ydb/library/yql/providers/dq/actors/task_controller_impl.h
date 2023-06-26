@@ -337,7 +337,7 @@ private:
         YQL_ENSURE(x.GetTasks().size() == 1);
         auto& s = x.GetTasks(0);
         ui64 taskId = s.GetTaskId();
-        ui64 stageId = s.GetStageId();
+        ui64 stageId = Stages.Value(taskId, s.GetStageId());
 
 #define ADD_COUNTER(name) \
         if (stats.Get ## name()) { \

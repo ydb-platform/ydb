@@ -46,6 +46,47 @@ private:
     }
 };
 
+class TCellsStorage
+{
+public:
+    TCellsStorage() = default;
+
+    void Reset(TArrayRef<const TCell> cells)
+    {
+        size_t CellsSize = cells.size();
+        Cells.resize(CellsSize);
+
+        size_t cellsDataSize = 0;
+        for (size_t i = 0; i < CellsSize; ++i) {
+            auto cell = cells[i];
+            Cells[i] = cell;
+
+            if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
+                cellsDataSize += cell.Size();
+            }
+        }
+
+        CellsData.resize(cellsDataSize);
+        char *cellsData = CellsData.data();
+
+        for (size_t i = 0; i < CellsSize; ++i) {
+            auto cell = Cells[i];
+
+            if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
+                memcpy(cellsData, cell.Data(), cell.Size());
+                Cells[i] = TCell(cellsData, cell.Size());
+                cellsData += cell.Size();
+            }
+        }
+    }
+
+    TArrayRef<const TCell> GetCells() const {
+        return Cells;
+    }
+private:
+    TSmallVec<TCell> Cells;
+    std::vector<char> CellsData;
+};
 
 class TCellBlockBuilder : public IBlockBuilder {
 public:
@@ -710,14 +751,18 @@ private:
     EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
         Y_UNUSED(ctx);
 
-        std::optional<TOwnedCellVec> lastProcessedKey;
+        bool hasLastProcessedKey = false;
+        TCellsStorage lastProcessedKeyCellsStorage;
+
         bool stoppedByLimit = false;
+        auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             TDbTupleRef rowKey = iter->GetKey();
             TDbTupleRef rowValues = iter->GetValues();
 
-            lastProcessedKey = TOwnedCellVec(rowKey.Cells());
+            hasLastProcessedKey = true;
+            lastProcessedKeyCellsStorage.Reset(rowKey.Cells());
 
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
@@ -726,7 +771,7 @@ private:
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
             RowsSinceLastCheck += 1 + ResetRowStats(iter->Stats);
 
-            Self->GetKeyAccessSampler()->AddSample(TableId, rowKey.Cells());
+            keyAccessSampler->AddSample(TableId, rowKey.Cells());
 
             if (ShouldStop()) {
                 stoppedByLimit = true;
@@ -734,8 +779,8 @@ private:
             }
         }
 
-        if (lastProcessedKey) {
-            LastProcessedKey = TSerializedCellVec::Serialize(*lastProcessedKey);
+        if (hasLastProcessedKey) {
+            LastProcessedKey = TSerializedCellVec::Serialize(lastProcessedKeyCellsStorage.GetCells());
         }
 
         if (stoppedByLimit)

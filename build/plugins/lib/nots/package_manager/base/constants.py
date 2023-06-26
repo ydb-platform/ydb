@@ -1,5 +1,6 @@
 BUILD_DIRNAME = "build"
 BUNDLE_DIRNAME = "bundle"
+OUTPUT_TAR_FILENAME = "output.tar"
 NODE_MODULES_BUNDLE_FILENAME = "node_modules.tar"
 NODE_MODULES_DIRNAME = "node_modules"
 NODE_MODULES_WORKSPACE_BUNDLE_FILENAME = "workspace_node_modules.tar"

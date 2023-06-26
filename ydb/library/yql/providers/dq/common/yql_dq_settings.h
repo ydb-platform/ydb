@@ -38,6 +38,7 @@ struct TDqSettings {
         static constexpr ui32 HashShuffleMaxTasks = 24;
         static constexpr bool UseFastPickleTransport = false;
         static constexpr bool AggregateStatsByStage = true;
+        static constexpr bool EnableChannelStats = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -98,6 +99,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> UseFastPickleTransport;
 
     NCommon::TConfSetting<bool, false> AggregateStatsByStage;
+    NCommon::TConfSetting<bool, false> EnableChannelStats;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -147,6 +149,7 @@ struct TDqSettings {
         SAVE_SETTING(UseWideChannels);
         SAVE_SETTING(UseFastPickleTransport);
         SAVE_SETTING(AggregateStatsByStage);
+        SAVE_SETTING(EnableChannelStats);
 #undef SAVE_SETTING
     }
 

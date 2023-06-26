@@ -1,0 +1,85 @@
+name: Prewarm-Ccache
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  provide-runner:
+    name: Start self-hosted YC runner
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-yc-runner.outputs.label }}
+      instance-id: ${{ steps.start-yc-runner.outputs.instance-id }}
+    steps:
+      - name: Start YC runner
+        id: start-yc-runner
+        uses: yc-actions/yc-github-runner@v1
+        with:
+          mode: start
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          folder-id: ${{ secrets.YC_FOLDER }}
+          image-id: fd8earpjmhevh8h6ug5o # TODO: create constant
+          disk-size: ${{ vars.DISK_SIZE && vars.DISK_SIZE || '279GB' }}
+          disk-type: network-ssd-nonreplicated
+          cores: 32
+          memory: 64GB
+          core-fraction: 100
+          zone-id: ru-central1-b
+          subnet-id: ${{ secrets.YC_SUBNET }}
+
+  prepare-vm:
+    name: Prepare runner
+    needs: provide-runner
+    runs-on: "${{ needs.provide-runner.outputs.label }}"
+    steps:
+      - name: install docker
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends docker.io
+  build:
+    needs:
+      - provide-runner
+      - prepare-vm
+    runs-on: "${{ needs.provide-runner.outputs.label }}"
+#    runs-on: linux
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        version: ["ubuntu-2204", "ubuntu-2004", "ubuntu-1804"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: build
+        shell: bash
+        run: |
+          echo "::group::docker-build"
+          docker build -f .github/prewarm/${{ matrix.version }}.dockerfile -t $IMG .
+          echo "::endgroup::"
+          
+          docker run --rm -v `pwd`:/ydbwork/ydb \
+            -e CCACHE_REMOTE_STORAGE="${CCACHE_REMOTE_STORAGE}" \
+            $IMG \
+            bash /ydbwork/ydb/.github/prewarm/build.sh
+        env:
+          IMG: runner-${{ matrix.version }}
+          CCACHE_REMOTE_STORAGE: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}
+  release-runner:
+    name: Release self-hosted YC runner if provided on-demand
+    needs:
+      - provide-runner
+      - build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Stop YC runner
+        uses: yc-actions/yc-github-runner@v1
+        with:
+          mode: stop
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.provide-runner.outputs.label }}
+          instance-id: ${{ needs.provide-runner.outputs.instance-id }}

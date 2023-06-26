@@ -89,6 +89,8 @@ public:
 struct TTestBootstrap {
     const TDuration RequestTimeout = TDuration::Seconds(10);
     NConfig::TControlPlaneProxyConfig Config;
+    NConfig::TComputeConfig ComputeConfig;
+    NConfig::TCommonConfig CommonConfig;
 
     TRuntimePtr Runtime;
     TGrabActor* MetaStorageGrab;
@@ -379,7 +381,14 @@ private:
         TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::STREAMS_CONTROL_PLANE_SERVICE, NLog::PRI_DEBUG);
 
-        auto controlPlaneProxy = CreateControlPlaneProxyActor(Config, MakeIntrusive<::NMonitoring::TDynamicCounters>(), true);
+        auto controlPlaneProxy = CreateControlPlaneProxyActor(
+            Config,
+            ComputeConfig,
+            CommonConfig,
+            NFq::TYqSharedResources::TPtr{},
+            NKikimr::TYdbCredentialsProviderFactory(nullptr),
+            MakeIntrusive<::NMonitoring::TDynamicCounters>(),
+            true);
         runtime->AddLocalService(
             ControlPlaneProxyActorId(),
             TActorSetupCmd(controlPlaneProxy, TMailboxType::Simple, 0));
@@ -1332,7 +1341,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsSuccess) {
         NConfig::TControlPlaneProxyConfig config;
         config.SetEnablePermissions(true);
         TTestBootstrap bootstrap(config);
-        bootstrap.SendCreateBindingRequest({"yq.bindings.create@as"});
+        bootstrap.SendCreateBindingRequest({"yq.bindings.create@as", "yq.connections.get@as"});
         auto request = bootstrap.MetaStorageGrab->GetRequest();
         auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
         auto permissions = event->Permissions;
@@ -1896,6 +1905,9 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         config.SetEnablePermissions(true);
         TTestBootstrap bootstrap(config);
         bootstrap.SendCreateBindingRequest({
+            "yq.connections.get@as",
+            "yq.resources.viewPublic@as",
+            "yq.resources.viewPrivate@as",
             "yq.bindings.create@as",
             "yq.resources.managePublic@as"
         });
@@ -1903,7 +1915,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckPermissionsControlPlaneStorageSuccess) 
         auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
         auto permissions = event->Permissions;
         UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
         UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
@@ -2691,11 +2703,11 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyCheckNegativePermissionsSuccess) {
         auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
         auto permissions = event->Permissions;
         UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-        UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+        UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
         UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
-        UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+        UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
         UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
         UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
@@ -3157,11 +3169,11 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
             auto permissions = event->Permissions;
             UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
             UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));
-            UNIT_ASSERT(!permissions.Check(TPermissions::MANAGE_PRIVATE));
+            UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::CONNECTIONS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::BINDINGS_USE));
             UNIT_ASSERT(!permissions.Check(TPermissions::QUERY_INVOKE));
@@ -3609,7 +3621,7 @@ Y_UNIT_TEST_SUITE(TControlPlaneProxyShouldPassHids) {
             auto event = request->Get<TEvControlPlaneStorage::TEvCreateBindingRequest>();
             auto permissions = event->Permissions;
             UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
-            UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PUBLIC));
+            UNIT_ASSERT(permissions.Check(TPermissions::VIEW_PUBLIC));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_PRIVATE));
             UNIT_ASSERT(!permissions.Check(TPermissions::VIEW_AST));
             UNIT_ASSERT(permissions.Check(TPermissions::MANAGE_PUBLIC));

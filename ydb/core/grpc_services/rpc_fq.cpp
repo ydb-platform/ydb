@@ -590,7 +590,10 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryCreateBindingRequestOp
         // so yq.resources.managePublic is always requested as optional
         return {
             NPerms::Required("yq.bindings.create"),
-            NPerms::Optional("yq.resources.managePublic")
+            NPerms::Required("yq.connections.get"),
+            NPerms::Optional("yq.resources.managePublic"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
         };
     } };
 

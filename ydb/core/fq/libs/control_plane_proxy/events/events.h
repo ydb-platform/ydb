@@ -79,6 +79,7 @@ struct TEvControlPlaneProxy {
             , Permissions(permissions)
             , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
+            , ComputeYDBOperationWasPerformed(false)
         {
         }
 
@@ -91,6 +92,7 @@ struct TEvControlPlaneProxy {
         TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
         TString SubjectType;
+        bool ComputeYDBOperationWasPerformed;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>

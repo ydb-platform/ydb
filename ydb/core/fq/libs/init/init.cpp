@@ -96,8 +96,14 @@ void Init(
     }
 
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
-        auto controlPlaneProxy = NFq::CreateControlPlaneProxyActor(protoConfig.GetControlPlaneProxy(),
-            yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"), protoConfig.GetQuotasManager().GetEnabled());
+        auto controlPlaneProxy = NFq::CreateControlPlaneProxyActor(
+            protoConfig.GetControlPlaneProxy(),
+            protoConfig.GetCompute(),
+            protoConfig.GetCommon(),
+            yqSharedResources,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"),
+            protoConfig.GetQuotasManager().GetEnabled());
         actorRegistrator(NFq::ControlPlaneProxyActorId(), controlPlaneProxy);
     }
 

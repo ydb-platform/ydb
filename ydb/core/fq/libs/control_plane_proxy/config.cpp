@@ -30,12 +30,20 @@ NConfig::TControlPlaneProxyConfig FillDefaultParameters(NConfig::TControlPlanePr
 
 }
 
-TControlPlaneProxyConfig::TControlPlaneProxyConfig(const NConfig::TControlPlaneProxyConfig& config)
+TControlPlaneProxyConfig::TControlPlaneProxyConfig(
+    const NConfig::TControlPlaneProxyConfig& config,
+    const NConfig::TComputeConfig& computeConfig,
+    const NConfig::TCommonConfig& commonConfig)
     : Proto(FillDefaultParameters(config))
+    , ComputeConfig(computeConfig)
+    , CommonConfig(commonConfig)
     , RequestTimeout(GetDuration(Proto.GetRequestTimeout(), TDuration::Seconds(30)))
     , MetricsTtl(GetDuration(Proto.GetMetricsTtl(), TDuration::Days(1)))
-    , ConfigRetryPeriod(GetDuration(Proto.GetConfigRetryPeriod(), TDuration::MilliSeconds(100)))
-{
+    , ConfigRetryPeriod(
+          GetDuration(Proto.GetConfigRetryPeriod(), TDuration::MilliSeconds(100))) { }
+
+bool TControlPlaneProxyConfig::IsYDBComputeEngineEnabled() const {
+    return ComputeConfig.HasYdb() && ComputeConfig.GetYdb().GetEnable();
 }
 
 } // NFq

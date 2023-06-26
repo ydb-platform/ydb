@@ -34,7 +34,7 @@ TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const NYql::NNodes::TExprBa
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDict(
     const NYql::NNodes::TDqPhyPrecompute& lookupKeys, const NYql::TKikimrTableDescription& table,
-    const THashSet<TString>& dataColumns, const TSecondaryIndexes& indexes, NYql::TPositionHandle pos,
+    const THashSet<TString>& dataColumns, const THashSet<TString>& keyColumns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 
 NYql::NNodes::TCoLambda MakeTableKeySelector(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,

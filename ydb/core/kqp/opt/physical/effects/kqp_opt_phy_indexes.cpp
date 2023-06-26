@@ -9,32 +9,30 @@ using namespace NYql::NNodes;
 namespace {
 
 TVector<TExprBase> CreateColumnsToSelectToUpdateIndex(
-    const TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> indexes,
     const TVector<TString>& pk,
     const THashSet<TString>& dataColumns,
+    const THashSet<TString>& keyColumns,
     TPositionHandle pos,
     TExprContext& ctx)
 {
     TVector<TExprBase> columnsToSelect;
     TSet<TString> columns;
 
-    for (const auto& pair : indexes) {
-        for (const auto& col : pair.second->KeyColumns) {
-            if (columns.insert(col).second) {
-                auto atom = Build<TCoAtom>(ctx, pos)
-                    .Value(col)
-                    .Done();
-                columnsToSelect.emplace_back(std::move(atom));
-            }
+    for (const auto& col : keyColumns) {
+        if (columns.insert(col).second) {
+            auto atom = Build<TCoAtom>(ctx, pos)
+                .Value(col)
+                .Done();
+            columnsToSelect.emplace_back(std::move(atom));
         }
+    }
 
-        for (const auto& col : dataColumns) {
-            if (columns.insert(col).second) {
-                auto atom = Build<TCoAtom>(ctx, pos)
-                    .Value(col)
-                    .Done();
-                columnsToSelect.emplace_back(std::move(atom));
-            }
+    for (const auto& col : dataColumns) {
+        if (columns.insert(col).second) {
+            auto atom = Build<TCoAtom>(ctx, pos)
+                .Value(col)
+                .Done();
+            columnsToSelect.emplace_back(std::move(atom));
         }
     }
 
@@ -129,11 +127,11 @@ TSecondaryIndexes BuildSecondaryIndexVector(const TKikimrTableDescription& table
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,
-    const TKikimrTableDescription& table, const THashSet<TString>& dataColumns, const TSecondaryIndexes& indexes,
-    TPositionHandle pos, TExprContext& ctx)
+    const TKikimrTableDescription& table, const THashSet<TString>& dataColumns,
+    const THashSet<TString>& keyColumns, TPositionHandle pos, TExprContext& ctx)
 {
-    auto lookupColumns = CreateColumnsToSelectToUpdateIndex(indexes, table.Metadata->KeyColumnNames, dataColumns,
-        pos, ctx);
+    auto lookupColumns = CreateColumnsToSelectToUpdateIndex(table.Metadata->KeyColumnNames, dataColumns,
+        keyColumns, pos, ctx);
 
     auto lookupColumnsList = Build<TCoAtomList>(ctx, pos)
         .Add(lookupColumns)

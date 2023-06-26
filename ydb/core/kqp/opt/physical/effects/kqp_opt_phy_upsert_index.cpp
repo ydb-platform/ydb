@@ -107,6 +107,20 @@ THashSet<TString> CreateDataColumnSetToRead(
     return res;
 }
 
+THashSet<TString> CreateKeyColumnSetToRead(
+    const TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>>& indexes)
+{
+    THashSet<TString> res;
+
+    for (const auto& index : indexes) {
+        for (const auto& col : index.second->KeyColumns) {
+            res.emplace(col);
+        }
+    }
+
+    return res;
+}
+
 TExprBase MakeNonexistingRowsFilter(const TDqPhyPrecompute& inputRows, const TDqPhyPrecompute& lookupDict,
     const TVector<TString>& dictKeys, TPositionHandle pos, TExprContext& ctx)
 {
@@ -309,16 +323,20 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     auto inputRowsAndKeys = PrecomputeRowsAndKeys(*condenseInputResult, table, pos, ctx);
 
-    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx);
-    YQL_ENSURE(indexes);
-
     THashSet<TStringBuf> inputColumnsSet;
     for (const auto& column : inputColumns) {
         inputColumnsSet.emplace(column.Value());
     }
 
-    auto dataColumns = CreateDataColumnSetToRead(indexes, inputColumnsSet);
-    auto lookupDict = PrecomputeTableLookupDict(inputRowsAndKeys.KeysPrecompute, table, dataColumns, indexes, pos, ctx);
+    auto filter =  (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
+    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
+    // For UPSERT check that indexes is not empty for UPSERT
+    YQL_ENSURE(mode == TKqpPhyUpsertIndexMode::UpdateOn || indexes);
+
+    THashSet<TString> indexDataColumns = CreateDataColumnSetToRead(indexes, inputColumnsSet);
+    THashSet<TString> indexKeyColumns = CreateKeyColumnSetToRead(indexes);
+
+    auto lookupDict = PrecomputeTableLookupDict(inputRowsAndKeys.KeysPrecompute, table, indexDataColumns, indexKeyColumns, pos, ctx);
     if (!lookupDict) {
         return {};
     }

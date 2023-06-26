@@ -4032,6 +4032,108 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .ExpectedReads = 1
         });
     }
+    Y_UNIT_TEST(UpdateOnReadColumns) {
+        {
+            // Check that keys from non involved index are not in read columns
+            TKikimrRunner kikimr;
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            CreateSampleTablesWithIndex(session);
+
+            auto result = session.ExplainDataQuery(R"(
+                UPDATE `/Root/SecondaryKeys` ON (Key, Value) VALUES (1, "New");
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto table = plan["tables"][0];
+            UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryKeys");
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+        }
+        {
+            // Check that keys from involved index are in read columns
+            TKikimrRunner kikimr;
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            CreateSampleTablesWithIndex(session);
+
+            auto result = session.ExplainDataQuery(R"(
+                UPDATE `/Root/SecondaryComplexKeys` ON (Key, Fk1, Value) VALUES (1, 1, "New");
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto table = plan["tables"][0];
+            UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryComplexKeys");
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
+        }
+        {
+            // Check that all keys from involved index are in read columns
+            TKikimrRunner kikimr;
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            CreateSampleTablesWithIndex(session);
+
+            auto result = session.ExplainDataQuery(R"(
+                UPDATE `/Root/SecondaryComplexKeys` ON (Key, Fk1, Value) VALUES (1, 1, "New");
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto table = plan["tables"][0];
+            UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryComplexKeys");
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
+        }
+        {
+            // Check that data colomns from involved index are in read columns
+            TKikimrRunner kikimr;
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            CreateSampleTablesWithIndex(session);
+
+            auto result = session.ExplainDataQuery(R"(
+                UPDATE `/Root/SecondaryWithDataColumns` ON (Key, Value) VALUES ("1", "New");
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto table = plan["tables"][0];
+            UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 2);
+        }
+        {
+            // Check that data colomns not from involved index aren't in read columns
+            TKikimrRunner kikimr;
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            CreateSampleTablesWithIndex(session);
+
+            auto result = session.ExplainDataQuery(R"(
+                UPDATE `/Root/SecondaryWithDataColumns` ON (Key, ExtPayload) VALUES ("1", "New");
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+            auto table = plan["tables"][0];
+            UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
+            auto reads = table["reads"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+        }
+    }
 }
 
 }

@@ -211,15 +211,14 @@ void AddRangeQuery(
     auto fromBuf = TSerializedCellVec::Serialize(fromCells);
     auto toBuf = TSerializedCellVec::Serialize(toCells);
 
-    request.Ranges.emplace_back(fromBuf, toBuf, fromInclusive, toInclusive);
+    request.Ranges.emplace_back(std::move(fromBuf), std::move(toBuf), fromInclusive, toInclusive);
 }
 
 void AddKeyQuery(
     TEvDataShard::TEvRead &request,
     const TOwnedCellVec &key)
 {
-    auto buf = TSerializedCellVec::Serialize(key);
-    request.Keys.emplace_back(buf);
+    request.Keys.emplace_back(key);
 }
 
 IActor *CreateReadIteratorScan(

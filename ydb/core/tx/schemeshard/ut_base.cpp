@@ -9827,7 +9827,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
 
-            return NKikimr::TSerializedCellVec(NKikimr::TSerializedCellVec::Serialize(cells));
+            return NKikimr::TSerializedCellVec(cells);
         }
 
         NKikimrTableStats::THistogram FillHistogram(const TVector<TVector<TString>>& keys) const {

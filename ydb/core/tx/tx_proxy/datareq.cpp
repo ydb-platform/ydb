@@ -588,9 +588,9 @@ void TKeySpace::Initialize(bool ordered,
                            TConstArrayRef<NScheme::TTypeInfo> keyTypes,
                            const TTableRange &range)
 {
-    SpaceRange.From.Parse(TSerializedCellVec::Serialize(range.From));
+    SpaceRange.From = TSerializedCellVec(range.From);
     SpaceRange.FromInclusive = range.InclusiveFrom;
-    SpaceRange.To.Parse(TSerializedCellVec::Serialize(range.To));
+    SpaceRange.To = TSerializedCellVec(range.To);
     SpaceRange.ToInclusive = range.InclusiveTo;
 
     // +INF should not be included
@@ -3047,7 +3047,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         break;
     }
 
-    buf.Parse(TSerializedCellVec::Serialize(key));
+    buf = TSerializedCellVec(key);
     return true;
 }
 

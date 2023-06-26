@@ -328,7 +328,7 @@ namespace NTable {
 
             if (NextSliceFirstRowId == Max<TRowId>()) {
                 NextSliceFirstRowId = Groups[0].Data.GetLastRowId();
-                NextSliceFirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(KeyState.Key));
+                NextSliceFirstKey = TSerializedCellVec(KeyState.Key);
             }
         }
 
@@ -732,7 +732,7 @@ namespace NTable {
                     TRowId lastRowId = dataPage.BaseRow() + dataPage->Records - 1;
                     InitKey(dataPage->Record(dataPage->Records - 1), groupId);
 
-                    SaveSlice(lastRowId, TSerializedCellVec(TSerializedCellVec::Serialize(Key)));
+                    SaveSlice(lastRowId, TSerializedCellVec(Key));
 
                     if (Phase == 1) {
                         Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == g.LastKeyIndexSize);

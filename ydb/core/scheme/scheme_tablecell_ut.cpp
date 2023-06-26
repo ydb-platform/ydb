@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT(!TSerializedCellVec::TryParse("\1\1", vec));
 
         const TString buf = TSerializedCellVec::Serialize({TCell(), TCell()});
-        UNIT_ASSERT_VALUES_EQUAL(buf.size(), 2 + 2*4);
+        UNIT_ASSERT_VALUES_EQUAL(buf.size(), sizeof(ui16) * 2 + sizeof(ui8) + 2 * 4);
 
         {
             for (size_t i = 0; i < buf.size(); ++i) {

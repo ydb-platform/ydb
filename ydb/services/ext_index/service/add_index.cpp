@@ -35,8 +35,8 @@ public:
         for (auto&& c : cells) {
             key.emplace_back(c);
         }
-        TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
-        Rows->emplace_back(serializedKey, "");
+        TSerializedCellVec serializedKey(key);
+        Rows->emplace_back(std::move(serializedKey), "");
         ++Index;
     }
 };

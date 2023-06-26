@@ -75,8 +75,8 @@ public:
         TConstArrayRef<TCell> keyCells(&cells[0], KeySize);
         TConstArrayRef<TCell> valueCells(&cells[KeySize], cells.size() - KeySize);
 
-        TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells));
-        Rows.emplace_back(serializedKey, TSerializedCellVec::Serialize(valueCells));
+        TSerializedCellVec serializedKey(keyCells);
+        Rows.emplace_back(std::move(serializedKey), TSerializedCellVec::Serialize(valueCells));
     }
 
     float GetRuCost() const {
@@ -817,7 +817,6 @@ private:
     }
 
     void FindMinMaxKeys() {
-
         for (const auto& pair : GetRows()) {
              const auto& serializedKey = pair.first;
 

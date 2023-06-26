@@ -212,8 +212,8 @@ public:
 
     TSerializedTableRange(TConstArrayRef<TCell> fromValues, bool inclusiveFrom, TConstArrayRef<TCell> toValues,
         bool inclusiveTo)
-        : From(TSerializedCellVec::Serialize(fromValues))
-        , To(TSerializedCellVec::Serialize(toValues))
+        : From(fromValues)
+        , To(toValues)
         , FromInclusive(inclusiveFrom)
         , ToInclusive(inclusiveTo) {}
 

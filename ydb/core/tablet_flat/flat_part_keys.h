@@ -138,7 +138,7 @@ namespace NTable {
 
         TSerializedCellVec GetKey() const noexcept
         {
-            return TSerializedCellVec(TSerializedCellVec::Serialize(Key));
+            return TSerializedCellVec(Key);
         }
 
         bool SeekRow(TRowId rowId) noexcept

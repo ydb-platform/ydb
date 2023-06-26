@@ -156,10 +156,6 @@
     - stdatomic.h:    contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
     - atomic.h:       contrib/libs/ffmpeg-3.4.1/libavutil/atomic.h
 
-- source_filter: "^contrib/libs/glog"
-  includes:
-    - port.h:        contrib/libs/glog/missing_includes/port.h
-
 - source_filter: "^contrib/libs/postgresql"
   includes:
     - port.h:        contrib/libs/postgresql/src/include/port.h

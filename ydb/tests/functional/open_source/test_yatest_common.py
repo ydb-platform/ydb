@@ -7,7 +7,9 @@ import yatest.common as ya_common
 class TestYaTestContext(object):
     def test_source_path(self):
         resource_path = 'ydb/tests/functional/open_source/resource.txt'
-        ya_source_path = ya_common.source_path(resource_path)
+        arcadia_root = ya_common.source_path('')
+        ya_source_path = os.path.join(arcadia_root, ya_common.test_source_path('resource.txt'))
+
         context_file = os.getenv('YA_TEST_CONTEXT_FILE')
 
         if context_file:

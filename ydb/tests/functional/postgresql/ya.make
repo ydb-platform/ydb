@@ -18,6 +18,8 @@ TEST_SRCS(
     test_postgres.py
 )
 
+ENV(PGWIRE_BINARY="ydb/apps/pgwire/pgwire")
+
 PEERDIR(
     library/python/testing/yatest_common
     ydb/tests/library

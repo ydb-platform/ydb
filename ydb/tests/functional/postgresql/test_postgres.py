@@ -45,7 +45,8 @@ def psql_binary_path():
 
 
 def pgwire_binary_path():
-    return yatest_common.binary_path('ydb/apps/pgwire/pgwire')
+    assert os.getenv('PGWIRE_BINARY')
+    return yatest_common.binary_path(os.getenv('PGWIRE_BINARY'))
 
 
 def execute_binary(binary_name, cmd, wait, join_stderr=False):

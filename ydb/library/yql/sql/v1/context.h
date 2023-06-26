@@ -139,7 +139,7 @@ namespace NSQLTranslationV1 {
                     return TString(NYql::KikimrProviderName);
                 }
                 if (Settings.DynamicClusterProvider) {
-                    normalizedClusterName = cluster;
+                    normalizedClusterName = cluster.StartsWith('/') ? cluster : Settings.PathPrefix + "/" + cluster;
                     return Settings.DynamicClusterProvider;
                 }
                 return Nothing();
@@ -148,6 +148,7 @@ namespace NSQLTranslationV1 {
             return provider;
         }
 
+        bool IsDynamicCluster(const TDeferredAtom& cluster) const;
         bool HasNonYtProvider(const ISource& source) const;
         bool UseUnordered(const ISource& source) const;
         bool UseUnordered(const TTableRef& table) const;

@@ -241,6 +241,21 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
     return *IssueMsgHolder;
 }
 
+bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
+    const TString* clusterPtr = cluster.GetLiteral();
+    if (!clusterPtr) {
+        return false;
+    }
+    TString unused;
+    if (ClusterMapping.GetClusterProvider(*clusterPtr, unused)) {
+        return false;
+    }
+    if (Settings.AssumeYdbOnClusterWithSlash && clusterPtr->StartsWith('/')) {
+        return false;
+    }
+    return !Settings.DynamicClusterProvider.Empty();
+}
+
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
         if (*arg == YtProviderName
@@ -276,6 +291,9 @@ TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& 
 }
 
 TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
+    if (IsDynamicCluster(cluster)) {
+        return {};
+    }
     auto* clusterPrefix = cluster.GetLiteral()
                             ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral())
                             : nullptr;

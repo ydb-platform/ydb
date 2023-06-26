@@ -1,0 +1,25 @@
+set -e
+
+export CONAN_USER_HOME=/ydbwork/build
+export CCACHE_SLOPPINESS=locale
+export CCACHE_BASEDIR=/ydbwork/
+
+export CONAN_USER_HOME=/ydbwork/build
+
+mkdir /ydbwork/build
+cd /ydbwork/build
+
+echo "::group::cmake"
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
+-DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
+-DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+../ydb
+echo "::endgroup::"
+
+
+echo "::group::ninja"
+#ninja ydb/apps/ydb/all
+ninja
+echo "::endgroup::"
+
+ccache -s

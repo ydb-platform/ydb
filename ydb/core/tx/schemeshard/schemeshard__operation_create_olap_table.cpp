@@ -14,10 +14,14 @@ namespace NKikimr::NSchemeShard {
 namespace {
 
 class TTableConstructorBase {
-    YDB_READONLY(ui32, ShardsCount, 1);
-    YDB_READONLY_DEF(TString, Name);
-    YDB_OPT(NKikimrSchemeOp::TColumnDataLifeCycle, TtlSettings);
-    YDB_OPT(NKikimrSchemeOp::TColumnTableSharding, Sharding);
+public:
+    static constexpr ui32 DEFAULT_SHARDS_COUNT = 64;
+
+private:
+    ui32 ShardsCount = 0;
+    TString Name;
+    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> TtlSettings;
+    std::optional<NKikimrSchemeOp::TColumnTableSharding> Sharding;
 
 public:
     bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
@@ -32,14 +36,12 @@ public:
             return false;
         }
 
-        ShardsCount = Max(ui32(1), description.GetColumnShardCount());
+        ShardsCount = description.GetColumnShardCount();
+
         if (description.HasSharding()) {
             Sharding = description.GetSharding();
-        }
-
-        if (!Sharding && ShardsCount > 1) {
-            errors.AddError("Sharding is not set");
-            return false;
+        } else {
+            Sharding = DefaultSharding();
         }
 
         if (!DoDeserialize(description, errors)) {
@@ -62,8 +64,8 @@ public:
         BuildDescription(tableInfo->Description);
         tableInfo->Description.SetColumnShardCount(ShardsCount);
         tableInfo->Description.SetName(Name);
-        if (HasTtlSettings()) {
-            tableInfo->Description.MutableTtlSettings()->CopyFrom(GetTtlSettingsUnsafe());
+        if (TtlSettings) {
+            tableInfo->Description.MutableTtlSettings()->CopyFrom(*TtlSettings);
             tableInfo->Description.MutableTtlSettings()->SetVersion(1);
         }
         if (!SetSharding(GetSchema(), tableInfo, errors)) {
@@ -78,12 +80,15 @@ private:
     virtual const TOlapSchema& GetSchema() const = 0;
 
     bool SetSharding(const TOlapSchema& schema, TColumnTableInfo::TPtr tableInfo, IErrorCollector& errors) const {
-        if (Sharding) {
-            tableInfo->Sharding = *Sharding;
-        } else {
-            Y_VERIFY(ShardsCount == 1);
-            tableInfo->Sharding.MutableRandomSharding();
-        };
+        if (!ShardsCount) {
+            errors.AddError("Shards count is zero");
+            return false;
+        }
+        if (!Sharding) {
+            errors.AddError("Sharding is not set");
+            return false;
+        }
+        tableInfo->Sharding = *Sharding;
 
         switch (tableInfo->Sharding.Method_case()) {
             case NKikimrSchemeOp::TColumnTableSharding::kRandomSharding: {
@@ -96,7 +101,10 @@ private:
             case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
                 auto& sharding = *tableInfo->Sharding.MutableHashSharding();
                 if (sharding.ColumnsSize() == 0) {
-                    errors.AddError(Sprintf("Hash sharding requires a non-empty list of columns"));
+                    sharding.MutableColumns()->CopyFrom(tableInfo->Description.GetSchema().GetKeyColumnNames());
+                }
+                if (ShardsCount > 1 && sharding.ColumnsSize() == 0) {
+                    errors.AddError("Hash sharding requires a non-empty list of columns or primary key specified");
                     return false;
                 }
                 for (const TString& columnName : sharding.GetColumns()) {
@@ -121,13 +129,20 @@ private:
         }
         return true;
     }
+
+    static NKikimrSchemeOp::TColumnTableSharding DefaultSharding() {
+        NKikimrSchemeOp::TColumnTableSharding sharding;
+        auto* hashSharding = sharding.MutableHashSharding();
+        hashSharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+        return sharding;
+    }
 };
 
 class TOlapPresetConstructor : public TTableConstructorBase {
-    YDB_READONLY(ui32, PresetId, 0);
-    YDB_READONLY(TString, PresetName, "default");
-
+    ui32 PresetId = 0;
+    TString PresetName = "default";
     const TOlapStoreInfo& StoreInfo;
+
 public:
     TOlapPresetConstructor(const TOlapStoreInfo& storeInfo)
         : StoreInfo(storeInfo)
@@ -552,7 +567,12 @@ public:
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        auto& createDescription = Transaction.GetCreateColumnTable();
+
+        // Copy CreateColumnTable for changes. Update defaut sharding if not set.
+        auto createDescription = Transaction.GetCreateColumnTable();
+        if (!createDescription.HasColumnShardCount()) {
+            createDescription.SetColumnShardCount(TTableConstructorBase::DEFAULT_SHARDS_COUNT);
+        }
         const TString& name = createDescription.GetName();
         const ui32 shardsCount = Max(ui32(1), createDescription.GetColumnShardCount());
         auto opTxId = OperationId.GetTxId();

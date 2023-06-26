@@ -4,6 +4,7 @@
 #include <util/generic/string.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
+#include <util/stream/zerocopy.h>
 #include <util/stream/str.h>
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
@@ -1078,6 +1079,40 @@ public:
 
     bool IsOnChunk() const {
         return Head != Slide;
+    }
+};
+
+class TRopeZeroCopyInput : public IZeroCopyInput {
+    TRope::TConstIterator Iter;
+    const char* Data = nullptr;
+    size_t Len = 0;
+
+private:
+    size_t DoNext(const void** ptr, size_t len) override {
+        Y_VERIFY_DEBUG(ptr);
+        if (Len == 0) {
+            if (Iter.Valid()) {
+                Data = Iter.ContiguousData();
+                Len = Iter.ContiguousSize();
+                Y_VERIFY_DEBUG(Len);
+                Y_VERIFY_DEBUG(Data);
+                ++Iter;
+            } else {
+                Data = nullptr;
+            }
+        }
+
+        size_t chunk = std::min(Len, len);
+        *ptr = Data;
+        Data += chunk;
+        Len -= chunk;
+        return chunk;
+    }
+
+public:
+    explicit TRopeZeroCopyInput(TRope::TConstIterator iter)
+        : Iter(iter)
+    {
     }
 };
 

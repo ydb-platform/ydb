@@ -373,4 +373,46 @@ Y_UNIT_TEST_SUITE(TRope) {
         }
     }
 
+    Y_UNIT_TEST(RopeZeroCopyInputBasic) {
+        TRope rope = CreateRope(Text, 3);
+        TRopeZeroCopyInput input(rope.Begin());
+
+        TString result;
+        TStringOutput output(result);
+        TransferData(&input, &output);
+        UNIT_ASSERT_EQUAL(result, Text);
+    }
+
+    Y_UNIT_TEST(RopeZeroCopyInput) {
+        TRope rope;
+        rope.Insert(rope.End(), TRope{"abc"});
+        rope.Insert(rope.End(), TRope{TString{}});
+        rope.Insert(rope.End(), TRope{"de"});
+        rope.Insert(rope.End(), TRope{TString{}});
+        rope.Insert(rope.End(), TRope{TString{}});
+        rope.Insert(rope.End(), TRope{"fghi"});
+
+        TRopeZeroCopyInput input(rope.Begin());
+
+        const char* data = nullptr;
+        size_t len;
+
+        len = input.Next(&data, 2);
+        UNIT_ASSERT_EQUAL("ab", TStringBuf(data, len));
+
+        len = input.Next(&data, 3);
+        UNIT_ASSERT_EQUAL("c", TStringBuf(data, len));
+
+        len = input.Next(&data, 3);
+        UNIT_ASSERT_EQUAL("de", TStringBuf(data, len));
+
+        len = input.Next(&data);
+        UNIT_ASSERT_EQUAL("fghi", TStringBuf(data, len));
+
+        len = input.Next(&data);
+        UNIT_ASSERT_EQUAL(len, 0);
+
+        len = input.Next(&data);
+        UNIT_ASSERT_EQUAL(len, 0);
+    }
 }

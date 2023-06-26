@@ -68,6 +68,7 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_olapstore_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_query_ut.cpp
 )
 set_property(
   TARGET

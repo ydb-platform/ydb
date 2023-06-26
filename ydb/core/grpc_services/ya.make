@@ -23,7 +23,6 @@ SRCS(
     rpc_copy_tables.cpp
     rpc_export.cpp
     rpc_create_coordination_node.cpp
-    rpc_create_session.cpp
     rpc_create_table.cpp
     rpc_delete_session.cpp
     rpc_describe_coordination_node.cpp
@@ -73,6 +72,8 @@ SRCS(
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     table_settings.cpp
+
+    rpc_common/rpc_common_kqp_session.cpp
 
     query/rpc_execute_query.cpp
     query/rpc_execute_script.cpp

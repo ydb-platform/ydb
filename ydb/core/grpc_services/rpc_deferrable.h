@@ -4,7 +4,7 @@
 #include "grpc_request_proxy.h"
 #include "cancelation/cancelation.h"
 #include "cancelation/cancelation_event.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/kikimr_issue.h>
@@ -27,6 +27,18 @@ private:
     typedef TActorBootstrapped<TDerived> TBase;
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
 
+    template<typename TIn, typename TOut>
+    void Fill(const TIn* in, TOut* out) {
+        auto& operationParams = in->operation_params();
+        out->OperationTimeout_ = GetDuration(operationParams.operation_timeout());
+        out->CancelAfter_ = GetDuration(operationParams.cancel_after());
+        out->ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED;
+    }
+
+    template<typename TOut>
+    void Fill(const NProtoBuf::Message*, TOut*) {
+    }
+
 public:
     enum EWakeupTag {
         WakeupTagTimeout = 10,
@@ -39,10 +51,11 @@ public:
     TRpcRequestWithOperationParamsActor(TRequestBase* request)
         : Request_(request)
     {
-        auto& operationParams = GetProtoRequest()->operation_params();
-        OperationTimeout_ = GetDuration(operationParams.operation_timeout());
-        CancelAfter_ = GetDuration(operationParams.cancel_after());
-        ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED;
+        Fill(GetProtoRequest(), this);
+        //auto& operationParams = GetProtoRequest()->operation_params();
+        //OperationTimeout_ = GetDuration(operationParams.operation_timeout());
+        //CancelAfter_ = GetDuration(operationParams.cancel_after());
+        //ReportCostInfo_ = operationParams.report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
 
     const typename TRequest::TRequest* GetProtoRequest() const {

@@ -5,7 +5,7 @@
 #include "rpc_scheme_base.h"
 
 #include "service_table.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>

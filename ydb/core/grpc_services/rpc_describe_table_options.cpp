@@ -3,7 +3,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>

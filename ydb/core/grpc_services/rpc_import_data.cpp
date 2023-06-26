@@ -1,6 +1,6 @@
 #include "grpc_request_proxy.h"
 #include "rpc_calls.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "rpc_request_base.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "grpc_request_proxy.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/proto_duration.h>
+#include "ydb/core/grpc_services/grpc_request_proxy.h"
 
 namespace NKikimr {
 namespace NGRpcService {

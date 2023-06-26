@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/grpc_services/rpc_common.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/local.h>

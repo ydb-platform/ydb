@@ -4,7 +4,7 @@
 #include "rpc_kh_snapshots.h"
 #include "resolve_local_db_table.h"
 
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "rpc_deferrable.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>

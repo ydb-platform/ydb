@@ -6,7 +6,6 @@
 
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/grpc_services/rpc_common.h>
 
 namespace NKikimr::NGRpcService {
 

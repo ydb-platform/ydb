@@ -1,5 +1,5 @@
 #include "service_logstore.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "rpc_scheme_base.h"
 
 #include <ydb/core/ydb_convert/table_description.h>

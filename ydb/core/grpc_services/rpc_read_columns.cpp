@@ -1,7 +1,7 @@
 #include "service_coordination.h"
 #include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "rpc_kh_snapshots.h"
 #include "resolve_local_db_table.h"
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -13,6 +13,7 @@
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/public/api/protos/ydb_clickhouse_internal.pb.h>
 
 #include <util/string/vector.h>
 

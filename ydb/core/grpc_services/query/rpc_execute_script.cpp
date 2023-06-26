@@ -168,11 +168,15 @@ private:
 
 } // namespace
 
-void DoExecuteScriptRequest(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
+namespace NQuery {
+
+void DoExecuteScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
     Y_UNUSED(f);
     auto* req = dynamic_cast<TEvExecuteScriptRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
     f.RegisterActor(new TExecuteScriptRPC(req));
+}
+
 }
 
 } // namespace NKikimr::NGRpcService

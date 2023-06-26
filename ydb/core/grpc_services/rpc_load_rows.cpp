@@ -1,6 +1,6 @@
 #include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>

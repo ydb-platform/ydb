@@ -1,6 +1,6 @@
 #include "grpc_request_proxy.h"
 #include "rpc_calls.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/tablet_pipe.h>

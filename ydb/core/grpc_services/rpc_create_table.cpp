@@ -2,7 +2,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "table_settings.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>

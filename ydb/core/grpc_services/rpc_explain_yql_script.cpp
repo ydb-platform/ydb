@@ -1,6 +1,6 @@
 #include "service_yql_scripting.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 

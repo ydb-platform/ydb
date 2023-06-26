@@ -2,7 +2,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 
 #include "rpc_scheme_base.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

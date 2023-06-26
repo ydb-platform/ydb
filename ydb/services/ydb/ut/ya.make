@@ -28,6 +28,7 @@ SRCS(
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
     cert_gen.cpp
+    ydb_query_ut.cpp
 )
 
 PEERDIR(

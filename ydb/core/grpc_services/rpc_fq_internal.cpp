@@ -1,5 +1,5 @@
 #include "service_fq_internal.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "rpc_deferrable.h"
 
 #include <ydb/core/fq/libs/events/events.h>

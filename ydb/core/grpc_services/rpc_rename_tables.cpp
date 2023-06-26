@@ -4,7 +4,7 @@
 #include "service_table.h"
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 
 namespace NKikimr {
 namespace NGRpcService {

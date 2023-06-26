@@ -3,7 +3,7 @@
 
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
-#include "rpc_common.h"
+#include "rpc_common/rpc_common.h"
 #include "service_table.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>

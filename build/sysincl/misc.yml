@@ -237,12 +237,6 @@
   includes:
     - cuda.h:        contrib/deprecated/tf/tensorflow/core/platform/cuda.h
 
-# unused legacy include in boost
-- source_filter: "^contrib/restricted/boost"
-  includes:
-    - fstream.h
-    - ../include/fenv.h
-
 # windows sdk includes that we do not want to apply for whole arcadia
 - source_filter: "^contrib"
   includes:

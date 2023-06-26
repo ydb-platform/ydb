@@ -12,6 +12,8 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/size_literals.h>
 
@@ -69,6 +71,8 @@ private:
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, Handle);
         hFunc(TEvScriptExecutionFinished, Handle);
         hFunc(TEvScriptLeaseUpdateResponse, Handle);
+        hFunc(TEvSaveScriptResultMetaFinished, Handle);
+        hFunc(TEvSaveScriptResultFinished, Handle);
     )
 
     void SendToKqpProxy(THolder<NActors::IEventBase> ev) {
@@ -167,13 +171,89 @@ private:
 
         LOG_D("Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
+            << ", queryResultIndex: " << ev->Get()->Record.GetQueryResultIndex()
             << ", to: " << ev->Sender);
 
         Send(ev->Sender, resp.Release());
 
-        if (IsExecuting() && !IsTruncated()) {
-            MergeResultSet(ev);
+        auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
+
+        if (resultSetIndex > ExpireAt.size()) {
+            Issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected result set index"));
+            Finish(Ydb::StatusIds::INTERNAL_ERROR);
+            return;
         }
+
+        if (resultSetIndex == ExpireAt.size()) {
+            // next ResultSet arrived
+            ResultSetRowCount.resize(resultSetIndex + 1);
+            ResultSetByteCount.resize(resultSetIndex + 1);
+            Truncated.resize(resultSetIndex + 1);
+            ExpireAt.resize(resultSetIndex + 1);
+            ExpireAt[resultSetIndex] = TInstant::Now() + TDuration::Days(1);
+        }
+
+        if (IsExecuting() && !Truncated[resultSetIndex]) {
+            auto& rowCount = ResultSetRowCount[resultSetIndex];
+            auto& byteCount = ResultSetByteCount[resultSetIndex];
+            auto firstRow = rowCount;
+            std::vector<TString> serializedRows;
+
+            for (const auto& row : ev->Get()->Record.GetResultSet().rows()) {
+                if (rowCount > RESULT_ROWS_LIMIT) {
+                    Truncated[resultSetIndex] = true;
+                    break;
+                }
+
+                auto serializedSize = row.ByteSizeLong();
+                if (byteCount + serializedSize > RESULT_SIZE_LIMIT) {
+                    Truncated[resultSetIndex] = true;
+                    break;
+                }
+
+                rowCount++;
+                byteCount += serializedSize;
+                serializedRows.push_back(row.SerializeAsString());
+            }
+
+            if (firstRow == 0 || Truncated[resultSetIndex]) {
+                Ydb::Query::ResultSetMeta meta;
+                *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+                meta.set_truncated(Truncated[resultSetIndex]);
+
+                NJson::TJsonValue* value;
+                if (firstRow == 0) {
+                    value = &ResultSetMetas[resultSetIndex];
+                    ResultSetMetaArray.push_back(value);
+                } else {
+                    value = ResultSetMetaArray[resultSetIndex];
+                }
+                NProtobufJson::Proto2Json(meta, *value, NProtobufJson::TProto2JsonConfig());
+
+                // can't save meta when previous request is not completed for TLI reasons
+                if (SaveResultMetaInflight) {
+                    PendingResultMeta = true;
+                } else {
+                    SaveResultMeta();
+                    SaveResultMetaInflight++;
+                }
+            }
+
+            if (!serializedRows.empty()) {
+                Register(
+                    CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, resultSetIndex, ExpireAt[resultSetIndex], firstRow, std::move(serializedRows))
+                );
+                SaveResultInflight++;
+            }
+        }
+    }
+
+    void SaveResultMeta() {
+        NJsonWriter::TBuf sout;
+        sout.WriteJsonValue(&ResultSetMetas);
+        Register(
+            CreateSaveScriptExecutionResultMetaActor(SelfId(), Database, ExecutionId, sout.Str())
+        );
     }
 
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -198,27 +278,17 @@ private:
                 resp->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
                 resp->Record.AddIssues()->set_message("Script execution is cancelled");
             }
-        } else {
-            if (!ResultSets.empty()) {
-                resp->Record.SetResultSetIndex(0);
-                resp->Record.MutableResultSet()->mutable_columns()->CopyFrom(ResultSets[0].columns());
-
-                const ui64 rowsOffset = ev->Get()->Record.GetRowsOffset();
-                const ui64 rowsLimit = ev->Get()->Record.GetRowsLimit();
-                ui64 rowsAdded = 0;
-                for (i64 row = static_cast<i64>(rowsOffset); row < ResultSets[0].rows_size(); ++row) {
-                    if (rowsAdded >= rowsLimit) {
-                        resp->Record.MutableResultSet()->set_truncated(true);
-                        break;
-                    }
-                    resp->Record.MutableResultSet()->add_rows()->CopyFrom(ResultSets[0].rows(row));
-                }
-            }
+        } else if (Status != Ydb::StatusIds::SUCCESS) {
             resp->Record.SetStatus(Status);
             for (const auto& issue : Issues) {
                 auto item = resp->Record.add_issues();
                 NYql::IssueToMessage(issue, item);
             }
+        } else {
+            Register(
+                CreateGetScriptExecutionResultActor(ev->Sender, Database, ExecutionId, ev->Get()->Record.GetResultSetId(), ev->Get()->Record.GetRowsOffset(), ev->Get()->Record.GetRowsLimit())
+            );
+            return;
         }
         Send(ev->Sender, std::move(resp));
     }
@@ -286,28 +356,28 @@ private:
         CancelRequests.clear();
     }
 
-    void MergeResultSet(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        if (ResultSets.empty()) {
-            ResultSets.emplace_back(ev->Get()->Record.GetResultSet());
+    void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
+        if (PendingResultMeta) {
+            PendingResultMeta = false;
+            SaveResultMeta();
             return;
         }
-        if (ResultSets[0].columns_size() != ev->Get()->Record.GetResultSet().columns_size()) {
-            Issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
-            Finish(Ydb::StatusIds::INTERNAL_ERROR);
-            return;
+
+        SaveResultMetaInflight--;
+        if (Status == Ydb::StatusIds::SUCCESS && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Status = ev->Get()->Status;
+            Issues.AddIssues(ev->Get()->Issues);
         }
-        size_t rowsAdded = 0;
-        for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
-            ResultSets[0].add_rows()->Swap(&row);
-            ++rowsAdded;
-            if (ResultSets[0].rows_size() >= RESULT_ROWS_LIMIT) {
-                break;
-            }
+        CheckSaveInflight();
+    }
+
+    void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
+        SaveResultInflight--;
+        if (Status == Ydb::StatusIds::SUCCESS && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Status = ev->Get()->Status;
+            Issues.AddIssues(ev->Get()->Issues);
         }
-        if (ev->Get()->Record.GetResultSet().truncated() || ResultSets[0].rows_size() >= RESULT_ROWS_LIMIT || ResultSets[0].ByteSizeLong() >= RESULT_SIZE_LIMIT) {
-            ResultSets[0].set_truncated(true);
-        }
-        LOG_D("Received partial result. Rows added: " << rowsAdded << ". Truncated: " << IsTruncated());
+        CheckSaveInflight();
     }
 
     static Ydb::Query::ExecStatus GetExecStatusFromStatusCode(Ydb::StatusIds::StatusCode status) {
@@ -320,15 +390,31 @@ private:
         }
     }
 
+    void CheckSaveInflight() {
+        if (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight)) {
+            // wait for save completions
+            return;
+        }
+
+        Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status), Issues));
+        if (RunState == ERunState::Cancelling) {
+            Issues.AddIssue("Script execution is cancelled");
+        }
+        CloseSession();
+    }
+
     void Finish(Ydb::StatusIds::StatusCode status, ERunState runState = ERunState::Finishing) {
         RunState = runState;
         Status = status;
-        Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, status, GetExecStatusFromStatusCode(status), Issues));
-        if (RunState == ERunState::Cancelling) {
-            Issues.AddIssue("Script execution is cancelled");
-            ResultSets.clear();
+
+        // if query has no results, save empty json array
+        if (ResultSetMetaArray.empty()) {
+            ResultSetMetas.SetType(NJson::JSON_ARRAY);
+            SaveResultMeta();
+            SaveResultMetaInflight++;
+        } else {
+            CheckSaveInflight();
         }
-        CloseSession();
     }
 
     void PassAway() override {
@@ -341,10 +427,6 @@ private:
             && RunState != ERunState::Finishing
             && RunState != ERunState::Cancelled
             && RunState != ERunState::Cancelling;
-    }
-
-    bool IsTruncated() const {
-        return !ResultSets.empty() && ResultSets[0].truncated();
     }
 
 private:
@@ -361,7 +443,17 @@ private:
     // Result
     NYql::TIssues Issues;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    std::vector<Ydb::ResultSet> ResultSets;
+
+    // Result
+    std::vector<ui64> ResultSetRowCount;
+    std::vector<ui64> ResultSetByteCount;
+    std::vector<bool> Truncated;
+    std::vector<TInstant> ExpireAt;
+    std::vector<NJson::TJsonValue*> ResultSetMetaArray;
+    NJson::TJsonValue ResultSetMetas;
+    ui32 SaveResultInflight = 0;
+    ui32 SaveResultMetaInflight = 0;
+    bool PendingResultMeta = false;
 };
 
 } // namespace

@@ -88,10 +88,10 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
-    void Handle(NKqp::TEvForgetScriptExecutionOperationResponce::TPtr& ev) {
+    void Handle(NKqp::TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issuesProto;
         NYql::IssuesToMessage(ev->Get()->Issues, &issuesProto);
-        LOG_D("Handle NKqp::TEvForgetScriptExecutionOperationResponce responce"
+        LOG_D("Handle NKqp::TEvForgetScriptExecutionOperationResponse response"
             << ": status# " << ev->Get()->Status);
         Reply(ev->Get()->Status, issuesProto);
     }
@@ -139,7 +139,7 @@ public:
             hFunc(TEvExport::TEvForgetExportResponse, Handle);
             hFunc(TEvImport::TEvForgetImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvForgetResponse, Handle);
-            hFunc(NKqp::TEvForgetScriptExecutionOperationResponce, Handle);
+            hFunc(NKqp::TEvForgetScriptExecutionOperationResponse, Handle);
         default:
             return StateBase(ev);
         }

@@ -97,13 +97,15 @@ struct TEvPrivate {
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {
-        TEvFetchScriptResultRequest(int64_t rowOffset, TString executionId)
-            : RowOffset(rowOffset)
-            , ExecutionId(std::move(executionId))
+        TEvFetchScriptResultRequest(TString executionId, int64_t resultSetId, int64_t rowOffset)
+            : ExecutionId(std::move(executionId))
+            , ResultSetId(resultSetId)
+            , RowOffset(rowOffset)
         {}
 
-        int64_t RowOffset = 0;
         TString ExecutionId;
+        int64_t ResultSetId = 0;
+        int64_t RowOffset = 0;
     };
 
     struct TEvFetchScriptResultResponse : public NActors::TEventLocal<TEvFetchScriptResultResponse, EvFetchScriptResultResponse> {

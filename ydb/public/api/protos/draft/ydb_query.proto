@@ -179,6 +179,7 @@ message ExecuteQueryRequest {
 
 message ResultSetMeta {
     repeated Ydb.Column columns = 1;
+    bool truncated = 2;
 }
 
 message ExecuteQueryResponsePart {
@@ -263,6 +264,8 @@ message FetchScriptResultsRequest {
         string execution_id = 1 [(Ydb.length).le = 1024];
         string operation_id = 5 [(Ydb.length).le = 1024];
     }
+
+    int64 result_set_id = 6;
 
     oneof fetch {
         string fetch_token = 2 [(Ydb.length).le = 1024];

@@ -624,6 +624,7 @@ message TKqpStreamLookupSettings {
 }
 
 message TEvFetchScriptResultsRequest {
+    optional uint64 ResultSetId = 3;
     optional uint64 RowsOffset = 1;
     optional uint64 RowsLimit = 2;
 }

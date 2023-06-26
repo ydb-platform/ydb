@@ -315,6 +315,7 @@ public:
         Become(&TScriptExecutionsTablesCreator::StateFunc);
         RunCreateScriptExecutions();
         RunCreateScriptExecutionLeases();
+        RunCreateScriptResultSets();
     }
 
 private:
@@ -330,6 +331,7 @@ private:
     }
 
     void RunCreateScriptExecutions() {
+        TablesCreating++;
         Register(
             new TTableCreator(
                 { ".metadata", "script_executions" },
@@ -350,6 +352,7 @@ private:
                     Col("store_deadline", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
                     Col("meta", NScheme::NTypeIds::JsonDocument),
                     Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
+                    Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
                 },
                 { "database", "execution_id" }
             )
@@ -357,6 +360,7 @@ private:
     }
 
     void RunCreateScriptExecutionLeases() {
+        TablesCreating++;
         Register(
             new TTableCreator(
                 { ".metadata", "script_execution_leases" },
@@ -371,8 +375,27 @@ private:
         );
     }
 
+    void RunCreateScriptResultSets() {
+        TablesCreating++;
+        Register(
+            new TTableCreator(
+                { ".metadata", "result_sets" },
+                {
+                    Col("database", NScheme::NTypeIds::Text),
+                    Col("execution_id", NScheme::NTypeIds::Text),
+                    Col("result_set_id", NScheme::NTypeIds::Int32),
+                    Col("row_id", NScheme::NTypeIds::Int64),
+                    Col("expire_at", NScheme::NTypeIds::Timestamp),
+                    Col("result_set", NScheme::NTypeIds::String),
+                },
+                { "database", "execution_id", "result_set_id", "row_id" }
+            )
+        );
+    }
+
     void Handle(TEvPrivate::TEvCreateTableResponse::TPtr&) {
-        if (++TablesCreated == 2) {
+        Y_VERIFY(TablesCreating > 0);
+        if (--TablesCreating == 0) {
             Send(Owner, std::move(ResultEvent));
             PassAway();
         }
@@ -385,7 +408,7 @@ private:
 private:
     THolder<NActors::IEventBase> ResultEvent;
     NActors::TActorId Owner;
-    size_t TablesCreated = 0;
+    size_t TablesCreating = 0;
 };
 
 class TCreateScriptOperationQuery : public TQueryBase {
@@ -1003,7 +1026,7 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Request->Sender, new TEvForgetScriptExecutionOperationResponce(status, std::move(issues)));
+        Send(Request->Sender, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)));
     }
 
 private:
@@ -1030,7 +1053,8 @@ public:
                 query_text,
                 syntax,
                 execution_mode,
-                issues
+                issues,
+                result_set_metas
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
@@ -1102,6 +1126,21 @@ public:
         const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
         if (issuesSerialized) {
             Issues = DeserializeIssues(*issuesSerialized);
+        }
+
+        const TMaybe<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
+        if (serializedMetas) {
+            NJson::TJsonValue value;
+            if (!NJson::ReadJsonTree(*serializedMetas, &value) || value.GetType() != NJson::JSON_ARRAY) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is corrupted");
+                return;
+            }
+
+            for (auto i = 0; i < value.GetIntegerRobust(); i++) {
+                const NJson::TJsonValue* metaValue;
+                value.GetValuePointer(i, &metaValue);
+                NProtobufJson::Json2Proto(*metaValue, *metadata.add_result_set_meta());
+            }
         }
 
         bool finishing = false;
@@ -1524,9 +1563,366 @@ private:
         }
         PassAway();
     }
-
 private:
     TEvKqp::TEvGetRunScriptActorRequest::TPtr Request;
+};
+
+class TSaveScriptExecutionResultMetaQuery : public TQueryBase {
+public:
+    TSaveScriptExecutionResultMetaQuery(const TString& database, const TString& executionId, const TString& serializedMetas)
+        : Database(database), ExecutionId(executionId), SerializedMetas(serializedMetas)
+    {
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $result_set_metas AS JsonDocument;
+
+            UPDATE `.metadata/script_executions`
+            SET result_set_metas = $result_set_metas
+            WHERE database = $database
+            AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$result_set_metas")
+                .JsonDocument(SerializedMetas)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            Send(Owner, new TEvSaveScriptResultMetaFinished(status));
+        } else {
+            Send(Owner, new TEvSaveScriptResultMetaFinished(status, std::move(issues)));
+        }
+    }
+
+private:
+    const TString Database;
+    const TString ExecutionId;
+    const TString SerializedMetas;
+};
+
+class TSaveScriptExecutionResultMetaActor : public TActorBootstrapped<TSaveScriptExecutionResultMetaActor> {
+public:
+    TSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMetas) 
+        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), SerializedMetas(serializedMetas)
+    {   
+    }
+
+    void Bootstrap() {
+        Register(new TSaveScriptExecutionResultMetaQuery(Database, ExecutionId, SerializedMetas));
+
+        Become(&TSaveScriptExecutionResultMetaActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvSaveScriptResultMetaFinished, Handle);
+    )
+
+    void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
+        Send(ev->Forward(ReplyActorId));
+        PassAway();
+    }
+
+private:
+    const NActors::TActorId ReplyActorId;
+    const TString Database;
+    const TString ExecutionId;
+    const TString SerializedMetas;
+};
+
+class TSaveScriptExecutionResultQuery : public TQueryBase {
+public:
+    TSaveScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows)
+        : Database(database), ExecutionId(executionId), ResultSetId(resultSetId), ExpireAt(expireAt), FirstRow(firstRow), SerializedRows(std::move(serializedRows))
+    {
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $result_set_id AS Int32;
+            DECLARE $expire_at AS Timestamp;
+            DECLARE $items AS List<Struct<row_id:Int64,result_set:String>>;
+
+            UPSERT INTO `.metadata/result_sets`
+            SELECT $database as database, $execution_id as execution_id, $result_set_id as result_set_id,
+                T.row_id as row_id, $expire_at as expire_at, T.result_set as result_set
+            FROM AS_TABLE($items) AS T;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$result_set_id")
+                .Int32(ResultSetId)
+                .Build()
+            .AddParam("$expire_at")
+                .Timestamp(ExpireAt)
+                .Build();
+
+        auto& param = params
+            .AddParam("$items");
+
+        param
+                .BeginList();
+
+        auto row = FirstRow;
+        for(auto& serializedRow : SerializedRows) {
+            param
+                    .AddListItem()
+                    .BeginStruct()
+                        .AddMember("row_id")
+                            .Int64(row++)
+                        .AddMember("result_set")
+                            .String(serializedRow)
+                    .EndStruct();
+        }
+        param
+                .EndList()
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            Send(Owner, new TEvSaveScriptResultFinished(status));
+        } else {
+            Send(Owner, new TEvSaveScriptResultFinished(status, std::move(issues)));
+        }
+    }
+
+private:
+    const TString Database;
+    const TString ExecutionId;
+    const i32 ResultSetId;
+    const TInstant ExpireAt;
+    const i64 FirstRow;
+    const std::vector<TString> SerializedRows;
+};
+
+class TSaveScriptExecutionResultActor : public TActorBootstrapped<TSaveScriptExecutionResultActor> {
+public:
+    TSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows) 
+        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetId(resultSetId), ExpireAt(expireAt), FirstRow(firstRow), SerializedRows(std::move(serializedRows))
+    {
+    }
+
+    void Bootstrap() {
+        Register(new TSaveScriptExecutionResultQuery(Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, std::move(SerializedRows)));
+
+        Become(&TSaveScriptExecutionResultActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvSaveScriptResultFinished, Handle);
+    )
+
+    void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
+        Send(ev->Forward(ReplyActorId));
+        PassAway();
+    }
+
+private:
+    const NActors::TActorId ReplyActorId;
+    const TString Database;
+    const TString ExecutionId;
+    const i32 ResultSetId;
+    const TInstant ExpireAt;
+    const i64 FirstRow;
+    std::vector<TString> SerializedRows;
+};
+
+class TGetScriptExecutionResultQuery : public TQueryBase {
+public:
+    TGetScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit)
+        : Database(database), ExecutionId(executionId), ResultSetId(resultSetId), Offset(offset), Limit(limit)
+    {
+        Response = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
+        Response->Record.SetResultSetIndex(ResultSetId);
+    }
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $result_set_id AS Int32;
+            DECLARE $offset AS Int64;
+            DECLARE $limit AS Uint64;
+
+            SELECT result_set_metas
+            FROM `.metadata/script_executions`
+            WHERE database = $database 
+              AND execution_id = $execution_id;
+
+            SELECT row_id, result_set
+            FROM `.metadata/result_sets`
+            WHERE database = $database 
+              AND execution_id = $execution_id
+              AND result_set_id = $result_set_id
+              AND row_id >= $offset
+            ORDER BY row_id
+            LIMIT $limit;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$result_set_id")
+                .Int32(ResultSetId)
+                .Build()
+            .AddParam("$offset")
+                .Int64(Offset)
+                .Build()
+            .AddParam("$limit")
+                .Uint64(Limit)
+                .Build();
+
+        RunDataQuery(sql, &params);
+    }
+
+    void OnQueryResult() override {
+        if (ResultSets.size() != 2) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+
+        { // columns
+            NYdb::TResultSetParser result(ResultSets[0]);
+        
+            if (!result.TryNextRow()) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Script execution not found");
+                return;
+            }
+
+            const TMaybe<TString> serializedMetas = result.ColumnParser("result_set_metas").GetOptionalJsonDocument();
+            if (!serializedMetas) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is empty");
+                return;
+            }
+
+            NJson::TJsonValue value;
+            if (!NJson::ReadJsonTree(*serializedMetas, &value) || value.GetType() != NJson::JSON_ARRAY) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result meta is corrupted");
+                return;
+            }
+
+            const NJson::TJsonValue* metaValue;
+            if (!value.GetValuePointer(ResultSetId, &metaValue)) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
+                return;
+            }
+
+            Ydb::Query::ResultSetMeta meta;
+            NProtobufJson::Json2Proto(*metaValue, meta);
+
+            *Response->Record.MutableResultSet()->mutable_columns() = meta.columns();
+            Response->Record.MutableResultSet()->set_truncated(meta.truncated());
+        }
+
+        { // rows
+            NYdb::TResultSetParser result(ResultSets[1]);
+
+            while (result.TryNextRow()) {
+                const TMaybe<TString> serializedRow = result.ColumnParser("result_set").GetOptionalString();
+
+                if (!serializedRow) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is empty");
+                    return;
+                }
+
+                if (!Response->Record.MutableResultSet()->add_rows()->ParseFromString(*serializedRow)) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
+                    return;
+                }
+            }
+        }
+
+        Finish();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        Response->Record.SetStatus(status);
+        if (status != Ydb::StatusIds::SUCCESS) {
+            Response->Record.MutableResultSet()->Clear();
+        }
+        if (issues) {
+            NYql::IssuesToMessage(issues, Response->Record.MutableIssues());
+        }
+        Send(Owner, std::move(Response));
+    }
+
+private:
+    const TString Database;
+    const TString ExecutionId;
+    const i32 ResultSetId;
+    const i64 Offset;
+    const i64 Limit;
+    THolder<TEvKqp::TEvFetchScriptResultsResponse> Response;
+};
+
+class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
+public:
+    TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit) 
+        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetId(resultSetId), Offset(offset), Limit(limit)
+    {   
+    }
+
+    void Bootstrap() {
+        Register(new TGetScriptExecutionResultQuery(Database, ExecutionId, ResultSetId, Offset, Limit));
+
+        Become(&TGetScriptExecutionResultActor::StateFunc);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvKqp::TEvFetchScriptResultsResponse, Handle);
+    )
+
+    void Handle(TEvKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
+        Send(ev->Forward(ReplyActorId));
+        PassAway();
+    }
+
+private:
+    const NActors::TActorId ReplyActorId;
+    const TString Database;
+    const TString ExecutionId;
+    const i32 ResultSetId;
+    const i64 Offset;
+    const i64 Limit;
 };
 
 } // anonymous namespace
@@ -1572,6 +1968,18 @@ NActors::IActor* CreateGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorReques
 
 NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, const TInstant& leaseDeadline) {
     return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDeadline);
+}
+
+NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMeta) {
+    return new TSaveScriptExecutionResultMetaActor(replyActorId, database, executionId, serializedMeta);
+}
+
+NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows) {
+    return new TSaveScriptExecutionResultActor(replyActorId, database, executionId, resultSetId, expireAt, firstRow, std::move(serializedRows));
+}
+
+NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit) {
+    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, resultSetId, offset, limit);
 }
 
 namespace NPrivate {

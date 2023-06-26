@@ -139,7 +139,9 @@ struct TKqpScriptExecutionEvents {
         EvCancelScriptExecutionOperationResponse,
         EvScriptExecutionFinished,
         EvForgetScriptExecutionOperation,
-        EvForgetScriptExecutionOperationResponce
+        EvForgetScriptExecutionOperationResponse,
+        EvSaveScriptResultMetaFinished,
+        EvSaveScriptResultFinished,
     };
 };
 

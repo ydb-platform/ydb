@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
+    library/cpp/protobuf/json
     ydb/core/base
     ydb/core/protos
     ydb/core/kqp/common/events

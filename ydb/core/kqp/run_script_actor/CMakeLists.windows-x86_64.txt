@@ -16,6 +16,7 @@ target_link_libraries(core-kqp-run_script_actor PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  cpp-protobuf-json
   ydb-core-base
   ydb-core-protos
   kqp-common-events

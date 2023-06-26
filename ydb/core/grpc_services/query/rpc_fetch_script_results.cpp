@@ -85,6 +85,7 @@ private:
         const auto* userReq = GetProtoRequest();
 
         auto req = MakeHolder<NKqp::TEvKqp::TEvFetchScriptResultsRequest>();
+        req->Record.SetResultSetId(userReq->result_set_id());
         req->Record.SetRowsOffset(userReq->rows_offset());
         req->Record.SetRowsLimit(userReq->rows_limit());
 

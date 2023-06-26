@@ -38,10 +38,10 @@ public:
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 
-    TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId,
+    TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId, int64_t resultSetId,
         const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
 
-    TAsyncFetchScriptResultsResult FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation,
+    TAsyncFetchScriptResultsResult FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation, int64_t resultSetId,
         const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
 
 private:

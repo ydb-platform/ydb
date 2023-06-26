@@ -74,7 +74,7 @@ public:
         NYdb::NQuery::TFetchScriptResultsSettings settings;
         settings.RowsOffset(ev->Get()->RowOffset);
         QueryClient
-            ->FetchScriptResults(ev->Get()->ExecutionId, settings)
+            ->FetchScriptResults(ev->Get()->ExecutionId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();

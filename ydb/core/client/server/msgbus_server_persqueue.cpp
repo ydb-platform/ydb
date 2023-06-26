@@ -190,10 +190,11 @@ void TPersQueueBaseRequestProcessor::AnswerAndDie(const TActorContext& ctx) {
 }
 
 void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId);
-
     StartTimestamp = ctx.Now();
-    ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest());
+
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeAllTopicsRequest");
+    bool ret = ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest());
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeAllTopicsRequest Result:" << ret);
 
     if (ListNodes) {
         const TActorId nameserviceId = GetNameserviceActorId();

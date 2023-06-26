@@ -546,6 +546,8 @@ public:
         auto channel = grpc::CreateCustomChannel(endpoint, grpc::InsecureChannelCredentials(), args);
 
         Stub = NKikimrClient::TGRpcServer::NewStub(channel);
+
+        Cerr << "PQClient connected to " << endpoint << Endl;
     }
 
     ~TFlatMsgBusPQClient() {
@@ -811,7 +813,7 @@ public:
     }
 
     NKikimrClient::TResponse CallPersQueueGRPC(const NKikimrClient::TPersQueueRequest& request, ui64 maxPrintSize = 1000) {
-        Cerr << "CallPersQueueGRPC request to " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
+        Cerr << "CallPersQueueGRPC request to localhost:" << GRpcPort << "\n"
              << PrintToString(request, maxPrintSize) << Endl;
 
         NKikimrClient::TResponse response;

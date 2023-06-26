@@ -15,7 +15,7 @@
     - Y_MSVC_INCLUDE_NEXT(stdint.h)
     - Y_MSVC_INCLUDE_NEXT(yvals.h)
 
-    - Y_UCRT_INCLUDE_NEXT(coMPlex.h)
+    - Y_UCRT_INCLUDE_NEXT(complex.h)
     - Y_UCRT_INCLUDE_NEXT(ctype.h)
     - Y_UCRT_INCLUDE_NEXT(errno.h)
     - Y_UCRT_INCLUDE_NEXT(fenv.h)

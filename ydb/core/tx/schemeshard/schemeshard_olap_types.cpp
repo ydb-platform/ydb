@@ -317,6 +317,7 @@ namespace NKikimr::NSchemeShard {
         Version = tableSchema.GetVersion();
         Y_VERIFY(tableSchema.HasEngine());
         Engine = tableSchema.GetEngine();
+        CompositeMarksFlag = tableSchema.GetCompositeMarks();
 
         TMap<TString, ui32> keyIndexes;
         ui32 idx = 0;
@@ -348,6 +349,7 @@ namespace NKikimr::NSchemeShard {
     void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
         tableSchema.SetNextColumnId(NextColumnId);
         tableSchema.SetVersion(Version);
+        tableSchema.SetCompositeMarks(CompositeMarksFlag);
 
         Y_VERIFY(HasEngine());
         tableSchema.SetEngine(GetEngineUnsafe());

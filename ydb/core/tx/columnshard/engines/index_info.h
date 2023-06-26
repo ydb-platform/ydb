@@ -34,7 +34,7 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
 private:
     mutable THashMap<ui32, TColumnFeatures> ColumnFeatures;
     mutable THashMap<ui32, std::shared_ptr<arrow::Field>> ArrowColumnByColumnIdCache;
-    TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey = false);
+    TIndexInfo(const TString& name, ui32 id);
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
     TColumnFeatures& GetOrCreateColumnFeatures(const ui32 columnId) const;
 public:
@@ -69,21 +69,16 @@ public:
         }
         return true;
     }
+
+    bool CheckAlterScheme(const NKikimrSchemeOp::TColumnTableSchema& scheme) const;
 public:
 
     static TIndexInfo BuildDefault() {
-        TIndexInfo result("dummy", 0, false);
+        TIndexInfo result("dummy", 0);
         return result;
     }
 
-    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema,
-                                                    bool forceCompositeMarks) {
-        TIndexInfo result("", 0, forceCompositeMarks || schema.GetCompositeMarks());
-        if (!result.DeserializeFromProto(schema)) {
-            return {};
-        }
-        return result;
-    }
+    static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);
 
     /// Returns id of the index.
     ui32 GetId() const noexcept {
@@ -182,7 +177,7 @@ public:
 private:
     ui32 Id;
     TString Name;
-    const bool CompositeIndexKey;
+    bool CompositeIndexKey = false;
     mutable std::shared_ptr<arrow::Schema> Schema;
     mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> SortingKey;
@@ -192,6 +187,7 @@ private:
     THashSet<TString> RequiredColumns;
     THashSet<ui32> MinMaxIdxColumnsIds;
     std::optional<NArrow::TCompression> DefaultCompression;
+    bool CompositeMarks = false;
 };
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials = false);

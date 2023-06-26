@@ -687,9 +687,6 @@ public:
                 return result;
             }
             tableInfo = tableConstructor.BuildTableInfo(errors);
-            if (tableInfo) {
-                tableInfo->Description.MutableSchema()->SetCompositeMarks(true);
-            }
         }
 
         if (!tableInfo) {

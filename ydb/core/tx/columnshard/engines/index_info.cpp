@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/serializer/batch_only.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NOlap {
 
@@ -22,11 +23,10 @@ static std::vector<TString> NamesOnly(const std::vector<TNameTypeInfo>& columns)
     return out;
 }
 
-TIndexInfo::TIndexInfo(const TString& name, ui32 id, bool compositeIndexKey)
+TIndexInfo::TIndexInfo(const TString& name, ui32 id)
     : NTable::TScheme::TTableSchema()
     , Id(id)
     , Name(name)
-    , CompositeIndexKey(compositeIndexKey)
 {}
 
 std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot) {
@@ -374,7 +374,14 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         }
         DefaultCompression = *result;
     }
+
+    CompositeMarks = schema.GetCompositeMarks();
+    CompositeIndexKey = AppData()->FeatureFlags.GetForceColumnTablesCompositeMarks() ? true : CompositeMarks;
     return true;
+}
+
+bool TIndexInfo::CheckAlterScheme(const NKikimrSchemeOp::TColumnTableSchema& scheme) const {
+    return CompositeMarks == scheme.GetCompositeMarks();
 }
 
 std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, bool withSpecials) {
@@ -410,6 +417,14 @@ std::vector<TNameTypeInfo> GetColumns(const NTable::TScheme::TTableSchema& table
         out.emplace_back(ci->second.Name, ci->second.PType);
     }
     return out;
+}
+
+std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    TIndexInfo result("", 0);
+    if (!result.DeserializeFromProto(schema)) {
+        return std::nullopt;
+    }
+    return result;
 }
 
 } // namespace NKikimr::NOlap

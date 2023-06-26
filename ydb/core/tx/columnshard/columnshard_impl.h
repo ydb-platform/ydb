@@ -316,7 +316,7 @@ private:
         NKikimrTxColumnShard::TSchemaTxBody Body;
         THashSet<TActorId> NotifySubscribers;
 
-        bool Validate() const;
+        bool Validate(const NOlap::ISnapshotSchema::TPtr& schema) const;
     };
 
     struct TCommitMeta {

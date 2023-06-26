@@ -51,13 +51,20 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             if (!meta.Body.ParseFromString(txBody)) {
                 statusMessage = TStringBuilder()
                     << "Schema TxId# " << txId << " cannot be parsed";
+                status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
                 break;
             }
 
+            NOlap::ISnapshotSchema::TPtr currentSchema;
+            if (Self->TablesManager.HasPrimaryIndex()) {
+                currentSchema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema();
+            }
+
             // Invalid body generated at a newer SchemeShard
-            if (!meta.Validate()) {
+            if (!meta.Validate(currentSchema)) {
                 statusMessage = TStringBuilder()
                     << "Schema TxId# " << txId << " cannot be proposed";
+                status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
                 break;
             }
 

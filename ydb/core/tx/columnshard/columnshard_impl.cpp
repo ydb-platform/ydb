@@ -83,7 +83,7 @@ bool ValidateTablePreset(const NKikimrSchemeOp::TColumnTableSchemaPreset& preset
 
 }
 
-bool TColumnShard::TAlterMeta::Validate() const {
+bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& schema) const {
     switch (Body.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
             break;
@@ -99,8 +99,25 @@ bool TColumnShard::TAlterMeta::Validate() const {
             }
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
-        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            if (schema) {
+                if (Body.HasAlterTable() && Body.GetAlterTable().HasSchema()) {
+                    return schema->GetIndexInfo().CheckAlterScheme(Body.GetAlterTable().GetSchema());
+                }
+                if (Body.HasAlterTable() && Body.GetAlterTable().HasSchemaPreset() && Body.GetAlterTable().GetSchemaPreset().HasSchema()) {
+                    return schema->GetIndexInfo().CheckAlterScheme(Body.GetAlterTable().GetSchemaPreset().GetSchema());
+                }
+            }
+            return true;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
+            if (schema) {
+                for (const auto& presetProto : Body.GetAlterStore().GetSchemaPresets()) {
+                    if (!schema->GetIndexInfo().CheckAlterScheme(presetProto.GetSchema())) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

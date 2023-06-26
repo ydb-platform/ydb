@@ -1522,7 +1522,8 @@
                 {"Index": 3, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LeftRenames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"}
+                {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
 

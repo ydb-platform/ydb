@@ -2414,11 +2414,19 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
+        bool leftAny = false, rigthAny = false;
+        core.Flags().Ref().ForEachChild([&](const TExprNode& flag) {
+            if (flag.IsAtom("LeftAny"))
+               leftAny = true;
+            else if (flag.IsAtom("RightAny"))
+                rigthAny = true;
+        });
+
         const auto lUnique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
         const auto rUnique = core.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
 
-        const bool lOneRow = lUnique && lUnique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref()));
-        const bool rOneRow = rUnique && rUnique->HasEqualColumns(GetKeys(core.RightKeysColumns().Ref()));
+        const bool lOneRow = lUnique && (leftAny || lUnique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref())));
+        const bool rOneRow = rUnique && (rigthAny || rUnique->HasEqualColumns(GetKeys(core.RightKeysColumns().Ref())));
 
         const bool singleSide = joinType.Content().ends_with("Semi") || joinType.Content().ends_with("Only");
 

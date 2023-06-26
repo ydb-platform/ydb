@@ -1551,12 +1551,18 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *leftTupleType : *outputTupleType, child.Content())); });
         s = false;
         node.Child(6)->ForEachChild([&](TExprNode& child){
-            rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content()));
+            rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content())); });
 
-            });
+        auto anyJoinSettings = EAnyJoinSettings::None;
+        node.Tail().ForEachChild([&](const TExprNode& flag) {
+            if (flag.IsAtom("LeftAny"))
+               anyJoinSettings = EAnyJoinSettings::Right == anyJoinSettings ? EAnyJoinSettings::Both : EAnyJoinSettings::Left;
+            else if (flag.IsAtom("RightAny"))
+               anyJoinSettings = EAnyJoinSettings::Left == anyJoinSettings ? EAnyJoinSettings::Both : EAnyJoinSettings::Right;
+        });
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType);
+        return ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
     });
 
 
@@ -2517,7 +2523,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         for (ui32 i = 1; i < node.ChildrenSize(); ++i) {
             dependentNodes.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
-        
+
         return ctx.ProgramBuilder.PgClone(input, dependentNodes);
     });
 

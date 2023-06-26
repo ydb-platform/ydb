@@ -1202,6 +1202,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
+                    .List(7).Seal()
                 .Seal()
                 .Build();
             break;

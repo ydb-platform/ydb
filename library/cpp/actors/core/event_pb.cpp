@@ -63,6 +63,8 @@ namespace NActors {
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
+        Y_VERIFY(!CancelFlag);
+        Y_VERIFY(!AbortFlag);
         Y_VERIFY(size >= 0);
         while (size) {
             if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
@@ -87,6 +89,8 @@ namespace NActors {
     }
 
     bool TCoroutineChunkSerializer::Next(void** data, int* size) {
+        Y_VERIFY(!CancelFlag);
+        Y_VERIFY(!AbortFlag);
         if (!SizeRemain) {
             InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
@@ -170,7 +174,7 @@ namespace NActors {
     void TCoroutineChunkSerializer::DoRun() {
         while (!CancelFlag) {
             Y_VERIFY(Event);
-            SerializationSuccess = Event->SerializeToArcadiaStream(this);
+            SerializationSuccess = !AbortFlag && Event->SerializeToArcadiaStream(this);
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization
                 InnerContext.SwitchTo(BufFeedContext);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <span>
 
 #include <ydb/core/debug/valgrind_check.h>
 #include <ydb/core/util/yverify_stream.h>
@@ -293,7 +294,6 @@ struct TErasureType {
         : ErasureSpecies(s)
     {}
 
-    virtual ~TErasureType() = default;
     TErasureType(const TErasureType &) = default;
     TErasureType &operator =(const TErasureType &) = default;
 
@@ -378,6 +378,11 @@ protected:
 };
 
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf);
+bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope);
+
+void ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, TRope&& whole, std::span<TRope> parts);
+void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
+    std::span<TRope> parts, ui32 restoreMask);
 
 }
 

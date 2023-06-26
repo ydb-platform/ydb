@@ -326,6 +326,8 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx,
                 const TDiskPutRequest &put = requests.PutsToSend[idx];
                 ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(),
                         VPutRequests);
+                Y_VERIFY_DEBUG(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
+                    put.Id.PartId() != 3 || put.Buffer.IsEmpty());
                 auto vPut = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vDiskId, true, &cookie,
                     Deadline, Blackboard.PutHandleClass);
                 R_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << diskOrderNumber << " idx# " << idx

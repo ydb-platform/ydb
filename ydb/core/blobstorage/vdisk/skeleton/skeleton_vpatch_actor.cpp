@@ -350,8 +350,8 @@ namespace NKikimr::NPrivate {
             Y_VERIFY(item.HasBlobID());
             TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
 
-            Y_VERIFY(item.HasBuffer());
-            Buffer = TRope(item.GetBuffer());
+            Y_VERIFY(ev->Get()->HasBlob(item));
+            Buffer = ev->Get()->GetBlobData(item);
 
             STLOG(PRI_INFO, BS_VDISK_PATCH, BSVSP08,
                     VDiskLogPrefix << " TEvVPatch: received part data;",

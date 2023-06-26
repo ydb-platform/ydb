@@ -53,7 +53,6 @@ namespace NKikimr {
             const TString &queueName, TInterconnectChannels::EInterconnectChannels interconnectChannel,
             TWrapper wrapper = {})
     {
-        TBlobStorageGroupType type = gInfo->Type;
         for (auto &vdiskInfo : disks) {
             auto vdisk = GetVDiskID(vdiskInfo);
             if (vdisk != vCtx->ShortSelfVDisk) {

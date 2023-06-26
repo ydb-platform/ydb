@@ -501,6 +501,7 @@ message TEvVGet {
     optional TTabletData ForceBlockTabletData = 26;
 
     optional bytes SnapshotId = 30; // read data from specific snapshot (if set)
+    optional bool EnablePayload = 31; // reply with payload out of protobuf
 }
 
 message TQueryResult {
@@ -510,7 +511,10 @@ message TQueryResult {
     optional uint64 Shift = 3;
     optional uint64 Size = 4;
 
-    optional bytes Buffer = 5;
+    oneof Payload {
+        bytes BufferData = 5;
+        uint32 PayloadId = 12;
+    }
     optional uint64 Cookie = 6;
 
     optional uint64 FullDataSize = 7;

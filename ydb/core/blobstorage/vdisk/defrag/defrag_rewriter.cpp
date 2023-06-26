@@ -129,7 +129,7 @@ namespace NKikimr {
             ui8 partId = rec.LogoBlobId.PartId();
             Y_VERIFY(partId);
 
-            TString data = msg->Data.ToString();
+            TRcBuf data = msg->Data.ToString();
             Y_VERIFY(data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId));
             const char *header = data.data();
 
@@ -140,7 +140,7 @@ namespace NKikimr {
 
             Y_VERIFY(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
 
-            TRope rope(data);
+            TRope rope(std::move(data));
             rope.EraseFront(TDiskBlob::HeaderSize);
 
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),

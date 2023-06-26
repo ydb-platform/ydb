@@ -257,13 +257,11 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
         Y_VERIFY(subgroup.size() > partId - 1);
         part = &subgroup[partId - 1];
 
-        result->AddResult(status, part->LogoBlobId, 0, part->Data.data(), part->Data.size(),
-            &queryCookie);
+        result->AddResult(status, part->LogoBlobId, 0, TRope(part->Data), &queryCookie);
     } else if (status == NKikimrProto::NODATA) {
         result->Record.SetCookie(from->InnerCookie);
         TLogoBlobID id(from->LogoBlobId, partId);
-        result->AddResult(status, id, 0, nullptr, 0,
-            &queryCookie);
+        result->AddResult(status, id, 0, 0u, &queryCookie);
     } else {
         result->Record.SetCookie(from->InnerCookie);
         TLogoBlobID id(from->LogoBlobId, 0);
@@ -334,8 +332,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
                 }
             }
             TLogoBlobID id(it->LogoBlobId, partIdx + 1);
-            result->AddResult(status, id, it->Shift, data.data(),
-                data.size(), &it->QueryCookie);
+            result->AddResult(status, id, it->Shift, TRope(data), &it->QueryCookie);
         }
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
@@ -1215,9 +1212,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                     new TEvBlobStorage::TEvVGetResult(
                         NKikimrProto::OK, theRequest.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
                         nullptr, nullptr, nullptr, {}, 0U, 0U));
-                result->AddResult(
-                    NKikimrProto::OK, id, query.Shift, resultData.data(),
-                    resultData.size(), &query.QueryCookie);
+                result->AddResult(NKikimrProto::OK, id, query.Shift, TRope(resultData), &query.QueryCookie);
                 result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(msgId);
                 result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(sequenceId);
                 result->Record.SetCookie(theRequest.RecordCookie);
@@ -1311,8 +1306,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
             ingress.Merge(partIngress);
         }
         const ui64 ingressRaw = ingress.Raw();
-        result->AddResult(NKikimrProto::OK, logoblobid, 0, nullptr, 0, &query.QueryCookie,
-                &ingressRaw);
+        result->AddResult(NKikimrProto::OK, logoblobid, 0, 0u, &query.QueryCookie, &ingressRaw);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(req.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(req.SequenceId);
         runtime.Send(new IEventHandle(req.Sender, req.ActorId, result.release(), 0, req.Cookie));

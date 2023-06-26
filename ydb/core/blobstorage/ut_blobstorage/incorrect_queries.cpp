@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(IncorrectQueries) {
             TEvBlobStorage::TEvVGetResult *getResult = r->Get<TEvBlobStorage::TEvVGetResult>();
             UNIT_ASSERT_VALUES_EQUAL(getResult->Record.GetStatus(), status);
             if (status == NKikimrProto::OK) {
-                UNIT_ASSERT_VALUES_EQUAL(getResult->Record.GetResult(0).GetBuffer(), part);
+                UNIT_ASSERT_VALUES_EQUAL(getResult->GetBlobData(getResult->Record.GetResult(0)).ConvertToString(), part);
             }
         });
     }

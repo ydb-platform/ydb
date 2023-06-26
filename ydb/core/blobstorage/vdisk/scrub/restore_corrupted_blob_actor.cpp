@@ -82,7 +82,7 @@ namespace NKikimr {
                     TDiskBlob blob(data, local, GType, key.LogoBlobID());
                     for (auto it = blob.begin(); it != blob.end(); ++it) {
                         if (Item->Needed.Get(it.GetPartId() - 1)) {
-                            Item->SetPartData(TLogoBlobID(key.LogoBlobID(), it.GetPartId()), it.GetPart().ConvertToString());
+                            Item->SetPartData(TLogoBlobID(key.LogoBlobID(), it.GetPartId()), it.GetPart());
                         }
                     }
                 } else {
@@ -176,7 +176,7 @@ namespace NKikimr {
                 TDiskBlob blob(&rope, cmd->Parts, Info->Type, item.BlobId);
                 for (auto it = blob.begin(); it != blob.end(); ++it) {
                     if (item.Needed.Get(it.GetPartId() - 1)) {
-                        item.SetPartData(TLogoBlobID(item.BlobId, it.GetPartId()), it.GetPart().ConvertToString());
+                        item.SetPartData(TLogoBlobID(item.BlobId, it.GetPartId()), it.GetPart());
                     }
                 }
                 const NMatrix::TVectorType& avail = item.GetAvailableParts();
@@ -204,7 +204,7 @@ namespace NKikimr {
                         ev.reset(new TEvRecoverBlob);
                         ev->Deadline = Deadline;
                     }
-                    ev->Items.emplace_back(item.BlobId, TDataPartSet(item.PartSet), item.Needed, TDiskPart(), i);
+                    ev->Items.emplace_back(item.BlobId, TStackVec<TRope, 8>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
                 }
             }
             if (ev) {
@@ -225,7 +225,8 @@ namespace NKikimr {
             for (auto& item : ev->Get()->Items) {
                 auto& myItem = Items[item.Cookie];
                 Y_VERIFY(myItem.Status == NKikimrProto::UNKNOWN);
-                myItem.PartSet = std::move(item.PartSet);
+                myItem.Parts = std::move(item.Parts);
+                myItem.PartsMask = item.PartsMask;
                 if (item.Status != NKikimrProto::NODATA) { // we keep trying to fetch NODATA's till deadline
                     myItem.Status = item.Status;
                     if (myItem.Status == NKikimrProto::OK && WriteRestoredParts) {

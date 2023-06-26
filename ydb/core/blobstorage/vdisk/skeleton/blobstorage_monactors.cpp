@@ -463,7 +463,8 @@ namespace NKikimr {
             this->Become(&TSkeletonFrontMonLogoBlobsQueryActor::StateFunc);
         }
 
-        void OutputOneQueryResultToHtml(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q) {
+        void OutputOneQueryResultToHtml(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q,
+                TEvBlobStorage::TEvVGetResult& ev) {
             HTML(str) {
                 DIV_CLASS("well well-small") {
                     const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
@@ -475,7 +476,7 @@ namespace NKikimr {
                     }
                     if (!IndexOnly) {
                         str << "FullDataSize: " << q.GetFullDataSize() << "<br>";
-                        str << "Data: " << q.GetBuffer() << "<br>";
+                        str << "Data: " << EscapeC(ev.GetBlobData(q).ConvertToString()) << "<br>";
                     }
                 }
             }
@@ -515,7 +516,7 @@ namespace NKikimr {
                     DIV_CLASS("row") {
                         for (ui32 i = 0; i < size; i++) {
                             const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
-                            OutputOneQueryResultToHtml(str, q);
+                            OutputOneQueryResultToHtml(str, q, *ev->Get());
                         }
                     }
                 }

@@ -138,6 +138,38 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf
     ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
 }
 
+bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope) {
+    switch (crcMode) {
+        case TErasureType::CrcModeNone:
+            return true;
+        case TErasureType::CrcModeWholePart:
+            if (rope.IsEmpty()) {
+                return true;
+            } else {
+                Y_VERIFY(rope.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+                        " is less then crcSize# %" PRIu64, (ui64)rope.size(), (ui64)sizeof(ui32));
+
+                size_t bytesRemain = rope.size() - sizeof(ui32);
+                ui32 crc = 0;
+
+                auto iter = rope.begin();
+                while (bytesRemain) {
+                    const char *data = iter.ContiguousData();
+                    const size_t size = std::min(bytesRemain, iter.ContiguousSize());
+                    crc = Crc32cExtend(crc, data, size);
+                    iter += size;
+                    bytesRemain -= size;
+                }
+
+                ui32 expectedCrc;
+                iter.ExtractPlainDataAndAdvance(&expectedCrc, sizeof(expectedCrc));
+
+                return crc == expectedCrc;
+            }
+    }
+    ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
+}
+
 class TBlockParams {
 public:
     ui64 DataSize;

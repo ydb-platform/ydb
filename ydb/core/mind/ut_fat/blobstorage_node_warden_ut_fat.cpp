@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 "Status# " << NKikimrProto::EReplyStatus_Name(vgetResult->Record.GetStatus()));
         UNIT_ASSERT_EQUAL(vgetResult->Record.GetCookie(), cookie);
         UNIT_ASSERT(vgetResult->Record.ResultSize() == 1);
-        TString resBuffer = vgetResult->Record.GetResult(0).GetBuffer();
+        TString resBuffer = vgetResult->GetBlobData(vgetResult->Record.GetResult(0)).ConvertToString();
         UNIT_ASSERT_EQUAL(resBuffer.size(), data.size());
         if (expected == EExpectedEqualData) {
             UNIT_ASSERT_EQUAL(resBuffer, data);

@@ -80,7 +80,7 @@ namespace NKikimr {
             TPayload Payload;
             ui64 Serial;
             NKikimrProto::EReplyStatus Status;
-            TString Content;
+            TRcBuf Content;
         };
         using TReadQueue = TDeque<TReadItem>;
         TReadQueue ReadQueue;
@@ -247,7 +247,7 @@ namespace NKikimr {
         }
 
         // try to get result item
-        bool GetResultItem(ui64 *serial, TPayload *payload, NKikimrProto::EReplyStatus *status, TString *content) {
+        bool GetResultItem(ui64 *serial, TPayload *payload, NKikimrProto::EReplyStatus *status, TRcBuf *content) {
             if (!ReadyItemQueue) {
                 return false;
             }

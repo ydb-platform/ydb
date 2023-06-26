@@ -1,4 +1,5 @@
 #include "fragmented_buffer.h"
+#include "lz4_data_generator.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -118,7 +119,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         buffer[sizeof(buffer) - 1] = 0;
         fb.Read(0, buffer, 7);
         UNIT_ASSERT_VALUES_EQUAL(buffer, "2345678");
-        UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), false);
+        UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
     }
 
     Y_UNIT_TEST(TestGetMonolith) {
@@ -138,7 +139,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
     Y_UNIT_TEST(TestSetMonolith) {
         TRope inData(TString("123"));
         TFragmentedBuffer fb;
-        fb.SetMonolith(inData);
+        fb.SetMonolith(TRope(inData));
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
         TRope res = fb.GetMonolith();
         UNIT_ASSERT_VALUES_EQUAL(inData.ConvertToString(), res.ConvertToString());
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), false);
         fb.Write(4, data4, 3);
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), false);
-        fb.SetMonolith(inData);
+        fb.SetMonolith(TRope(inData));
         UNIT_ASSERT_VALUES_EQUAL(fb.IsMonolith(), true);
         TRope res = fb.GetMonolith();
         UNIT_ASSERT_VALUES_EQUAL(inData.ConvertToString(), res.ConvertToString());
@@ -165,22 +166,56 @@ Y_UNIT_TEST_SUITE(TFragmentedBufferTest) {
         buffer.Write(0, "HELLO", 5);
         buffer.Write(10, "WORLD", 5);
         TFragmentedBuffer copy;
-        copy.CopyFrom(buffer, TIntervalSet<i32>(0, 5));
+        copy.CopyFrom(buffer, {0, 5});
         buffer.Write(5, "BRAVE", 5);
-        copy.CopyFrom(buffer, TIntervalSet<i32>(5, 15));
-        UNIT_ASSERT(copy.Get(0).second == 5);
-        UNIT_ASSERT(!memcmp(copy.Get(0).first, "HELLO", 5));
-        UNIT_ASSERT(copy.Get(10).second == 5);
-        UNIT_ASSERT(!memcmp(copy.Get(10).first, "WORLD", 5));
-        UNIT_ASSERT(copy.Get(12).second == 3);
-        UNIT_ASSERT(!memcmp(copy.Get(12).first, "RLD", 3));
-        copy.CopyFrom(buffer, TIntervalSet<i32>(0, 15));
-        UNIT_ASSERT(copy.Get(0).second == 5);
-        UNIT_ASSERT(!memcmp(copy.Get(0).first, "HELLO", 5));
-        UNIT_ASSERT(copy.Get(5).second == 5);
-        UNIT_ASSERT(!memcmp(copy.Get(5).first, "BRAVE", 5));
+        copy.CopyFrom(buffer, {5, 15});
+        UNIT_ASSERT_VALUES_EQUAL(copy.Read(0, 5).ConvertToString(), "HELLO");
+        UNIT_ASSERT_VALUES_EQUAL(copy.Read(10, 5).ConvertToString(), "WORLD");
+        UNIT_ASSERT_VALUES_EQUAL(copy.Read(12, 3).ConvertToString(), "RLD");
+        copy.CopyFrom(buffer, {0, 15});
+        UNIT_ASSERT_VALUES_EQUAL(copy.Read(0, 15).ConvertToString(), "HELLOBRAVEWORLD");
+    }
+
+    Y_UNIT_TEST(ReadWriteRandom) {
+        const size_t maxLength = 10000;
+        TString reference(maxLength, 0);
+        TFragmentedBuffer buffer;
+        TIntervalSet<i32> written;
+
+        auto ropify = [](TString buffer) {
+            TRope result;
+            size_t offset = 0;
+            while (offset < buffer.size()) {
+                size_t length = 1 + RandomNumber<size_t>(buffer.size() - offset);
+                result.Insert(result.End(), TRcBuf::Copy(buffer.data() + offset, length));
+                offset += length;
+            }
+            return result;
+        };
+
+        for (ui32 iter = 0; iter < 10000; ++iter) {
+            size_t writeOffset = RandomNumber<size_t>(maxLength);
+            size_t writeLength = 1 + RandomNumber<size_t>(Min<size_t>(100, maxLength - writeOffset));
+            TString data = FastGenDataForLZ4(writeLength, iter);
+
+            memcpy(reference.Detach() + writeOffset, data.data(), writeLength);
+            written.Add(writeOffset, writeOffset + writeLength);
+
+            buffer.Write(writeOffset, ropify(data));
+
+            size_t index = RandomNumber<size_t>(written.Size());
+            auto it = written.begin();
+            for (size_t i = 0; i < index; ++i) {
+                ++it;
+            }
+            auto [begin, end] = *it;
+            UNIT_ASSERT(begin < end);
+            begin += RandomNumber<size_t>(end - begin);
+            ui32 size = 1 + RandomNumber<size_t>(end - begin);
+
+            UNIT_ASSERT_EQUAL(buffer.Read(begin, size).ConvertToString(), reference.substr(begin, size));
+        }
     }
 }
 
 } // NKikimr
-

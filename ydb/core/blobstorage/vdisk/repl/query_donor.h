@@ -87,6 +87,10 @@ namespace NKikimr {
 
                     std::optional<ui64> cookie = res->HasCookie() ? std::make_optional(res->GetCookie()) : std::nullopt;
                     res->CopyFrom(item);
+                    res->ClearPayload();
+                    if (ev->Get()->HasBlob(item)) {
+                        Result->SetBlobData(*res, ev->Get()->GetBlobData(item));
+                    }
                     if (cookie) { // retain original cookie
                         res->SetCookie(*cookie);
                     } else {

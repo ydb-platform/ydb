@@ -14,19 +14,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/getopt
-    library/cpp/svnversion
-    ydb/core/base
-    ydb/core/blobstorage/base
     ydb/core/blobstorage/dsproxy
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/ut_vdisk/lib
-    ydb/core/blobstorage/vdisk/common
-    ydb/core/blobstorage/vdisk/query
+#    ydb/core/blobstorage/ut_vdisk/lib
     ydb/core/testlib/default
-    ydb/core/testlib/actors
-    ydb/core/testlib/basics
 )
 
 YQL_LAST_ABI_VERSION()
@@ -39,10 +29,8 @@ SRCS(
     dsproxy_counters_ut.cpp
 )
 
-
-IF (BUILD_TYPE == "RELEASE")
+IF (BUILD_TYPE != "DEBUG")
     SRCS(
-        dsproxy_fault_tolerance_ut.cpp
         dsproxy_get_ut.cpp
     )
 ELSE ()

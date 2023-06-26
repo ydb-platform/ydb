@@ -94,7 +94,7 @@ namespace NKikimr {
         res.MutableBlobID(); // in only fixuint64
         res.SetShift(Max<ui64>());
         res.SetSize(Max<ui64>());
-        res.SetBuffer(data);
+        res.SetBufferData(data);
         res.SetCookie(Max<ui64>());
         res.SetFullDataSize(Max<ui64>());
         res.SetIngress(Max<ui64>());

@@ -42,13 +42,12 @@ public:
                     case NKikimrProto::OK:
                         // whenever the PUT request finishes with success, the blob must be actually written and should
                         // be restored in any case while fitting failure model
-                        Y_ASSERT(fitsFailModel);
                         dataMap[id] = data;
                         break;
 
                     case NKikimrProto::ERROR:
                         // ERROR can only be generated if the failure model is exceeded
-                        Y_ASSERT(!fitsFailModel);
+                        Y_VERIFY(!fitsFailModel);
                         UNIT_ASSERT_VALUES_UNEQUAL("", result->ErrorReason);
                         break;
 

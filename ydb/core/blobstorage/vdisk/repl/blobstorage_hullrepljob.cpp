@@ -559,12 +559,11 @@ namespace NKikimr {
                     while (proxy->Valid() && proxy->GenLogoBlobId() == item.Id) {
                         TLogoBlobID id;
                         NKikimrProto::EReplyStatus status;
-                        TTrackableString data(TMemoryConsumer(ReplCtx->VCtx->Replication));
-                        proxy->GetData(&id, &status, &data);
-                        if (status != NKikimrProto::OK || data.size()) {
-                            item.AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, data.GetBaseConstRef());
+                        TRope data;
+                        proxy->FetchData(&id, &status, &data);
+                        if (status != NKikimrProto::OK || data) {
+                            item.AddData(ReplCtx->VCtx->Top->GetOrderNumber(proxy->VDiskId), id, status, std::move(data));
                         }
-                        proxy->Next();
                     }
                     Y_VERIFY_DEBUG(!proxy->Valid() || item.Id < proxy->GenLogoBlobId());
 

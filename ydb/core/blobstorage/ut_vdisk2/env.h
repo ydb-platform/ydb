@@ -57,8 +57,15 @@ namespace NKikimr {
                 NKikimrBlobStorage::EGetHandleClass prio = NKikimrBlobStorage::EGetHandleClass::FastRead) {
             auto query = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskId, TInstant::Max(), prio,
                 TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), {id});
-            return ExecuteQuery<TEvBlobStorage::TEvVGetResult>(std::unique_ptr<IEventBase>(query.release()),
-                GetQueueId(prio));
+            std::unique_ptr<TEvBlobStorage::TEvVGetResult> rp;
+            auto r = ExecuteQuery<TEvBlobStorage::TEvVGetResult>(std::unique_ptr<IEventBase>(query.release()),
+                GetQueueId(prio), &rp);
+            for (size_t i = 0; i < r.ResultSize(); ++i) {
+                if (rp->HasBlob(r.GetResult(i))) {
+                    r.MutableResult(i)->SetBufferData(rp->GetBlobData(r.GetResult(i)).ConvertToString());
+                }
+            }
+            return r;
         }
 
         NKikimrBlobStorage::TEvVCollectGarbageResult Collect(ui64 tabletId, ui32 gen, ui32 counter,
@@ -74,13 +81,16 @@ namespace NKikimr {
     private:
         template<typename TEvVResult>
         decltype(std::declval<TEvVResult>().Record) ExecuteQuery(std::unique_ptr<IEventBase> query,
-                NKikimrBlobStorage::EVDiskQueueId queueId) {
+                NKikimrBlobStorage::EVDiskQueueId queueId, std::unique_ptr<TEvVResult> *rp = nullptr) {
             const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
             Runtime->Send(new IEventHandle(QueueIds.at(queueId), edge, query.release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);
             auto *msg = ev->CastAsLocal<TEvVResult>();
             UNIT_ASSERT(msg);
+            if (rp) {
+                rp->reset(static_cast<TEvVResult*>(ev->ReleaseBase().Release()));
+            }
             return msg->Record;
         }
 

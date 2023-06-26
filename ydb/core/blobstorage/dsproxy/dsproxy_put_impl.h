@@ -171,7 +171,7 @@ public:
     }
 
     template <typename TVPutEvent>
-    void GenerateInitialRequests(TLogContext &logCtx, TBatchedVec<TDataPartSet> &partSets,
+    void GenerateInitialRequests(TLogContext &logCtx, TBatchedVec<TStackVec<TRope, 8>>& partSets,
             TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
         Y_UNUSED(logCtx);
         Y_VERIFY_S(partSets.size() == Blobs.size(), "partSets.size# " << partSets.size()
@@ -181,12 +181,9 @@ public:
             TBlobInfo& blob = Blobs[blobIdx];
             Blackboard.RegisterBlobForPut(blob.BlobId, &blob.ExtraBlockChecks, &blob.Span);
             for (ui32 i = 0; i < totalParts; ++i) {
-#ifdef WITH_VALGRIND
-                for (auto [data, size] : partSets[blobIdx].Parts[i].OwnedString) {
-                    REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
+                if (Info->Type.PartSize(TLogoBlobID(blob.BlobId, i + 1))) {
+                    Blackboard.AddPartToPut(blob.BlobId, i, TRope(partSets[blobIdx][i]));
                 }
-#endif
-                Blackboard.AddPartToPut(blob.BlobId, i, partSets[blobIdx].Parts[i].OwnedString);
             }
             Blackboard.MarkBlobReadyToPut(blob.BlobId, blobIdx);
         }
@@ -486,6 +483,9 @@ protected:
                 const TDiskPutRequest &put = requests.PutsToSend[idx];
                 ui32 counter = isVPut ? VPutRequests : VMultiPutRequests;
                 ui64 cookie = TBlobCookie(diskOrderNumber, put.BlobIdx, put.Id.PartId(), counter);
+
+                Y_VERIFY_DEBUG(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
+                    put.Id.PartId() != 3 || put.Buffer.IsEmpty());
 
                 if constexpr (isVPut) {
                     auto vPut = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vDiskId, false, &cookie,

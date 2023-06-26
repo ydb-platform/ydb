@@ -24,6 +24,7 @@
 #include <util/generic/maybe.h>
 #include <util/stream/str.h>
 #include <util/string/escape.h>
+#include <util/generic/overloaded.h>
 
 // FIXME: this check is obsolete; TEvVGet message generators check expected reply size by their own
 #ifndef BS_EVVGET_SIZE_VERIFY
@@ -468,7 +469,6 @@ namespace NKikimr {
 
         template<typename TQueryRecord>
         static inline TInstant GetReceivedTimestamp(const TQueryRecord *queryRecord, TInstant now) {
-
             if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()) {
                 return TInstant::MicroSeconds(queryRecord->GetMsgQoS().GetExecTimeStats().GetReceivedTimestamp());
             }
@@ -1297,6 +1297,7 @@ namespace NKikimr {
                 Record.MutableForceBlockTabletData()->SetGeneration(forceBlockTabletData->Generation);
             }
             Record.MutableMsgQoS()->SetExtQueueId(HandleClassToQueueId(cls));
+            Record.SetEnablePayload(true);
         }
     };
 
@@ -1304,6 +1305,7 @@ namespace NKikimr {
         : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVGetResult,
                 NKikimrBlobStorage::TEvVGetResult,
                 TEvBlobStorage::EvVGetResult> {
+        const bool EnablePayload = false;
 
         TEvVGetResult() = default;
 
@@ -1312,6 +1314,7 @@ namespace NKikimr {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
                 TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
             : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
+            , EnablePayload(queryRecord && queryRecord->GetEnablePayload())
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -1333,8 +1336,16 @@ namespace NKikimr {
         }
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, ui64 sh,
-                       const char *data, size_t size, const ui64 *cookie = nullptr, const ui64 *ingress = nullptr,
-                       bool keep = false, bool doNotKeep = false) {
+                       std::variant<TRope, ui32> dataOrSize, const ui64 *cookie = nullptr,
+                       const ui64 *ingress = nullptr, bool keep = false, bool doNotKeep = false) {
+            TRope *data = nullptr;
+            ui32 size = 0;
+
+            std::visit(TOverloaded{
+                [&](TRope& x) { data = &x; size = x.size(); },
+                [&](ui32& x) { size = x; }
+            }, dataOrSize);
+
             IncrementSize(size);
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);
@@ -1343,7 +1354,7 @@ namespace NKikimr {
                 r->SetShift(sh);
             }
             if (data) {
-                r->SetBuffer(data, size);
+                SetBlobData(*r, std::move(*data));
             }
             r->SetSize(size);
             r->SetFullDataSize(logoBlobId.BlobSize());
@@ -1359,6 +1370,14 @@ namespace NKikimr {
                 r->SetDoNotKeep(true);
             }
             Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
+        }
+
+        void SetBlobData(NKikimrBlobStorage::TQueryResult& item, TRope&& data) {
+            if (EnablePayload && data.size() >= 128) {
+                item.SetPayloadId(AddPayload(std::move(data)));
+            } else {
+                item.SetBufferData(data.ConvertToString());
+            }
         }
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const ui64 *cookie = nullptr,
@@ -1385,6 +1404,22 @@ namespace NKikimr {
             Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
         }
 
+        bool HasBlob(const NKikimrBlobStorage::TQueryResult& result) const {
+            return result.HasBufferData() || result.HasPayloadId();
+        }
+
+        ui32 GetBlobSize(const NKikimrBlobStorage::TQueryResult& result) const {
+            return result.HasBufferData() ? result.GetBufferData().size()
+                : result.HasPayloadId() ? GetPayload(result.GetPayloadId()).size()
+                : 0;
+        }
+
+        TRope GetBlobData(const NKikimrBlobStorage::TQueryResult& result) const {
+            return result.HasBufferData() ? TRope(result.GetBufferData())
+                : result.HasPayloadId() ? GetPayload(result.GetPayloadId())
+                : TRope();
+        }
+
         TString ToString() const override {
             TStringStream str;
             str << "{EvVGetResult QueryResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
@@ -1401,16 +1436,15 @@ namespace NKikimr {
                 if (result.HasFullDataSize()) {
                     str << " FullDataSize# " << result.GetFullDataSize();
                 }
-                if (result.HasBuffer()) {
-                    const TString &data = result.GetBuffer();
-                    str << " DataSize# " << data.size();
-                    if (data.size() > 16) {
-                        str << " Data# <too_large>";
-                    } else {
-                        TString encoded;
-                        Base64Encode(data, encoded);
-                        str << " Data# " << encoded;
-                    }
+                if (result.HasBufferData()) {
+                    const TString& data = result.GetBufferData();
+                    str << " BufferData# "
+                        << (data.size() <= 16 ? Base64Encode(data) : (TStringBuilder() << "<too_large>" << data.size() << 'b'));
+                }
+                if (result.HasPayloadId()) {
+                    const TRope& data = GetPayload(result.GetPayloadId());
+                    str << " PayloadId# " << result.GetPayloadId()
+                        << " Data# " << (data.size() <= 16 ? Base64Encode(data.ConvertToString()) : (TStringBuilder() << "<too_large>" << data.size() << 'b'));
                 }
                 if (result.HasCookie()) {
                     str << " Cookie# " << result.GetCookie();
@@ -1449,7 +1483,7 @@ namespace NKikimr {
                     cookieValue = query.GetCookie();
                     cookie = &cookieValue;
                 }
-                AddResult(queryStatus, id, shift, nullptr, 0, cookie);
+                AddResult(queryStatus, id, shift, 0u, cookie);
             }
 
             if (request.HasVDiskID()) {

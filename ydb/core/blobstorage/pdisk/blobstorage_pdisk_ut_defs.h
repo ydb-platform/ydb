@@ -81,7 +81,7 @@ do { \
         ASSERT_YTHROW((a).size() == (b).size(), "Unexpected data size, got size# " << (a).size() << " expected size# " << (b).size()); \
     } else { \
         ASSERT_YTHROW((a).size() == (b).size(), "Unexpected data size, got size# " << (a).size() << " expected size# " << (b).size() << \
-            "\n got \n'" << a.c_str() << "'\n expected \n'" << (b).c_str() << "'\n" ); \
+            "\n got \n'" << a.data() << "'\n expected \n'" << (b).data() << "'\n" ); \
     } \
     for (ui32 i = 0; i < (a).size(); ++i) { \
         if ((a).data()[i] != (b).data()[i]) { \

@@ -111,29 +111,33 @@ namespace NKikimr {
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {
                     // put NODATA
-                    Result->AddResult(NKikimrProto::NODATA, query->LogoBlobID, cookiePtr, nullptr);
+                    Result->AddResult(NKikimrProto::NODATA, query->LogoBlobID, cookiePtr);
                 } else {
                     // index record(s) are found
                     ForwardIt->PutToMerger(&Merger);
                     Merger.Finish();
                     TIngress ingress = Merger.GetMemRec().GetIngress();
+
                     // Find out if we have all parts locally that we must have according to ingress
                     NMatrix::TVectorType mustHave = ingress.PartsWeMustHaveLocally(QueryCtx->HullCtx->VCtx->Top.get(),
                             QueryCtx->HullCtx->VCtx->ShortSelfVDisk, query->LogoBlobID);
                     NMatrix::TVectorType actuallyHave = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
                     NMatrix::TVectorType missingParts = mustHave - actuallyHave;
+
                     // If we don't have something locally we return NOT_YET unless that blob is going to be collected
                     auto status = IsBlobDeleted(query->LogoBlobID, Merger) ? NKikimrProto::NODATA :
                         missingParts.Empty() ? NKikimrProto::OK : NKikimrProto::NOT_YET;
+
                     // Add result
-                    ui64 ingressRaw = ingress.Raw();
-                    ui64 *pingr = (ShowInternals ? &ingressRaw : nullptr);
+                    const ui64 ingressRaw = ingress.Raw();
+                    const ui64 *pingr = ShowInternals ? &ingressRaw : nullptr;
 
                     const int mode = ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));
                     const bool keep = (mode & CollectModeKeep) && !(mode & CollectModeDoNotKeep);
                     const bool doNotKeep = mode & CollectModeDoNotKeep;
+                    const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
 
-                    Result->AddResult(status, query->LogoBlobID, cookiePtr, pingr, nullptr, keep, doNotKeep);
+                    Result->AddResult(status, query->LogoBlobID, cookiePtr, pingr, &local, keep, doNotKeep);
                     Merger.Clear();
                 }
             }
@@ -219,8 +223,8 @@ namespace NKikimr {
                     case NReadBatcher::TDataItem::ET_NOT_YET:
                         // put NOT_YET
                         Y_VERIFY(it->Id.PartId() > 0);
-                        Result->AddResult(NKikimrProto::NOT_YET, it->Id, query->Shift, nullptr, query->Size, cookiePtr,
-                            pingr, keep, doNotKeep);
+                        Result->AddResult(NKikimrProto::NOT_YET, it->Id, query->Shift, static_cast<ui32>(query->Size),
+                            cookiePtr, pingr, keep, doNotKeep);
                         break;
                     case NReadBatcher::TDataItem::ET_SETDISK:
                     case NReadBatcher::TDataItem::ET_SETMEM:
@@ -238,17 +242,17 @@ namespace NKikimr {
                             const bool DoNotKeep;
                             bool Success = true;
                             void operator()(NReadBatcher::TReadError) {
-                                Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, nullptr, Size, CookiePtr, IngrPtr,
-                                    Keep, DoNotKeep);
+                                Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep);
                                 Success = false;
                             }
-                            void operator()(const char *data, size_t size) const {
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, data, size, CookiePtr, IngrPtr, Keep,
-                                    DoNotKeep);
+                            void operator()(TRcBuf&& buffer) const {
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(std::move(buffer)), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep);
                             }
                             void operator()(const TRope& data) const {
-                                const TString s = data.ConvertToString();
-                                (*this)(s.data(), s.size());
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, TRope(data), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep);
                             }
                         } processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep, doNotKeep};
                         rit.GetData(processor);
@@ -289,8 +293,11 @@ namespace NKikimr {
                     const auto it = map.find(id.FullID());
                     Y_VERIFY(it != map.end());
                     if (it->second->Status == NKikimrProto::OK) {
-                        const TString& buffer = it->second->GetPartData(id).ConvertToString();
-                        res.SetBuffer(buffer.substr(res.GetShift(), res.GetSize() ? res.GetSize() : buffer.size() - res.GetShift()));
+                        const TRope& buffer = it->second->GetPartData(id);
+                        const ui32 shift = res.GetShift();
+                        const ui32 size = res.GetSize() ? res.GetSize() : buffer.size() - shift;
+                        TRope slice = {buffer.Position(shift), buffer.Position(shift + size)};
+                        Result->SetBlobData(res, std::move(slice));
                         res.SetStatus(NKikimrProto::OK);
                     }
                 }

@@ -7,7 +7,8 @@ namespace NKikimr {
     struct TEvRecoverBlob : TEventLocal<TEvRecoverBlob, TEvBlobStorage::EvRecoverBlob> {
         struct TItem {
             TLogoBlobID BlobId;
-            TDataPartSet PartSet; // available data
+            TStackVec<TRope, 8> Parts;
+            ui32 PartsMask = 0;
             NMatrix::TVectorType Needed; // needed parts
             TDiskPart CorruptedPart;
             ui64 Cookie;
@@ -15,9 +16,10 @@ namespace NKikimr {
             TItem(const TItem&) = default;
             TItem(TItem&&) = default;
 
-            TItem(TLogoBlobID blobId, TDataPartSet&& partSet, NMatrix::TVectorType needed, TDiskPart corruptedPart, ui64 cookie = 0)
+            TItem(TLogoBlobID blobId, TStackVec<TRope, 8>&& parts, ui32 partsMask, NMatrix::TVectorType needed, TDiskPart corruptedPart, ui64 cookie = 0)
                 : BlobId(blobId)
-                , PartSet(std::move(partSet))
+                , Parts(std::move(parts))
+                , PartsMask(partsMask)
                 , Needed(needed)
                 , CorruptedPart(corruptedPart)
                 , Cookie(cookie)
@@ -25,36 +27,37 @@ namespace NKikimr {
 
             TItem(TLogoBlobID blobId, NMatrix::TVectorType needed, const TBlobStorageGroupType& gtype, TDiskPart corruptedPart, ui64 cookie = 0)
                 : BlobId(blobId)
-                , PartSet{blobId.BlobSize(), 0, {gtype.TotalPartCount(), TPartFragment()}, TPartFragment(), 0u, false}
+                , Parts(gtype.TotalPartCount())
+                , PartsMask(0)
                 , Needed(needed)
                 , CorruptedPart(corruptedPart)
                 , Cookie(cookie)
             {}
 
-            void SetPartData(TLogoBlobID id, TString data) {
+            void SetPartData(TLogoBlobID id, TRope&& data) {
                 Y_VERIFY(id.FullID() == BlobId);
                 Y_VERIFY(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
-                if (PartSet.PartsMask & (1 << partIdx)) {
+                if (PartsMask & (1 << partIdx)) {
                     Y_VERIFY(GetPartData(id) == data);
                 } else {
-                    PartSet.PartsMask |= 1 << partIdx;
-                    PartSet.Parts[partIdx].ReferenceTo(data);
+                    PartsMask |= 1 << partIdx;
+                    Parts[partIdx] = std::move(data);
                 }
             }
 
-            TRope GetPartData(TLogoBlobID id) const {
+            const TRope& GetPartData(TLogoBlobID id) const {
                 Y_VERIFY(id.FullID() == BlobId);
                 Y_VERIFY(id.PartId());
                 const ui32 partIdx = id.PartId() - 1;
-                Y_VERIFY(PartSet.PartsMask & (1 << partIdx));
-                return PartSet.Parts[partIdx].OwnedString;
+                Y_VERIFY(PartsMask & (1 << partIdx));
+                return Parts[partIdx];
             }
 
             NMatrix::TVectorType GetAvailableParts() const {
                 NMatrix::TVectorType res(0, Needed.GetSize());
-                for (size_t i = 0; i < PartSet.Parts.size(); ++i) {
-                    if (PartSet.PartsMask & (1 << i)) {
+                for (size_t i = 0; i < Parts.size(); ++i) {
+                    if (PartsMask & (1 << i)) {
                         res.Set(i);
                     }
                 }
@@ -75,7 +78,7 @@ namespace NKikimr {
             bool first = true;
             for (const TItem& item : Items) {
                 s << (std::exchange(first, false) ? "" : " ") << "{BlobId# " << item.BlobId.ToString() << " Needed# "
-                    << item.Needed.ToString() << " PartsMask# " << Sprintf("%02" PRIx32, item.PartSet.PartsMask) << "}";
+                    << item.Needed.ToString() << " PartsMask# " << Sprintf("%02" PRIx32, item.PartsMask) << "}";
             }
             s << "]}";
         }

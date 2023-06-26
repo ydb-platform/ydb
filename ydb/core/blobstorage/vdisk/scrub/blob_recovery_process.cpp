@@ -88,10 +88,10 @@ namespace NKikimr {
                 TPerBlobInfo& info = it->second;
                 if (auto context = info.Context.lock()) { // context acquired, request is still intact
                     auto& item = *info.Item; // only here we can access item, after obtaining context pointer
-                    TString data = res.GetBuffer();
+                    TRope data = ev->Get()->GetBlobData(res);
                     bool update = false;
                     if (res.GetStatus() == NKikimrProto::OK && data) {
-                        item.SetPartData(id, data);
+                        item.SetPartData(id, std::move(data));
                         update = true;
                     }
                     const bool term = !--info.BlobReplyCounter;
@@ -121,16 +121,24 @@ namespace NKikimr {
         if (item.GetAvailableParts().IsSupersetOf(item.Needed)) {
             return NKikimrProto::OK;
         }
-        const ui32 numParts = PopCount(item.PartSet.PartsMask);
+        const ui32 numParts = PopCount(item.PartsMask);
         if (numParts >= Info->Type.MinimalRestorablePartCount()) {
-            TRope buffer;
-            Info->Type.RestoreData((TErasureType::ECrcMode)item.BlobId.CrcMode(), item.PartSet, buffer, true,
-                false, true);
-            item.PartSet.PartsMask = (1u << item.PartSet.Parts.size()) - 1;
+            Y_VERIFY_DEBUG(item.Parts.size() == Info->Type.TotalPartCount());
+
+            ui32 restoreMask = 0;
+            for (ui8 i = item.Needed.FirstPosition(); i != item.Needed.GetSize(); i = item.Needed.NextPosition(i)) {
+                restoreMask |= 1 << i;
+            }
+            restoreMask &= ~item.PartsMask;
+
+            ErasureRestore((TErasureType::ECrcMode)item.BlobId.CrcMode(), Info->Type, item.BlobId.BlobSize(), nullptr,
+                item.Parts, restoreMask);
+            item.PartsMask |= restoreMask;
+
             // clear metadata parts in mirror erasures
-            for (ui32 i = 0; i < item.PartSet.Parts.size(); ++i) {
+            for (ui32 i = 0; i < item.Parts.size(); ++i) {
                 if (!Info->Type.PartSize(TLogoBlobID(item.BlobId, i + 1))) {
-                    item.PartSet.Parts[i].ReferenceTo(TString());
+                    item.Parts[i] = TRope();
                 }
             }
             return NKikimrProto::OK;

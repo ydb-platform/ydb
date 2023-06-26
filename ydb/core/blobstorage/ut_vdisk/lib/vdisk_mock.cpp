@@ -226,21 +226,20 @@ public:
                 pingr = &ingress;
             }
 
+            if (buffer) {
+                offset = Min<size_t>(offset, buffer->size());
+                const ui32 maxSize = buffer->size() - offset;
+                size = size ? Min(size, maxSize) : maxSize;
+            }
+
             if (LostMode) {
                 // answer like in VDisk query code
                 if (record.GetIndexOnly()) {
                     response->AddResult(NKikimrProto::NOT_YET, fullId, cookie, pingr);
                 } else {
-                    response->AddResult(NKikimrProto::NOT_YET, id, offset, nullptr, size, cookie, pingr);
+                    response->AddResult(NKikimrProto::NOT_YET, id, offset, size, cookie, pingr);
                 }
             } else {
-                // adjust offset and size
-                if (buffer) {
-                    offset = Min<size_t>(offset, buffer->size());
-                    const ui32 maxSize = buffer->size() - offset;
-                    size = size ? Min(size, maxSize) : maxSize;
-                }
-
                 // check the status; we reply with OK on all index queries (we have found the blob); also we reply OK on
                 // data queries where we have the data
                 NKikimrProto::EReplyStatus status = record.GetIndexOnly() || buffer
@@ -251,7 +250,8 @@ public:
                     NMatrix::TVectorType local = ingr.LocalParts(Shared->GroupInfo->Type);
                     response->AddResult(status, record.GetIndexOnly() ? fullId : id, cookie, pingr, &local);
                 } else {
-                    response->AddResult(status, id, offset, buffer->data() + offset, size, cookie, pingr);
+                    auto data = TRcBuf::Copy(buffer->data() + offset, size);
+                    response->AddResult(status, id, offset, TRope(std::move(data)), cookie, pingr);
                 }
             }
         };

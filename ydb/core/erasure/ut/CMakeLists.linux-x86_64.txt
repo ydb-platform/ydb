@@ -32,6 +32,7 @@ target_link_options(ydb-core-erasure-ut PRIVATE
 )
 target_sources(ydb-core-erasure-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_new_ut.cpp
 )
 set_property(
   TARGET

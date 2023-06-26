@@ -20,7 +20,7 @@ struct TEvResume : public TEventLocal<TEvResume, TEvBlobStorage::EvResume> {
     double WaitSec;
     double SplitSec;
     size_t Count;
-    TBatchedVec<TDataPartSet> PartSets;
+    TBatchedVec<TStackVec<TRope, 8>> PartSets;
 };
 
 struct TEvAccelerate : public TEventLocal<TEvAccelerate, TEvBlobStorage::EvAccelerate> {
@@ -389,14 +389,12 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             }
             TEvBlobStorage::TEvPut *put;
 
-            TRcBuf buffer = TRcBuf(item.Buffer); //TODO(innokentii) prevent compaction
-            char* data = buffer.GetContiguousSpanMut().data();
-            Decrypt(data, data, 0, buffer.size(), item.BlobId, *Info);
+            DecryptInplace(item.Buffer, item.BlobId, *Info);
 
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(buffer), Deadline, HandleClass, Tactic),
+                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), Deadline, HandleClass, Tactic),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,
@@ -544,20 +542,9 @@ public:
 
         for (ui64 idx = 0; idx < PutImpl.Blobs.size(); ++idx) {
             TLogoBlobID blobId = PutImpl.Blobs[idx].BlobId;
-
-            const ui64 partSize = Info->Type.PartSize(blobId);
-            ui64 bufferSize = PutImpl.Blobs[idx].BufferSize;
-
-            char *data = PutImpl.Blobs[idx].Buffer.GetContiguousSpanMut().data();
-            Encrypt(data, data, 0, bufferSize, blobId, *Info);
-            TDataPartSet &partSet = resume->PartSets[idx];
-
-            partSet.Parts.resize(totalParts);
-            if (Info->Type.ErasureFamily() != TErasureType::ErasureMirror) {
-                for (ui32 i = 0; i < totalParts; ++i) {
-                    partSet.Parts[i].UninitializedOwnedWhole(partSize, 24);
-                }
-            }
+            EncryptInplace(PutImpl.Blobs[idx].Buffer, blobId, *Info);
+            auto& parts = resume->PartSets[idx];
+            parts.resize(totalParts);
         }
         double allocateSec = Timer.PassedReset();
 
@@ -631,14 +618,10 @@ public:
         Y_VERIFY(PutImpl.Blobs.size() == resume->PartSets.size());
         bool splitDone = true;
         for (ui64 idx = 0; idx < PutImpl.Blobs.size(); ++idx) {
-            TDataPartSet &partSet = resume->PartSets[idx];
+            auto& parts = resume->PartSets[idx];
             TLogoBlobID blobId = PutImpl.Blobs[idx].BlobId;
-            Info->Type.IncrementalSplitData((TErasureType::ECrcMode)blobId.CrcMode(), PutImpl.Blobs[idx].Buffer, partSet);
-            if (partSet.IsSplitDone()) {
-                ReportBytes(partSet.MemoryConsumed - PutImpl.Blobs[idx].BufferSize);
-            } else {
-                splitDone = false;
-            }
+            ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), Info->Type, TRope(PutImpl.Blobs[idx].Buffer), parts);
+            // TODO: ReportBytes(partSet.MemoryConsumed - PutImpl.Blobs[idx].BufferSize);
         }
         double splitSec = Timer.PassedReset();
         resume->SplitSec += splitSec;

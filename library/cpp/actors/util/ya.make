@@ -20,6 +20,7 @@ SRCS(
     memory_tracker.h
     recentwnd.h
     rope.h
+    rc_buf.cpp
     rc_buf.h
     shared_data.h
     shared_data.cpp

@@ -586,15 +586,15 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
         ctx.Send(VDiskInfo.ActorID, req.release());
     }
 
-    void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec) {
+    void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec, const TEvBlobStorage::TEvVGetResult& ev) {
         Y_UNUSED(ctx);
         int size = rec.GetResult().size();
         Y_VERIFY(size == 1, "size=%d", size);
         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(0);
-        if (q.GetBuffer() != MsgData) {
+        if (const auto& s = ev.GetBlobData(q).ConvertToString(); s != MsgData) {
             fprintf(stderr, "Original: %s\n", MsgData.data());
-            fprintf(stderr, "Received: %s\n", q.GetBuffer().data());
-            Y_VERIFY(q.GetBuffer() == MsgData);
+            fprintf(stderr, "Received: %s\n", s.data());
+            Y_FAIL();
         }
     }
 
@@ -604,7 +604,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
             fprintf(stderr, "ERROR\n");
         } else {
             if (BadSteps->find(Step) == BadSteps->end()) {
-                Check(ctx, ev->Get()->Record);
+                Check(ctx, ev->Get()->Record, *ev->Get());
             }
         }
 
@@ -688,17 +688,17 @@ class TGet : public TActorBootstrapped<TGet> {
         ctx.Send(VDiskInfo.ActorID, req.release());
     }
 
-    void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec) {
+    void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec, const TEvBlobStorage::TEvVGetResult& ev) {
         Y_UNUSED(ctx);
         ui32 size = rec.GetResult().size();
         Y_VERIFY(size == MsgNum, "size=%d", size);
         for (ui64 i = 0; i < MsgNum; ++i) {
             const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
             const TString &data = Data[i];
-            if (q.GetBuffer() != data.substr(Shift)) {
+            if (const auto& s = ev.GetBlobData(q).ConvertToString(); s != data.substr(Shift)) {
                 fprintf(stderr, "Original: %s\n", data.data());
-                fprintf(stderr, "Received: %s\n", q.GetBuffer().data());
-                Y_VERIFY(q.GetBuffer() == data.substr(Shift));
+                fprintf(stderr, "Received: %s\n", s.data());
+                Y_FAIL();
             }
         }
         auto serial = rec.SerializeAsString();
@@ -714,7 +714,7 @@ class TGet : public TActorBootstrapped<TGet> {
             if (WithErrorResponse) {
                 Y_FAIL("Expected ERROR status but given OK");
             }
-            Check(ctx, ev->Get()->Record);
+            Check(ctx, ev->Get()->Record, *ev->Get());
             break;
 
         case NKikimrProto::ERROR:
@@ -1627,7 +1627,8 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
         TIngress ingress(q.GetIngress());
         if (q.GetStatus() == NKikimrProto::OK) {
             Y_VERIFY(id == Cur->Id);
-            Y_VERIFY(ingress.Raw() == Cur->Ingress.Raw() && q.GetBuffer() == Cur->Data,
+            const auto& data = ev->Get()->GetBlobData(q).ConvertToString();
+            Y_VERIFY(ingress.Raw() == Cur->Ingress.Raw() && data == Cur->Data,
                      "vdiskId# %s id# %s ingress# %s Cur->Ingress# %s"
                      " ingress.Raw# %" PRIu64 " Cur->Ingress.Raw# %" PRIu64
                      " buf# '%s' Cur->Data# '%s'",
@@ -1637,7 +1638,7 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
                      Cur->Ingress.ToString(&Conf->GroupInfo->GetTopology(), Cur->VDiskID, id).data(),
                      ingress.Raw(),
                      Cur->Ingress.Raw(),
-                     q.GetBuffer().data(),
+                     data.data(),
                      Cur->Data.data());
         } else if (q.GetStatus() == NKikimrProto::NODATA) {
             Y_VERIFY(Cur->Data.empty());
@@ -1711,10 +1712,11 @@ void CheckQueryResult(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NA
             for (int i = 0; i < size; i++) {
                 const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
                 const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
+                const TString& data = ev->Get()->GetBlobData(q).ConvertToString();
                 LOG_NOTICE(ctx, NActorsServices::TEST, "    @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Cookie=%" PRIu64,
-                           NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(),
+                           NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(data).data(),
                            q.GetCookie());
-                expSet->Check(id, q.GetStatus(), q.GetBuffer());
+                expSet->Check(id, q.GetStatus(), data);
             }
             if (fullResult)
                 expSet->Finish();
@@ -1744,8 +1746,9 @@ void PrintDebug(NKikimr::TEvBlobStorage::TEvVGetResult::TPtr &ev, const NActors:
             ingressStr = ingress.ToString(&info->GetTopology(), vdisk, id);
             ingressRaw = ingress.Raw();
         }
+        const TString& data = ev->Get()->GetBlobData(q).ConvertToString();
         LOG_NOTICE(ctx, NActorsServices::TEST, "  @@@@@@@@@@ Status=%s LogoBlob=%s Data='%s' Ingress='%s' Raw=0x%lx",
-                   NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(q.GetBuffer()).data(),
+                   NKikimrProto::EReplyStatus_Name(q.GetStatus()).data(), id.ToString().data(), LimitData(data).data(),
                    ingressStr.data(), ingressRaw);
     }
 }

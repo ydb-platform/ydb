@@ -102,7 +102,7 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
                     const TLogoBlobID id = TLogoBlobID(LogoBlobIDFromLogoBlobID(q.GetBlobID()), 0);
                     const TReadSet::iterator it = ReadSet.find(id);
                     if (it != ReadSet.end()) {
-                        if (it->second.Data == q.GetBuffer()) {
+                        if (it->second.Data == ev->Get()->GetBlobData(q).ConvertToString()) {
                             if (!Multipart || it->second.AddReply(LogoBlobIDFromLogoBlobID(q.GetBlobID()))) {
                                 ReadSet.erase(it);
                             }
@@ -234,12 +234,11 @@ private:
         while (Proxy->Valid()) {
             TLogoBlobID id;
             NKikimrProto::EReplyStatus status;
-            TTrackableString data(TMemoryConsumer(VCtx->Replication));
-            Proxy->GetData(&id, &status, &data);
+            TRope data;
+            Proxy->FetchData(&id, &status, &data);
             if (status == NKikimrProto::OK) {
-                ExpectedSetPtr->Check(id, status, data.GetBaseConstRef());
+                ExpectedSetPtr->Check(id, status, data.ConvertToString());
             }
-            Proxy->Next();
         }
 
         if (Proxy->IsEof()) {

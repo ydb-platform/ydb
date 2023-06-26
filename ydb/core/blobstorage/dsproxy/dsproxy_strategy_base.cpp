@@ -276,35 +276,41 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,
         TBlobStorageGroupType::TPartPlacement &partPlacement) {
     bool isPartsAvailable = true;
-    ui32 partSize = info.Type.PartSize(state.Id);
-    for (ui32 i = 0; i < partPlacement.Records.size(); ++i) {
-        ui32 partIdx = partPlacement.Records[i].PartIdx;
-        if (state.Parts.size() <= partIdx || !state.Parts[partIdx].Data.IsMonolith() ||
-                state.Parts[partIdx].Data.GetMonolith().size() != partSize) {
+    Y_VERIFY_DEBUG(state.Parts.size() == info.Type.TotalPartCount());
+    for (auto& record : partPlacement.Records) {
+        const ui32 partIdx = record.PartIdx;
+        Y_VERIFY_DEBUG(partIdx < state.Parts.size());
+        auto& part = state.Parts[partIdx];
+        Y_VERIFY_DEBUG(part.Data.GetIntervalSet() == part.Here);
+        if (!part.Data.IsMonolith() || part.Data.GetMonolith().size() != info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1))) {
             isPartsAvailable = false;
+            break;
         }
     }
 
     if (!isPartsAvailable) {
         // Prepare new put request set
-        TIntervalVec<i32> fullInterval(0, state.Id.BlobSize());
-        Y_VERIFY(fullInterval.IsSubsetOf(state.Whole.Here),
-                "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
+        TIntervalSet<i32> fullInterval(0, state.Id.BlobSize());
+        Y_VERIFY_DEBUG(state.Whole.Data.GetIntervalSet() == state.Whole.Here);
+        Y_VERIFY(fullInterval == state.Whole.Here, "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
 
-        TRope wholeBuffer(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Uninitialized(state.Id.BlobSize())));
-        state.Whole.Data.Read(0, wholeBuffer.UnsafeGetContiguousSpanMut().data(), state.Id.BlobSize());
-        TDataPartSet partSet;
-        info.Type.SplitData((TErasureType::ECrcMode)state.Id.CrcMode(), wholeBuffer, partSet);
+        TStackVec<TRope, 8> partData(info.Type.TotalPartCount());
+        ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
+            state.Whole.Data.Read(0, state.Id.BlobSize()), partData);
 
-        Y_VERIFY(partSet.Parts.size() == state.Parts.size());
-        for (ui32 partIdx = 0; partIdx < partSet.Parts.size(); ++partIdx) {
-            TRope data = partSet.Parts[partIdx].OwnedString;
-            state.AddPartToPut(partIdx, data);
+        for (ui32 partIdx = 0; partIdx < info.Type.TotalPartCount(); ++partIdx) {
+            auto& part = state.Parts[partIdx];
+            const ui32 partSize = info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1));
+            if (partSize) {
+                state.AddPartToPut(partIdx, std::move(partData[partIdx]));
+                Y_VERIFY(part.Data.IsMonolith());
+                Y_VERIFY(part.Data.GetMonolith().size() == partSize);
+                Y_VERIFY(part.Here == TIntervalSet<i32>(0, partSize));
+            }
         }
     }
 
-    for (ui32 i = 0; i < partPlacement.Records.size(); ++i) {
-        TBlobStorageGroupType::TPartPlacement::TVDiskPart& record = partPlacement.Records[i];
+    for (auto& record : partPlacement.Records) {
         // send record.PartIdx to record.VDiskIdx if needed
         TBlobState::TDisk &disk = state.Disks[record.VDiskIdx];
         TBlobState::ESituation partSituation = disk.DiskParts[record.PartIdx].Situation;

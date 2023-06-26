@@ -146,7 +146,7 @@ namespace NKikimr {
                         }
                     }
                     UNIT_ASSERT(partIndex != groupInfo->Type.BlobSubgroupSize());
-                    p.AddData(0, TLogoBlobID(id, partIndex + 1), NKikimrProto::OK, v[i]);
+                    p.AddData(0, TLogoBlobID(id, partIndex + 1), NKikimrProto::OK, TRope(v[i]));
                 }
                 NRepl::TRecoveryMachine::TRecoveredBlobsQueue rbq;
                 NMatrix::TVectorType parts;

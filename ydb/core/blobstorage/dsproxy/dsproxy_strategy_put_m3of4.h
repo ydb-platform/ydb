@@ -47,13 +47,11 @@ protected:
         }
         const TIntervalVec<i32> interval(0, state.Id.BlobSize());
         Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data());
-        TRope wholeBuffer(TSharedData::Uninitialized(state.Id.BlobSize()));
-        state.Whole.Data.Read(0, wholeBuffer.UnsafeGetContiguousSpanMut().data(), state.Id.BlobSize());
-        TDataPartSet partSet;
-        info.Type.SplitData((TErasureType::ECrcMode)state.Id.CrcMode(), wholeBuffer, partSet);
-        TRope s = partSet.Parts[0].OwnedString;
-        state.Parts[0].Data.SetMonolith(s);
-        return s;
+        TRope whole = state.Whole.Data.Read(0, state.Id.BlobSize());
+        std::array<TRope, 3> parts;
+        ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type, std::move(whole), parts);
+        state.Parts[0].Data.SetMonolith(std::move(parts[0]));
+        return parts[1]; // must be the same as parts[0]
     }
 
     EStrategyOutcome Process(TBlobState& state, const TBlobStorageGroupInfo& info, TGroupDiskRequests& groupDiskRequests, bool minLatency) {

@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
                 pendingReads.erase(pendingReads.begin() + index);
                 NPDisk::TEvChunkReadResult result(NKikimrProto::OK, msg->ChunkIdx, msg->Offset, msg->Cookie, 0, "");
                 UNIT_ASSERT(msg->Offset + msg->Size <= chunkSize);
-                result.Data.SetData(chunks.at(msg->ChunkIdx).substr(msg->Offset, msg->Size));
+                result.Data.SetData(TRcBuf::Copy(chunks.at(msg->ChunkIdx).substr(msg->Offset, msg->Size)));
                 batcher.Apply(&result);
             } else if (auto msg = batcher.GetPendingMessage(0, 0, 0)) {
                 pendingReads.push_back(std::move(msg));
@@ -93,13 +93,13 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
             ui64 serial;
             TPayload payload;
             NKikimrProto::EReplyStatus status;
-            TString data;
+            TRcBuf data;
             while (batcher.GetResultItem(&serial, &payload, &status, &data)) {
                 STR << serial << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(serial, expectedSerial);
                 ++expectedSerial;
                 UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-                UNIT_ASSERT_EQUAL(chunks.at(payload.ChunkIdx).substr(payload.Offset, payload.Size), data);
+                UNIT_ASSERT_EQUAL(chunks.at(payload.ChunkIdx).substr(payload.Offset, payload.Size), TStringBuf(data));
             }
         }
     }

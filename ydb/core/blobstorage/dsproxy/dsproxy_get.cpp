@@ -195,7 +195,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         for (ui32 i = 0; i < record.ResultSize(); ++i) {
             const NKikimrBlobStorage::TQueryResult &queryResult = record.GetResult(i);
             if (record.GetStatus() == NKikimrProto::OK) {
-                totalSize += queryResult.GetBuffer().size();
+                totalSize += ev->Get()->GetBlobSize(queryResult);
             }
             const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(queryResult.GetBlobID());
             tabletId = blob.TabletID();

@@ -388,7 +388,8 @@ namespace NKikimr {
                             ++CurPosIdx;
 
                         if (q.GetStatus() == NKikimrProto::OK) {
-                            TString buffer = q.GetBuffer();
+                            Y_VERIFY_DEBUG(msg->HasBlob(q));
+                            TRope buffer = msg->GetBlobData(q);
                             if (buffer.size() != GType.PartSize(id)) {
                                 TString message = VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
                                     "Received incorrect data BlobId# %s Buffer.size# %zu;"

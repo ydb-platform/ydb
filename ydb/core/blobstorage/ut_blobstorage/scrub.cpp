@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 for (const auto& item : r.GetResult()) {
                     if (item.GetStatus() == NKikimrProto::OK) {
                         const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                        const TString& buffer = item.GetBuffer();
+                        const TString buffer = res->Get()->GetBlobData(item).ConvertToString();
                         const TString& hash = MD5::Calc(buffer);
                         data.emplace(id, hash);
                         Cerr << "BlobId# " << id.ToString() << " hash# " << hash << " size# " << buffer.size() << Endl;
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             for (const auto& result : r.GetResult()) {
                 const TLogoBlobID& key = LogoBlobIDFromLogoBlobID(result.GetBlobID());
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrProto::OK, "Id# " << key);
-                UNIT_ASSERT_EQUAL(MD5::Calc(result.GetBuffer()), data.at(key));
+                UNIT_ASSERT_EQUAL(MD5::Calc(res->Get()->GetBlobData(result).ConvertToString()), data.at(key));
                 --numBlobs;
             }
         }

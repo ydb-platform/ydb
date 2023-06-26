@@ -59,9 +59,9 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     char *dataBytes = encryptedData.Detach();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *group.GetInfo());
 
-    TBatchedVec<TDataPartSet> partSetSingleton(1);
-    partSetSingleton[0].Parts.resize(totalParts);
-    group.GetInfo()->Type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedData, partSetSingleton[0]);
+    TBatchedVec<TStackVec<TRope, 8>> partSetSingleton(1);
+    partSetSingleton[0].resize(totalParts);
+    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), group.GetInfo()->Type, TRope(encryptedData), partSetSingleton[0]);
 
     TEvBlobStorage::TEvPut ev(blobId, data, TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticDefault);
@@ -165,7 +165,7 @@ struct TTestPutAllOk {
 
     TLogContext LogCtx;
 
-    TBatchedVec<TDataPartSet> PartSets;
+    TBatchedVec<TStackVec<TRope, 8>> PartSets;
 
     TStackVec<ui32, 16> CheckStack;
 
@@ -199,8 +199,8 @@ struct TTestPutAllOk {
             char *dataBytes = encryptedData.Detach();
             Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *Group.GetInfo());
 
-            PartSets[blobIdx].Parts.resize(totalParts);
-            Group.GetInfo()->Type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedData, PartSets[blobIdx]);
+            PartSets[blobIdx].resize(totalParts);
+            ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), Group.GetInfo()->Type, TRope(encryptedData), PartSets[blobIdx]);
         }
     }
 
@@ -418,13 +418,13 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     logCtx.LogAcc.IsLogEnabled = false;
 
     const ui32 totalParts = env.Info->Type.TotalPartCount();
-    TBatchedVec<TDataPartSet> partSetSingleton(1);
-    partSetSingleton[0].Parts.resize(totalParts);
+    TBatchedVec<TStackVec<TRope, 8>> partSetSingleton(1);
+    partSetSingleton[0].resize(totalParts);
 
     TString encryptedData = data;
     char *dataBytes = encryptedData.Detach();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *env.Info);
-    env.Info->Type.SplitData((TErasureType::ECrcMode)blobId.CrcMode(), encryptedData, partSetSingleton[0]);
+    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0]);
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton, vPuts);
 
     UNIT_ASSERT_VALUES_EQUAL(vPuts.size(), 9);

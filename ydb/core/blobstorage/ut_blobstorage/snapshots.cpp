@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(SnapshotTesting) {
                     const auto& result = record.GetResult(0);
                     if (shouldBeReadable) {
                         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
-                        UNIT_ASSERT_VALUES_EQUAL(result.GetBuffer(), data);
+                        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetBlobData(result).ConvertToString(), data);
                     } else if (result.GetStatus() == NKikimrProto::NODATA) {
                         ++numUnreadable;
                     }

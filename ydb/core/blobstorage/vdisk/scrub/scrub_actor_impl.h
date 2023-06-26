@@ -127,7 +127,7 @@ namespace NKikimr {
         // PDISK INTERACTION
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::optional<TString> Read(const TDiskPart& part);
+        std::optional<TRcBuf> Read(const TDiskPart& part);
         bool IsReadable(const TDiskPart& part);
         void Write(const TDiskPart& part, TString data);
 

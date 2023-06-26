@@ -530,8 +530,8 @@ protected:
                     << " Status: " << StatusToString(replyStatus));
 
                 if (replyStatus == NKikimrProto::OK) {
-                    LastResponse.Data[i] = result.GetBuffer();
-                    VERBOSE_COUT(" data: " << result.GetBuffer());
+                    LastResponse.Data[i] = ev->Get()->GetBlobData(result).ConvertToString();
+                    VERBOSE_COUT(" data: " << LastResponse.Data[i]);
                 }
             }
         }

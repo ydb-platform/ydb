@@ -27,4 +27,6 @@ target_sources(ydb-core-erasure PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_rope.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_perf_test.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_split.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_restore.cpp
 )

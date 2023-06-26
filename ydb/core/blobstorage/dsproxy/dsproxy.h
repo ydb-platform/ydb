@@ -591,8 +591,11 @@ private:
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
         const TBlobStorageGroupInfo &info);
+void EncryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
+
 void Decrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
         const TBlobStorageGroupInfo &info);
+void DecryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
 
 IActor* CreateBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,

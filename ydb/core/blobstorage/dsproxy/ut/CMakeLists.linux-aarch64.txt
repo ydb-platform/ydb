@@ -16,19 +16,8 @@ target_link_libraries(ydb-core-blobstorage-dsproxy-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
-  cpp-actors-core
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  core-blobstorage-base
   core-blobstorage-dsproxy
-  core-blobstorage-groupinfo
-  blobstorage-ut_vdisk-lib
-  blobstorage-vdisk-common
-  blobstorage-vdisk-query
   core-testlib-default
-  core-testlib-actors
-  core-testlib-basics
 )
 target_link_options(ydb-core-blobstorage-dsproxy-ut PRIVATE
   -ldl
@@ -46,7 +35,6 @@ target_sources(ydb-core-blobstorage-dsproxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_sequence_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_patch_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_counters_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_fault_tolerance_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_get_ut.cpp
 )
 set_property(

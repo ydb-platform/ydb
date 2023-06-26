@@ -50,8 +50,8 @@ struct TBlobState {
         TFragmentedBuffer Data;
         TIntervalSet<i32> Here;    // Present in the Data buffer
 
-        void AddResponseData(ui32 fullSize, ui32 shift, TString &data);
-        void AddPartToPut(TRope &data);
+        void AddResponseData(ui32 fullSize, ui32 shift, TRope&& data);
+        void AddPartToPut(TRope&& partData);
         TString ToString() const;
     };
     struct TWholeState : TState {
@@ -88,11 +88,11 @@ struct TBlobState {
 
     void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
     void AddNeeded(ui64 begin, ui64 size);
-    void AddPartToPut(ui32 partIdx, TRope &partData);
+    void AddPartToPut(ui32 partIdx, TRope&& partData);
     void MarkBlobReadyToPut(ui8 blobIdx = 0);
     bool Restore(const TBlobStorageGroupInfo &info);
     void AddResponseData(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring,
-            ui32 shift, TString &data, bool keep, bool doNotKeep);
+            ui32 shift, TRope&& data, bool keep, bool doNotKeep);
     void AddPutOkResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber);
     void AddNoDataResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
     void AddErrorResponse(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 diskIdxInSubring);
@@ -205,10 +205,10 @@ struct TBlackboard {
     {}
 
     void AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize);
-    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope &partData);
+    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope&& partData);
     void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0);
     void MoveBlobStateToDone(const TLogoBlobID &id);
-    void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data, bool keep, bool doNotKeep);
+    void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TRope&& data, bool keep, bool doNotKeep);
     void AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber);
     void AddErrorResponse(const TLogoBlobID &id, ui32 orderNumber);

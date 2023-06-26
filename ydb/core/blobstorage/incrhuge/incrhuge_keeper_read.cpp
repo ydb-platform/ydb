@@ -56,7 +56,7 @@ namespace NKikimr {
                 TString data;
                 NPDisk::TEvChunkReadResult& result = *static_cast<NPDisk::TEvChunkReadResult*>(msg);
                 if (result.Data.IsReadable()) {
-                    data = result.Data.ToString();
+                    data = TStringBuf(result.Data.ToString());
                 } else {
                     status = NKikimrProto::ERROR;
                 }

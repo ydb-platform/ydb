@@ -6,19 +6,20 @@ namespace NKikimr {
 // TBlobState
 //
 
-void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TString &data) {
+void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TRope&& data) {
+    const ui32 size = data.size();
     // Add the data to the Data buffer
-    Y_VERIFY(data.size());
-    Y_VERIFY(shift + data.size() <= fullSize);
-    Data.Write(shift, data.data(), data.size());
+    Y_VERIFY(size);
+    Y_VERIFY(shift < fullSize && size <= fullSize - shift);
+    Data.Write(shift, std::move(data));
     // Mark the interval as present in the Data buffer
-    Here.Add(shift, shift + data.size());
+    Here.Add(shift, shift + size);
 }
 
-void TBlobState::TState::AddPartToPut(TRope &data) {
-    Y_VERIFY(data.size());
-    Data.SetMonolith(data);
-    Here.Assign(0, data.size());
+void TBlobState::TState::AddPartToPut(TRope&& partData) {
+    Y_VERIFY(partData);
+    Here.Assign(0, partData.size());
+    Data.SetMonolith(std::move(partData));
 }
 
 
@@ -45,10 +46,10 @@ void TBlobState::AddNeeded(ui64 begin, ui64 size) {
     IsChanged = true;
 }
 
-void TBlobState::AddPartToPut(ui32 partIdx, TRope &partData) {
+void TBlobState::AddPartToPut(ui32 partIdx, TRope&& partData) {
     Y_VERIFY(bool(Id));
     Y_VERIFY(partIdx < Parts.size());
-    Parts[partIdx].AddPartToPut(partData);
+    Parts[partIdx].AddPartToPut(std::move(partData));
     IsChanged = true;
 }
 
@@ -101,14 +102,15 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
 }
 
 void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
-        ui32 shift, TString &data, bool keep, bool doNotKeep) {
+        ui32 shift, TRope&& data, bool keep, bool doNotKeep) {
     // Add actual data to Parts
     Y_VERIFY(id.PartId() != 0);
     ui32 partIdx = id.PartId() - 1;
     Y_VERIFY(partIdx < Parts.size());
     const ui32 partSize = info.Type.PartSize(id);
+    const ui32 dataSize = data.size();
     if (partSize) {
-        Parts[partIdx].AddResponseData(partSize, shift, data);
+        Parts[partIdx].AddResponseData(partSize, shift, std::move(data));
     }
     IsChanged = true;
     // Mark part as present for the disk
@@ -122,7 +124,7 @@ void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoB
             //Cerr << Endl << "present diskIdx# " << diskIdx << " partIdx# " << partIdx << Endl << Endl;
             diskPart.Situation = ESituation::Present;
             if (partSize) {
-                TIntervalVec<i32> responseInterval(shift, shift + data.size());
+                TIntervalVec<i32> responseInterval(shift, shift + dataSize);
                 diskPart.Requested.Subtract(responseInterval);
             }
             break;
@@ -381,11 +383,13 @@ void TBlackboard::AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize) {
     }
 }
 
-void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope &partData) {
+void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TRope&& partData) {
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() == 0);
     Y_VERIFY(id.BlobSize() != 0);
-    (*this)[id].AddPartToPut(partIdx, partData);
+    Y_VERIFY(partData.size() == Info->Type.PartSize(TLogoBlobID(id, partIdx + 1)),
+        "partData# %zu partSize# %" PRIu64, partData.size(), Info->Type.PartSize(TLogoBlobID(id, partIdx + 1)));
+    (*this)[id].AddPartToPut(partIdx, std::move(partData));
 }
 
 void TBlackboard::MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx) {
@@ -423,11 +427,11 @@ void TBlackboard::AddPutOkResponse(const TLogoBlobID &id, ui32 orderNumber) {
     state.AddPutOkResponse(*Info, id, orderNumber);
 }
 
-void TBlackboard::AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data, bool keep, bool doNotKeep) {
+void TBlackboard::AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TRope&& data, bool keep, bool doNotKeep) {
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() != 0);
     TBlobState &state = GetState(id);
-    state.AddResponseData(*Info, id, orderNumber, shift, data, keep, doNotKeep);
+    state.AddResponseData(*Info, id, orderNumber, shift, std::move(data), keep, doNotKeep);
 }
 
 void TBlackboard::AddNoDataResponse(const TLogoBlobID &id, ui32 orderNumber) {

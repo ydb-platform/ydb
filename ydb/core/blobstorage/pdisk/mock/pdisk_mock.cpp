@@ -604,7 +604,7 @@ public:
             ui32 offset = msg->Offset;
             ui32 size = msg->Size;
             Y_VERIFY(offset < Impl.ChunkSize && offset + size <= Impl.ChunkSize && size);
-            TString data = TString::Uninitialized(size);
+            auto data = TRcBuf::Uninitialized(size);
 
             const auto chunkIt = owner->ChunkData.find(msg->ChunkIdx);
             if (chunkIt == owner->ChunkData.end()) {
@@ -615,7 +615,7 @@ public:
                 if (Impl.Corrupted & TIntervalSet<ui64>(chunkOffset + offset, chunkOffset + offset + size)) {
                     res->Status = NKikimrProto::CORRUPTED;
                 } else {
-                    char *begin = data.Detach(), *ptr = begin;
+                    char *begin = data.GetDataMut(), *ptr = begin;
                     while (size) {
                         const ui32 blockIdx = offset / Impl.AppendBlockSize;
                         const ui32 offsetInBlock = offset % Impl.AppendBlockSize;

@@ -56,9 +56,25 @@ namespace NKikimr {
         Y_VERIFY(false, "Unexpected Encryption Mode# %" PRIu64, (ui64)info.GetEncryptionMode());
     }
 
+    void EncryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info) {
+        if (info.GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
+            return;
+        }
+        auto span = rope.GetContiguousSpanMut();
+        Encrypt(span.data(), span.data(), 0, span.size(), id, info);
+    }
+
     void Decrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
             const TBlobStorageGroupInfo &info) {
         Encrypt(destination, source, shift, sizeBytes, id, info);
+    }
+
+    void DecryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info) {
+        if (info.GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
+            return;
+        }
+        auto span = rope.GetContiguousSpanMut();
+        Decrypt(span.data(), span.data(), 0, span.size(), id, info);
     }
 
 } // NKikimr

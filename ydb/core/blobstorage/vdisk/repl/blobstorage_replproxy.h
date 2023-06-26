@@ -25,21 +25,21 @@ namespace NKikimr {
             struct TDataElement {
                 TLogoBlobID LogoBlobId;
                 NKikimrProto::EReplyStatus Status;
-                TTrackableString Data;
+                TRope Data;
 
-                TDataElement(TMemoryConsumer&& consumer, const TLogoBlobID& logoBlobId, NKikimrProto::EReplyStatus status,
-                        TString&& data)
+                TDataElement(TMemoryConsumer&& /*consumer*/, const TLogoBlobID& logoBlobId, NKikimrProto::EReplyStatus status,
+                        TRope&& data)
                     : LogoBlobId(logoBlobId)
                     , Status(status)
-                    , Data(std::move(consumer), std::move(data))
+                    , Data(std::move(data))
                 {}
 
                 void Reset() {
-                    Data.clear();
+                    Data = {};
                 }
 
                 size_t GetDataSize() const {
-                    return Data.capacity();
+                    return Data.size();
                 }
             };
 
@@ -75,14 +75,14 @@ namespace NKikimr {
             // WRITE PART
             ////////////////////////////////////////////////////////////////////////////////
 
-            void Add(const TLogoBlobID& logoBlobId, TString&& data) {
+            void Add(const TLogoBlobID& logoBlobId, TRope&& data) {
                 Y_VERIFY_DEBUG(FrontPos == 0);
                 Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, NKikimrProto::OK, std::move(data));
             }
 
             void AddError(const TLogoBlobID& logoBlobId, NKikimrProto::EReplyStatus status) {
                 Y_VERIFY_DEBUG(FrontPos == 0);
-                Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, status, TString());
+                Items.emplace_back(TMemoryConsumer(Consumer), logoBlobId, status, TRope());
             }
 
             void Append(TDataPortion&& from) {
@@ -112,12 +112,12 @@ namespace NKikimr {
                 return bytes;
             }
 
-            void GetFrontItem(TLogoBlobID *logoBlobId, NKikimrProto::EReplyStatus *status, TTrackableString *data) const {
+            void GetFrontItem(TLogoBlobID *logoBlobId, NKikimrProto::EReplyStatus *status, TRope *data) {
                 Y_VERIFY_DEBUG(FrontPos < Items.size());
                 const TDataElement& elem = Items[FrontPos];
                 *logoBlobId = elem.LogoBlobId;
                 *status = elem.Status;
-                *data = elem.Data;
+                *data = std::move(elem.Data);
             }
 
             void GetFrontItem(TLogoBlobID *logoBlobId) const {
@@ -276,14 +276,9 @@ namespace NKikimr {
                 Ids.emplace_back(id, expectedReplySize);
             }
 
-            // Next(): advance to next data item
-            // Precondition: Valid()
-            void Next() {
-                DataPortion.Next();
-            }
-
-            void GetData(TLogoBlobID *logoBlobId, NKikimrProto::EReplyStatus *status, TTrackableString *data) const {
+            void FetchData(TLogoBlobID *logoBlobId, NKikimrProto::EReplyStatus *status, TRope *data) {
                 DataPortion.GetFrontItem(logoBlobId, status, data);
+                DataPortion.Next();
             }
 
             TLogoBlobID GenLogoBlobId() const {

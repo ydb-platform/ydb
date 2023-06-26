@@ -76,7 +76,7 @@ namespace NKikimr {
             // fourth step: sanity check
             Y_VERIFY(!destLen);
 
-            std::optional<TString> data = Read(part);
+            std::optional<TRcBuf> data = Read(part);
             if (!data) {
                 STLOGX(GetActorContext(), PRI_WARN, BS_VDISK_SCRUB, VDS13, VDISKP(LogPrefix, "index is corrupt, restoring"),
                     (SstId, sst->AssignedSstId), (Location, part));
@@ -84,9 +84,9 @@ namespace NKikimr {
                 ui32 offset = part.Offset - part.Offset % ScrubCtx->PDiskCtx->Dsk->AppendBlockSize;
                 if (const ui32 prefixLen = part.Offset - offset) {
                     // restore prefixLen bytes of data before the index
-                    std::optional<TString> data = Read(TDiskPart(part.ChunkIdx, offset, prefixLen));
+                    std::optional<TRcBuf> data = Read(TDiskPart(part.ChunkIdx, offset, prefixLen));
                     if (data) {
-                        regen = *data + regen;
+                        regen = TStringBuf(*data) + regen;
                         part.Offset = offset;
                         part.Size += prefixLen;
                     } else {

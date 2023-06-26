@@ -142,19 +142,15 @@ public:
             for (auto it = Blobs.lower_bound(idFirst); it != Blobs.end() && it->first <= idLast; it++) {
                 isNoData = false;
                 if (NotYetBlobs.find(it->first) != NotYetBlobs.end()) {
-                    outVGetResult.AddResult(NKikimrProto::NOT_YET, it->first, shift,
-                            nullptr, 0, cookie);
+                    outVGetResult.AddResult(NKikimrProto::NOT_YET, it->first, shift, static_cast<ui32>(resultSize), cookie);
                 } else {
-                    TString resultData;
-                    resultData.resize(resultSize);
-                    memcpy((void*)resultData.data(), ((char*)(void*)it->second.data()) + rShift, resultSize);
-                    outVGetResult.AddResult(NKikimrProto::OK, it->first, shift,
-                            resultData.data(), resultSize, cookie);
+                    auto buffer = TRcBuf::Copy((char*)it->second.data() + rShift, resultSize);
+                    outVGetResult.AddResult(NKikimrProto::OK, it->first, shift, TRope(std::move(buffer)), cookie);
                 }
             }
             if (isNoData) {
                 CTEST << "VDisk# " << VDiskId.ToString() << " blob# " << id.ToString() << " NODATA" << Endl;
-                outVGetResult.AddResult(NKikimrProto::NODATA, id, shift, nullptr, 0, cookie);
+                outVGetResult.AddResult(NKikimrProto::NODATA, id, cookie);
             }
         }
         Y_VERIFY(request.HasVDiskID());

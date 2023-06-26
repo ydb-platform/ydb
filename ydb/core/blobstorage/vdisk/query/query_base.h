@@ -95,7 +95,7 @@ namespace NKikimr {
             } else {
                 ui64 total = 0;
                 for (const auto& result : Result->Record.GetResult()) {
-                    total += result.GetBuffer().size();
+                    total += Result->GetBlobSize(result);
                     hasNotYet = hasNotYet || result.GetStatus() == NKikimrProto::NOT_YET;
                 }
                 QueryCtx->MonGroup.GetTotalBytes() += total;

@@ -461,7 +461,7 @@ namespace NKikimr {
                     std::array<TRope, 8> parts;
                     ui32 numParts = 0;
                     for (ui32 i = item.Needed.FirstPosition(); i != item.Needed.GetSize(); i = item.Needed.NextPosition(i)) {
-                        parts[numParts++] = TRope(item.PartSet.Parts[i].OwnedString);
+                        parts[numParts++] = std::move(item.Parts[i]);
                     }
                     DeferredItems.AddReadDiskBlob(item.Cookie, TDiskBlob::CreateFromDistinctParts(&parts[0],
                         &parts[numParts], item.Needed, item.BlobId.BlobSize(), Arena), item.Needed);
@@ -486,7 +486,7 @@ namespace NKikimr {
             ui64 serial;
             TBatcherPayload payload;
             NKikimrProto::EReplyStatus status;
-            TString buffer;
+            TRcBuf buffer;
             while (ReadBatcher.GetResultItem(&serial, &payload, &status, &buffer)) {
                 if (status == NKikimrProto::CORRUPTED) {
                     ExpectingBlobRestoration = true;
@@ -494,7 +494,7 @@ namespace NKikimr {
                     return new TEvRestoreCorruptedBlob(now + RestoreDeadline, {1u, item}, false, true);
                 } else {
                     Y_VERIFY(status == NKikimrProto::OK);
-                    DeferredItems.AddReadDiskBlob(payload.Id, TRope(buffer), payload.LocalParts);
+                    DeferredItems.AddReadDiskBlob(payload.Id, TRope(std::move(buffer)), payload.LocalParts);
                 }
             }
             return nullptr;

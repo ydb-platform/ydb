@@ -304,7 +304,7 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
     result->Data = std::move(CommonBuffer);
     CommonBuffer.Clear();
-    Y_VERIFY(result->Data.IsDetached());
+    //Y_VERIFY(result->Data.IsDetached());
 
     result->Data.Commit();
 

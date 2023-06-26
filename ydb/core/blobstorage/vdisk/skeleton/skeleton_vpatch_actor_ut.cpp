@@ -440,7 +440,7 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
                     vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGet->GetCachedByteSize(), &evVGet->Record,
                     nullptr, nullptr, nullptr, evVGet->Record.GetCookie(), vGetHandle->GetChannel(), 0);
-            evVGetResult->AddResult(NKikimrProto::OK, blob.BlobId, 0, blob.Buffer.data(), blob.Buffer.size());
+            evVGetResult->AddResult(NKikimrProto::OK, blob.BlobId, 0, TRope(blob.Buffer));
 
             std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, evVGetResult.release());
             runtime.Send(handle.release());

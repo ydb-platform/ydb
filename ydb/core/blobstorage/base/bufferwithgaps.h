@@ -20,7 +20,7 @@ namespace NKikimr {
      * through replication, or do something else. */
 
     class TBufferWithGaps {
-        TString Data;
+        TRcBuf Data;
         // <begin, size>
         TMap<ui32, ui32> Gaps;
         ui32 Offset; // Data's offset in Gaps space
@@ -40,7 +40,7 @@ namespace NKikimr {
         {}
 
         TBufferWithGaps(ui32 offset, ui32 size)
-            : Data(TString::Uninitialized(size))
+            : Data(TRcBuf::Uninitialized(size))
             , Offset(offset)
             , IsCommited(false)
         {}
@@ -63,21 +63,21 @@ namespace NKikimr {
             Gaps.emplace(begin, size);
         }
 
-        void SetData(TString&& data) {
+        void SetData(TRcBuf&& data) {
             Data = std::move(data);
             IsCommited = true;
         }
 
-        TString ToString() const {
+        TRcBuf ToString() const {
             Y_VERIFY_S(IsReadable(), "returned data is corrupt (or was never written) and therefore could not be used safely, State# "
                     << PrintState());
             return Data;
         }
 
-        TString Substr(ui32 offset, ui32 len) const {
+        TRcBuf Substr(ui32 offset, ui32 len) const {
             Y_VERIFY_S(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# %" << offset
                    << " len# " << len << " and therefore could not be used safely, State# " << PrintState());
-            return Data.substr(offset, len);
+            return TRcBuf(TRcBuf::Piece, Data.data() + offset, len, Data);
         }
 
         template<typename T>
@@ -91,7 +91,7 @@ namespace NKikimr {
             Y_VERIFY(offset + len <= Data.size(), "Buffer has size# %zu less then requested offset# %" PRIu32
                     " len# %" PRIu32, Data.size(), offset, len);
             IsCommited = false;
-            return reinterpret_cast<ui8 *>(Data.Detach() + offset);
+            return reinterpret_cast<ui8 *>(Data.GetDataMut() + offset);
         }
 
         void Commit() {
@@ -136,21 +136,17 @@ namespace NKikimr {
         }
 
         void Swap(TBufferWithGaps& other) {
-            Data.swap(other.Data);
+            std::swap(Data, other.Data);
             Gaps.swap(other.Gaps);
             DoSwap(Offset, other.Offset);
             DoSwap(IsCommited, other.IsCommited);
         }
 
         void Clear() {
-            Data.clear();
+            Data = {};
             Gaps.clear();
             Offset = 0;
             IsCommited = false;
-        }
-
-        bool IsDetached() const {
-            return Data.IsDetached();
         }
 
         bool Empty() const {

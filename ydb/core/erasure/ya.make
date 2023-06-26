@@ -6,6 +6,8 @@ SRCS(
     erasure_rope.cpp
     erasure_rope.h
     erasure_perf_test.cpp
+    erasure_split.cpp
+    erasure_restore.cpp
 )
 
 PEERDIR(

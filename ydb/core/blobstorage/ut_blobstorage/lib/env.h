@@ -568,7 +568,7 @@ struct TEnvironmentSetup {
                 const auto& res = record.GetResult(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), status, Dump(vdiskActorId, vdiskId));
                 if (status == NKikimrProto::OK) {
-                    UNIT_ASSERT_VALUES_EQUAL(res.GetBuffer(), part.substr(1, part.size() - 2));
+                    UNIT_ASSERT_VALUES_EQUAL(r->Get()->GetBlobData(res).ConvertToString(), part.substr(1, part.size() - 2));
                 }
             }
 
@@ -581,7 +581,7 @@ struct TEnvironmentSetup {
                 UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
                 UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 1);
                 const auto& res = record.GetResult(0);
-                UNIT_ASSERT(!res.HasBuffer());
+                UNIT_ASSERT(!r->Get()->HasBlob(res));
                 UNIT_ASSERT_VALUES_EQUAL(LogoBlobIDFromLogoBlobID(res.GetBlobID()), blobId.FullID());
                 UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), status);
             }

@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-    std::optional<TString> TScrubCoroImpl::Read(const TDiskPart& part) {
+    std::optional<TRcBuf> TScrubCoroImpl::Read(const TDiskPart& part) {
         Y_VERIFY(part.ChunkIdx);
         Y_VERIFY(part.Size);
         auto msg = std::make_unique<NPDisk::TEvChunkRead>(ScrubCtx->PDiskCtx->Dsk->Owner,

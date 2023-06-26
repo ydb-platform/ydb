@@ -1576,21 +1576,8 @@ private:
 
         if (const auto structPassthrough = input->Head().GetConstraint<TPassthroughConstraintNode>(), fieldPasstrought = input->Tail().GetConstraint<TPassthroughConstraintNode>();
             structPassthrough || fieldPasstrought) {
-            auto mapping = structPassthrough ? structPassthrough->GetColumnMapping() : TPassthroughConstraintNode::TMapType();
-            if (const auto self = mapping.find(nullptr); mapping.cend() != self)
-                mapping.emplace(structPassthrough, std::move(mapping.extract(self).mapped()));
-            const TConstraintNode::TPathType key(1U, name);
-            for (auto p = mapping.begin(); mapping.end() != p;) {
-                if (auto it = p->second.lower_bound(key); p->second.cend() > it && it->first.front() == key.front()) {
-                    do p->second.erase(it++);
-                    while (p->second.end() > it && it->first.front() == key.front());
-                    if (p->second.empty()) {
-                        mapping.erase(p++);
-                        continue;
-                    }
-                }
-                ++p;
-            }
+            const auto filtered = structPassthrough ? structPassthrough->FilterFields(ctx, [&name](const TConstraintNode::TPathType& path) { return !path.empty() && path.front() != name; }) :  nullptr;
+            auto mapping = filtered ? filtered->GetColumnMapping() : TPassthroughConstraintNode::TMapType();
             if (fieldPasstrought) {
                 for (const auto& part : fieldPasstrought->GetColumnMapping()) {
                     for (auto item : part.second) {

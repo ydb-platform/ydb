@@ -219,8 +219,9 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
     return Counters;
 }
 
-void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType) {
-    UpdatePortionStats(Counters, portionInfo, updateType);
+void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType,
+                                            std::optional<TPortionMeta::EProduced> exProduced) {
+    UpdatePortionStats(Counters, portionInfo, updateType, exProduced);
 
     ui64 granule = portionInfo.Granule();
     Y_VERIFY(granule);
@@ -232,11 +233,12 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
         stats = std::make_shared<TColumnEngineStats>();
         stats->Tables = 1;
     }
-    UpdatePortionStats(*PathStats[pathId], portionInfo, updateType);
+    UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exProduced);
 }
 
 void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
-                                              EStatsUpdateType updateType) const {
+                                              EStatsUpdateType updateType,
+                                              std::optional<TPortionMeta::EProduced> exProduced) const {
     TColumnEngineStats::TPortionsStats deltaStats;
     ui64 columnRecords = portionInfo.Records.size();
     ui64 metadataBytes = 0;
@@ -258,14 +260,16 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     deltaStats.Blobs = blobs.size();
     deltaStats.Portions = 1;
     Y_VERIFY(portionInfo.Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
-    TColumnEngineStats::TPortionsStats& srcStats = engineStats.StatsByType[portionInfo.Meta.Produced];
-    auto* stats = (updateType == EStatsUpdateType::EVICT)
-        ? &engineStats.StatsByType[TPortionMeta::EProduced::EVICTED]
-        : (portionInfo.IsActive() ? &srcStats : &engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE]);
+    TColumnEngineStats::TPortionsStats& srcStats = exProduced
+        ? engineStats.StatsByType[*exProduced]
+        : engineStats.StatsByType[portionInfo.Meta.Produced];
+    auto* stats = portionInfo.IsActive()
+        ? &engineStats.StatsByType[portionInfo.Meta.Produced]
+        : &engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE];
 
     const bool isErase = updateType == EStatsUpdateType::ERASE;
     const bool isLoad = updateType == EStatsUpdateType::LOAD;
-    const bool isAppended = portionInfo.IsActive() && (updateType != EStatsUpdateType::EVICT);
+    const bool isAppended = portionInfo.IsActive() && !exProduced;
 
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
@@ -819,11 +823,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
         }
         Y_VERIFY(portionInfo.TierName != oldInfo.TierName);
 
-        if (apply) {
-            UpdatePortionStats(oldInfo, EStatsUpdateType::EVICT);
-        }
-
-        if (!UpsertPortion(portionInfo, apply, false)) {
+        if (!UpsertPortion(portionInfo, apply, true, &oldInfo)) {
             LOG_S_ERROR("Cannot evict portion " << portionInfo << " at tablet " << TabletId);
             return false;
         }
@@ -973,7 +973,8 @@ void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& 
     PathGranules[pathId].erase(mark);
 }
 
-bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats) {
+bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats,
+                                        const TPortionInfo* exInfo) {
     ui64 granule = portionInfo.Granule();
 
     if (!apply) {
@@ -989,7 +990,12 @@ bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool a
     auto& spg = Granules[granule];
     Y_VERIFY(spg);
     if (updateStats) {
-        UpdatePortionStats(portionInfo);
+        if (exInfo) {
+            Y_VERIFY(portionInfo.Meta.Produced == TPortionMeta::EProduced::EVICTED);
+            UpdatePortionStats(portionInfo, EStatsUpdateType::DEFAULT, exInfo->Meta.Produced);
+        } else {
+            UpdatePortionStats(portionInfo);
+        }
     }
     spg->UpsertPortion(portionInfo);
     return true; // It must return true if (apply == true)

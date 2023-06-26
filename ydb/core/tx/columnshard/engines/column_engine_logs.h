@@ -183,8 +183,7 @@ public:
     enum class EStatsUpdateType {
         DEFAULT = 0,
         ERASE,
-        LOAD,
-        EVICT
+        LOAD
     };
 
     TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits = {});
@@ -331,11 +330,13 @@ private:
 
     /// Insert granule or check if same granule was already inserted.
     bool SetGranule(const TGranuleRecord& rec, bool apply);
-    bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
+    bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true, const TPortionInfo* exInfo = nullptr);
     bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
-    void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT);
+    void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT,
+                            std::optional<TPortionMeta::EProduced> exProduced = {});
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
-                            EStatsUpdateType updateType) const;
+                            EStatsUpdateType updateType,
+                            std::optional<TPortionMeta::EProduced> exProduced = {}) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
 

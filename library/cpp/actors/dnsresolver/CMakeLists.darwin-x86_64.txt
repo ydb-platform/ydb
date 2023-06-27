@@ -10,9 +10,6 @@ find_package(c-ares REQUIRED)
 add_subdirectory(ut)
 
 add_library(cpp-actors-dnsresolver)
-target_include_directories(cpp-actors-dnsresolver PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/include
-)
 target_link_libraries(cpp-actors-dnsresolver PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -110,6 +110,13 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             node = ctx.NewCallable(node->Pos(), "Nothing", { ExpandType(node->Pos(), expectedType, ctx) });
             return IGraphTransformer::TStatus::Repeat;
         }
+
+        if (sourceType.GetKind() == ETypeAnnotationKind::Pg) {
+            if (sourceType.Cast<TPgExprType>()->GetName() == "unknown") {
+                node = ctx.NewCallable(node->Pos(), "PgCast", { node, ExpandType(node->Pos(), expectedType, ctx) });
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
     }
 
     if (expectedType.GetKind() == ETypeAnnotationKind::Optional) {
@@ -940,6 +947,10 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
 
 template <bool Strong>
 NUdf::TCastResultOptions CastResult(const TPgExprType* source, const TPgExprType* target) {
+    if (source->GetName() == "unknown") {
+        return NUdf::ECastOptions::Complete;
+    }
+
     if (source->GetId() != target->GetId()) {
         return NUdf::ECastOptions::Impossible;
     }
@@ -1296,6 +1307,14 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
 
 const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const TPgExprType* two, TExprContext& ctx) {
     if (one->GetId() == two->GetId()) {
+        return one;
+    }
+
+    if (one->GetName() == "unknown") {
+        return two;
+    }
+
+    if (two->GetName() == "unknown") {
         return one;
     }
 
@@ -5437,6 +5456,10 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         return false;
     } else {
         pgType = type->Cast<TPgExprType>()->GetId();
+        if (NPg::LookupType(pgType).Name == "unknown") {
+            pgType = 0;
+        }
+
         return true;
     }
 }
@@ -5875,7 +5898,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
             .Seal()
             .Build();
 
-        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+        if ((lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) ||
+            (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg &&
+            lambda->GetTypeAnn()->Cast<TPgExprType>()->GetName() == "unknown")) {
             initLambda = ctx.Builder(pos)
                 .Lambda()
                     .Param("row")

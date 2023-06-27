@@ -17,6 +17,21 @@ namespace NYql {
 
 namespace NTypeAnnImpl {
 
+bool AdjustUnknownType(TVector<const TItemExprType*>& outputItems, TExprContext& ctx) {
+    bool replaced = false;
+    for (auto& item : outputItems) {
+        if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg &&
+            item->GetItemType()->Cast<TPgExprType>()->GetName() == "unknown") {
+                replaced = true;
+                item = ctx.MakeType<TItemExprType>(
+                    item->GetName(),
+                    ctx.MakeType<TPgExprType>(NPg::LookupType("text").TypeId));
+            }
+    }
+
+    return replaced;
+}
+
 bool ValidateInputTypes(TExprNode& node, TExprContext& ctx) {
     if (!EnsureTuple(node, ctx)) {
         return false;
@@ -171,6 +186,8 @@ const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotation
         dataType = ctx.MakeType<TDataExprType>(EDataSlot::Utf8);
     } else if (name == "bytea") {
         dataType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    } else if (name == "unknown") {
+        return ctx.MakeType<TNullExprType>();
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
             TStringBuilder() << "Unsupported type: " << name));
@@ -623,6 +640,48 @@ IGraphTransformer::TStatus PgResultItemWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgReplaceUnknownWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureListType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto listType = input->Head().GetTypeAnn()->Cast<TListExprType>();
+    if (!EnsureStructType(input->Head().Pos(), *listType->GetItemType(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto structType = listType->GetItemType()->Cast<TStructExprType>();
+    auto newItemTypes = structType->GetItems();
+    if (!AdjustUnknownType(newItemTypes, ctx.Expr)) {
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto newStructType = ctx.Expr.MakeType<TStructExprType>(newItemTypes);
+    if (!newStructType->Validate(input->Pos(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    output = ctx.Expr.Builder(input->Pos())
+        .Callable("OrderedMap")
+            .Add(0, input->HeadPtr())
+            .Lambda(1)
+                .Param("row")
+                .Callable("SafeCast")
+                    .Arg(0, "row")
+                    .Add(1, ExpandType(input->Pos(), *newStructType, ctx.Expr))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus PgWhereWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -922,7 +981,8 @@ IGraphTransformer::TStatus PgConstWrapper(const TExprNode::TPtr& input, TExprNod
         }
     }
 
-    input->SetTypeAnn(input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+    auto retType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    input->SetTypeAnn(retType);
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -966,7 +1026,13 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
 
     if (inputTypeId != 0 && inputTypeId != targetTypeId) {
         bool fail = false;
-        const auto& inputDesc = NPg::LookupType(inputTypeId);
+        const auto& rawInputDesc = NPg::LookupType(inputTypeId);
+        const NPg::TTypeDesc* inputDescPtr = &rawInputDesc;
+        if (rawInputDesc.Name == "unknown") {
+            inputDescPtr = &NPg::LookupType("text");
+        }
+
+        const NPg::TTypeDesc& inputDesc = *inputDescPtr;
         const auto& targetDesc = NPg::LookupType(targetTypeId);
         const bool isInputArray = (inputDesc.TypeId == inputDesc.ArrayTypeId);
         const bool isTargetArray = (targetDesc.TypeId == targetDesc.ArrayTypeId);
@@ -2620,6 +2686,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         outputItems.push_back(ctx.Expr.MakeType<TItemExprType>(columnName, tupleType->GetItems()[i]));
                     }
 
+                    AdjustUnknownType(outputItems, ctx.Expr);
                     outputRowType = ctx.Expr.MakeType<TStructExprType>(outputItems);
                     if (!outputRowType->Validate(names->Pos(), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
@@ -2869,6 +2936,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             return IGraphTransformer::TStatus::Repeat;
                         }
 
+                        AdjustUnknownType(outputItems, ctx.Expr);
                         outputRowType = ctx.Expr.MakeType<TStructExprType>(outputItems);
                         if (!outputRowType->Validate(data.Pos(), ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
@@ -4310,14 +4378,24 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!listItemType->IsEquatable()) {
+    if (itemTypePg && !listItemType->IsEquatable()) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(itemTypePg).Name));
     }
 
-    if (!inputType->IsEquatable()) {
+    if (inputTypePg && !inputType->IsEquatable()) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(inputTypePg).Name));
+    }
+
+    if (!itemTypePg || !inputTypePg) {
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("Nothing")
+                .Callable(0, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Build();
     }
 
     auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);
@@ -4326,7 +4404,6 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
 }
 
 IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4371,6 +4448,16 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(elemType).Name));
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!elemType) {
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("Nothing")
+                .Callable(0, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Build();
     }
 
     auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);

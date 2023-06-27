@@ -11790,6 +11790,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
         Functions["PgColumnRef"] = &PgColumnRefWrapper;
         Functions["PgResultItem"] = &PgResultItemWrapper;
+        Functions["PgReplaceUnknown"] = &PgReplaceUnknownWrapper;
         Functions["PgWhere"] = &PgWhereWrapper;
         Functions["PgSort"] = &PgSortWrapper;
         Functions["PgGroup"] = &PgWhereWrapper;

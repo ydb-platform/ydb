@@ -9,6 +9,7 @@
 namespace NYql::NPg {
 
 constexpr ui32 InvalidOid = 0;
+constexpr ui32 UnknownOid = 705;
 constexpr ui32 AnyOid = 2276;
 constexpr ui32 AnyArrayOid = 2277;
 //constexpr ui32 AnyElementOid = 2283;
@@ -43,6 +44,10 @@ bool IsCompatibleTo(ui32 actualType, ui32 expectedType, const TTypes& types) {
     }
 
     if (actualType == expectedType) {
+        return true;
+    }
+
+    if (actualType == UnknownOid) {
         return true;
     }
 

@@ -1771,6 +1771,9 @@ TComputationNodeFactory GetPgFactory() {
                 ui32 sourceId = 0;
                 if (!inputType->IsNull()) {
                     sourceId = AS_TYPE(TPgType, inputType)->GetTypeId();
+                    if (sourceId == UNKNOWNOID) {
+                        sourceId = TEXTOID;
+                    }
                 }
 
                 auto returnType = callable.GetType()->GetReturnType();

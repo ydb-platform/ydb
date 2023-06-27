@@ -689,6 +689,18 @@ TExprNode::TPtr ExpandCastOverData(const TExprNode::TPtr& input, TExprContext& c
 }
 
 template <bool Strong>
+TExprNode::TPtr ExpandCastOverPg(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto to = input->GetTypeAnn()->Cast<TPgExprType>();
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Pg";
+    return ctx.Builder(input->Pos())
+        .Callable("PgCast")
+            .Add(0, input->HeadPtr())
+            .Add(1, ExpandType(input->Pos(), *to, ctx))
+        .Seal()
+        .Build();
+}
+
+template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalData(const TExprNode::TPtr& input, TExprContext& ctx) {
     if constexpr (Strong) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content()
@@ -1556,6 +1568,7 @@ TExprNode::TPtr ExpandCast(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (sKind == tKind) {
         switch (sKind) {
             case ETypeAnnotationKind::Data:     return ExpandCastOverData<Strong>(input, ctx);
+            case ETypeAnnotationKind::Pg:       return ExpandCastOverPg<Strong>(input, ctx);
             case ETypeAnnotationKind::Optional: return ExpandCastOverOptional<Strong>(input, ctx);
             case ETypeAnnotationKind::List:     return ExpandCastOverList<Strong>(input, ctx);
             case ETypeAnnotationKind::Dict:     return ExpandCastOverDict<Strong>(input, ctx);

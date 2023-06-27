@@ -3009,7 +3009,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         TExprNode::TPtr list;
         if (values) {
             YQL_ENSURE(!result);
-            list = BuildValues(node->Pos(), values, targetColumns, ctx);
+            list = ctx.NewCallable(node->Pos(), "PgReplaceUnknown", { BuildValues(node->Pos(), values, targetColumns, ctx) });
         } else {
             YQL_ENSURE(result);
             YQL_ENSURE(!targetColumns, "target columns for projection are not supported yet");
@@ -3129,6 +3129,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                     .Seal()
                 .Seal()
                 .Build();
+
+            list = ctx.NewCallable(node->Pos(), "PgReplaceUnknown", { list });
 
             if (distinctAll) {
                 YQL_ENSURE(!extraSortColumns);

@@ -55,11 +55,17 @@
 
 - source_filter: "^contrib/libs/webrtc/modules"
   includes:
-    - jni.h
     - aaudio/AAudio.h
     - SLES/OpenSLES.h
     - SLES/OpenSLES_Android.h
     - SLES/OpenSLES_AndroidConfiguration.h
+
+- includes:
+  - jni.h: contrib/libs/jdk/include/jni.h
+  - jni_md.h:
+    - contrib/libs/jdk/include/darwin/jni_md.h
+    - contrib/libs/jdk/include/linux/jni_md.h
+    - contrib/libs/jdk/include/win32/jni_md.h
 
 - source_filter: "^contrib/python/(coverage|gevent|greenlet)"
   includes:

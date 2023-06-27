@@ -32,20 +32,11 @@
 - includes:
   - _cgo_export.h
 
-# Resolve jni.h from swig/Lib/java/javahead.swg when building non-java .swg
-# since they do not peerdir contrib/libs/jdk.
 # Resolve Python.h from swig/Lib/python/pyruntime.swg when building non-python .swg
 # since they do not peerdir contrib/libs/python.
 - source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$"
   includes:
-  - jni.h:           contrib/libs/jdk/include/jni.h
   - Python.h:        contrib/libs/python/Include/Python.h
-- source_filter: "^contrib/libs/jdk/include/jni[.]h$"
-  includes:
-  - jni_md.h:
-    - contrib/libs/jdk/include/darwin/jni_md.h
-    - contrib/libs/jdk/include/linux/jni_md.h
-    - contrib/libs/jdk/include/win32/jni_md.h
 
 # libunistring, libidn and libidn2
 # have its own libc header wrappers that are added to ADDINCL
@@ -342,14 +333,6 @@
   includes:
     - hwloc.h
     - hwloc/cudart.h
-
-- source_filter: "^contrib/libs/(aws-sdk-cpp|c-ares|proj)"
-  includes:
-    - jni.h
-
-- source_filter: "^contrib/(libs/ffmpeg-3|libs/ffmpeg-3.4.1|restricted/patched/ffmpeg_minimal)/libavcodec/"
-  includes:
-    - jni.h
 
 - source_filter: "^contrib/(libs/(ffmpeg-3|kyotocabinet)|tools/ag)"
   includes:

@@ -78,12 +78,14 @@
   - stdarg.h
   - stdatomic.h
   - stdio_ext.h
+  - stdint.h
   - stdnoreturn.h
   - strings.h
   - stropts.h
   - sys/acct.h
   - sys/auxv.h
   - sys/cachectl.h
+  - sys/cdefs.h
   - syscall.h
   - sys/dir.h
   - sys/epoll.h

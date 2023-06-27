@@ -50,6 +50,7 @@ namespace NActors {
         ui32 NumPreallocatedBuffers = 16;
         bool EnableExternalDataChannel = false;
         bool ValidateIncomingPeerViaDirectLookup = false;
+        ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
 
         ui32 GetSendBufferSize() const {
             ui32 res = 512 * 1024; // 512 kb is the default value for send buffer

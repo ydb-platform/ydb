@@ -578,6 +578,7 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasValidateIncomingPeerViaDirectLookup()) {
         result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();
     }
+    result.SocketBacklogSize = config.GetSocketBacklogSize();
 
     return result;
 }

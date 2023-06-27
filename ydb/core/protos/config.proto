@@ -440,6 +440,7 @@ message TInterconnectConfig {
     optional uint32 NumPreallocatedBuffers = 41;
     optional bool EnableExternalDataChannel = 42;
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
+    optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

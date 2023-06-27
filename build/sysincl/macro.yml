@@ -30,6 +30,14 @@
     - Y_UCRT_INCLUDE_NEXT(wchar.h)
     - Y_UCRT_INCLUDE_NEXT(wctype.h)
 
+    # BOOST_PP_ITERATE() itself is defined to one of these values
+    - BOOST_PP_ITERATE():
+      - contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/iter/forward1.hpp
+      - contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/iter/forward2.hpp
+      - contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/iter/forward3.hpp
+      - contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/iter/forward4.hpp
+      - contrib/restricted/boost/preprocessor/include/boost/preprocessor/iteration/detail/iter/forward5.hpp
+
     # BOOST_PP_INCLUDE_SELF() is defined in boost/preprocessor/iteration/detail/self.hpp
     # It works as follows:
     # The user defines BOOST_PP_INDIRECT_SELF containing current file name.
@@ -186,7 +194,6 @@
       - contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_tags/cc_tag.hpp
     - BOOST_ABI_PREFIX: contrib/restricted/boost/config/include/boost/config/abi/msvc_prefix.hpp
     - BOOST_ABI_SUFFIX: contrib/restricted/boost/config/include/boost/config/abi/msvc_suffix.hpp
-    - BOOST_PP_ASSIGN_SLOT(1): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot1.hpp
     - BOOST_TYPEOF_INCREMENT_REGISTRATION_GROUP(): contrib/restricted/boost/typeof/include/boost/typeof/incr_registration_group.hpp
     - BOOST_REGEX_USER_CONFIG: contrib/restricted/boost/regex/include/boost/regex/user.hpp
     - BOOST_USER_CONFIG: contrib/restricted/boost/config/include/boost/config/user.hpp
@@ -340,6 +347,7 @@
       - contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/master.hpp
       - contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/preprocessed.hpp
     - BOOST_FT_variate_file: contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_arity_loop.hpp
+    - BOOST_PP_ASSIGN_SLOT(1): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot1.hpp
     - BOOST_PP_ITERATE(): contrib/restricted/boost/function_types/include/boost/function_types/detail/pp_cc_loop/master.hpp
 
 - source_filter: "^contrib/restricted/boost/functional"
@@ -639,6 +647,22 @@
     - BOOST_PHOENIX_ITERATION_FILE()
     - BOOST_PHOENIX_ITERATE(): contrib/restricted/boost/phoenix/include/boost/phoenix/support/detail/iterate.hpp
     - BOOST_PP_ITERATE(): contrib/restricted/boost/phoenix/include/boost/phoenix/support/detail/iterate.hpp
+
+- source_filter: "^contrib/restricted/boost/preprocessor"
+  includes:
+    # BOOST_PP_ASSIGN_SLOT(i) macros are defined in boost/preprocessor/slot/slot.hpp
+    - BOOST_PP_ASSIGN_SLOT(1): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot1.hpp
+    - BOOST_PP_ASSIGN_SLOT(2): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot2.hpp
+    - BOOST_PP_ASSIGN_SLOT(3): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot3.hpp
+    - BOOST_PP_ASSIGN_SLOT(4): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot4.hpp
+    - BOOST_PP_ASSIGN_SLOT(5): contrib/restricted/boost/preprocessor/include/boost/preprocessor/slot/detail/slot5.hpp
+
+    # BOOST_PP_FILENAME macros extract values from BOOST_PP_ITERATION_PARAMS, which we have already resolved in BOOST_PP_ITERATE()
+    - BOOST_PP_FILENAME_1
+    - BOOST_PP_FILENAME_2
+    - BOOST_PP_FILENAME_3
+    - BOOST_PP_FILENAME_4
+    - BOOST_PP_FILENAME_5
 
 - source_filter: "^contrib/restricted/boost/proto"
   includes:

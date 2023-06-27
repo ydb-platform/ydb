@@ -1503,7 +1503,7 @@ yes_type is_mem_fun_pointer_tester(R(__cdecl T::*const volatile*)(T0, T1, T2, T3
 
 #define BOOST_PP_ITERATION_PARAMS_1 \
     (3, (0, 25, "boost/type_traits/detail/is_mem_fun_pointer_tester.hpp"))
-#include BOOST_PP_ITERATE()
+#error #include BOOST_PP_ITERATE()
 
 #endif // BOOST_TT_PREPROCESSING_MODE
 

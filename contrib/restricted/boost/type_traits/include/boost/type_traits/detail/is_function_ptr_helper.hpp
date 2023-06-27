@@ -412,7 +412,7 @@ struct is_function_ptr_helper<R(*)(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, 
 #undef BOOST_STATIC_CONSTANT
 #define BOOST_PP_ITERATION_PARAMS_1 \
     (3, (0, 25, "boost/type_traits/detail/is_function_ptr_helper.hpp"))
-#include BOOST_PP_ITERATE()
+#error #include BOOST_PP_ITERATE()
 
 #endif // BOOST_TT_PREPROCESSING_MODE
 

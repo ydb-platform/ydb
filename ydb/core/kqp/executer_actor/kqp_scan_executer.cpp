@@ -64,6 +64,7 @@ public:
         , PreparedQuery(preparedQuery)
         , AggregationSettings(aggregation)
     {
+        Y_VERIFY_DEBUG(false, "You shall not pass!");
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.DataShardLocks.empty());
         YQL_ENSURE(!Request.ValidateLocks);

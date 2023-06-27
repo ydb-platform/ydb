@@ -7,7 +7,6 @@ PROVIDES(
 YQL_LAST_ABI_VERSION()
 
 ADDINCL(
-    contrib/libs/libiconv/include
     contrib/libs/lz4
     ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/bootstrap
     ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser
@@ -77,7 +76,6 @@ PEERDIR(
 
     contrib/libs/icu
     contrib/libs/libc_compat
-    contrib/libs/libiconv
     contrib/libs/libxml
     contrib/libs/lz4
     contrib/libs/openssl

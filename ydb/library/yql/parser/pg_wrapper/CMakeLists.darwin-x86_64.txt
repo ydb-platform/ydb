@@ -97,7 +97,6 @@ target_compile_options(yql-parser-pg_wrapper PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(yql-parser-pg_wrapper PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libiconv/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/lz4
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/bootstrap
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser

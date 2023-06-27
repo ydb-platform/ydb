@@ -5,7 +5,6 @@ namespace NKikimr::NGRpcService {
 namespace NQuery {
 
 void DoAttachSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
-    Cerr << "DoAttachSession" << Endl;
     p->ReplyWithRpcStatus(grpc::StatusCode::UNIMPLEMENTED);
 }
 

@@ -242,12 +242,12 @@ NSsa::TAssign TProgramBuilder::MakeConstant(const std::string& name, const NKiki
         case TId::kBytes:
         {
             TString str = constant.GetBytes();
-            return TAssign(name, std::string(str.data(), str.size()));
+            return TAssign(name, std::string(str.data(), str.size()), true);
         }
         case TId::kText:
         {
             TString str = constant.GetText();
-            return TAssign(name, std::string(str.data(), str.size()));
+            return TAssign(name, std::string(str.data(), str.size()), false);
         }
         case TId::VALUE_NOT_SET:
             break;
@@ -479,8 +479,8 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchem
         ProgramParameters = NArrow::DeserializeBatch(olapProgramProto.GetParameters(), schema);
     }
 
-    if (olapProgramProto.HasKernels()) {
-        KernelsRegistry.Parse(olapProgramProto.GetKernels());
+    if (programProto.HasKernels()) {
+        KernelsRegistry.Parse(programProto.GetKernels());
     }
 
     NOlap::TProgramContainer ssaProgram;

@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                 ReqBuilder = std::make_unique<NYql::TKernelRequestBuilder>(*Reg);
             }
 
-            ui32 Add(NYql::TKernelRequestBuilder::EBinaryOp operation) {
+            ui32 Add(NYql::TKernelRequestBuilder::EBinaryOp operation, bool scalar = false) {
                 switch (operation) {
                     case NYql::TKernelRequestBuilder::EBinaryOp::Add:
                     {
@@ -60,7 +60,12 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                         NYql::TExprContext ctx;
                         auto blockStringType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
                         auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
-                        return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockBoolType);
+                        if (scalar) {
+                            auto scalarStringType = ctx.template MakeType<NYql::TScalarExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
+                            return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, scalarStringType, blockBoolType);
+                        } else {
+                            return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockBoolType);
+                        }
                     }
                     case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
                     {
@@ -106,12 +111,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             }            
     };
 
-    TString SerializeProgram(const NKikimrSSA::TProgram& programProto, const TString& kernels = "") {
+    TString SerializeProgram(const NKikimrSSA::TProgram& programProto) {
         NKikimrSSA::TOlapProgram olapProgramProto;
-        if (kernels) {
-            olapProgramProto.SetKernels(kernels);
-        }
-        
         {
             TString str;
             Y_PROTOBUF_SUPPRESS_NODISCARD programProto.SerializeToString(&str);
@@ -145,7 +146,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         TKernelsWrapper kernels;
         kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::Add);
-        const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+        programProto.SetKernels(kernels.Serialize());
+        const auto programSerialized = SerializeProgram(programProto);
        
         TProgramContainer program;
         TString errors;
@@ -164,6 +166,60 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         auto expected = result.BuildArrow();
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+    }
+
+    Y_UNIT_TEST(YqlKernelStartsWithScalar) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            auto* constantProto = command->MutableAssign()->MutableConstant();
+            constantProto->SetBytes("Lorem");
+            command->MutableAssign()->MutableColumn()->SetName("prefix");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("string");
+            functionProto->AddArguments()->SetName("prefix");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_LENGTH);
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("0");
+        }
+
+        {
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true);
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
+        
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }}));
+            updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.");
+            updates.AddRow().Add<std::string>("ipsum dolor sit amet.");
+
+            auto batch = updates.BuildArrow();
+            Cerr << batch->ToString() << Endl;
+            UNIT_ASSERT(program.ApplyProgram(batch).ok());
+
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
+            result.AddRow().Add<ui8>(1);
+            result.AddRow().Add<ui8>(0);
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
     }
 
     Y_UNIT_TEST(YqlKernelStartsWith) {
@@ -190,7 +246,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         {
             TKernelsWrapper kernels;
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
-            const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
         
             TProgramContainer program;
             TString errors;
@@ -215,7 +272,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         {
             TKernelsWrapper kernels;
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
-            const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
         
             TProgramContainer program;
             TString errors;
@@ -273,7 +331,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         TKernelsWrapper kernels;
         kernels.AddJsonExists(isBinaryType);
-        const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+        programProto.SetKernels(kernels.Serialize());
+        const auto programSerialized = SerializeProgram(programProto);
        
         TProgramContainer program;
         TString errors;
@@ -342,7 +401,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         TKernelsWrapper kernels;
         kernels.AddJsonValue(isBinaryType, resultType);
-        const auto programSerialized = SerializeProgram(programProto, kernels.Serialize());
+        programProto.SetKernels(kernels.Serialize());
+        const auto programSerialized = SerializeProgram(programProto);
        
         TProgramContainer program;
         TString errors;

@@ -146,10 +146,11 @@ public:
         , FuncOpts(nullptr)
     {}
 
-    explicit TAssign(const std::string& name, const std::string& value)
+    explicit TAssign(const std::string& name, const std::string& value, bool binary)
         : Name(name)
         , Operation(EOperation::Constant)
-        , Constant(std::make_shared<arrow::StringScalar>(value))
+        , Constant( binary ? std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(value), arrow::binary())
+                              : std::make_shared<arrow::StringScalar>(value))
         , FuncOpts(nullptr)
     {}
 

@@ -171,6 +171,7 @@ message TProgram {
 
     repeated TCommand Command = 1;
     optional uint32 Version = 2;
+    optional bytes Kernels = 3;
 }
 
 message TOlapProgram {
@@ -180,5 +181,4 @@ message TOlapProgram {
     // RecordBatch deserialization require arrow::Schema, thus store it here
     optional bytes ParametersSchema = 2;
     optional bytes Parameters = 3;
-    optional bytes Kernels = 4;
 }

@@ -457,6 +457,50 @@ CH::GroupByOptions::Assign GetGroupByAssign(const TAggregateAssign& assign) {
     return descr;
 }
 
+class TFilterVisitor : public arrow::ArrayVisitor {
+    std::vector<bool> FiltersMerged;
+public:
+    void BuildColumnFilter(NArrow::TColumnFilter& result) {
+        result = NArrow::TColumnFilter(std::move(FiltersMerged));
+    }
+
+    arrow::Status Visit(const arrow::BooleanArray& array) override {
+        InitAndCheck(array);
+        for (ui32 i = 0; i < FiltersMerged.size(); ++i) {
+            bool columnValue = array.Value(i);
+            FiltersMerged[i] = FiltersMerged[i] && columnValue;
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::Int8Array& array) override {
+        return VisitImpl(array);
+    }
+
+    arrow::Status Visit(const arrow::UInt8Array& array) override {
+        return VisitImpl(array);
+    }
+
+private:
+    template <class TArray>
+    arrow::Status VisitImpl(const TArray& array) {
+        InitAndCheck(array);
+        for (ui32 i = 0; i < FiltersMerged.size(); ++i) {
+            bool columnValue = (bool)array.Value(i);
+            FiltersMerged[i] = FiltersMerged[i] && columnValue;
+        }
+        return arrow::Status::OK();
+    }
+
+    void InitAndCheck(const arrow::Array& array) {
+        if (FiltersMerged.empty()) {
+            FiltersMerged.resize(array.length(), true);
+        } else {
+            Y_VERIFY(FiltersMerged.size() == (size_t)array.length());
+        }
+    }
+};
+
 }
 
 
@@ -633,26 +677,22 @@ arrow::Status TProgramStep::ApplyAggregates(TDatumBatch& batch, arrow::compute::
 }
 
 arrow::Status TProgramStep::MakeCombinedFilter(TDatumBatch& batch, NArrow::TColumnFilter& result) const {
-    std::vector<bool> filtersMerged;
+    TFilterVisitor filterVisitor;
     for (auto& colName : Filters) {
         auto column = batch.GetColumnByName(colName);
         if (!column.ok()) {
             return column.status();
         }
-        if (!column->is_array() || column->type() != arrow::boolean()) {
-            return arrow::Status::Invalid("Column '" + colName + "' is not a boolean array.");
+        if (!column->is_array()) {
+            return arrow::Status::Invalid("Column '" + colName + "' is not an array.");
         }
-
-        auto boolColumn = std::static_pointer_cast<arrow::BooleanArray>(column->make_array());
-        if (filtersMerged.empty()) {
-            filtersMerged.resize(boolColumn->length(), true);
-        }
-        Y_VERIFY(filtersMerged.size() == (size_t)boolColumn->length());
-        for (ui32 i = 0; i < filtersMerged.size(); ++i) {
-            filtersMerged[i] = filtersMerged[i] && boolColumn->Value(i);
+        auto columnArray = column->make_array();
+        auto status = columnArray->Accept(&filterVisitor);
+        if (!status.ok()) {
+            return status;
         }
     }
-    result = NArrow::TColumnFilter(std::move(filtersMerged));
+    filterVisitor.BuildColumnFilter(result);
     return arrow::Status::OK();
 }
 

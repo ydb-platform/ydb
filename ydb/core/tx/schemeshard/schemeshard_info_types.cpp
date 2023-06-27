@@ -157,9 +157,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             colName2Id[colName] = colId;
             TTableInfo::TColumn& column = alterData->Columns[colId];
-            column = TTableInfo::TColumn(colName, colId, typeInfo, typeMod);
+            column = TTableInfo::TColumn(colName, colId, typeInfo, typeMod, col.GetNotNull());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
-            column.NotNull = col.GetNotNull();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
             if (col.HasDefaultFromSequence()) {
@@ -347,6 +346,7 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
             if (columnType.TypeInfo) {
                 *colDescr->MutableTypeInfo() = *columnType.TypeInfo;
             }
+            colDescr->SetNotNull(column.NotNull);
             colDescr->SetFamily(column.Family);
         }
         for (auto ci : keyColumnIds) {
@@ -2110,7 +2110,7 @@ void TOlapStoreInfo::ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescrip
     NextTtlSettingsPresetId = descriptionProto.GetNextTtlSettingsPresetId();
     NextSchemaPresetId = descriptionProto.GetNextSchemaPresetId();
     Name = descriptionProto.GetName();
-    
+
     size_t schemaPresetIndex = 0;
     for (const auto& presetProto : descriptionProto.GetSchemaPresets()) {
         Y_VERIFY(!SchemaPresets.contains(presetProto.GetId()));
@@ -2128,7 +2128,7 @@ bool TOlapStoreInfo::UpdatePreset(const TString& presetName, const TOlapSchemaUp
     if (!currentPreset.Update(schemaUpdate, errors)) {
         return false;
     }
-        
+
     NKikimrSchemeOp::TColumnTableSchemaPreset schemaUpdateProto;
     currentPreset.Serialize(schemaUpdateProto);
 
@@ -2312,4 +2312,3 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 
 } // namespace NSchemeShard
 } // namespace NKikimr
-

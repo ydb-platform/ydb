@@ -72,10 +72,6 @@ TExprBase RemoveDuplicateKeyFromInput(const TExprBase& input, const TKikimrTable
 
 } // namespace
 
-TExprNode::TPtr MakeMessage(TStringBuf message, TPositionHandle pos, TExprContext& ctx) {
-    return ctx.NewCallable(pos, "Utf8", { ctx.NewAtom(pos, message) });
-}
-
 TMaybe<TCondenseInputResult> CondenseInput(const TExprBase& input, TExprContext& ctx) {
     TVector<TExprBase> stageInputs;
     TVector<TCoArgument> stageArguments;

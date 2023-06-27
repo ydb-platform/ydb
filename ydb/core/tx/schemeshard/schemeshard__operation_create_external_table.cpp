@@ -171,8 +171,7 @@ TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NK
         nextColumnId = colId + 1 > nextColumnId ? colId + 1 : nextColumnId;
 
         TTableInfo::TColumn& column = externalTableInfo->Columns[colId];
-        column = TTableInfo::TColumn(colName, colId, typeInfo, ""); // TODO: do we need typeMod here?
-        column.NotNull = col.GetNotNull();
+        column = TTableInfo::TColumn(colName, colId, typeInfo, "", col.GetNotNull()); // TODO: do we need typeMod here?
 
         auto& schemaColumn= *schema.add_column();
         schemaColumn.set_name(colName);

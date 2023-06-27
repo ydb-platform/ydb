@@ -1080,10 +1080,11 @@ TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TD
 }
 
 TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TPgType& type, const TString& family) {
-    throw yexception() << "It is not allowed to create NOT NULL column with pg type";
-    Y_UNUSED(name);
-    Y_UNUSED(type);
-    Y_UNUSED(family);
+    auto columnType = TTypeBuilder()
+        .Pg(type)
+        .Build();
+
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
     return *this;
 }
 

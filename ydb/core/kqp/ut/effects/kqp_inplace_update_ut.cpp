@@ -33,9 +33,37 @@ void PrepareTable(TSession& session) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void Test(bool enableInplaceUpdate, const TString& query, TParams&& params, const TString& expectedResult,
-    std::function<void(const Ydb::TableStats::QueryStats&)>&& check)
-{
+void PreparePgTable(TSession& session) {
+    auto ret = session.ExecuteSchemeQuery(R"(
+        --!syntax_v1
+        CREATE TABLE `/Root/InplaceUpdate` (
+            Key Uint64,
+            ValueStr String,
+            ValueInt PgInt2,
+            ValueDbl Double,
+            PRIMARY KEY(Key)
+        ) WITH (
+            PARTITION_AT_KEYS = (10)
+        )
+    )").ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(ret.GetStatus(), EStatus::SUCCESS, ret.GetIssues().ToString());
+
+    auto result = session.ExecuteDataQuery(R"(
+        UPSERT INTO `/Root/InplaceUpdate` (Key, ValueStr, ValueInt, ValueDbl) VALUES
+            (1, "One", PgInt2(100), 101.0),
+            (20, "Two", PgInt2(200), 202.0)
+    )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void Test(
+    bool enableInplaceUpdate,
+    const TString& query,
+    TParams&& params,
+    const TString& expectedResult,
+    std::function<void(const Ydb::TableStats::QueryStats&)>&& check,
+    const std::function<void(TSession& session)>& prepareTable = &PrepareTable
+) {
     auto setting = NKikimrKqp::TKqpSetting();
     setting.SetName("_KqpAllowUnsafeCommit");
     setting.SetValue("true");
@@ -53,7 +81,7 @@ void Test(bool enableInplaceUpdate, const TString& query, TParams&& params, cons
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
-    PrepareTable(session);
+    prepareTable(session);
 
     TExecDataQuerySettings execSettings;
     execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
@@ -436,6 +464,32 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
             [#];[["123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+}
+
+Y_UNIT_TEST(SingleRowPgNotNull) {
+    Test(
+        true,
+        R"( DECLARE $key AS Uint64;
+            DECLARE $value AS PgInt2;
+
+            UPDATE `/Root/InplaceUpdate` SET
+                ValueInt = $value
+            WHERE Key = $key
+        )",
+        TParamsBuilder()
+            .AddParam("$key").Uint64(1).Build()
+            .AddParam("$value").Pg(TPgValue(TPgValue::VK_TEXT, "123", TPgType("pgint2"))).Build()
+            .Build(),
+        R"([
+            [[1u];["One"];"123";[101.]];
+            [[20u];["Two"];"200";[202.]]
+           ])",
+        [](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+        },
+        &PreparePgTable);
 }
 
 } // suite

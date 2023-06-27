@@ -504,25 +504,27 @@ private:
         TResult result;
         if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
             result.SetSuccess();
-        }
-        for (auto& issue : response->GetIssues()) {
-            result.AddIssue(NYql::IssueFromMessage(issue));
+            result.ExecuterResult.Swap(response->MutableResult());
+            {
+                auto g = Parameters->TypeEnv().BindAllocator();
+
+                auto& txResults = ev->GetTxResults();
+                result.Results.reserve(txResults.size());
+                for(auto& tx : txResults) {
+                    result.Results.emplace_back(tx.GetMkql());
+                }
+                Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
+
+                if (!txResults.empty()) {
+                    Parameters->AddTxResults(TxIndex, std::move(txResults));
+                }
+            }
+        } else {
+            for (auto& issue : response->GetIssues()) {
+                result.AddIssue(NYql::IssueFromMessage(issue));
+            }
         }
 
-        result.ExecuterResult.Swap(response->MutableResult());
-        {
-            auto g = Parameters->TypeEnv().BindAllocator();
-            auto& txResults = ev->GetTxResults();
-            result.Results.reserve(txResults.size());
-            for(auto& tx : txResults) {
-                result.Results.emplace_back(tx.GetMkql());
-            }
-            Parameters->AddTxHolders(std::move(ev->GetTxHolders()));
-
-            if (!txResults.empty()) {
-                Parameters->AddTxResults(TxIndex, std::move(txResults));
-            }
-        }
         Promise.SetValue(std::move(result));
         this->PassAway();
     }

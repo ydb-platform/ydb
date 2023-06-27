@@ -1856,7 +1856,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable() || Self->PathsById.at(pathId)->IsExternalTable(), "Path is not a table or external table, pathId: " << pathId);
                 Y_VERIFY_S(Self->Tables.FindPtr(pathId) || Self->ExternalTables.FindPtr(pathId), "Table or external table don't exist, pathId: " << pathId);
 
-                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod);
+                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod, notNull);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;
@@ -1921,7 +1921,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->AlterData->NextColumnId = colId + 1; // calc next NextColumnId
                 }
 
-                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod);
+                TTableInfo::TColumn colInfo(colName, colId, typeInfo, typeMod, notNull);
                 colInfo.KeyOrder = keyOrder;
                 colInfo.CreateVersion = createVersion;
                 colInfo.DeleteVersion = deleteVersion;

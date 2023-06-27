@@ -553,11 +553,14 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
             return TStatus::Error;
         }
 
+
         if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                << "Can't set optional or NULL value to not null column: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
+            if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                    << "Can't set optional or NULL value to not null column: " << name
+                    << ". All not null columns should be initialized"));
+                return TStatus::Error;
+            }
         }
     }
 
@@ -627,10 +630,12 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         }
 
         if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                << "Can't set optional or NULL value to not null column: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
+            if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                    << "Can't set optional or NULL value to not null column: " << name
+                    << ". All not null columns should be initialized"));
+                return TStatus::Error;
+            }
         }
     }
 
@@ -693,9 +698,11 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
         auto column = table.second->Metadata->Columns.FindPtr(TString(item->GetName()));
         YQL_ENSURE(column);
         if (column->NotNull && item->HasOptionalOrNull()) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                << "Can't set optional or NULL value to not null column: " << column->Name));
-            return TStatus::Error;
+            if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                    << "Can't set optional or NULL value to not null column: " << column->Name));
+                return TStatus::Error;
+            }
         }
     }
 
@@ -1154,6 +1161,12 @@ TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx)
     return TStatus::Ok;
 }
 
+bool IsExpectedEffect(const NYql::TExprNode* effect) {
+    return TKqpUpsertRows::Match(effect)
+        || TKqpDeleteRows::Match(effect)
+        || TKqpWriteConstraint::Match(effect);
+}
+
 TStatus AnnotateKqpEffects(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto kqpEffectType = MakeKqpEffectType(ctx);
 
@@ -1162,7 +1175,7 @@ TStatus AnnotateKqpEffects(const TExprNode::TPtr& node, TExprContext& ctx) {
             return TStatus::Error;
         }
 
-        if (!TKqpUpsertRows::Match(arg.Get()) && !TKqpDeleteRows::Match(arg.Get())) {
+        if (!IsExpectedEffect(arg.Get())) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
                 << "Unexpected effect: " << arg->Content()));
             return TStatus::Error;
@@ -1182,6 +1195,13 @@ TStatus AnnotateKqpEffects(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(kqpEffectType));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateWriteConstraint(const TExprNode::TPtr& node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    auto* input = node->Child(TKqpWriteConstraint::idx_Input);
+    node->SetTypeAnn(input->GetTypeAnn());
     return TStatus::Ok;
 }
 
@@ -1449,6 +1469,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKqpEffects(input, ctx);
             }
 
+            if (TKqpWriteConstraint::Match(input.Get())) {
+                return AnnotateWriteConstraint(input, ctx);
+            }
+
             if (TKqpProgram::Match(input.Get())) {
                 return AnnotateKqpProgram(input, ctx);
             }
@@ -1460,6 +1484,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
+
 
             return dqTransformer->Transform(input, output, ctx);
         });

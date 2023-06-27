@@ -15,8 +15,6 @@ using TSecondaryIndexes = TVector<std::pair<
 TSecondaryIndexes BuildSecondaryIndexVector(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx, const THashSet<TStringBuf>* filter = nullptr);
 
-NYql::TExprNode::TPtr MakeMessage(TStringBuf message, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
-
 struct TCondenseInputResult {
     NYql::NNodes::TExprBase Stream;
     TVector<NYql::NNodes::TExprBase> StageInputs;
@@ -59,6 +57,3 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(T
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt
-
-
-

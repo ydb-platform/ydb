@@ -1,3 +1,4 @@
+#include "ydb/public/sdk/cpp/client/ydb_proto/accessor.h"
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
@@ -181,9 +182,7 @@ void ValidateTypeCoercionResult(
         for (size_t i = 0; parser.TryNextRow(); ++i) {
             auto expected = spec.TextOut();
             auto& c = parser.ColumnParser("value");
-            auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
-            UNIT_ASSERT_C(!result.Error, *result.Error);
-            UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
+            UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
             Cerr << expected << Endl;
         }
     }
@@ -866,9 +865,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 for (size_t i = 0; parser.TryNextRow(); ++i) {
                     auto check = [&parser, &spec, &i] (const TString& column, const TString& expected) {
                         auto& c = parser.ColumnParser(column);
-                        auto result = NPg::PgNativeTextFromNativeBinary(c.GetPg().Content_, spec.TypeId);
-                        UNIT_ASSERT_C(!result.Error, *result.Error);
-                        UNIT_ASSERT_VALUES_EQUAL(expected, result.Str);
+                        UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
                         Cerr << expected << Endl;
                     };
                     auto expected = spec.TextOut(i);
@@ -1328,41 +1325,33 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     }
 
     Y_UNIT_TEST(CreateNotNullPgColumn) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE Pg (
+                key int2 PRIMARY KEY,
+                value int2 NOT NULL
+                ))");
 
-        TTableBuilder builder;
-        UNIT_ASSERT_EXCEPTION(builder.AddNonNullableColumn("key", TPgType("pgint2")), yexception);
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
 
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        auto req = TStringBuilder() << R"(
-        --!syntax_pg
-        CREATE TABLE Pg (
-        key int2 PRIMARY KEY,
-        value int2 NOT NULL
-        );)";
-        Cerr << req << Endl;
-        auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Type annotation, code: 1030\n"
-        "    <main>:1:1: Error: At function: KiCreateTable!\n"
-        "        <main>:1:1: Error: notnull option for primary key column key will be ignored\n"
-        "        <main>:1:1: Error: notnull option for pg column value is forbidden\n");
-
-        TString reqV1 = TStringBuilder() << R"(
-        --!syntax_v1
-        CREATE TABLE `Pg` (
-        key pg_int2,
-        value pg_int2 NOT NULL,
-        PRIMARY KEY (key)
-        );)";
-        Cerr << reqV1 << Endl;
-        result = session.ExecuteDataQuery(reqV1, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-                UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Type annotation, code: 1030\n"
-        "    <main>:6:22: Error: At function: KiCreateTable!\n"
-        "        <main>:6:22: Error: notnull option for pg column value is forbidden\n");
-    }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                CREATE TABLE `PgV1` (
+                key pg_int2,
+                value pg_int2 NOT NULL,
+                PRIMARY KEY (key)
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+     }
 
     Y_UNIT_TEST(ValuesInsert) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));

@@ -27,7 +27,23 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
     context->RandomProvider = TAppData::RandomProvider.Get();
     context->TimeProvider = TAppData::TimeProvider.Get();
     context->ComputeCtx = computeCtx;
-    context->ComputationFactory = NMiniKQL::GetKqpBaseComputeFactory(computeCtx);
+
+    auto computeFactory = NMiniKQL::GetKqpBaseComputeFactory(computeCtx);
+    context->ComputationFactory =
+        [computeFactory](NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx)
+        -> NMiniKQL::IComputationNode*
+    {
+        if (auto compute = computeFactory(callable, ctx)) {
+            return compute;
+        }
+        auto name = callable.GetType()->GetName();
+        // only for _pure_ compute actors!
+        if (name == "KqpEnsure"sv) {
+            return WrapKqpEnsure(callable, ctx);
+        }
+        return nullptr;
+    };
+
     context->Alloc = alloc;
     context->TypeEnv = typeEnv;
     context->ApplyCtx = nullptr;
@@ -85,6 +101,10 @@ public:
             LOG_W("TKqpLiteralExecuter, memory limit exceeded.");
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
+        } catch (const NMiniKQL::TKqpEnsureFail& e) {
+            LOG_E("TKqpLiteralExecuter, TKqpEnsure failed.");
+            CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
+                YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
             LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);

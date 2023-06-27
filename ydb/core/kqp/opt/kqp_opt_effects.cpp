@@ -24,6 +24,20 @@ bool InplaceUpdateEnabled(const TKikimrConfiguration& config) {
     return true;
 }
 
+bool InplaceUpdateEnabled(
+    const TKikimrConfiguration& config,
+    const TKikimrTableDescription& tableDesc,
+    const TCoAtomList& columns)
+{
+    for (const auto& column : columns) {
+        if (tableDesc.GetColumnType(column.StringValue())->GetKind() == ETypeAnnotationKind::Pg) {
+            return false;
+        }
+    }
+
+    return InplaceUpdateEnabled(config);
+}
+
 bool IsSingleKeyStream(const TExprBase& stream, TExprContext&) {
     auto asList = stream.Maybe<TCoIterator>().List().Maybe<TCoAsList>();
     if (!asList) {
@@ -258,7 +272,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto program = dqUnion.Output().Stage().Program();
     auto input = program.Body();
 
-    if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input, ctx)) {
+    if (InplaceUpdateEnabled(*kqpCtx.Config, table, node.Columns()) && IsMapWrite(table, input, ctx)) {
         stageInput = Build<TKqpCnMapShard>(ctx, node.Pos())
             .Output()
                 .Stage(dqUnion.Output().Stage())

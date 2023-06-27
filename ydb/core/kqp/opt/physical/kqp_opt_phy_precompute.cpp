@@ -110,5 +110,43 @@ TExprBase KqpPropagatePrecomuteScalarRowset(TExprBase node, TExprContext& ctx, I
         .Done();
 }
 
-} // namespace NKikimr::NKqp::NOpt
+TExprBase KqpBuildWriteConstraint(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    auto constraint = node.template Cast<TKqpWriteConstraint>();
+    if (!constraint.Columns().Ref().ChildrenSize()) {
+        //omit node, no push needed
+        return constraint.Input();
+    }
 
+    if (!constraint.Input().template Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto dqUnion = constraint.Input().template Cast<TDqCnUnionAll>();
+
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TKqpWriteConstraint::idx_Input, std::move(connToPushableStage)));
+    }
+
+    auto lambda = Build<TCoLambda>(ctx, constraint.Pos())
+            .Args({"stream"})
+            .template Body<TKqpWriteConstraint>()
+                .Input("stream")
+                .Columns(constraint.Columns())
+                .Build()
+            .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+
+    return result.Cast();
+}
+
+} // namespace NKikimr::NKqp::NOpt

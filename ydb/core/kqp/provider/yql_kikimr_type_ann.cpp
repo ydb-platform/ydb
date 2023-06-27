@@ -388,28 +388,35 @@ private:
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
-                if (meta.NotNull && !rowType->FindItem(name)) {
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                        << "Missing not null column in input: " << name
-                        << ". All not null columns should be initialized"));
-                    return TStatus::Error;
-                }
-
-                if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                        << "Can't set NULL or optional value to not null column: " << name
-                        << ". All not null columns should be initialized"));
-                    return TStatus::Error;
+                if (meta.NotNull) {
+                    if (!rowType->FindItem(name)) {
+                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                            << "Missing not null column in input: " << name
+                            << ". All not null columns should be initialized"));
+                        return TStatus::Error;
+                    }
+                    if (rowType->FindItemType(name)->GetKind() == ETypeAnnotationKind::Pg) {
+                        //no type-level notnull check for pg types.
+                        continue;
+                    }
+                    if (rowType->FindItemType(name)->HasOptionalOrNull()) {
+                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set NULL or optional value to not null column: " << name
+                            << ". All not null columns should be initialized"));
+                        return TStatus::Error;
+                    }
                 }
             }
         } else if (op == TYdbOperation::UpdateOn) {
             for (const auto& item : rowType->GetItems()) {
                 auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
                 YQL_ENSURE(column);
-                if (column->NotNull && item->HasOptionalOrNull()) {
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                        << "Can't set NULL or optional value to not null column: " << column->Name));
-                    return TStatus::Error;
+                if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
+                    if (column->NotNull && item->HasOptionalOrNull()) {
+                        ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set NULL or optional value to not null column: " << column->Name));
+                        return TStatus::Error;
+                    }
                 }
             }
         }
@@ -504,6 +511,10 @@ private:
                 return TStatus::Error;
             }
             if (column->NotNull && item->HasOptionalOrNull()) {
+                if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Pg) {
+                    //no type-level notnull check for pg types.
+                    continue;
+                }
                 ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                     << "Can't set NULL or optional value to not null column: " << column->Name));
                 return TStatus::Error;
@@ -604,21 +615,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
             bool notNull;
             if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
-                if (notNullColumns.contains(columnName)) {
-                    if (std::find(meta->KeyColumnNames.begin(), meta->KeyColumnNames.end(), columnName) == meta->KeyColumnNames.end()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(create.NotNullColumns().Pos()), TStringBuilder()
-                            << "notnull option for pg column " << columnName << " is forbidden"));
-                        return TStatus::Error;
-                    } else {
-                        //TODO: KIKIMR-17471
-                        //Right now YDB ignores the constraint native Postgres enforces
-                        //on primary key values; it should be used very carefully.
-                        ctx.AddWarning(TIssue(ctx.GetPosition(create.NotNullColumns().Pos()), TStringBuilder()
-                            << "notnull option for primary key column " << columnName << " will be ignored"));
-                    }
-                }
-                //TODO: set notnull for pg types
-                notNull = false;
+                notNull = notNullColumns.contains(columnName);
             } else {
                 notNull = !isOptional;
             }
@@ -873,6 +870,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         if (columnName == key) {
                             auto typeNode = columnTuple.Item(1);
                             auto keyType = typeNode.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                            YQL_ENSURE(
+                                keyType->GetKind() != ETypeAnnotationKind::Pg,
+                                "pg types are not supported for partition at keys"
+                            );
                             if (keyType->HasOptional()) {
                                 keyType = keyType->Cast<TOptionalExprType>()->GetItemType();
                             }

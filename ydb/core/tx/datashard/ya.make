@@ -246,6 +246,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
+    ydb/library/yql/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
 )

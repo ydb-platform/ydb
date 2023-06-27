@@ -225,6 +225,15 @@
             ]
         },
         {
+            "Name": "TKqpWriteConstraint",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "KqpWriteConstraint"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
             "Name": "TKqlInsertRowsBase",
             "Base": "TKqlTableEffect",
             "Match": {"Type": "CallableBase"},

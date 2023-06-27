@@ -48,7 +48,6 @@ inline ESortDirection operator|=(ESortDirection& a, ESortDirection b) { return (
 
 ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections);
 
+NYql::TExprNode::TPtr MakeMessage(TStringBuf message, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
 } // NKikimr::NKqp::NOpt
-
-
-

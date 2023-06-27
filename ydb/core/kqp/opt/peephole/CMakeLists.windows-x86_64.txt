@@ -17,8 +17,10 @@ target_link_libraries(kqp-opt-peephole PUBLIC
   core-kqp-common
   ydb-library-naming_conventions
   yql-dq-opt
+  kqp-opt-physical
 )
 target_sources(kqp-opt-peephole PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_wide_read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole_write_constraint.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/peephole/kqp_opt_peephole.cpp
 )

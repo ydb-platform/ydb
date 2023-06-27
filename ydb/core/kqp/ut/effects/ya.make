@@ -12,6 +12,8 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(ram:12)
+
 SRCS(
     kqp_effects_ut.cpp
     kqp_immediate_effects_ut.cpp
@@ -22,7 +24,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/sql/pg
+    ydb/library/yql/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

@@ -192,12 +192,32 @@ TExprBase BuildReadTableIndex(const TKiReadTable& read, const TKikimrTableDescri
     }
 }
 
+TExprNode::TPtr GetPgNotNullColumns(
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    auto pgNotNullColumns = Build<TCoAtomList>(ctx, pos);
+
+    for (const auto& [column, meta] : table.Metadata->Columns) {
+        if (meta.NotNull && table.GetColumnType(column)->GetKind() == ETypeAnnotationKind::Pg) {
+            pgNotNullColumns.Add<TCoAtom>()
+                .Value(column).Build();
+        }
+    }
+    return pgNotNullColumns.Done().Ptr();
+}
+
+
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     auto effect = Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(write.Input())
+        .Input<TKqpWriteConstraint>()
+            .Input(write.Input())
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(inputColumns)
         .Done();
 
@@ -209,7 +229,10 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
 {
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(write.Input())
+        .Input<TKqpWriteConstraint>()
+            .Input(write.Input())
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(inputColumns)
         .Done();
 
@@ -223,7 +246,10 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
 
     return Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(data)
+        .Input<TKqpWriteConstraint>()
+            .Input(data)
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(columns)
         .Done();
 }
@@ -235,7 +261,10 @@ TExprBase BuildReplaceTableWithIndex(const TKiWriteTable& write, const TCoAtomLi
 
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(data)
+        .Input<TKqpWriteConstraint>()
+            .Input(data)
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(columns)
         .Done();
 
@@ -247,7 +276,10 @@ TExprBase BuildInsertTable(const TKiWriteTable& write, bool abort, const TCoAtom
 {
     auto effect = Build<TKqlInsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(write.Input())
+        .Input<TKqpWriteConstraint>()
+            .Input(write.Input())
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(inputColumns)
         .OnConflict()
             .Value(abort ? "abort"sv : "revert"sv)
@@ -262,7 +294,10 @@ TExprBase BuildInsertTableWithIndex(const TKiWriteTable& write, bool abort, cons
 {
     auto effect = Build<TKqlInsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(write.Input())
+        .Input<TKqpWriteConstraint>()
+            .Input(write.Input())
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(inputColumns)
         .OnConflict()
             .Value(abort ? "abort"sv : "revert"sv)
@@ -277,7 +312,10 @@ TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inpu
 {
     return Build<TKqlUpdateRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(write.Input())
+        .Input<TKqpWriteConstraint>()
+            .Input(write.Input())
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(inputColumns)
         .Done();
 }
@@ -287,7 +325,10 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
 {
     return Build<TKqlUpdateRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input(write.Input())
+        .Input<TKqpWriteConstraint>()
+            .Input(write.Input())
+            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Build()
         .Columns(inputColumns)
         .Done();
 }
@@ -465,7 +506,10 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
 
     return Build<TKqlUpsertRows>(ctx, update.Pos())
         .Table(BuildTableMeta(tableData, update.Pos(), ctx))
-        .Input(updatedRows)
+        .Input<TKqpWriteConstraint>()
+            .Input(updatedRows)
+            .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
+        .Build()
         .Columns()
             .Add(updateColumnsList)
             .Build()
@@ -495,7 +539,10 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
 
     auto tableUpsert = Build<TKqlUpsertRows>(ctx, update.Pos())
         .Table(BuildTableMeta(tableData, update.Pos(), ctx))
-        .Input(updatedRows)
+        .Input<TKqpWriteConstraint>()
+            .Input(updatedRows)
+            .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
+        .Build()
         .Columns()
             .Add(updateColumnsList)
             .Build()
@@ -558,7 +605,10 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, update.Pos())
                 .Table(indexMeta)
-                .Input(indexRows)
+                .Input<TKqpWriteConstraint>()
+                    .Input(indexRows)
+                    .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
+                .Build()
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()

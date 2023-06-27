@@ -21,7 +21,8 @@ target_link_libraries(ydb-core-kqp-ut-effects PUBLIC
   cpp-testing-unittest_main
   ydb-core-kqp
   kqp-ut-common
-  yql-sql-pg_dummy
+  yql-sql-pg
+  yql-parser-pg_wrapper
 )
 target_sources(ydb-core-kqp-ut-effects PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/effects/kqp_effects_ut.cpp

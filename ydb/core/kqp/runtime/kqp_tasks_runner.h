@@ -54,8 +54,7 @@ public:
 
     ui64 GetAllocatedMemory() const { return Alloc->GetAllocated(); }
 
-    const TMap<ui64, const NYql::NDq::TDqTaskRunnerStats*> GetTasksStats() const { return Stats; };
-
+    const TMap<ui64, const NYql::NDq::TDqTaskRunnerStats*> GetTasksStats() const { return Stats; }
 private:
     TMap<ui64, TIntrusivePtr<NYql::NDq::IDqTaskRunner>> TaskRunners;
     TMap<ui64, NYql::NDq::TDqTaskSettings> Tasks;

@@ -21,7 +21,8 @@ target_link_libraries(ydb-core-kqp-ut-effects PUBLIC
   cpp-testing-unittest_main
   ydb-core-kqp
   kqp-ut-common
-  yql-sql-pg_dummy
+  yql-sql-pg
+  yql-parser-pg_wrapper
 )
 target_link_options(ydb-core-kqp-ut-effects PRIVATE
   -ldl

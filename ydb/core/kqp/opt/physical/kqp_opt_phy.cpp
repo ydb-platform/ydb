@@ -69,6 +69,7 @@ public:
         AddHandler(0, &TKqlUpsertRowsIndex::Match, HNDL(BuildUpsertIndexStages));
         AddHandler(0, &TKqlInsertRowsIndex::Match, HNDL(BuildInsertIndexStages));
         AddHandler(0, &TKqlDeleteRowsIndex::Match, HNDL(BuildDeleteIndexStages));
+        AddHandler(0, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<false>));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(DropUnordered));
         AddHandler(0, &TDqStage::Match, HNDL(PrecomputeToInput));
         AddHandler(0, &TDqStage::Match, HNDL(FloatUpStage));
@@ -113,6 +114,7 @@ public:
         AddHandler(1, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<true>));
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
         AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
+        AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
 #undef HNDL
@@ -427,6 +429,15 @@ protected:
     TMaybeNode<TExprBase> BuildDeleteIndexStages(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildDeleteIndexStages(node, ctx, KqpCtx);
         DumpAppliedRule("BuildDeleteIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildWriteConstraint(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = KqpBuildWriteConstraint(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("BuildWriteConstraint", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

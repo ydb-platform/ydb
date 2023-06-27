@@ -9,7 +9,7 @@
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
-
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 //#include <library/cpp/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
@@ -107,7 +107,12 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         break;
     }
     case NScheme::NTypeIds::Pg: {
-        val.set_bytes_value(cell.Data(), cell.Size());
+        auto result = NPg::PgNativeTextFromNativeBinary(
+            TString(cell.Data(), cell.Size()),
+            NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc())
+        );
+        Y_VERIFY(!result.Error, "Failed to add cell to Ydb::Value: %s", (*result.Error).c_str());
+        val.set_text_value(result.Str);
         break;
     }
     default:

@@ -10,7 +10,7 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     Y_UNIT_TEST(CreateTableWithDisabledNotNullDataColumns) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(InsertNotNullPk) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -77,8 +77,68 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    Y_UNIT_TEST(InsertNotNullPkPg) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE Pg (
+                key int2 PRIMARY KEY,
+                value int2
+            ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key, value) VALUES (
+                    1::int2, 1::int2
+            ))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {   /* missing not null pk column */
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key, value) VALUES (
+                    NULL::int2
+            ))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR), result.GetIssues().ToString());
+        }
+
+        {   /* set NULL to not null pk column */
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key, value) VALUES (
+                    NULL::int2, 123::int2
+            ))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
+            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+            "    <main>: Error: Tried no insert NULL value into NOT NULL column: key, code: 2031\n");
+        }
+
+        {   /* set NULL to nullable column */
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO Pg (key, value) VALUES (
+                    123::int2, NULL::int2
+            ))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(UpsertNotNullPk) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -115,8 +175,47 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    Y_UNIT_TEST(UpsertNotNullPkPg) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE `/Root/TestUpsertNotNullPk` (
+                    Key PgInt2 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_("UPSERT INTO `/Root/TestUpsertNotNullPk` (Key, Value) VALUES (PgInt2(1), 'Value1')");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  /* missing not null pk column */
+            const auto query = Q_("UPSERT INTO `/Root/TestUpsertNotNullPk` (Value) VALUES ('Value2')");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED), result.GetIssues().ToString());
+        }
+
+        {  /* set NULL to not null pk column */
+            const auto query = Q_("UPSERT INTO `/Root/TestUpsertNotNullPk` (Key, Value) VALUES (PgCast(NULL, PgInt2), 'Value3')");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
+        }
+    }
+
+
     Y_UNIT_TEST(ReplaceNotNullPk) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -153,8 +252,46 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    Y_UNIT_TEST(ReplaceNotNullPkPg) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE `/Root/TestReplaceNotNullPk` (
+                    Key PgInt2 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_("REPLACE INTO `/Root/TestReplaceNotNullPk` (Key, Value) VALUES (PgInt2(1), 'Value1')");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  /* missing not null pk column */
+            const auto query = Q_("REPLACE INTO `/Root/TestReplaceNotNullPk` (Value) VALUES ('Value2')");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED), result.GetIssues().ToString());
+        }
+
+        {  /* set NULL to not null pk column */
+            const auto query = Q_("REPLACE INTO `/Root/TestReplaceNotNullPk` (Key, Value) VALUES (PgCast(NULL, PgInt2), 'Value3')");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(UpdateNotNullPk) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -201,8 +338,57 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    Y_UNIT_TEST(UpdateNotNullPkPg) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE `/Root/TestUpdateNotNullPk` (
+                    Key PgInt2 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  /* init table */
+            const auto query = Q_(R"(
+                REPLACE INTO `/Root/TestUpdateNotNullPk` (Key, Value) VALUES
+                    (PgInt2(1), 'Value1'),
+                    (PgInt2(2), 'Value2'),
+                    (PgInt2(3), 'Value3');
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  /* update data column */
+            const auto query = Q_("UPDATE `/Root/TestUpdateNotNullPk` SET Value = 'NewValue'");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  /* update not null pk column */
+            const auto query = Q_("UPDATE `/Root/TestUpdateNotNullPk` SET Key = PgInt2(10) WHERE Key = PgInt2(1)");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {  /* set NULL to not null pk column */
+            const auto query = Q_("UPDATE `/Root/TestUpdateNotNullPk` SET Key = PgCast(NULL, PgInt2) WHERE Key = PgInt2(1)");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(SelectNotNullColumns) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -254,6 +440,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(InsertNotNull) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -293,8 +480,53 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
+    Y_UNIT_TEST(InsertNotNullPg) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE `/Root/TestInsertNotNull` (
+                    Key Uint64,
+                    Value PgInt2 NOT NULL,
+                    PRIMARY KEY (Key))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_("INSERT INTO `/Root/TestInsertNotNull` (Key, Value) VALUES (1, PgInt2(1))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {  /* missing not null column */
+            const auto query = Q_("INSERT INTO `/Root/TestInsertNotNull` (Key) VALUES (2)");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE), result.GetIssues().ToString());
+        }
+
+        {  /* set NULL to not null column */
+            const auto query = Q_("INSERT INTO `/Root/TestInsertNotNull` (Key, Value) VALUES (3, PgCast(NULL, PgInt2))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
+            UNIT_ASSERT_NO_DIFF(result.GetIssues().ToString(), "<main>: Error: Execution, code: 1060\n"
+            "    <main>: Error: Tried no insert NULL value into NOT NULL column: Value, code: 2031\n");
+        }
+    }
+
     Y_UNIT_TEST(UpsertNotNull) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -336,6 +568,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(ReplaceNotNull) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -377,6 +610,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(UpdateNotNull) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -429,6 +663,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(UpdateOnNotNull) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -499,6 +734,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(AlterDropNotNullColumn) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -527,6 +763,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(FailedMultiEffects) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -603,6 +840,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(SecondaryKeyWithNotNullColumn) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -705,6 +943,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(SecondaryIndexWithNotNullDataColumn) {
         auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
@@ -806,6 +1045,112 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                 result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(SecondaryIndexWithNotNullDataColumnPg) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q1_(R"(
+                CREATE TABLE `/Root/TestNotNullSecondaryIndex` (
+                    Key PgInt2 NOT NULL,
+                    Value String,
+                    Index1 PgText NOT NULL,
+                    Index2 String,
+                    PRIMARY KEY (Key),
+                    INDEX Index GLOBAL ON (Index1, Index2)
+                    COVER (Value));
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        /* upsert row and update not null index column Index1 */
+        {
+            const auto query = Q_(R"(
+                UPSERT INTO `/Root/TestNotNullSecondaryIndex` (Key, Index1, Index2)
+                    VALUES (PgInt2(1), 'Secondary1'pt, 'Secondary11')
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_("UPDATE `/Root/TestNotNullSecondaryIndex` SET Index1 = PgCast(NULL, PgText) WHERE Key = PgInt2(1)");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto yson = ReadTablePartToYson(session, "/Root/TestNotNullSecondaryIndex/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(yson, R"([["Secondary1";["Secondary11"];"1";#]])");
+        }
+
+        /* missing not null index column Index1 */
+        {
+            const auto query = Q_("INSERT INTO `/Root/TestNotNullSecondaryIndex` (Key) VALUES (PgInt2(2))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE),
+                result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_("UPSERT INTO `/Root/TestNotNullSecondaryIndex` (Key) VALUES (PgInt2(3))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE),
+                result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_("REPLACE INTO `/Root/TestNotNullSecondaryIndex` (Key) VALUES (PgInt2(4))");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE),
+                result.GetIssues().ToString());
+        }
+
+        /* set NULL to not null index column Index1 */
+        {
+            const auto query = Q_(R"(
+                INSERT INTO `/Root/TestNotNullSecondaryIndex` (Key, Value, Index1) VALUES (PgInt2(5), 'Value5', PgCast(NULL, PgText))
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE),
+                result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                UPSERT INTO `/Root/TestNotNullSecondaryIndex` (Key, Value, Index1) VALUES (PgInt2(6), 'Value6', PgCast(NULL, PgText))
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE),
+                result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                REPLACE INTO `/Root/TestNotNullSecondaryIndex` (Key, Value, Index1) VALUES (PgInt2(7), 'Value7', PgCast(NULL, PgText))
+            )");
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE),
+                result.GetIssues().ToString());
+        }
+    }
+
 
     Y_UNIT_TEST(JoinBothTablesWithNotNullPk) {
         TKikimrRunner kikimr;

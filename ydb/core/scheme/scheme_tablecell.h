@@ -415,7 +415,7 @@ static_assert(std::is_nothrow_default_constructible_v<TOwnedCellVec>, "Expected 
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {
 public:
-    explicit TSerializedCellVec(const TConstArrayRef<TCell>& cells);
+    explicit TSerializedCellVec(TConstArrayRef<TCell> cells);
 
     explicit TSerializedCellVec(const TString& buf)
     {
@@ -475,9 +475,9 @@ public:
         return Cells;
     }
 
-    static void Serialize(TString& res, const TConstArrayRef<TCell>& cells);
+    static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
-    static TString Serialize(const TConstArrayRef<TCell>& cells);
+    static TString Serialize(TConstArrayRef<TCell> cells);
 
     const TString &GetBuffer() const { return Buf; }
 

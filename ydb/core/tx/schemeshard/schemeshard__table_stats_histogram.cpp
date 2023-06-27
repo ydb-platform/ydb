@@ -67,16 +67,16 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
                 // For other types let's do binary search between med and hi to find smallest key > med
 
                 // Compares only i-th cell in keys
-                auto fnCmpCurrentCell = [i, columnType] (const auto& bucket1, const auto& bucket2) {
-                    TSerializedCellVec key1(bucket1.GetKey());
-                    TSerializedCellVec key2(bucket2.GetKey());
-                    return CompareTypedCells(key1.GetCells()[i], key2.GetCells()[i], columnType) < 0;
+                auto fnCmpCurrentCell = [i, columnType] (const auto& keyMed, const auto& bucket) {
+                    TSerializedCellVec bucketCells(bucket.GetKey());
+                    return CompareTypedCells(keyMed.GetCells()[i], bucketCells.GetCells()[i], columnType) < 0;
                 };
+
                 const auto bucketsBegin = histogram.GetBuckets().begin();
                 const auto it = UpperBound(
                             bucketsBegin + idxMed,
                             bucketsBegin + idxHi,
-                            histogram.GetBuckets(idxMed),
+                            keyMed,
                             fnCmpCurrentCell);
                 TSerializedCellVec keyFound(it->GetKey());
                 splitKey[i] = keyFound.GetCells()[i];

@@ -220,8 +220,8 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
 }
 
 void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType,
-                                            std::optional<TPortionMeta::EProduced> exProduced) {
-    UpdatePortionStats(Counters, portionInfo, updateType, exProduced);
+                                            const TPortionInfo* exPortionInfo) {
+    UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
 
     ui64 granule = portionInfo.Granule();
     Y_VERIFY(granule);
@@ -233,12 +233,12 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
         stats = std::make_shared<TColumnEngineStats>();
         stats->Tables = 1;
     }
-    UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exProduced);
+    UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exPortionInfo);
 }
 
 void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                                               EStatsUpdateType updateType,
-                                              std::optional<TPortionMeta::EProduced> exProduced) const {
+                                              const TPortionInfo* exPortionInfo) const {
     TColumnEngineStats::TPortionsStats deltaStats;
     ui64 columnRecords = portionInfo.Records.size();
     ui64 metadataBytes = 0;
@@ -259,31 +259,35 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
     deltaStats.Blobs = blobs.size();
     deltaStats.Portions = 1;
+
+    Y_VERIFY(!exPortionInfo || exPortionInfo->Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_VERIFY(portionInfo.Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
-    TColumnEngineStats::TPortionsStats& srcStats = exProduced
-        ? engineStats.StatsByType[*exProduced]
+
+    TColumnEngineStats::TPortionsStats& srcStats = exPortionInfo
+        ? (exPortionInfo->IsActive()
+            ? engineStats.StatsByType[exPortionInfo->Meta.Produced]
+            : engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE])
         : engineStats.StatsByType[portionInfo.Meta.Produced];
-    auto* stats = portionInfo.IsActive()
-        ? &engineStats.StatsByType[portionInfo.Meta.Produced]
-        : &engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE];
+    TColumnEngineStats::TPortionsStats& stats = portionInfo.IsActive()
+        ? engineStats.StatsByType[portionInfo.Meta.Produced]
+        : engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE];
 
     const bool isErase = updateType == EStatsUpdateType::ERASE;
-    const bool isLoad = updateType == EStatsUpdateType::LOAD;
-    const bool isAppended = portionInfo.IsActive() && !exProduced;
+    const bool isAdd = updateType == EStatsUpdateType::ADD;
 
     if (isErase) { // PortionsToDrop
         engineStats.ColumnRecords -= columnRecords;
         engineStats.ColumnMetadataBytes -= metadataBytes;
 
-        *stats -= deltaStats;
-    } else if (isLoad || isAppended) { // AppendedPortions
+        stats -= deltaStats;
+    } else if (isAdd) { // Load || AppendedPortions
         engineStats.ColumnRecords += columnRecords;
         engineStats.ColumnMetadataBytes += metadataBytes;
 
-        *stats += deltaStats;
-    } else { // SwitchedPortions || PortionsToEvict
+        stats += deltaStats;
+    } else if (&srcStats != &stats) { // SwitchedPortions || PortionsToEvict
         srcStats -= deltaStats;
-        (*stats) += deltaStats;
+        stats += deltaStats;
     }
 }
 
@@ -319,7 +323,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
             emptyGranulePaths.insert(spg->PathId());
         }
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
-            UpdatePortionStats(portionInfo, EStatsUpdateType::LOAD);
+            UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
             if (portionInfo.CheckForCleanup()) {
                 CleanupPortions.emplace(portionInfo.GetAddress());
             }
@@ -766,7 +770,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
             ui64 granule = portionInfo.Granule();
             ui64 portion = portionInfo.Portion();
             if (!Granules.contains(granule)) {
-                LOG_S_DEBUG("Cannot update unknown granule " << granule << " at tablet " << TabletId);
+                LOG_S_ERROR("Cannot update unknown granule " << granule << " at tablet " << TabletId);
                 return false;
             }
             if (!Granules[granule]->GetPortions().contains(portion)) {
@@ -786,7 +790,10 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
                 }
             }
 
-            if (!UpsertPortion(portionInfo, apply)) {
+            // In case of race with eviction portion could become evicted
+            const TPortionInfo& oldInfo = Granules[granule]->GetPortionVerified(portion);
+
+            if (!UpsertPortion(portionInfo, apply, &oldInfo)) {
                 LOG_S_ERROR("Cannot update portion " << portionInfo << " at tablet " << TabletId);
                 return false;
             }
@@ -815,7 +822,6 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
         }
 
         // In case of race with compaction portion could become inactive
-        // TODO: evict others instead of abort eviction
         const TPortionInfo& oldInfo = Granules[granule]->GetPortionVerified(portion);
         if (!oldInfo.IsActive()) {
             LOG_S_WARN("Cannot evict inactive portion " << oldInfo << " at tablet " << TabletId);
@@ -823,7 +829,7 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
         }
         Y_VERIFY(portionInfo.TierName != oldInfo.TierName);
 
-        if (!UpsertPortion(portionInfo, apply, true, &oldInfo)) {
+        if (!UpsertPortion(portionInfo, apply, &oldInfo)) {
             LOG_S_ERROR("Cannot evict portion " << portionInfo << " at tablet " << TabletId);
             return false;
         }
@@ -837,15 +843,27 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, const TChanges& changes,
 
     // Move portions in granules (zero-copy switch + append into new granules)
 
-    for (auto& [info, granule] : changes.PortionsToMove) {
+    for (auto& [info, dstGranule] : changes.PortionsToMove) {
         const auto& portionInfo = info;
+
+        ui64 granule = portionInfo.Granule();
+        ui64 portion = portionInfo.Portion();
+        if (!Granules.contains(granule) || !Granules[granule]->GetPortions().contains(portion)) {
+            LOG_S_ERROR("Cannot move unknown portion " << portionInfo << " at tablet " << TabletId);
+            return false;
+        }
+
+        // In case of race with eviction portion could become evicted
+        const TPortionInfo oldInfo = Granules[granule]->GetPortionVerified(portion);
+
         if (!ErasePortion(portionInfo, apply, false)) {
             LOG_S_ERROR("Cannot erase moved portion " << portionInfo << " at tablet " << TabletId);
             return false;
         }
+
         TPortionInfo moved = portionInfo;
-        moved.SetGranule(granule);
-        if (!UpsertPortion(moved, apply, false)) {
+        moved.SetGranule(dstGranule);
+        if (!UpsertPortion(moved, apply, &oldInfo)) {
             LOG_S_ERROR("Cannot insert moved portion " << moved << " at tablet " << TabletId);
             return false;
         }
@@ -973,8 +991,7 @@ void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& 
     PathGranules[pathId].erase(mark);
 }
 
-bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats,
-                                        const TPortionInfo* exInfo) {
+bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, const TPortionInfo* exInfo) {
     ui64 granule = portionInfo.Granule();
 
     if (!apply) {
@@ -989,14 +1006,13 @@ bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool a
     Y_VERIFY(portionInfo.Valid());
     auto& spg = Granules[granule];
     Y_VERIFY(spg);
-    if (updateStats) {
-        if (exInfo) {
-            Y_VERIFY(portionInfo.Meta.Produced == TPortionMeta::EProduced::EVICTED);
-            UpdatePortionStats(portionInfo, EStatsUpdateType::DEFAULT, exInfo->Meta.Produced);
-        } else {
-            UpdatePortionStats(portionInfo);
-        }
+
+    if (exInfo) {
+        UpdatePortionStats(portionInfo, EStatsUpdateType::DEFAULT, exInfo);
+    } else {
+        UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
     }
+
     spg->UpsertPortion(portionInfo);
     return true; // It must return true if (apply == true)
 }

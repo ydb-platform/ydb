@@ -134,7 +134,7 @@ bool CheckSame(const TString& blob, const TString& strSchema, ui32 expectedSize,
 
 std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
                               const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema) {
-    UNIT_ASSERT(ts.size() > 1);
+    UNIT_ASSERT(ts.size() > 0);
 
     ui32 numRows = portionSize + (ts.size() - 1) * (portionSize - overlapSize);
     TString testData = MakeTestBlob({0, numRows}, ydbSchema);
@@ -1160,6 +1160,79 @@ void TestDropWriteRace() {
     PlanCommit(runtime, sender, ++planStep, commitTxId);
 }
 
+void TestCompaction(std::optional<ui32> numWrites = {}) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime,
+                        CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+                        &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    // Create table
+
+    ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 planStep = 100;
+    ui64 txId = 100;
+
+    bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
+                              NOlap::TSnapshot(++planStep, ++txId));
+    UNIT_ASSERT(ok);
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+
+    // Set tiering
+
+    ui64 ts = 1620000000;
+    TInstant now = TAppData::TimeProvider->Now();
+    TDuration allow = TDuration::Seconds(now.Seconds() - ts + 3600);
+    TDuration disallow = TDuration::Seconds(now.Seconds() - ts - 3600);
+
+    TTestSchema::TTableSpecials spec;
+    spec.SetTtlColumn("timestamp");
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("hot").SetTtlColumn("timestamp"));
+    spec.Tiers.back().EvictAfter = disallow;
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
+    spec.Tiers.back().EvictAfter = allow;
+    spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
+
+    ok = ProposeSchemaTx(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
+                            NOlap::TSnapshot(++planStep, ++txId));
+    UNIT_ASSERT(ok);
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+
+    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+
+    // Writes
+
+    std::vector<TString> blobs = MakeData({ts}, PORTION_ROWS, 0, spec.TtlColumn);
+    const TString& triggerData = blobs[0];
+    UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+    UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
+
+    if (!numWrites) {
+        numWrites = 4 * NOlap::TCompactionLimits().GranuleExpectedSize / triggerData.size();
+    }
+
+    ++planStep;
+    ++txId;
+    for (ui32 i = 0; i < *numWrites; ++i, ++writeId, ++planStep, ++txId) {
+        UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+
+        ProposeCommit(runtime, sender, metaShard, txId, {writeId});
+        PlanCommit(runtime, sender, planStep, txId);
+
+        if (i % 2 == 0) {
+            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
+        }
+    }
+}
+
 }
 
 namespace NColumnShard {
@@ -1413,6 +1486,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     // TODO: DisableTierAfterExport
     // TODO: ReenableTierAfterExport
     // TODO: AlterTierBorderAfterExport
+
+    Y_UNIT_TEST(ColdCompactionSmoke) {
+        TestCompaction();
+    }
 
     Y_UNIT_TEST(Drop) {
         TestDrop(false);

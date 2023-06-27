@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys, os
+import sys
+
 
 def main():
     alphabet = 'abcdefghijklmnopqrstuvwxyz'
@@ -26,32 +27,34 @@ def main():
                     tlds[label].append(domain)
                     break
 
-    print('// actual list can be found at http://data.iana.org/TLD/tlds-alpha-by-domain.txt')
-    print('static const char* const TopLevelDomains[] = {')
+    stdout = open(sys.stdout.fileno(), "w", encoding="utf-8", closefd=False)
+
+    stdout.write('// actual list can be found at http://data.iana.org/TLD/tlds-alpha-by-domain.txt\n')
+    stdout.write('static const char* const TopLevelDomains[] = {\n')
 
     for label, value in sorted(tlds.items()):
         if label == 'xn--':
-            sys.stdout.write('    /* ')
+            stdout.write('    /* ')
             str = ''
             for n in value:
                 unicode_domain = n.decode('idna')
                 str += ('%s, ' % unicode_domain)
-            sys.stdout.write('%s*/\n' % str.rstrip())
+            stdout.write('%s*/\n' % str.rstrip())
 
-            sys.stdout.write('    ')
+            stdout.write('    ')
             str = ''
             for n in value:
                 str += ('"%s", ' % n.decode('utf-8'))
-            sys.stdout.write('%s\n' % str.rstrip())
+            stdout.write('%s\n' % str.rstrip())
         else:
-            sys.stdout.write('    ')
+            stdout.write('    ')
             str = ''
             for n in value:
                 str += ('"%s", ' % n.decode('utf-8'))
-            sys.stdout.write('%s\n' % str.rstrip())
+            stdout.write('%s\n' % str.rstrip())
 
-    print('    0')
-    print('};')
+    stdout.write('    0\n')
+    stdout.write('};\n')
 
 if __name__ == '__main__':
     main()

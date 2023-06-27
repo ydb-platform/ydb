@@ -34,17 +34,30 @@ DEFAULT_PY_VER = 2
 RETRIES = 5
 HASH_PREFIX = 10
 
-PY3_HANDLERS = [
+PY3_HANDLERS = {
     "ya3bin0", "ya3bin3",  # handers for tests
     "krevedko",
     "curl", "nvim", "gdb", "emacs", "grep", "jstyle", "nile", "sed", "vim",
-    "py23_utils", 
-]
-PY2_HANDLERS = ["ya2bin0", "ya2bin2"]
+    "py23_utils",
+}
 
-EXPERIMENTAL_PY3_HANDLERS = [
-    'upload', 'download', 'paste', 'whoami',
-]
+PY2_HANDLERS = {
+    "ya2bin0", "ya2bin2",
+}
+
+EXPERIMENTAL_PY3_HANDLERS = {
+    'ydb', 'upload', 'download', 'paste', 'whoami',
+}
+
+DEVTOOLS_PY3_HANDLERS = set()
+
+
+def is_devtools():
+    # type: () -> bool
+    devtools_users = {'tldr', 'yetty', 'prettyboy', 'neksard', 'ival83', 'mikhnenko', 'aokhotin', 'somov', 'shadchin', 'albazh', 'grasscat', 'nogert', 'jolex007', 'aakuz', 'aripinen', 'sudilovskiy', 'tutelka', 'tutelka', 'vlasovskikh', 'vlasovskikh', 'and42', 'say', 'rudeshko', 'pg', 'artanis', 'hiddenpath', 'hiddenpath', 'khoden', 'bulatkhr', 'v-korovin', 'viknet', 'saxumcordis', 'vpozdyayev', 'vturov', 'vturov', 'vlad-savinov', 'slava', 'miripiruni', 'trushkin', 'griddic', 'ligreen', 'zaverden', 'kirpadmitriy', 'dmitko', 'dldmitry', 'lix0', 'yak-dmitriy', 'dankolesnikov', 'keepitsimple', 'workfork', 'vania-pooh', 'ilezhankin', 'igorart', 'thevery', 'ilia-vashurov', 'iaz1607', 'il2kondr4', 'ilyasiluyanov', 'trofimenkov', 'kirkharitonov', 'korum', 'tilacyn', 'maratik', 'miroslav2', 'spasitel', 'nslus', 'nsamokhin', 'r2d2', 'zhukoff-pavel', 'r-vetrov', 'gotocoding', 'svkov42', 'sabevzenko', 'belesev', 'svidyuk', 'snermolaev', 'spreis', 's-repalov', 'golovin-stan', 'ilikepugs', 'tekireeva', 'zumra6a', 'sareyu', 'thegeorg', 'snowball'}
+
+    user = os.environ.get('USER')
+    return bool(user and user in devtools_users)
 
 
 def create_dirs(path):
@@ -322,6 +335,7 @@ def _parse_arguments():
         use_python_set_force = True  # Prevent ya-bin respawn
     elif use_python == 3:
         if not print_sandbox_id:
+            # will be shown only if user set `-3` by force
             sys.stderr.write("!! python3-based ya-bin will be used, "
                              "be prepared for some strange effects, "
                              "don't be ashamed to write in DEVTOOLSSUPPORT about it\n")
@@ -335,13 +349,21 @@ def _parse_arguments():
     else:
         use_python = 23  # ya-bin/3 makes a decision
 
-    if not py3_handlers_disabled and use_python != 3:
+    if not use_python_set_force and not py3_handlers_disabled and use_python != 3:
+        # User didn't set python version by force, didn't disable it, handler is under python2, so lets check experiments
+
         ya_experimental = os.environ.get("YA_EXPERIMENTAL") in ENV_TRUE
         if ya_experimental and handler in EXPERIMENTAL_PY3_HANDLERS:
             sys.stderr.write("!! python3-based ya-bin will be used because of:\n"
-                             " * You enable `YA_EXPERIMENTAL` environment variable\n"
-                             " * Handler `{}` in the list of experimental python3-compatible handlers"
-                             "\n".format(handler))
+                            " * You enable `YA_EXPERIMENTAL` environment variable\n"
+                            " * Handler `{}` in the list of experimental python3-compatible handlers\n"
+                            "".format(handler))
+            use_python = 3
+        elif is_devtools() and handler in DEVTOOLS_PY3_HANDLERS:
+            sys.stderr.write("!! python3-based ya-bin will be used because of:\n"
+                                " * You are member of DEVTOOLS (it's just list of logins in `ya` script)\n"
+                                " * Handler `{}` in the list of experimental python3-compatible handlers for DEVTOOLS members\n"
+                                "".format(handler) )
             use_python = 3
 
     if use_python == 2:

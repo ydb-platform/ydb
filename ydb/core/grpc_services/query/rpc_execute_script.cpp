@@ -44,20 +44,29 @@ bool FillQueryContent(const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::T
     }
 }
 
+
 std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest)
 {
     kqpRequest.MutableRequest()->MutableYdbParameters()->insert(req.parameters().begin(), req.parameters().end());
+
     switch (req.exec_mode()) {
         case Ydb::Query::EXEC_MODE_EXECUTE:
             kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             break;
+        case Ydb::Query::EXEC_MODE_EXPLAIN:
+            kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            break;
+        // TODO: other modes
         default: {
             NYql::TIssues issues;
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected query mode"));
+            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                            req.exec_mode() == Ydb::Query::EXEC_MODE_UNSPECIFIED ? "Query mode is not specified" : "Query mode is not supported yet"));
             return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
         }
     }
+
+
 
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
     kqpRequest.MutableRequest()->SetKeepSession(false);

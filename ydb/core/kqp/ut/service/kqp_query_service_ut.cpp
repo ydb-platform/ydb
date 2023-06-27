@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
-        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
@@ -339,6 +339,74 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(resultSet.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 101);
         }
+    }
+
+    Y_UNIT_TEST(ExplainScript) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_EXPLAIN);
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", settings).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(scriptExecutionOperation.Metadata().ExecMode, EExecMode::Explain);
+        
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Explain);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
+        UNIT_ASSERT(!readyOp.Metadata().ExecStats.query_plan().empty());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(readyOp.Metadata().ExecStats.query_plan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+    }
+
+    Y_UNIT_TEST(ParseScript) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_PARSE);
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", settings).ExtractValueSync();
+        
+        // TODO: change when parse mode will be supported
+        UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
+        UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
+        UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not supported yet", scriptExecutionOperation.Status().GetIssues().ToString());
+        
+    }
+
+    Y_UNIT_TEST(ValidateScript) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_VALIDATE);
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", settings).ExtractValueSync();
+        
+        // TODO: change when validate mode will be supported
+        UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
+        UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
+        UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not supported yet", scriptExecutionOperation.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithUnspecifiedMode) {
+                auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteScriptSettings().ExecMode(Ydb::Query::EXEC_MODE_UNSPECIFIED);
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", settings).ExtractValueSync();
+        
+        UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
+        UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
+        UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not specified", scriptExecutionOperation.Status().GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ListScriptExecutions) {

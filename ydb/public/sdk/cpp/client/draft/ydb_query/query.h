@@ -126,6 +126,7 @@ private:
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
 
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
+    FLUENT_SETTING_DEFAULT(Ydb::Query::ExecMode, ExecMode, Ydb::Query::EXEC_MODE_EXECUTE);
 };
 
 class TVersionedScriptId {
@@ -175,6 +176,7 @@ public:
         // Not greater than one of SavedScriptId or QueryContent is set.
         std::optional<TVersionedScriptId> ScriptId;
         TQueryContent ScriptContent;
+        Ydb::TableStats::QueryStats ExecStats;
     };
 
     using TOperation::TOperation;

@@ -411,41 +411,41 @@ private:
     size_t TablesCreating = 0;
 };
 
+Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
+    switch (action) {
+        case NKikimrKqp::QUERY_ACTION_EXECUTE:
+            return Ydb::Query::EXEC_MODE_EXECUTE;
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
+            return Ydb::Query::EXEC_MODE_EXPLAIN;
+        case NKikimrKqp::QUERY_ACTION_VALIDATE:
+            return Ydb::Query::EXEC_MODE_VALIDATE;
+        case NKikimrKqp::QUERY_ACTION_PARSE:
+            return Ydb::Query::EXEC_MODE_PARSE;
+        case NKikimrKqp::QUERY_ACTION_PREPARE:
+            [[fallthrough]];
+        case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
+            [[fallthrough]];
+        case NKikimrKqp::QUERY_ACTION_BEGIN_TX:
+            [[fallthrough]];
+        case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
+            [[fallthrough]];
+        case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX:
+            [[fallthrough]];
+        case NKikimrKqp::QUERY_ACTION_TOPIC:
+            throw std::runtime_error(TStringBuilder() << "Unsupported query action: " << NKikimrKqp::EQueryAction_Name(action));
+    }
+}
+
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
-    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration)
+    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration leaseDuration = TDuration::Zero())
         : ExecutionId(executionId)
         , RunScriptActorId(runScriptActorId)
         , Request(req)
-        , LeaseDuration(leaseDuration)
+        , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
     {
     }
-
-    Ydb::Query::ExecMode GetExecMode() const {
-        switch (Request.GetRequest().GetAction()) {
-            case NKikimrKqp::QUERY_ACTION_EXECUTE:
-                return Ydb::Query::EXEC_MODE_EXECUTE;
-            case NKikimrKqp::QUERY_ACTION_EXPLAIN:
-                return Ydb::Query::EXEC_MODE_EXPLAIN;
-            case NKikimrKqp::QUERY_ACTION_VALIDATE:
-                return Ydb::Query::EXEC_MODE_VALIDATE;
-            case NKikimrKqp::QUERY_ACTION_PARSE:
-                return Ydb::Query::EXEC_MODE_PARSE;
-            case NKikimrKqp::QUERY_ACTION_PREPARE:
-                [[fallthrough]];
-            case NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED:
-                [[fallthrough]];
-            case NKikimrKqp::QUERY_ACTION_BEGIN_TX:
-                [[fallthrough]];
-            case NKikimrKqp::QUERY_ACTION_COMMIT_TX:
-                [[fallthrough]];
-            case NKikimrKqp::QUERY_ACTION_ROLLBACK_TX:
-                [[fallthrough]];
-            case NKikimrKqp::QUERY_ACTION_TOPIC:
-                throw std::runtime_error(TStringBuilder() << "Unsupported query action: " << NKikimrKqp::EQueryAction_Name(Request.GetRequest().GetAction()));
-        }
-    }
-
+    
     void OnRunQuery() override {
         TString sql = R"(
             DECLARE $database AS Text;
@@ -481,7 +481,7 @@ public:
                 .Int32(Ydb::Query::EXEC_STATUS_STARTING)
                 .Build()
             .AddParam("$execution_mode")
-                .Int32(GetExecMode())
+                .Int32(GetExecModeFromAction(Request.GetRequest().GetAction()))
                 .Build()
             .AddParam("$query_text")
                 .Utf8(Request.GetRequest().GetQuery())
@@ -536,7 +536,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             Send(RunScriptActorId, new NActors::TEvents::TEvWakeup());
-            Send(Event->Sender, new TEvKqp::TEvScriptResponse(ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId), ev->Get()->ExecutionId, Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_MODE_EXECUTE));
+            Send(Event->Sender, new TEvKqp::TEvScriptResponse(ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId), ev->Get()->ExecutionId, Ydb::Query::EXEC_STATUS_STARTING, GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())));
         } else {
             Send(RunScriptActorId, new NActors::TEvents::TEvPoison());
             Send(Event->Sender, new TEvKqp::TEvScriptResponse(ev->Get()->Status, std::move(ev->Get()->Issues)));
@@ -656,19 +656,22 @@ class TScriptExecutionFinisherBase : public TQueryBase {
 public:
     using TQueryBase::TQueryBase;
 
-    void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, const NYql::TIssues& issues = LeaseExpiredIssues(), TTxControl txControl = TTxControl::ContinueAndCommitTx()) {
+    void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus,
+                               const NYql::TIssues& issues = LeaseExpiredIssues(), TTxControl txControl = TTxControl::ContinueAndCommitTx(), TString queryPlan = "{}") {
         TString sql = R"(
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $operation_status AS Int32;
             DECLARE $execution_status AS Int32;
             DECLARE $issues AS JsonDocument;
+            DECLARE $plan AS JsonDocument;
 
             UPDATE `.metadata/script_executions`
             SET
                 operation_status = $operation_status,
                 execution_status = $execution_status,
                 issues = $issues,
+                plan = $plan,
                 end_ts = CurrentUtcTimestamp()
             WHERE database = $database AND execution_id = $execution_id;
 
@@ -692,6 +695,9 @@ public:
                 .Build()
             .AddParam("$issues")
                 .JsonDocument(SerializeIssues(issues))
+                .Build()
+            .AddParam("$plan")
+                .JsonDocument(queryPlan)
                 .Build();
 
         RunDataQuery(sql, &params, txControl);
@@ -720,7 +726,8 @@ public:
         ui64 leaseGeneration,
         Ydb::StatusIds::StatusCode operationStatus,
         Ydb::Query::ExecStatus execStatus,
-        NYql::TIssues issues
+        NYql::TIssues issues,
+        TString queryPlan = "{}"
     )
         : Database(database)
         , ExecutionId(executionId)
@@ -728,6 +735,7 @@ public:
         , OperationStatus(operationStatus)
         , ExecStatus(execStatus)
         , Issues(std::move(issues))
+        , QueryPlan(std::move(queryPlan))
     {
     }
 
@@ -777,7 +785,7 @@ public:
                 return;
             }
 
-            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, Issues);
+            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, Issues, TTxControl::ContinueAndCommitTx(), QueryPlan);
             FinishWasRun = true;
         } else {
             Finish();
@@ -785,7 +793,8 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        KQP_PROXY_LOG_D("Finish script execution operation. ExecutionId: " << ExecutionId << ". Lease generation: " << LeaseGeneration << ": " << Ydb::StatusIds::StatusCode_Name(status) << ". Issues: " << issues.ToOneLineString());
+        KQP_PROXY_LOG_D("Finish script execution operation. ExecutionId: " << ExecutionId << ". Lease generation: " <<
+                        LeaseGeneration << ": " << Ydb::StatusIds::StatusCode_Name(status) << ". Issues: " << issues.ToOneLineString() << ". Plan: " << QueryPlan);
         Send(Owner, new TEvScriptExecutionFinished(status, std::move(issues)));
     }
 
@@ -796,6 +805,7 @@ private:
     const Ydb::StatusIds::StatusCode OperationStatus;
     const Ydb::Query::ExecStatus ExecStatus;
     const NYql::TIssues Issues;
+    const TString QueryPlan;
     bool FinishWasRun = false;
 };
 
@@ -1053,8 +1063,9 @@ public:
                 query_text,
                 syntax,
                 execution_mode,
-                issues,
-                result_set_metas
+                result_set_metas,
+                plan,
+                issues
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
@@ -1121,6 +1132,11 @@ public:
         const TMaybe<i32> executionMode = result.ColumnParser("execution_mode").GetOptionalInt32();
         if (executionMode) {
             metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
+        }
+
+        const TMaybe<TString> plan = result.ColumnParser("plan").GetOptionalJsonDocument();
+        if (plan) {
+            metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
         const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
@@ -1941,9 +1957,10 @@ NActors::IActor* CreateScriptExecutionFinisher(
     ui64 leaseGeneration,
     Ydb::StatusIds::StatusCode operationStatus,
     Ydb::Query::ExecStatus execStatus,
-    NYql::TIssues issues)
+    NYql::TIssues issues, 
+    TString queryPlan)
 {
-    return new TScriptExecutionFinisher(executionId, database, leaseGeneration, operationStatus, execStatus, std::move(issues));
+    return new TScriptExecutionFinisher(executionId, database, leaseGeneration, operationStatus, execStatus, std::move(issues), std::move(queryPlan));
 }
 
 NActors::IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev) {

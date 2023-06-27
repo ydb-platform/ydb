@@ -261,9 +261,13 @@ private:
             return;
         }
         auto& record = ev->Get()->Record.GetRef();
-
+        
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, Issues);
+        
+        if (record.GetResponse().HasQueryPlan()) {
+            QueryPlan = record.GetResponse().GetQueryPlan();
+        }
 
         Finish(record.GetYdbStatus());
     }
@@ -390,13 +394,15 @@ private:
         }
     }
 
+
     void CheckSaveInflight() {
         if (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight)) {
             // wait for save completions
             return;
         }
 
-        Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status), Issues));
+        Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
+                                                     Issues, std::move(QueryPlan)));
         if (RunState == ERunState::Cancelling) {
             Issues.AddIssue("Script execution is cancelled");
         }
@@ -454,6 +460,7 @@ private:
     ui32 SaveResultInflight = 0;
     ui32 SaveResultMetaInflight = 0;
     bool PendingResultMeta = false;
+    TString QueryPlan = "{}";
 };
 
 } // namespace

@@ -37,7 +37,7 @@ public:
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
         using namespace Ydb::Query;
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
-        request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+        request.set_exec_mode(settings.ExecMode_);
         request.mutable_script_content()->set_text(script);
 
         auto promise = NThreading::NewPromise<TScriptExecutionOperation>();

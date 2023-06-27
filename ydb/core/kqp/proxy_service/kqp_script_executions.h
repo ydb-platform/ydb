@@ -33,7 +33,8 @@ NActors::IActor* CreateScriptExecutionFinisher(
     ui64 leaseGeneration,
     Ydb::StatusIds::StatusCode operationStatus,
     Ydb::Query::ExecStatus execStatus,
-    NYql::TIssues issues
+    NYql::TIssues issues,
+    TString queryPlan = "{}"
 );
 
 // Updates lease deadline in database.

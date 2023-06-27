@@ -37,22 +37,14 @@ message DeleteSessionResponse {
     repeated Ydb.Issue.IssueMessage issues = 2;
 }
 
-message PingSessionRequest {
-    // Identifier of session to ping (required)
+message AttachSessionRequest {
+    // Identifier of session to attach (required)
     string session_id = 1 [(Ydb.length).le = 1024];
 }
 
-enum SessionStatus {
-    SESSION_STATUS_UNSPECIFIED = 0;
-    SESSION_STATUS_READY = 1;
-    SESSION_STATUS_BUSY = 2;
-}
-
-message PingSessionResponse {
+message SessionState {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
-
-    SessionStatus session_status = 3;
 }
 
 message SerializableModeSettings {

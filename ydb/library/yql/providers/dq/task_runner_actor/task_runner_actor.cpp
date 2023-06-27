@@ -97,7 +97,7 @@ private:
 
         bool fallback = false;
         bool retry = false;
-        for (TStringBuf line: StringSplitter(input).SplitByString("\n").SkipEmpty()) {
+        for (TStringBuf line: StringSplitter(input).SplitByString("\n")) {
             if (line.Contains("mlockall failed")) {
                 // skip
             } else {

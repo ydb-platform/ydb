@@ -148,12 +148,7 @@ public:
         }
 
         TString serializedKey = TSerializedCellVec::Serialize(key);
-
-        auto [it, inserted] = KeyRefCount.emplace(serializedKey, 1);
-        if (!inserted) {
-            // Add a reference for existing key
-            ++it->second;
-        }
+        ++KeyRefCount[serializedKey];
 
         if (Sample.size() < SampleCount) {
             Sample.emplace_back(std::make_pair(serializedKey, accessKind));
@@ -163,12 +158,11 @@ public:
         TString old = Sample[idx].first;
         auto oit = KeyRefCount.find(old);
         Y_VERIFY(oit != KeyRefCount.end());
+        --oit->second;
 
         // Delete the key if this was the last reference
-        if (oit->second == 1) {
+        if (oit->second == 0) {
             KeyRefCount.erase(oit);
-        } else {
-            --oit->second;
         }
 
         Sample[idx] = std::make_pair(serializedKey, accessKind);

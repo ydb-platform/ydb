@@ -585,6 +585,7 @@ private:
             , SerializeFunc_(serializeFunc)
             , ArgsColumns_(argsColumns)
             , AggDesc_(aggDesc)
+            , IsCStringTransType_(NPg::LookupType(this->AggDesc_.TransTypeId).TypeLen == -2)
         {
             if (!HasInitValue && IsTransStrict) {
                 Y_ENSURE(AggDesc_.ArgTypes.size() == 1);
@@ -636,6 +637,7 @@ private:
         const TSerializeFunc SerializeFunc_;
         const std::vector<ui32> ArgsColumns_;
         const NPg::TAggregateDesc& AggDesc_;
+        const bool IsCStringTransType_;
         std::vector<bool> IsFixedArg_;
         FmgrInfo TransFuncInfo_;
         FmgrInfo SerializeFuncInfo_;
@@ -668,7 +670,7 @@ private:
             if constexpr (HasInitValue) {
                 auto datum = IsTransTypeFixed ? ScalarDatumFromPod(this->PreparedInitValue_) : PointerDatumFromPod(this->PreparedInitValue_);
                 typedState->isnull = false;
-                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(datum, this->AggDesc_.TransTypeId == CSTRINGOID);
+                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(datum, this->IsCStringTransType_);
             }
         }
 
@@ -816,7 +818,7 @@ SkipCall:;
             }
 
             CopyState<IsTransTypeFixed>(transCallInfo->args[0], *typedState);
-            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->IsCStringTransType_);
         }
 
         NUdf::TUnboxedValue FinishOne(const void* state) final {
@@ -894,7 +896,7 @@ SkipCall:;
             if constexpr (HasInitValue) {
                 auto datum = IsTransTypeFixed ? ScalarDatumFromPod(this->PreparedInitValue_) : PointerDatumFromPod(this->PreparedInitValue_);
                 typedState->isnull = false;
-                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(datum, this->AggDesc_.TransTypeId == CSTRINGOID);
+                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(datum, this->IsCStringTransType_);
             }
 
             UpdateKey(state, batchNum, columns, row);
@@ -962,7 +964,7 @@ SkipCall:;
             if (!HasInitValue && IsTransStrict) {
                 if (transCallInfo->args[0].isnull) {
                     typedState->isnull = false;
-                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(transCallInfo->args[1].value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(transCallInfo->args[1].value, this->IsCStringTransType_);
                     return;
                 }
             }
@@ -971,7 +973,7 @@ SkipCall:;
             ret = this->TransFunc_(transCallInfo);
 
             CopyState<IsTransTypeFixed>({ret, transCallInfo->isnull}, *typedState);
-            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);            
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->IsCStringTransType_);            
         }
 
         std::unique_ptr<NKikimr::NMiniKQL::IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
@@ -979,7 +981,7 @@ SkipCall:;
                 return std::make_unique<TAggColumnBuilder<true, false, HasSerialize, TSerializeFunc, true, NYql::NUdf::TFixedSizeArrayBuilder<ui64, true>>>(
                     this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::uint64(), this->Ctx_);
             } else {
-                if (SerializedType_ == CSTRINGOID) {
+                if (NPg::LookupType(SerializedType_).TypeLen == -2) {
                     return std::make_unique<TAggColumnBuilder<false, true, HasSerialize, TSerializeFunc, true, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true, NYql::NUdf::EPgStringType::CString>>>(
                         this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::binary(), this->Ctx_);
                 } else {
@@ -1008,6 +1010,7 @@ SkipCall:;
             , AggDesc_(aggDesc)
             , SerializedType_(HasSerialize ? NPg::LookupProc(this->AggDesc_.SerializeFuncId).ResultType : this->AggDesc_.TransTypeId)
             , FinalType_(HasFinal ? NPg::LookupProc(this->AggDesc_.FinalFuncId).ResultType : this->AggDesc_.TransTypeId)
+            , IsCStringTransType_(NPg::LookupType(this->AggDesc_.TransTypeId).TypeLen == -2)
         {
             Values_.reserve(1);
         }
@@ -1065,12 +1068,12 @@ SkipCall:;
 
             if constexpr (!HasDeserialize) {
                 typedState->isnull = false;
-                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->IsCStringTransType_);
             } else {
                 Deserialize(d.value, *typedState);
             }
 
-            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->IsCStringTransType_);
         }
 
         void UpdateState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
@@ -1100,7 +1103,7 @@ SkipCall:;
                 if constexpr (!HasDeserialize) {
                     if (IsCombineStrict && typedState->isnull) {
                         typedState->isnull = false;
-                        typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                        typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->IsCStringTransType_);
                         return;
                     }
 
@@ -1126,13 +1129,13 @@ SkipCall:;
             if constexpr (!HasDeserialize) {                
                 if (!combineCallInfo->isnull && ret == d.value) {
                     typedState->isnull = false;
-                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->AggDesc_.TransTypeId == CSTRINGOID);
+                    typedState->value = CloneDatumToAggContext<IsTransTypeFixed>(d.value, this->IsCStringTransType_);
                     return;
                 }
             }
 
             CopyState<IsTransTypeFixed>({ret, combineCallInfo->isnull}, *typedState);
-            SaveToAggContext<IsTransTypeFixed>(*typedState, this->AggDesc_.TransTypeId == CSTRINGOID);
+            SaveToAggContext<IsTransTypeFixed>(*typedState, this->IsCStringTransType_);
         }
 
         std::unique_ptr<NKikimr::NMiniKQL::IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
@@ -1140,7 +1143,7 @@ SkipCall:;
                 return std::make_unique<TAggColumnBuilder<true, false, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TFixedSizeArrayBuilder<ui64, true>>>(
                     this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::uint64(), this->Ctx_);
             } else {
-                if (FinalType_ == CSTRINGOID) {
+                if (NPg::LookupType(FinalType_).TypeLen == -2) {
                     return std::make_unique<TAggColumnBuilder<false, true, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true>>>(
                         this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::binary(), this->Ctx_);
                 } else {
@@ -1157,6 +1160,7 @@ SkipCall:;
         const NPg::TAggregateDesc& AggDesc_;
         const ui32 SerializedType_;
         const ui32 FinalType_;
+        const bool IsCStringTransType_;
         ui64 BatchNum_ = Max<ui64>();
         std::vector<arrow::Datum> Values_;
         TInputArgsAccessor<TDeserializeArgsPolicy> DeserializeAccessor_;

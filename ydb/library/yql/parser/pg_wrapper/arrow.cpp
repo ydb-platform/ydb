@@ -212,7 +212,7 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
             return {};
         }
 
-        return [primaryType, originalType, isCString = targetType->GetTypeId() == CSTRINGOID](const std::shared_ptr<arrow::Array>& value) {
+        return [primaryType, originalType, isCString = NPg::LookupType(targetType->GetTypeId()).TypeLen == -2](const std::shared_ptr<arrow::Array>& value) {
             auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow::compute::Cast(*value, primaryType));
             if (isCString) {
                 return PgConvertString<true>(res);

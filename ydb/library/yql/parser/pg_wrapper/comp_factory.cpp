@@ -619,15 +619,15 @@ public:
         if (!NPg::HasCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId) || (IsSourceArray != IsTargetArray)) {
             ArrayCast = IsSourceArray && IsTargetArray;
             if (IsSourceArray && !IsTargetArray) {
-                Y_ENSURE(TargetTypeDesc.Category == 'S');
+                Y_ENSURE(TargetTypeDesc.Category == 'S' || TargetId == UNKNOWNOID);
                 funcId = NPg::LookupProc("array_out", { 0 }).ProcId;
             } else if (IsTargetArray && !IsSourceArray) {
-                Y_ENSURE(SourceElemDesc.Category == 'S');
+                Y_ENSURE(SourceElemDesc.Category == 'S' || SourceId == UNKNOWNOID);
                 funcId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
-            } else if (SourceElemDesc.Category == 'S') {
+            } else if (SourceElemDesc.Category == 'S' || SourceId == UNKNOWNOID) {
                 funcId = TargetElemDesc.InFuncId;
             } else {
-                Y_ENSURE(TargetTypeDesc.Category == 'S');
+                Y_ENSURE(TargetTypeDesc.Category == 'S' || TargetId == UNKNOWNOID);
                 funcId = SourceElemDesc.OutFuncId;
             }
         } else {
@@ -658,7 +658,7 @@ public:
         Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
         Func1Lookup = NPg::LookupProc(funcId);
         Y_ENSURE(Func1Lookup.ArgTypes.size() >= 1 && Func1Lookup.ArgTypes.size() <= 3);
-        if (Func1Lookup.ArgTypes[0] == CSTRINGOID && SourceElemDesc.Category == 'S') {
+        if (NPg::LookupType(Func1Lookup.ArgTypes[0]).TypeLen == -2 && SourceElemDesc.Category == 'S') {
             ConvertArgToCString = true;
         }
 
@@ -673,16 +673,16 @@ public:
         }
 
         if (!funcId2) {
-            if (Func1Lookup.ResultType == CSTRINGOID && TargetElemDesc.Category == 'S') {
+            if (NPg::LookupType(Func1Lookup.ResultType).TypeLen == -2 && TargetElemDesc.Category == 'S') {
                 ConvertResFromCString = true;
             }
         } else {
             const auto& Func2ArgType = NPg::LookupType(Func2Lookup.ArgTypes[0]);
-            if (Func1Lookup.ResultType == CSTRINGOID && Func2ArgType.Category == 'S') {
+            if (NPg::LookupType(Func1Lookup.ResultType).TypeLen == -2 && Func2ArgType.Category == 'S') {
                 ConvertResFromCString = true;
             }
 
-            if (Func2Lookup.ResultType == CSTRINGOID && TargetElemDesc.Category == 'S') {
+            if (NPg::LookupType(Func2Lookup.ResultType).TypeLen == -2 && TargetElemDesc.Category == 'S') {
                 ConvertResFromCString2 = true;
             }
         }
@@ -1389,6 +1389,7 @@ private:
 struct TFromPgExec {
     TFromPgExec(ui32 sourceId)
         : SourceId(sourceId)
+        , IsCString(NPg::LookupType(sourceId).TypeLen == -2)
     {}
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
@@ -1460,7 +1461,7 @@ struct TFromPgExec {
 
                 ui32 len;
                 const char* ptr = item.AsStringRef().Data() + sizeof(void*);
-                if (SourceId == CSTRINGOID) {
+                if (IsCString) {
                     len = strlen(ptr);
                 } else {
                     len = GetCleanVarSize((const text*)ptr);
@@ -1481,6 +1482,7 @@ struct TFromPgExec {
     }
 
     const ui32 SourceId;
+    const bool IsCString;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType, TType* resultType, ui32 sourceId) {
@@ -1518,6 +1520,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
 struct TToPgExec {
     TToPgExec(ui32 targetId)
         : TargetId(targetId)
+        , IsCString(NPg::LookupType(targetId).TypeLen == -2)
     {}
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
@@ -1589,7 +1592,7 @@ struct TToPgExec {
                 }
 
                 ui32 len;
-                if (TargetId == CSTRINGOID) {
+                if (IsCString) {
                     len = sizeof(void*) + 1 + item.AsStringRef().Size();
                     if (Y_UNLIKELY(len < item.AsStringRef().Size())) {
                         ythrow yexception() << "Too long string";
@@ -1632,6 +1635,7 @@ struct TToPgExec {
     }
 
     const ui32 TargetId;
+    const bool IsCString;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, ui32 targetId) {
@@ -1687,7 +1691,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
         const auto& retTypeDesc = NPg::LookupType(procDesc.ResultType);
         state->Name = procDesc.Name;
         state->IsFixedResult = retTypeDesc.PassByValue;
-        state->IsCStringResult = procDesc.ResultType == CSTRINGOID;
+        state->IsCStringResult = NPg::LookupType(procDesc.ResultType).TypeLen == -2;
         for (const auto& argTypeId : procDesc.ArgTypes) {
             const auto& argTypeDesc = NPg::LookupType(argTypeId);
             state->IsFixedArg.push_back(argTypeDesc.PassByValue);
@@ -1771,9 +1775,6 @@ TComputationNodeFactory GetPgFactory() {
                 ui32 sourceId = 0;
                 if (!inputType->IsNull()) {
                     sourceId = AS_TYPE(TPgType, inputType)->GetTypeId();
-                    if (sourceId == UNKNOWNOID) {
-                        sourceId = TEXTOID;
-                    }
                 }
 
                 auto returnType = callable.GetType()->GetReturnType();

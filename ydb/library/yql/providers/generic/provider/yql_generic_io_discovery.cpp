@@ -47,24 +47,29 @@ namespace NYql {
                     !reads.empty()) {
                     for (auto& node : reads) {
                         const TGenRead read(node);
-                        const auto cluster = read.DataSource().Cluster().StringValue();
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "Found cluster: " << cluster;
-                        auto databaseID = State_->Configuration->ClusterConfigs[cluster].GetDatabaseID();
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "Found cloudID: " << databaseID;
-                        const auto idKey = std::make_pair(databaseID, NYql::DatabaseType::Generic);
-                        const auto iter = State_->DatabaseIds.find(idKey);
-                        if (iter != State_->DatabaseIds.end()) {
-                            YQL_CLOG(DEBUG, ProviderGeneric) << "Resolve CloudID: " << databaseID;
-                            ids[idKey] = iter->second;
+                        const auto clusterName = read.DataSource().Cluster().StringValue();
+                        YQL_CLOG(DEBUG, ProviderGeneric) << "found cluster name: " << clusterName;
+
+                        auto databaseId = State_->Configuration->ClusterConfigs[clusterName].GetDatabaseId();
+                        if (databaseId) {
+                            YQL_CLOG(DEBUG, ProviderGeneric) << "found database id: " << databaseId;
+                            const auto idKey = std::make_pair(databaseId, NYql::DatabaseType::Generic);
+                            const auto iter = State_->DatabaseIds.find(idKey);
+                            if (iter != State_->DatabaseIds.end()) {
+                                YQL_CLOG(DEBUG, ProviderGeneric) << "resolve database id: " << databaseId;
+                                ids[idKey] = iter->second;
+                            }
                         }
                     }
                 }
-                YQL_CLOG(DEBUG, ProviderGeneric) << "Ids to resolve: " << ids.size();
+                YQL_CLOG(DEBUG, ProviderGeneric) << "total database ids to resolve: " << ids.size();
 
                 if (ids.empty()) {
                     return TStatus::Ok;
                 }
 
+                // FIXME: overengineered code - instead of using weak_ptr, directly copy shared_ptr in callback in this way:
+                // Apply([response = DbResolverResponse_](...))
                 const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
                 AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future) {
                     if (const auto res = response.lock())
@@ -88,7 +93,7 @@ namespace NYql {
                                         DbResolverResponse_->DatabaseId2Endpoint.end());
                 DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
                 YQL_CLOG(DEBUG, ProviderGeneric) << "ResolvedIds: " << FullResolvedIds_.size();
-                const auto& id2Clusters = State_->Configuration->DbId2Clusters;
+                const auto& id2Clusters = State_->Configuration->DatabaseIdsToClusterNames;
                 for (const auto& [dbIdWithType, info] : FullResolvedIds_) {
                     const auto& dbId = dbIdWithType.first;
                     const auto iter = id2Clusters.find(dbId);

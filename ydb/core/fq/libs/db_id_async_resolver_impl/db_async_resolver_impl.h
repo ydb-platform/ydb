@@ -16,8 +16,7 @@ public:
         const TString& traceId = ""
     );
 
-    NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(
-        const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& ids) const override;
+    NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(const DatabaseIds& ids) const override;
 private:
     NActors::TActorSystem* ActorSystem;
     const NActors::TActorId Recipient;

@@ -313,6 +313,7 @@ private:
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
                 } else {
+                    YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
                     url = TUrlBuilder(ev->Get()->MdbGateway + "/managed-clickhouse/v1/clusters/")
                             .AddPathComponent(databaseId)
                             .AddPathComponent("hosts")

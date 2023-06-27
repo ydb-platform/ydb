@@ -13,6 +13,7 @@ enum class DatabaseType {
     Generic
 };
 
+
 struct TDatabaseAuth {
     TString StructuredToken;
     bool AddBearerToToken = false;
@@ -49,8 +50,9 @@ struct TDbResolverResponse {
 
 class IDatabaseAsyncResolver {
 public:
-    virtual NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(
-        const THashMap<std::pair<TString, DatabaseType>, NYql::TDatabaseAuth>& ids) const = 0;
+    using DatabaseIds = THashMap<std::pair<TString, DatabaseType>, NYql::TDatabaseAuth>;
+
+    virtual NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(const DatabaseIds& ids) const = 0;
 
     virtual ~IDatabaseAsyncResolver() = default;
 };

@@ -548,19 +548,31 @@ message TGenericClusterConfig {
     oneof Location {
         // Endpoint must be used for on-premise deployments.
         NYql.Connector.API.Endpoint Endpoint = 3;
-        // DatabaseID must be used when the data source is deployed in cloud.
+        // DatabaseId must be used when the data source is deployed in cloud.
         // Data source FQDN and port will be resolved by MDB service.
-        string DatabaseID = 4;
+        string DatabaseId = 4;
     }
 
+    // Credentials used to access data source instance
     required NYql.Connector.API.Credentials Credentials = 5;
+
+    // Credentials used to access MDB API.
+    // When working with data source instances deployed in a cloud, 
+    // you should either set (ServiceAccountId, ServiceAccountIdSignature) pair,
+    // or set IAM Token via env variable / credential table.
+    optional string ServiceAccountId = 6;
+    optional string ServiceAccountIdSignature = 7;
 }
 
 message TGenericGatewayConfig {
     // TODO: replace with map<DataSourceKind, Endpoint>
     required string Endpoint = 1;
+
     reserved 2;
     repeated TGenericClusterConfig ClusterMapping = 3;
+
+    // MDB API endpoint (do not fill in case of on-prem deployment)
+    optional string MdbGateway = 4;
 }
 
 /////////////////////////////// Root ///////////////////////////////

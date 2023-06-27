@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -13,25 +14,17 @@ namespace NYql {
         using TConstPtr = std::shared_ptr<const TGenericSettings>;
     };
 
-    struct TGenericURL {
-        TString Host;
-        ui16 Port;
-        EHostScheme Scheme;
-
-        TString Endpoint() const {
-            return Host + ':' + ToString(Port);
-        };
-    };
-
     struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingDispatcher {
         using TPtr = TIntrusivePtr<TGenericConfiguration>;
 
-        TGenericConfiguration();
+        TGenericConfiguration(){};
         TGenericConfiguration(const TGenericConfiguration&) = delete;
 
         template <typename TProtoConfig>
-        void Init(const TProtoConfig& config, const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-                  THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds)
+        void Init(const TProtoConfig& config,
+                  const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
+                  NYql::IDatabaseAsyncResolver::DatabaseIds& databaseIds,
+                  const TCredentials::TPtr& credentials)
         {
             TVector<TString> clusterNames(Reserve(config.ClusterMappingSize()));
 
@@ -39,42 +32,74 @@ namespace NYql {
                 clusterNames.push_back(cluster.GetName());
                 ClusterConfigs[cluster.GetName()] = cluster;
             }
-
             this->SetValidClusters(clusterNames);
 
-            // TODO: support data sources other than ClickHouse here
-            for (auto& cluster : config.GetClusterMapping()) {
-                if (dbResolver) {
-                    const auto& databaseID = cluster.GetDatabaseID();
-                    YQL_CLOG(DEBUG, ProviderGeneric)
-                        << "Settings: clusterName = " << cluster.GetName() << ", cluster cloud id = " << databaseID
-                        << ", cluster.GetEndpoint(): " << cluster.GetEndpoint()
-                        << ", HasEndpoint: " << (cluster.HasEndpoint() ? "TRUE" : "FALSE");
-
-                    // TODO: recover logic with structured tokens
-                    databaseIds[std::make_pair(databaseID, NYql::DatabaseType::Generic)] =
-                        NYql::TDatabaseAuth{"", /*AddBearer=*/false};
-                    if (databaseID) {
-                        DbId2Clusters[databaseID].emplace_back(cluster.GetName());
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "Add cluster cloud id: " << databaseID << " to DbId2Clusters";
-                    }
-                }
-
-                // NOTE: Tokens map is left because of legacy.
-                // There are no reasons for provider to store these tokens other than
-                // to keep compatibility with YQL engine.
-                const auto& basic = cluster.GetCredentials().basic();
-                Tokens[cluster.GetName()] = TStringBuilder() << "basic#" << basic.username() << "#" << basic.password();
+            for (const auto& cluster : config.GetClusterMapping()) {
+                InitCluster(cluster, dbResolver, databaseIds, credentials);
             }
+
             this->FreezeDefaults();
         }
 
-        bool HasCluster(TStringBuf cluster) const;
+    private:
+        void InitCluster(const TGenericClusterConfig& cluster,
+                         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
+                         NYql::IDatabaseAsyncResolver::DatabaseIds& databaseIds,
+                         const TCredentials::TPtr& credentials) {
+            const auto& clusterName = cluster.GetName();
+            const auto& databaseId = cluster.GetDatabaseId();
+            const auto& endpoint = cluster.GetEndpoint();
 
-        TGenericSettings::TConstPtr Snapshot() const;
+            YQL_CLOG(DEBUG, ProviderGeneric)
+                << "initialize cluster"
+                << ": name = " << clusterName
+                << ", database id = " << databaseId
+                << ", endpoint = " << endpoint;
+
+            if (dbResolver && databaseId) {
+                const auto token = MakeStructuredToken(cluster, credentials);
+
+                databaseIds[std::make_pair(databaseId, NYql::DatabaseType::Generic)] = NYql::TDatabaseAuth{token, /*AddBearer=*/true};
+
+                DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
+                YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
+            }
+
+            // NOTE: Tokens map is filled just because it's required by YQL legacy code.
+            // The only reason for provider to store these tokens is
+            // to keep compatibility with YQL engine.
+            // Real credentials are stored in TGenericClusterConfig.
+            Tokens[cluster.GetName()] = " ";
+        }
+
+        // Structured tokens are used to access MDB API. They can be constructed from two 
+        TString MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) {
+            TStructuredTokenBuilder b;
+
+            const auto iamToken = credentials->FindCredentialContent("default_" + cluster.name(), "default_generic", "");
+            if (iamToken) {
+                return b.SetIAMToken(iamToken).ToJson();
+            }
+
+            if (cluster.HasServiceAccountId() && cluster.HasServiceAccountIdSignature()) {
+                return b.SetServiceAccountIdAuth(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature()).ToJson();
+            }
+
+            ythrow yexception() << "you should either provide IAM Token via credential system, "
+                                   "or set (ServiceAccountId && ServiceAccountIdSignature) in cluster config";
+        }
+
+    public:
+        TGenericSettings::TConstPtr Snapshot() const {
+            return std::make_shared<const TGenericSettings>(*this);
+        }
+
+        bool HasCluster(TStringBuf cluster) const {
+            return ValidClusters.contains(cluster);
+        }
+
         THashMap<TString, TString> Tokens;
-        THashMap<TString, TGenericClusterConfig> ClusterConfigs;
-        THashMap<TString, TVector<TString>> DbId2Clusters; // DatabaseId -> ClusterNames
+        THashMap<TString, TGenericClusterConfig> ClusterConfigs;       // cluster name -> cluster config
+        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames; // database id -> cluster name
     };
-
 }

@@ -31,6 +31,7 @@ target_link_libraries(providers-generic-provider PUBLIC
   providers-common-mkql
   providers-common-proto
   providers-common-provider
+  providers-common-structured_token
   providers-common-transform
   providers-dq-common
   providers-dq-expr_nodes
@@ -51,5 +52,4 @@ target_sources(providers-generic-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_mkql_compiler.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_physical_opt.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_settings.cpp
 )

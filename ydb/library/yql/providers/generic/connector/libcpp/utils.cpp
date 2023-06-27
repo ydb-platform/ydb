@@ -3,6 +3,7 @@
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 #include <util/string/builder.h>
+#include <util/system/type_name.h>
 #include <ydb/core/formats/arrow/serializer/batch_only.h>
 #include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -47,7 +48,7 @@ namespace NYql::Connector {
             }
             default:
                 ythrow yexception() << "unexpected type: " << Ydb::Type_PrimitiveTypeId_Name(t) << " ("
-                                    << typeid(t).name() << ")";
+                                    << TypeName(t) << ")";
         }
         return arrow::Status::OK();
     }

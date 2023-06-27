@@ -60,13 +60,13 @@ namespace NYql::NDq {
         TGenericReadActor(ui64 inputIndex, Connector::IClient::TPtr genericClient, const NYql::Connector::API::Select& select,
                           const NYql::Connector::API::DataSourceInstance& dataSourceInstance,
                           const NActors::TActorId& computeActorId, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
-            : InputIndex(inputIndex)
-            , ComputeActorId(computeActorId)
-            , ActorSystem(TActivationContext::ActorSystem())
-            , ConnectorClient(genericClient)
-            , HolderFactory(holderFactory)
-            , Select(select)
-            , DataSourceInstance(dataSourceInstance)
+            : InputIndex_(inputIndex)
+            , ComputeActorId_(computeActorId)
+            , ActorSystem_(TActivationContext::ActorSystem())
+            , ConnectorClient_(genericClient)
+            , HolderFactory_(holderFactory)
+            , Select_(select)
+            , DataSourceInstance_(dataSourceInstance)
         {
         }
 
@@ -74,13 +74,13 @@ namespace NYql::NDq {
             Become(&TGenericReadActor::StateFunc);
 
             Connector::API::ListSplitsRequest listSplitsRequest;
-            listSplitsRequest.mutable_selects()->Add()->CopyFrom(Select);
-            listSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance);
+            listSplitsRequest.mutable_selects()->Add()->CopyFrom(Select_);
+            listSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
 
-            auto listSplitsResult = ConnectorClient->ListSplits(listSplitsRequest);
+            auto listSplitsResult = ConnectorClient_->ListSplits(listSplitsRequest);
             if (!Connector::ErrorIsSuccess(listSplitsResult->Error)) {
                 YQL_CLOG(ERROR, ProviderGeneric) << "ListSplits failure" << listSplitsResult->Error.DebugString();
-                ActorSystem->Send(new IEventHandle(
+                ActorSystem_->Send(new IEventHandle(
                     SelfId(), TActorId(), new TEvPrivate::TEvReadError(Connector::ErrorToIssues(listSplitsResult->Error))));
                 return;
             }
@@ -93,12 +93,12 @@ namespace NYql::NDq {
             std::for_each(
                 listSplitsResult->Splits.cbegin(), listSplitsResult->Splits.cend(),
                 [&](const Connector::API::Split& split) { readSplitsRequest.mutable_splits()->Add()->CopyFrom(split); });
-            readSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance);
+            readSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
 
-            auto readSplitsResult = ConnectorClient->ReadSplits(readSplitsRequest);
+            auto readSplitsResult = ConnectorClient_->ReadSplits(readSplitsRequest);
             if (!Connector::ErrorIsSuccess(listSplitsResult->Error)) {
                 YQL_CLOG(ERROR, ProviderGeneric) << "ReadSplits failure" << readSplitsResult->Error.DebugString();
-                ActorSystem->Send(new IEventHandle(
+                ActorSystem_->Send(new IEventHandle(
                     SelfId(), TActorId(), new TEvPrivate::TEvReadError(Connector::ErrorToIssues(listSplitsResult->Error))));
                 return;
             }
@@ -106,7 +106,7 @@ namespace NYql::NDq {
             YQL_CLOG(INFO, ProviderGeneric) << "ReadSplits succeess, total batches: "
                                             << readSplitsResult->RecordBatches.size();
 
-            ActorSystem->Send(new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvReadResult(readSplitsResult)));
+            ActorSystem_->Send(new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvReadResult(readSplitsResult)));
         }
 
         static constexpr char ActorName[] = "Generic_READ_ACTOR";
@@ -119,7 +119,7 @@ namespace NYql::NDq {
         void CommitState(const NDqProto::TCheckpoint&) final {
         }
         ui64 GetInputIndex() const final {
-            return InputIndex;
+            return InputIndex_;
         }
 
         STRICT_STFUNC(StateFunc,
@@ -129,12 +129,12 @@ namespace NYql::NDq {
         i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished,
                               i64 /*freeSpace*/) final {
             YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
-            if (Result) {
+            if (Result_) {
                 NUdf::TUnboxedValue value;
 
                 ui64 total = 0;
 
-                for (const auto& batch : Result->RecordBatches) {
+                for (const auto& batch : Result_->RecordBatches) {
                     total += NUdf::GetSizeOfArrowBatchInBytes(*batch);
 
                     YQL_CLOG(TRACE, ProviderGeneric) << "Converting arrow::RecordBatch into NUdf::UnboxedValue:\n"
@@ -151,14 +151,14 @@ namespace NYql::NDq {
                     }
 
                     NUdf::TUnboxedValue* structItems = nullptr;
-                    auto structObj = ArrowRowContainerCache.NewArray(HolderFactory, 1 + batch->num_columns(), structItems);
+                    auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, 1 + batch->num_columns(), structItems);
                     for (int i = 0; i < batch->num_columns(); ++i) {
                         const auto& columnName = batch->schema()->field(i)->name();
                         const auto ix = fieldNameOrder[columnName];
-                        structItems[ix] = HolderFactory.CreateArrowBlock(arrow::Datum(batch->column(i)));
+                        structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
                     }
 
-                    structItems[fieldNameOrder[std::string(BlockLengthColumnName)]] = HolderFactory.CreateArrowBlock(
+                    structItems[fieldNameOrder[std::string(BlockLengthColumnName)]] = HolderFactory_.CreateArrowBlock(
                         arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
                     value = structObj;
 
@@ -167,11 +167,11 @@ namespace NYql::NDq {
 
                 // freeSpace -= size;
                 finished = true;
-                Result.reset();
+                Result_.reset();
 
                 // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
                 // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp?rev=r11543410#L2497
-                ArrowRowContainerCache.Clear();
+                ArrowRowContainerCache_.Clear();
 
                 return total;
             }
@@ -180,13 +180,13 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvPrivate::TEvReadResult::TPtr& evReadResult) {
-            Result = evReadResult->Get()->Result;
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            Result_ = evReadResult->Get()->Result;
+            Send(ComputeActorId_, new TEvNewAsyncInputDataArrived(InputIndex_));
         }
 
         void Handle(TEvPrivate::TEvReadError::TPtr& result) {
-            Send(ComputeActorId,
-                 new TEvAsyncInputError(InputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId_,
+                 new TEvAsyncInputError(InputIndex_, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         }
 
         // IActor & IDqComputeActorAsyncInput
@@ -194,18 +194,18 @@ namespace NYql::NDq {
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
-        const ui64 InputIndex;
-        const NActors::TActorId ComputeActorId;
+        const ui64 InputIndex_;
+        const NActors::TActorId ComputeActorId_;
 
-        TActorSystem* const ActorSystem;
+        TActorSystem* const ActorSystem_;
 
         // Changed:
-        Connector::IClient::TPtr ConnectorClient;
-        Connector::ReadSplitsResult::TPtr Result;
-        NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache;
-        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
-        const NYql::Connector::API::Select Select;
-        const NYql::Connector::API::DataSourceInstance DataSourceInstance;
+        Connector::IClient::TPtr ConnectorClient_;
+        Connector::ReadSplitsResult::TPtr Result_;
+        NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
+        const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
+        const NYql::Connector::API::Select Select_;
+        const NYql::Connector::API::DataSourceInstance DataSourceInstance_;
     };
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>

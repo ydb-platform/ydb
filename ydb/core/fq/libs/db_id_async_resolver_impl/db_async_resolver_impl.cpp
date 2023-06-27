@@ -18,11 +18,17 @@ TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
     , MdbGateway(mdbGateway)
     , MdbTransformHost(mdbTransformHost)
     , TraceId(traceId)
-{}
-
-TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
-    const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& ids) const
 {
+}
+
+TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const DatabaseIds& ids) const
+{
+    // Cloud database ids validataion
+    for (const auto& kv: ids) {
+        // empty cluster name is not good
+        YQL_ENSURE(kv.first.first, "empty cluster name");
+    }
+
     auto promise = NewPromise<NYql::TDbResolverResponse>();
     TDuration timeout = TDuration::Seconds(40);
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
@@ -40,6 +46,7 @@ TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
     ActorSystem->Send(new NActors::IEventHandle(Recipient, callbackId,
         new TEvents::TEvEndpointRequest(ids, YdbMvpEndpoint, MdbGateway,
             TraceId, MdbTransformHost)));
+
     return promise.GetFuture();
 }
 

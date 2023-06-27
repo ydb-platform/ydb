@@ -12,7 +12,7 @@ void SetDatabaseSourceInstance(NYql::Connector::API::DataSourceInstance* dsi) {
     dsi->mutable_credentials()->mutable_basic()->set_password("qwerty12345");
 }
 
-std::shared_ptr<NYql::Connector::DescribeTableResult> describeTable(NYql::Connector::IClient::TPtr client) {
+std::shared_ptr<NYql::Connector::DescribeTableResult> DescribeTable(NYql::Connector::IClient::TPtr client) {
     NYql::Connector::API::DescribeTableRequest request;
     request.set_table(TableName);
     SetDatabaseSourceInstance(request.mutable_data_source_instance());
@@ -31,7 +31,7 @@ std::shared_ptr<NYql::Connector::DescribeTableResult> describeTable(NYql::Connec
 }
 
 std::shared_ptr<NYql::Connector::ListSplitsResult>
-listSplits(NYql::Connector::IClient::TPtr client, const google::protobuf::RepeatedPtrField<Ydb::Column>& columns) {
+ListSplits(NYql::Connector::IClient::TPtr client, const google::protobuf::RepeatedPtrField<Ydb::Column>& columns) {
     NYql::Connector::API::ListSplitsRequest request;
     SetDatabaseSourceInstance(request.mutable_data_source_instance());
 
@@ -61,7 +61,7 @@ listSplits(NYql::Connector::IClient::TPtr client, const google::protobuf::Repeat
     return result;
 }
 
-std::shared_ptr<NYql::Connector::ReadSplitsResult> readSplits(NYql::Connector::IClient::TPtr client,
+std::shared_ptr<NYql::Connector::ReadSplitsResult> ReadSplits(NYql::Connector::IClient::TPtr client,
                                                               const std::vector<NYql::Connector::API::Split>& splits) {
     NYql::Connector::API::ReadSplitsRequest request;
     SetDatabaseSourceInstance(request.mutable_data_source_instance());
@@ -91,9 +91,9 @@ int main() {
     auto client = NYql::Connector::MakeClientGRPC("localhost:50051");
 
     try {
-        auto columns = describeTable(client)->Schema.columns();
-        auto splits = listSplits(client, columns)->Splits;
-        readSplits(client, splits);
+        auto columns = DescribeTable(client)->Schema.columns();
+        auto splits = ListSplits(client, columns)->Splits;
+        ReadSplits(client, splits);
     } catch (const std::runtime_error& e) {
         YQL_LOG(ERROR) << e.what();
     }

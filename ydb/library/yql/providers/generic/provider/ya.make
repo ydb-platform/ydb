@@ -15,7 +15,6 @@ SRCS(
     yql_generic_provider.cpp
     yql_generic_provider.h
     yql_generic_provider_impl.h
-    yql_generic_settings.cpp
     yql_generic_settings.h
 )
 
@@ -38,6 +37,7 @@ PEERDIR(
     ydb/library/yql/providers/common/mkql
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/provider
+    ydb/library/yql/providers/common/structured_token
     ydb/library/yql/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes

@@ -27,7 +27,7 @@ namespace NYql {
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
             if (gatewaysConfig) {
-                state->Configuration->Init(gatewaysConfig->GetGeneric(), state->DbResolver, state->DatabaseIds);
+                state->Configuration->Init(gatewaysConfig->GetGeneric(), state->DbResolver, state->DatabaseIds, typeCtx->Credentials);
             }
 
             TDataProviderInfo info;

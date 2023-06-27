@@ -49,16 +49,7 @@ namespace NYql {
             ythrow yexception() << "unknown (" << cluster << ", " << table << ") pair";
         };
 
-        THashMap<std::pair<TString, TString>, TTableMeta> Tables;
-        std::unordered_map<std::string_view, std::string_view> Timezones;
-
-        TTypeAnnotationContext* Types = nullptr;
-        TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
-        const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
-        std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
-
-        TString DumpToString() const {
+        TString ToString() const {
             TStringBuilder sb;
             if (Tables) {
                 for (const auto& kv : Tables) {
@@ -68,6 +59,17 @@ namespace NYql {
             }
             return sb;
         }
+
+        THashMap<std::pair<TString, TString>, TTableMeta> Tables;
+        std::unordered_map<std::string_view, std::string_view> Timezones;
+
+        TTypeAnnotationContext* Types = nullptr;
+        TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
+        const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
+
+        // key - database id, value - credentials to access MDB API
+        NYql::IDatabaseAsyncResolver::DatabaseIds DatabaseIds;
+        std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     };
 
     TDataProviderInitializer

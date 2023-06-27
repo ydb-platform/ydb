@@ -1350,7 +1350,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
     } else {
         haveData = ProcessWrites(request.Get(), now, ctx);
     }
-    bool haveDrop = CleanUp(request.Get(), haveData, ctx);
+    bool haveDrop = CleanUp(request.Get(), ctx);
 
     ProcessReserveRequests(ctx);
     if (!haveData && !haveDrop && !haveCheckDisk) { //no data writed/deleted

@@ -223,6 +223,9 @@
   - OpenCL/cl_gl.h
   - OpenCL/opencl.h
   - OpenGLES/ES2/gl.h
+  - OpenGLES/ES2/glext.h
+  - OpenGLES/ES3/gl.h
+  - OpenGLES/ES3/glext.h
   - Speech/Speech.h
   - QuartzCore/QuartzCore.h
   - QuartzCore/CAEAGLLayer.h

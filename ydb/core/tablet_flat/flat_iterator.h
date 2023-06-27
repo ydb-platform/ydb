@@ -925,15 +925,8 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 template<class TIteratorOps>
 inline TDbTupleRef TTableItBase<TIteratorOps>::GetKey() const noexcept
 {
-    TIteratorId ai = Iterators.back().IteratorId;
-    switch (ai.Type) {
-        case EType::Mem:
-            return MemIters[ai.Index]->GetKey();
-        case EType::Run:
-            return RunIters[ai.Index]->GetKey();
-        default:
-            Y_FAIL("Unexpected iterator type");
-    }
+    auto key = Iterators.back().Key;
+    return { Scheme->Keys->BasicTypes().data(), key.data(), static_cast<ui32>(key.size()) };
 }
 
 template<class TIteratorOps>

@@ -22,6 +22,7 @@ namespace NYdb {
             const std::vector<TString>& GeneratedMessages;
             TString TopicName;
             size_t ByteRate;
+            size_t MessageSize;
             ui32 ProducerThreadCount;
             ui32 WriterIdx;
             TString ProducerId;
@@ -68,11 +69,8 @@ namespace NYdb {
             std::shared_ptr<std::atomic<bool>> Closed;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
 
-            struct TInflightMessage {
-                size_t MessageSize;
-                TInstant MessageTime;
-            };
-            THashMap<ui64, TInflightMessage> InflightMessages;
+            // SeqNo - CreateTime
+            THashMap<ui64, TInstant> InflightMessages;
         };
     }
 }

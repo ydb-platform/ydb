@@ -117,6 +117,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
             .GeneratedMessages = generatedMessages,
             .TopicName = TopicName,
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
+            .MessageSize = MessageSize,
             .ProducerThreadCount = ProducerThreadCount,
             .WriterIdx = writerIdx,
             .ProducerId = TGUID::CreateTimebased().AsGuidString(),

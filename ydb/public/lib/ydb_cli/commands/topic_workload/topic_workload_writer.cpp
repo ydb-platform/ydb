@@ -30,12 +30,12 @@ const size_t GENERATED_MESSAGES_COUNT = 32;
 
 std::vector<TString> TTopicWorkloadWriterWorker::GenerateMessages(size_t messageSize) {
     std::vector<TString> generatedMessages;
-    TStringBuilder res;
     for (size_t i = 0; i < GENERATED_MESSAGES_COUNT; i++) {
-        res.clear();
-        while (res.Size() < messageSize)
-            res << RandomNumber<ui64>(UINT64_MAX);
-        generatedMessages.push_back(res);
+        TStringBuilder stringBuilder;
+        while (stringBuilder.Size() < messageSize)
+            stringBuilder << RandomNumber<ui64>(UINT64_MAX);
+        stringBuilder.resize(messageSize);
+        generatedMessages.push_back(std::move(stringBuilder));
     }
     return generatedMessages;
 }
@@ -111,25 +111,39 @@ void TTopicWorkloadWriterWorker::Process() {
 
             now = Now();
 
-            ui64 bytesMustBeWritten = Params.ByteRate == 0 ? UINT64_MAX : (now - StartTimestamp).SecondsFloat() * Params.ByteRate / Params.ProducerThreadCount;
+            bool writingAllowed = ContinuationToken.Defined();
+            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "ContinuationToken.Defined() " << ContinuationToken.Defined());
 
-            WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "BytesWritten " << BytesWritten << " bytesMustBeWritten " << bytesMustBeWritten << " ContinuationToken.Defined() " << ContinuationToken.Defined());
+            if (Params.ByteRate != 0)
+            {
+                ui64 bytesMustBeWritten = (now - StartTimestamp).SecondsFloat() * Params.ByteRate / Params.ProducerThreadCount;
+                writingAllowed &= BytesWritten < bytesMustBeWritten;
+                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "BytesWritten " << BytesWritten << " bytesMustBeWritten " << bytesMustBeWritten << " writingAllowed " << writingAllowed);
+            }
+            else 
+            {
+                writingAllowed &= InflightMessages.size() <= 1_MB / Params.MessageSize;
+                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Inflight size " << InflightMessages.size() << " writingAllowed " << writingAllowed);
+            }
 
-            if (BytesWritten < bytesMustBeWritten && ContinuationToken.Defined()) {
+            if (writingAllowed) 
+            {
                 TString data = GetGeneratedMessage();
-                size_t messageSize = data.size();
 
                 TMaybe<TInstant> createTimestamp = Params.ByteRate == 0 ? TMaybe<TInstant>(Nothing()) : GetCreateTimestamp();
 
-                InflightMessages[MessageId] = {messageSize, createTimestamp.GetOrElse(now)};
+                InflightMessages[MessageId] = createTimestamp.GetOrElse(now);
 
-                BytesWritten += messageSize;
+                BytesWritten += Params.MessageSize;
 
-                WriteSession->Write(std::move(ContinuationToken.GetRef()), data, MessageId++, createTimestamp);
-                ContinuationToken.Clear();
+                WriteSession->Write(std::move(ContinuationToken.GetRef()), data, MessageId, createTimestamp);
 
                 WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << now - *createTimestamp.Get());
+                ContinuationToken.Clear();
+                MessageId++;
             }
+            else 
+                Sleep(TDuration::MilliSeconds(1));
 
             if (events.empty())
                 break;
@@ -155,6 +169,7 @@ bool TTopicWorkloadWriterWorker::ProcessEvent(
 bool TTopicWorkloadWriterWorker::ProcessAckEvent(
     const NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
     bool hasProgress = false;
+    auto now = Now();
     //! Acks just confirm that message was received and saved by server
     //! successfully. Here we just count acked messages to check, that everything
     //! written is confirmed.
@@ -170,11 +185,10 @@ bool TTopicWorkloadWriterWorker::ProcessAckEvent(
             return false;
         }
 
-        auto inflightTime = (Now() - inflightMessageIter->second.MessageTime);
-        ui64 messageSize = inflightMessageIter->second.MessageSize;
+        auto inflightTime = (now - inflightMessageIter->second);
         InflightMessages.erase(inflightMessageIter);
 
-        StatsCollector->AddWriterEvent(Params.WriterIdx, {messageSize, inflightTime.MilliSeconds(), InflightMessages.size()});
+        StatsCollector->AddWriterEvent(Params.WriterIdx, {Params.MessageSize, inflightTime.MilliSeconds(), InflightMessages.size()});
 
         hasProgress = true;
 

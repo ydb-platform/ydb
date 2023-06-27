@@ -233,25 +233,30 @@ runs:
       export build_root=$WORKDIR/../build/
 
       echo "[Stdout pytest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.pytest-logfilename}})" >> $GITHUB_STEP_SUMMARY
-      cd $WORKDIR/ydb/tests/functional/
-      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed -e 's/ignore=//g')
-      suites=""
-      for suite in $(echo */ | sed -e 's/\///g'); do
-        if [[ $(echo "$bad_suites" | grep -F -e $suite -) == '' ]]; then
-            suites+=$suite
-            suites+=$'\n'
-        fi
-      done
-      if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
-        suites="${{inputs.test_label_regexp}}"
-      fi
       source $WORKDIR/ydb/tests/oss/launch/prepare.sh
-      echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
-        -v --junit-xml=$PYTESTREPDIR/{}.xml {}" | \
-        sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
-        grep -E '(FAILED|ERROR)\s*\[.*\]' | \
-        tee $WORKDIR/pytest-short.log
+      
+      rm -rf $ARTIFACTS_DIR/pytest/
+      mkdir $ARTIFACTS_DIR/pytest/
+      
+      cd $WORKDIR/ydb/tests/functional/
+      
+      pytest \
+        -p xdist -n 24 --dist worksteal \
+        --timeout_method signal \
+        -o junit_logging=log -o junit_log_passing_tests=False --junit-xml=$PYTESTREPDIR/pytest.xml \
+        -ra --tb=no --show-capture=no \
+        --github-repo $GITHUB_REPOSITORY --github-ref $GITHUB_SHA \
+        --source-root $source_root \
+        --build-root $build_root \
+        --output-dir $ARTIFACTS_DIR/pytest/ \
+        . | tee $WORKDIR/pytest-short.log
+            
+#      echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
+#        -v --junit-xml=$PYTESTREPDIR/{}.xml {}" | \
+#        sed -e 's/\x1b\[[0-9;]*m//g' | \
+#        tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
+#        grep -E '(FAILED|ERROR)\s*\[.*\]' | \
+#        tee $WORKDIR/pytest-short.log
 
   - name: postprocess functional test reports
     if: always() && inputs.run_functional_tests == 'true'
@@ -287,13 +292,13 @@ runs:
     run: |
       testmo automation:run:complete --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}}
 
-  - name: sync test results to s3
-    if: always() && inputs.run_functional_tests == 'true'
-    shell: bash
-    run: |
-      echo "::group::s3-sync"
-      s3cmd sync -P --no-progress --stats --no-check-md5 -P $ARTIFACTS_DIR/ $S3_BUCKET_PATH
-      echo "::endgroup::"
+#  - name: sync test results to s3
+#    if: always() && inputs.run_functional_tests == 'true'
+#    shell: bash
+#    run: |
+#      echo "::group::s3-sync"
+#      s3cmd sync -P --no-progress --stats --no-check-md5 -P $ARTIFACTS_DIR/ $S3_BUCKET_PATH
+#      echo "::endgroup::"
 
   - name: finish
     shell: bash

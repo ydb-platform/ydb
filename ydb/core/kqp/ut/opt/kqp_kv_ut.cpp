@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         )", res);
     }
 
-    Y_UNIT_TEST(ReadRows) {
+    Y_UNIT_TEST(ReadRows_SpecificKey) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(true);
         auto kikimr = TKikimrRunner{settings};
@@ -158,6 +158,63 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 [7687053901553772359u;4u;"abcde"]
             ]
         )", res);
+    }
+
+    Y_UNIT_TEST(ReadRows_SpecificReturnValue) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(true);
+        auto kikimr = TKikimrRunner{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName = "Key";
+        const auto valueToReturnColumnName_1 = "Value_1";
+        const auto valueToReturnColumnName_2 = "Value_2";
+        const auto valueToIgnoreColumnName = "Value_3";
+
+        TTableBuilder builder;
+        builder.AddNonNullableColumn(keyColumnName, EPrimitiveType::Uint64);
+        builder.SetPrimaryKeyColumn(keyColumnName);
+        builder.AddNullableColumn(valueToReturnColumnName_1, EPrimitiveType::Uint64);
+        builder.AddNullableColumn(valueToReturnColumnName_2, EPrimitiveType::Uint64);
+        builder.AddNullableColumn(valueToIgnoreColumnName, EPrimitiveType::Uint64);
+
+        auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const ui64 keyValue = 1;
+        const ui64 valueToReturn_1 = 2;
+        const ui64 valueToReturn_2 = 3;
+        const ui64 valueToIgnore = 4;
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName).Uint64(keyValue)
+                    .AddMember(valueToReturnColumnName_1).Uint64(valueToReturn_1)
+                    .AddMember(valueToReturnColumnName_2).Uint64(valueToReturn_2)
+                    .AddMember(valueToIgnoreColumnName).Uint64(valueToIgnore)
+                .EndStruct();
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName).Uint64(keyValue)
+                .EndStruct();
+        keys.EndList();
+
+        auto selectResult = db.ReadRows(tableName, keys.Build(), {valueToReturnColumnName_1, valueToReturnColumnName_2}).GetValueSync();
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+
+        auto res = FormatResultSetYson(selectResult.GetResultSet());
+        CompareYson(Sprintf("[[%du;%du]]", valueToReturn_1, valueToReturn_2), res);
     }
 
     TVector<::ReadRowsPgParam> readRowsPgParams
@@ -216,7 +273,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
     }; 
     ::ReadRowsPgParam readRowsPgNullParam{.TypeId = BOOLOID, .TypeMod={}, .ValueContent=""};
     
-    Y_UNIT_TEST(ReadRowsPgValue) {
+    Y_UNIT_TEST(ReadRows_PgValue) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(true);
         auto kikimr = TKikimrRunner{settings};
@@ -234,7 +291,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             const auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             const auto& pgType = TPgType(typeName, testParam.TypeMod);
 
-            Cout << Sprintf("TestParam: type: `%s`; mod: `%s`, is null: %s\n", typeName.data(), testParam.TypeMod.data(), isNull ? "+" : "-" );
+            Cout << Sprintf("TestParam: type: `%s`; mod: `%s`; is null: %s\n", typeName.data(), testParam.TypeMod.data(), isNull ? "+" : "-" );
 
             TTableBuilder builder;
             builder.AddNonNullableColumn(keyColumnName, EPrimitiveType::Uint64);
@@ -291,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
     }; 
     ::ReadRowsPgParam readRowsPgNullKeyParam{.TypeId = TEXTOID, .TypeMod={}, .ValueContent=""};
     
-    Y_UNIT_TEST(ReadRowsPgKey) {
+    Y_UNIT_TEST(ReadRows_PgKey) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(true);
         auto kikimr = TKikimrRunner{settings};
@@ -309,7 +366,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
             const auto typeName = NPg::PgTypeNameFromTypeDesc(typeDesc);
             const auto& pgType = TPgType(typeName, testParam.TypeMod);
 
-            Cout << Sprintf("TestParam: type: `%s`; mod: `%s`, is null: %s\n", typeName.data(), testParam.TypeMod.data(), isNull ? "+" : "-" );
+            Cout << Sprintf("TestParam: type: `%s`; mod: `%s`; is null: %s\n", typeName.data(), testParam.TypeMod.data(), isNull ? "+" : "-" );
 
             TTableBuilder builder;
             builder.AddNullableColumn(keyColumnName, pgType);

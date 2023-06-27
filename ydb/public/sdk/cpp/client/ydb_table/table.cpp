@@ -1662,10 +1662,10 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataForma
     return Impl_->BulkUpsert(table, format, data, schema, settings);
 }
 
-TAsyncReadRowsResult TTableClient::ReadRows(const TString& table, TValue&& rows,
+TAsyncReadRowsResult TTableClient::ReadRows(const TString& table, TValue&& rows, const TVector<TString>& columns,
     const TReadRowsSettings& settings)
 {
-    return Impl_->ReadRows(table, std::move(rows), settings);
+    return Impl_->ReadRows(table, std::move(rows), columns, settings);
 }
 
 TAsyncScanQueryPartIterator TTableClient::StreamExecuteScanQuery(const TString& query, const TParams& params,

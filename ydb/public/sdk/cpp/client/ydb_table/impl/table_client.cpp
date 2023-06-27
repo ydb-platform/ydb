@@ -792,12 +792,17 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
 
 }
 
-TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&& keys, const TReadRowsSettings& settings) {
+TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&& keys, const TVector<TString>& columns, const TReadRowsSettings& settings) {
     auto request = MakeRequest<Ydb::Table::ReadRowsRequest>();
     request.set_path(path);
     auto* protoKeys = request.mutable_keys();
     *protoKeys->mutable_type() = TProtoAccessor::GetProto(keys.GetType());
     *protoKeys->mutable_value() = TProtoAccessor::GetProto(keys);
+    auto* protoColumns = request.mutable_columns();
+    for (const auto& column: columns)
+    {
+        *protoColumns->Add() = column;
+    }
 
     auto promise = NewPromise<TReadRowsResult>();
 

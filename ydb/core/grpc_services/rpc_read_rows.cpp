@@ -32,18 +32,38 @@ using namespace Ydb;
 
 namespace {
 
-TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(const Ydb::Table::ReadRowsRequest* proto) {
-    const auto& type = proto->Getkeys().Gettype();
+struct RequestedKeyColumn {
+    TString Name;
+    Ydb::Type Type;
+};
+
+}
+
+namespace {
+
+auto GetRequestedKeyColumns(const Ydb::Table::ReadRowsRequest& proto) {
+    const auto& type = proto.Getkeys().Gettype();
     const auto& rowFields = type.Getlist_type().Getitem().Getstruct_type().Getmembers();
 
-    TVector<std::pair<TString, Ydb::Type>> result;
+    std::vector<RequestedKeyColumn> result;
     result.reserve(rowFields.size());
     for (const auto& rowField: rowFields) {
         const auto& name = rowField.Getname();
         const auto& typeInProto = rowField.type().has_optional_type() ?
                     rowField.type().optional_type().item() : rowField.type();
 
-        result.emplace_back(name, typeInProto);
+        result.push_back({name, typeInProto});
+    }
+    return result;
+}
+
+auto GetRequestedResultColumns(const Ydb::Table::ReadRowsRequest& proto) {
+    const auto& columns = proto.Getcolumns();
+
+    std::vector<TString> result;
+    result.reserve(columns.size());
+    for (const auto& column: columns) {
+        result.emplace_back(column);
     }
     return result;
 }
@@ -70,53 +90,64 @@ public:
     bool BuildSchema(NSchemeCache::TSchemeCacheNavigate* resolveNamesResult, TString& errorMessage) {
         Y_VERIFY(resolveNamesResult);
 
-        auto& entry = resolveNamesResult->ResultSet.front();
+        const auto& entry = resolveNamesResult->ResultSet.front();
 
         if (entry.Indexes.size()) {
             errorMessage = "EvReadResults is not supported for tables with indexes";
             return false;
         }
 
-        THashSet<TString> keyColumnsLeft;
-        THashMap<TString, ui32> columnByName;
+        const auto requestedResultColumnNames = GetRequestedResultColumns(*GetProto());
 
+        THashSet<TString> keyColumnNamesInSchema;
+        THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*> nameToColumn;
         for (const auto& [colId, colInfo] : entry.Columns) {
-            ui32 id = colInfo.Id;
-            const auto& name = colInfo.Name;
-            const auto& type = colInfo.PType;
+            nameToColumn[colInfo.Name] = &colInfo;
 
-            ColumnsMeta.emplace_back(TColumnMeta{.Id = id,
-                                                 .Name = name,
-                                                 .Type = type,
-                                                 .PTypeMod = colInfo.PTypeMod});
-
-            columnByName[name] = id;
-            i32 keyOrder = colInfo.KeyOrder;
+            const i32 keyOrder = colInfo.KeyOrder;
             if (keyOrder != -1) {
                 Y_VERIFY(keyOrder >= 0);
-                KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), keyOrder + 1));
-                KeyColumnTypes[keyOrder] = type;
-                keyColumnsLeft.insert(name);
+                keyColumnNamesInSchema.insert(colInfo.Name);
             }
         }
 
-        KeyColumnPositions.resize(KeyColumnTypes.size());
+        if (!PrepareRequestedKeyColumns(keyColumnNamesInSchema,
+                                        nameToColumn,
+                                        entry.NotNullColumns,
+                                        errorMessage))
+        {
+            return false;
+        }
 
-        auto reqColumns = GetRequestColumns(GetProto());
+        if (!PrepareRequestedResultColumns(nameToColumn,
+                                           errorMessage))
+        {
+            return false;
+        }
 
-        for (size_t pos = 0; pos < reqColumns.size(); ++pos) {
-            auto& name = reqColumns[pos].first;
-            const auto* cp = columnByName.FindPtr(name);
-            if (!cp) {
-                errorMessage = Sprintf("Unknown column: %s", name.c_str());
+        return true;
+    }
+
+    bool PrepareRequestedKeyColumns(const THashSet<TString>& keyColumnNamesInSchema,
+                                    const THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*>& nameToColumn,
+                                    const THashSet<TString>& notNullColumns,
+                                    TString& errorMessage)
+    {
+        auto keyColumnsLeft = keyColumnNamesInSchema;
+        KeyColumnPositions.resize(keyColumnNamesInSchema.size());
+
+        const auto requestedColumns = GetRequestedKeyColumns(*GetProto());
+
+        for (size_t pos = 0; pos < requestedColumns.size(); ++pos) {
+            const auto& [name, typeInProto] = requestedColumns[pos];
+            const auto* colInfoPtr = nameToColumn.Value(name, nullptr);
+            if (!colInfoPtr) {
+                errorMessage = Sprintf("Unknown key column: %s", name.c_str());
                 return false;
             }
+            const auto& colInfo = *colInfoPtr;
+
             i32 typmod = -1;
-            ui32 colId = *cp;
-            auto& colInfo = *entry.Columns.FindPtr(colId);
-
-            const auto& typeInProto = reqColumns[pos].second;
-
             if (typeInProto.type_id()) {
                 // TODO check Arrow types
             } else if (typeInProto.has_decimal_type() && colInfo.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
@@ -163,17 +194,45 @@ public:
                 return false;
             }
 
-            bool notNull = entry.NotNullColumns.contains(colInfo.Name);
+            KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), colInfo.KeyOrder + 1));
+            KeyColumnTypes[colInfo.KeyOrder] = colInfo.PType;
 
-            if (colInfo.KeyOrder != -1) {
-                KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, (ui32)pos, colInfo.PType, typmod, notNull};
-                keyColumnsLeft.erase(colInfo.Name);
-            }
+            bool notNull = notNullColumns.contains(colInfo.Name);
+            KeyColumnPositions[colInfo.KeyOrder] = NTxProxy::TFieldDescription{colInfo.Id, colInfo.Name, static_cast<ui32>(pos), colInfo.PType, typmod, notNull};
+            keyColumnsLeft.erase(colInfo.Name);
         }
 
         if (!keyColumnsLeft.empty()) {
             errorMessage = Sprintf("Missing key columns: %s", JoinSeq(", ", keyColumnsLeft).c_str());
             return false;
+        }
+
+        return true;
+    }
+
+    bool PrepareRequestedResultColumns(const THashMap<TString, const NKikimr::TSysTables::TTableColumnInfo*>& nameToColumn,
+                                       TString& errorMessage)
+    {
+        const auto requestedColumnNames = GetRequestedResultColumns(*GetProto());
+        if (requestedColumnNames.empty())
+        {
+            for (const auto& [name, colInfoPtr] : nameToColumn) {
+                RequestedColumnsMeta.emplace_back(*colInfoPtr);
+            }
+            // sort per schema column order
+            std::sort(RequestedColumnsMeta.begin(), RequestedColumnsMeta.end(), [](const auto& a, const auto& b) { return a.Id < b.Id; });
+        }
+        else
+        {
+            for (const auto& name : requestedColumnNames) {
+                const auto* colInfoPtr = nameToColumn.Value(name, nullptr);
+                if (!colInfoPtr) {
+                    errorMessage = Sprintf("Unknown result column: %s", name.c_str());
+                    return false;
+                }
+
+                RequestedColumnsMeta.emplace_back(*colInfoPtr);
+            }
         }
 
         return true;
@@ -420,7 +479,7 @@ public:
         record.MutableTableId()->SetOwnerId(OwnerId);
         record.MutableTableId()->SetTableId(TableId);
 
-        for (const auto& meta: ColumnsMeta) {
+        for (const auto& meta: RequestedColumnsMeta) {
             record.AddColumns(meta.Id);
         }
 
@@ -475,7 +534,7 @@ public:
             }
         };
 
-        for (const auto& colMeta : ColumnsMeta) {
+        for (const auto& colMeta : RequestedColumnsMeta) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
             *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
@@ -488,12 +547,13 @@ public:
                 NYdb::TValueBuilder vb;
                 vb.BeginStruct();
                 ui64 sz = 0;
-                for (const auto& colMeta : ColumnsMeta) {
+                for (size_t i = 0; i < RequestedColumnsMeta.size(); ++i) {
+                    const auto& colMeta = RequestedColumnsMeta[i];
                     const auto type = getTypeFromColMeta(colMeta);
                     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TReadRowsRPC "
                         << " name: " << colMeta.Name
                     );
-                    const auto& cell = row[colMeta.Id - 1];
+                    const auto& cell = row[i];
                     vb.AddMember(colMeta.Name);
                     if (colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg)
                     {
@@ -585,12 +645,20 @@ private:
     TVector<NTxProxy::TFieldDescription> KeyColumnPositions;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     struct TColumnMeta {
+        TColumnMeta(const TSysTables::TTableColumnInfo& colInfo)
+            : Id(colInfo.Id)
+            , Name(colInfo.Name)
+            , Type(colInfo.PType)
+            , PTypeMod(colInfo.PTypeMod)
+        {
+        }
+
         ui32 Id;
         TString Name;
         NScheme::TTypeInfo Type;
         TString PTypeMod;
     };
-    TVector<TColumnMeta> ColumnsMeta;
+    TVector<TColumnMeta> RequestedColumnsMeta;
 
     std::vector<std::unique_ptr<TEvDataShard::TEvReadResult>> EvReadResults;
     // TEvRead interface

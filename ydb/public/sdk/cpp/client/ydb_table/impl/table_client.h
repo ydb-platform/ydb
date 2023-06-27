@@ -192,7 +192,7 @@ public:
         const TString& sessionId,
         const TString& path,
         const TReadTableSettings& settings);
-    TAsyncReadRowsResult ReadRows(const TString& path, TValue&& keys, const TReadRowsSettings& settings);
+    TAsyncReadRowsResult ReadRows(const TString& path, TValue&& keys, const TVector<TString>& columns, const TReadRowsSettings& settings);
 
     TAsyncStatus Close(const TSession::TImpl* sessionImpl, const TCloseSessionSettings& settings);
     TAsyncStatus CloseInternal(const TSession::TImpl* sessionImpl);

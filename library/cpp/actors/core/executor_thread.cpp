@@ -152,13 +152,12 @@ namespace NActors {
         bool firstEvent = true;
         bool preempted = false;
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
-            TAutoPtr<IEventHandle> ev(mailbox->Pop());
-            if (!!ev) {
+            if (TAutoPtr<IEventHandle> ev = mailbox->Pop()) {
                 NHPTimer::STime hpnow;
                 recipient = ev->GetRecipientRewrite();
+                TActorContext ctx(*mailbox, *this, hpprev, recipient);
+                TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
                 if (actor = mailbox->FindActor(recipient.LocalId())) {
-                    TActorContext ctx(*mailbox, *this, hpprev, recipient);
-                    TlsActivationContext = &ctx;
 
                     // Since actor is not null there should be no exceptions
                     actorType = &typeid(*actor);

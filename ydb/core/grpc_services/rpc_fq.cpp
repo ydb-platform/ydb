@@ -365,9 +365,7 @@ void DoFederatedQueryDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, cons
 std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryCreateQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx) {
     static const std::function permissions{[](const FederatedQuery::CreateQueryRequest& request) {
         TVector<NPerms::TPermission> basePermissions{
-            NPerms::Required("yq.queries.create"),
-            NPerms::Optional("yq.connections.use"),
-            NPerms::Optional("yq.bindings.use")
+            NPerms::Required("yq.queries.create")
         };
         if (request.execute_mode() != FederatedQuery::SAVE) {
             basePermissions.push_back(NPerms::Required("yq.queries.invoke"));
@@ -423,8 +421,6 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryModifyQueryRequestOper
     static const std::function permissions{[](const FederatedQuery::ModifyQueryRequest& request) {
         TVector<NPerms::TPermission> basePermissions{
             NPerms::Required("yq.queries.update"),
-            NPerms::Optional("yq.connections.use"),
-            NPerms::Optional("yq.bindings.use"),
             NPerms::Optional("yq.resources.managePrivate")
         };
         if (request.execute_mode() != FederatedQuery::SAVE) {

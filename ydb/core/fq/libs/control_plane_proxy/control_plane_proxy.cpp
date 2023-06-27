@@ -1565,8 +1565,6 @@ private:
         {"yq.queries.viewAst@as", TPermissions::VIEW_AST},
         {"yq.resources.managePublic@as", TPermissions::MANAGE_PUBLIC},
         {"yq.resources.managePrivate@as", TPermissions::MANAGE_PRIVATE},
-        {"yq.connections.use@as", TPermissions::CONNECTIONS_USE},
-        {"yq.bindings.use@as", TPermissions::BINDINGS_USE},
         {"yq.queries.invoke@as", TPermissions::QUERY_INVOKE},
         {"yq.queries.viewQueryText@as", TPermissions::VIEW_QUERY_TEXT},
     };
@@ -1651,8 +1649,6 @@ private:
 
         static const TPermissions availablePermissions {
             TPermissions::TPermission::QUERY_INVOKE
-            | TPermissions::TPermission::CONNECTIONS_USE
-            | TPermissions::TPermission::BINDINGS_USE
             | TPermissions::TPermission::MANAGE_PUBLIC
         };
 
@@ -1914,8 +1910,6 @@ private:
 
         static const TPermissions availablePermissions {
             TPermissions::TPermission::QUERY_INVOKE
-            | TPermissions::TPermission::CONNECTIONS_USE
-            | TPermissions::TPermission::BINDINGS_USE
             | TPermissions::TPermission::MANAGE_PUBLIC
             | TPermissions::TPermission::MANAGE_PRIVATE
         };

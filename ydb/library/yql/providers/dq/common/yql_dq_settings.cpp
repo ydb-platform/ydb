@@ -64,6 +64,7 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, AggregateStatsByStage);
     REGISTER_SETTING(*this, EnableChannelStats);
+    REGISTER_SETTING(*this, ExportStats);
 }
 
 } // namespace NYql

@@ -39,6 +39,7 @@ struct TDqSettings {
         static constexpr bool UseFastPickleTransport = false;
         static constexpr bool AggregateStatsByStage = true;
         static constexpr bool EnableChannelStats = false;
+        static constexpr bool ExportStats = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -100,6 +101,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<bool, false> AggregateStatsByStage;
     NCommon::TConfSetting<bool, false> EnableChannelStats;
+    NCommon::TConfSetting<bool, false> ExportStats;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -150,6 +152,7 @@ struct TDqSettings {
         SAVE_SETTING(UseFastPickleTransport);
         SAVE_SETTING(AggregateStatsByStage);
         SAVE_SETTING(EnableChannelStats);
+        SAVE_SETTING(ExportStats);
 #undef SAVE_SETTING
     }
 

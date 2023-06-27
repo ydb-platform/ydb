@@ -159,14 +159,14 @@ public:
             << " StatusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(state.GetStatusCode());
 
         if (state.HasStats() && TryAddStatsFromExtra(state.GetStats())) {
-            if (ServiceCounters.Counters && !AggrPeriod) {
+            if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
                 TrySendNonFinalStat();
             }
         } else if (state.HasStats() && state.GetStats().GetTasks().size()) {
             YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
             AddStats(state.GetStats());
-            if (ServiceCounters.Counters && !AggrPeriod) {
+            if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
                 TrySendNonFinalStat();
             }
@@ -229,7 +229,7 @@ public:
             break;
         case AGGR_TIMER_TAG:
             if (AggrPeriod) {
-                if (ServiceCounters.Counters) {
+                if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters) {
                     ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0);
                 }
                 SendNonFinalStat();
@@ -640,7 +640,7 @@ public:
 
 private:
     void Finish() {
-        if (ServiceCounters.Counters && AggrPeriod) {
+        if (Settings->ExportStats.Get().GetOrElse(TDqSettings::TDefault::ExportStats) && ServiceCounters.Counters && AggrPeriod) {
             ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0); // force metrics upload on Finish when Aggregated
         }
         Send(ExecuterId, new TEvGraphFinished());

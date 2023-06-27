@@ -95,6 +95,17 @@ public:
 
     void Bootstrap() {
         NYql::TIssues issues;
+        const auto& request = *Request_->GetProtoRequest();
+        if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
+            issues.AddIssue("forget_after is not supported for this type of operation");
+            return Reply(Ydb::StatusIds::UNSUPPORTED, issues);
+        }
+
+        if (request.operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
+            issues.AddIssue("ExecuteScript must be asyncronous operation");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, issues);
+        }
+
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
         if (auto scriptRequest = MakeScriptRequest(issues, status)) {
             if (Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), scriptRequest.Release())) {

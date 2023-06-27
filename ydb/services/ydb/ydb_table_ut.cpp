@@ -2186,10 +2186,20 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             auto settings = NYdb::NTable::TAlterTableSettings()
                 .AppendAddIndexes({TIndexDescription("NewIndex", {"Value"})});
 
+            // Check that forget_after is not supported
+            {
+                auto settingsWithForgetAfter = settings;
+                settingsWithForgetAfter.ForgetAfter(TDuration::Hours(1));
+                auto result = session.AlterTableLong("/Root/Test", settingsWithForgetAfter).ExtractValueSync();
+                UNIT_ASSERT(!result.Status().IsSuccess());
+                UNIT_ASSERT_C(result.Ready(), result.Status().GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), NYdb::EStatus::UNSUPPORTED, result.Status().GetIssues().ToString());
+            }
+
             auto result = session.AlterTableLong("/Root/Test", settings).ExtractValueSync();
 
             // Build index is async operation
-            UNIT_ASSERT(!result.Ready());
+            UNIT_ASSERT_C(!result.Ready(), result.Status().GetIssues().ToString());
 
             NYdb::NOperation::TOperationClient operationClient(driver);
 

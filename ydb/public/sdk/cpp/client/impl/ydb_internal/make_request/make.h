@@ -19,6 +19,10 @@ void FillOperationParams(const TRequestSettings& settings, TProtoRequest& params
         SetDuration(settings.CancelAfter_, *operationParams.mutable_cancel_after());
     }
 
+    if (settings.ForgetAfter_) {
+        SetDuration(settings.ForgetAfter_, *operationParams.mutable_forget_after());
+    }
+
     if (settings.OperationTimeout_) {
         SetDuration(settings.OperationTimeout_, *operationParams.mutable_operation_timeout());
     } else if (settings.ClientTimeout_ && settings.UseClientTimeoutForOperation_) {

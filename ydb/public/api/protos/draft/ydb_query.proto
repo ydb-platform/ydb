@@ -5,6 +5,8 @@ package Ydb.Query;
 option java_package = "com.yandex.ydb.query";
 option java_outer_classname = "QueryProtos";
 
+import "google/protobuf/duration.proto";
+
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
@@ -232,7 +234,7 @@ message ExecuteScriptRequest {
     reserved 10; // idempotency_key
     StatsMode stats_mode = 11;
     map<string, string> attributes = 12 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
-    reserved 13; // TODO: Results TTL?
+    google.protobuf.Duration results_ttl = 13; // After script execution operation finishes, TTL will start counting. After this TTL the results will be removed from database.
 }
 
 enum ExecStatus {

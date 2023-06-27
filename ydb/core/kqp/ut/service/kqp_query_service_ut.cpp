@@ -636,6 +636,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(!service->IsUnsafeToShutdown());
         }
     }
+
+    Y_UNIT_TEST(ExecuteScriptFailsWithForgetAfter) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", NYdb::NQuery::TExecuteScriptSettings().ForgetAfter(TDuration::Days(1))).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::UNSUPPORTED, scriptExecutionOperation.Status().GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

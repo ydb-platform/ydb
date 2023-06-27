@@ -63,6 +63,9 @@ public:
 
     void Bootstrap(const TActorContext&) {
         const auto& request = *(this->GetProtoRequest());
+        if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
+            return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
+        }
 
         if (request.settings().items().empty()) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");

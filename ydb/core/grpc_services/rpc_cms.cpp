@@ -44,6 +44,13 @@ public:
     {
         TBase::Bootstrap(ctx);
 
+        if (this->GetProtoRequest()->operation_params().has_forget_after() && this->GetProtoRequest()->operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
+            this->Request_->RaiseIssue(NYql::TIssue("forget_after is not supported for this type of operation"));
+            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
+            Die(ctx);
+            return;
+        }
+
         auto dinfo = AppData(ctx)->DomainsInfo;
         auto domain = dinfo->Domains.begin()->second;
         ui32 group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);

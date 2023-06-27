@@ -42,6 +42,15 @@ message OperationParams {
     // In case when cancellation isn't possible, no action will be performed.
     google.protobuf.Duration cancel_after = 3;
 
+    // Server will forget long-running operation (equivalent to ForgetOperation call) after the specified duration
+    // starting from the time the operation has finished. This will remove information associated with operation,
+    // including operation metadata as well as any internal resources associated with it.
+    // This setting only has effect on operations running in ASYNC mode, which create persistent operation object.
+    // For other types of operations it is ignored.
+    // If the parameter is absent, its default value for a particular type of operation will be used.
+    // See documentation for particular types of operations.
+    google.protobuf.Duration forget_after = 6;
+
     // User-defined labels of operation.
     map<string, string> labels = 4 [(map_key).length.le = 128, (length).le = 128];
 
@@ -112,4 +121,3 @@ message Operation {
     // For operations in progress, it might indicate the current cost of the operation (if supported).
     CostInfo cost_info = 7;
 }
-

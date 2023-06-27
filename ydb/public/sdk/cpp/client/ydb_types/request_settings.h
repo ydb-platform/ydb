@@ -49,6 +49,7 @@ struct TOperationRequestSettings : public TSimpleRequestSettings<TDerived> {
     /* Cancel/timeout operation settings available from 18-8 YDB server version */
     FLUENT_SETTING(TDuration, OperationTimeout);
     FLUENT_SETTING(TDuration, CancelAfter);
+    FLUENT_SETTING(TDuration, ForgetAfter);
     FLUENT_SETTING_DEFAULT(bool, UseClientTimeoutForOperation, true);
     FLUENT_SETTING_DEFAULT(bool, ReportCostInfo, false);
 
@@ -59,6 +60,7 @@ struct TOperationRequestSettings : public TSimpleRequestSettings<TDerived> {
         : TSimpleRequestSettings<TDerived>(other)
         , OperationTimeout_(other.OperationTimeout_)
         , CancelAfter_(other.CancelAfter_)
+        , ForgetAfter_(other.ForgetAfter_)
         , UseClientTimeoutForOperation_(other.UseClientTimeoutForOperation_)
         , ReportCostInfo_(other.ReportCostInfo_)
     {}

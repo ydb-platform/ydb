@@ -148,7 +148,11 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
-        const auto& req = GetProtoRequest();
+        const auto* req = GetProtoRequest();
+        if (req->operation_params().has_forget_after() && req->operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
+            return Reply(StatusIds::UNSUPPORTED, "forget_after is not supported for this type of operation", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+        }
+
         if (!Request_->GetSerializedToken().empty()) {
             UserToken = MakeHolder<NACLib::TUserToken>(Request_->GetSerializedToken());
         }

@@ -24,10 +24,7 @@ void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) 
     }
 
     for (const auto& [_, sender] : Senders) {
-        if (sender.Pending) {
-            Enqueued.insert(sender.Pending.begin(), sender.Pending.end());
-        }
-
+        ReEnqueueRecords(sender);
         ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
     }
 
@@ -130,7 +127,7 @@ void TBaseChangeSender::SendRecords() {
     }
 
     auto it = PendingSent.begin();
-    THashMap<ui64, TVector<TChangeRecord>> forward;
+    THashSet<ui64> sendTo;
     bool needToResolve = false;
 
     while (it != PendingSent.end()) {
@@ -141,31 +138,17 @@ void TBaseChangeSender::SendRecords() {
             continue;
         }
 
-        const auto& sender = Senders.at(partitionId);
-        if (!sender.Ready) {
-            ++it;
-            continue;
+        auto& sender = Senders.at(partitionId);
+        sender.Prepared.push_back(std::move(it->second));
+        if (sender.Ready) {
+            sendTo.insert(partitionId);
         }
 
-        MemUsage -= it->second.GetBody().size();
-
-        forward[partitionId].push_back(std::move(it->second));
         it = PendingSent.erase(it);
     }
 
-    for (auto& [partitionId, records] : forward) {
-        Y_VERIFY(Senders.contains(partitionId));
-        auto& sender = Senders.at(partitionId);
-
-        Y_VERIFY(sender.Ready);
-        sender.Ready = false;
-
-        sender.Pending.reserve(records.size());
-        for (const auto& record : records) {
-            sender.Pending.emplace_back(record.GetOrder(), record.GetBody().size());
-        }
-
-        ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::move(records)));
+    for (const auto partitionId : sendTo) {
+        SendPreparedRecords(partitionId);
     }
 
     if (needToResolve && !Resolver->IsResolving()) {
@@ -202,7 +185,9 @@ void TBaseChangeSender::OnReady(ui64 partitionId) {
         RemoveRecords(std::exchange(sender.Pending, {}));
     }
 
-    SendRecords();
+    if (sender.Prepared) {
+        SendPreparedRecords(partitionId);
+    }
 }
 
 void TBaseChangeSender::OnGone(ui64 partitionId) {
@@ -211,11 +196,7 @@ void TBaseChangeSender::OnGone(ui64 partitionId) {
         return;
     }
 
-    const auto& sender = it->second;
-    if (sender.Pending) {
-        Enqueued.insert(sender.Pending.begin(), sender.Pending.end());
-    }
-
+    ReEnqueueRecords(it->second);
     Senders.erase(it);
     GonePartitions.push_back(partitionId);
 
@@ -226,13 +207,41 @@ void TBaseChangeSender::OnGone(ui64 partitionId) {
     Resolver->Resolve();
 }
 
-void TBaseChangeSender::RemoveRecords() {
-    ui64 pendingStatus = 0;
-    for (const auto& [_, sender] : Senders) {
-        pendingStatus += sender.Pending.size();
+void TBaseChangeSender::SendPreparedRecords(ui64 partitionId) {
+    Y_VERIFY(Senders.contains(partitionId));
+    auto& sender = Senders.at(partitionId);
+
+    Y_VERIFY(sender.Ready);
+    sender.Ready = false;
+
+    sender.Pending.reserve(sender.Prepared.size());
+    for (const auto& record : sender.Prepared) {
+        sender.Pending.emplace_back(record.GetOrder(), record.GetBody().size());
+        MemUsage -= record.GetBody().size();
     }
 
-    TVector<ui64> remove(Reserve(Enqueued.size() + PendingBody.size() + PendingSent.size() + pendingStatus));
+    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+}
+
+void TBaseChangeSender::ReEnqueueRecords(const TSender& sender) {
+    for (const auto& record : sender.Pending) {
+        Enqueued.insert(record);
+    }
+
+    for (const auto& record : sender.Prepared) {
+        Enqueued.emplace(record.GetOrder(), record.GetBody().size());
+        MemUsage -= record.GetBody().size();
+    }
+}
+
+void TBaseChangeSender::RemoveRecords() {
+    ui64 pending = 0;
+    for (const auto& [_, sender] : Senders) {
+        pending += sender.Pending.size();
+        pending += sender.Prepared.size();
+    }
+
+    TVector<ui64> remove(Reserve(Enqueued.size() + PendingBody.size() + PendingSent.size() + pending));
 
     for (const auto& record : std::exchange(Enqueued, {})) {
         remove.push_back(record.Order);
@@ -249,6 +258,9 @@ void TBaseChangeSender::RemoveRecords() {
     for (const auto& [_, sender] : Senders) {
         for (const auto& record : sender.Pending) {
             remove.push_back(record.Order);
+        }
+        for (const auto& record : sender.Prepared) {
+            remove.push_back(record.GetOrder());
         }
     }
 
@@ -307,6 +319,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                             TABLEH() { html << "PartitionId"; }
                             TABLEH() { html << "Ready"; }
                             TABLEH() { html << "Pending"; }
+                            TABLEH() { html << "Prepared"; }
                             TABLEH() { html << "Actor"; }
                         }
                     }
@@ -318,6 +331,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                                 TABLED() { html << partitionId; }
                                 TABLED() { html << sender.Ready; }
                                 TABLED() { html << sender.Pending.size(); }
+                                TABLED() { html << sender.Prepared.size(); }
                                 TABLED() { ActorLink(html, DataShard.TabletId, PathId, partitionId); }
                             }
                         }

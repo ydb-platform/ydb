@@ -87,6 +87,7 @@ class TBaseChangeSender: public IChangeSender {
         TActorId ActorId;
         bool Ready = false;
         TVector<TEnqueuedRecord> Pending;
+        TVector<TChangeRecord> Prepared;
     };
 
     void CreateMissingSenders(const TVector<ui64>& partitionIds);
@@ -94,6 +95,9 @@ class TBaseChangeSender: public IChangeSender {
 
     bool RequestRecords();
     void SendRecords();
+
+    void SendPreparedRecords(ui64 partitionId);
+    void ReEnqueueRecords(const TSender& sender);
 
 protected:
     template <typename T>

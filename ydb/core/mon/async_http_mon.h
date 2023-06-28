@@ -41,7 +41,7 @@ protected:
 
     TMutex Mutex;
     std::vector<TActorMonPageInfo> ActorMonPages;
-    std::vector<TActorId> ActorServices;
+    THashMap<TString, TActorId> ActorServices;
 
     void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
 };

@@ -2,12 +2,14 @@
 
 #include "mon_page.h"
 
+#include <list>
+
 namespace NMonitoring {
     struct TIndexMonPage: public IMonPage {
         TMutex Mtx;
-        typedef TVector<TMonPagePtr> TPages;
-        TPages Pages;
-        typedef THashMap<TString, TMonPagePtr> TPagesByPath;
+        using TPages = std::list<TMonPagePtr>;
+        TPages Pages; // a list of pages to maintain specific order
+        using TPagesByPath = THashMap<TString, TPages::iterator>;
         TPagesByPath PagesByPath;
 
         TIndexMonPage(const TString& path, const TString& title)

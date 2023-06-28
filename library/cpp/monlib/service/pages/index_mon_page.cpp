@@ -28,9 +28,8 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
         TGuard<TMutex> g(Mtx);
         TStringBuf pathTmp = request.GetPathInfo();
         for (;;) {
-            TPagesByPath::iterator i = PagesByPath.find(pathTmp);
-            if (i != PagesByPath.end()) {
-                found = i->second;
+            if (TPagesByPath::iterator i = PagesByPath.find(pathTmp); i != PagesByPath.end()) {
+                found = *i->second;
                 pathInfo = request.GetPathInfo().substr(pathTmp.size());
                 Y_VERIFY(pathInfo.empty() || pathInfo.StartsWith('/'));
                 break;
@@ -67,18 +66,12 @@ void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
 
 void TIndexMonPage::Register(TMonPagePtr page) {
     TGuard<TMutex> g(Mtx);
-    auto insres = PagesByPath.insert(std::make_pair("/" + page->GetPath(), page));
-    if (insres.second) {
-        // new unique page just inserted, update Pages
-        Pages.push_back(page);
+    if (auto [it, inserted] = PagesByPath.try_emplace("/" + page->GetPath()); inserted) {
+        // new unique page just inserted, insert it to the end
+        it->second = Pages.insert(Pages.end(), page);
     } else {
         // a page with the given path is already present, replace it with the new page
-
-        // find old page, sorry for O(n)
-        auto it = std::find(Pages.begin(), Pages.end(), insres.first->second);
-        *it = page;
-        // this already present, replace it
-        insres.first->second = page;
+        *it->second = page;
     }
     page->Parent = this;
 }
@@ -101,7 +94,7 @@ IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     if (i == PagesByPath.end()) {
         return nullptr;
     } else {
-        return i->second.Get();
+        return i->second->Get();
     }
 }
 
@@ -171,7 +164,7 @@ void TIndexMonPage::OutputBody(IMonHttpRequest& req) {
 
 void TIndexMonPage::SortPages() {
     TGuard<TMutex> g(Mtx);
-    std::sort(Pages.begin(), Pages.end(), [](const TMonPagePtr& a, const TMonPagePtr& b) {
+    Pages.sort([](const TMonPagePtr& a, const TMonPagePtr& b) {
         return AsciiCompareIgnoreCase(a->GetTitle(), b->GetTitle()) < 0;
     });
 }

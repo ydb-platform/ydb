@@ -71,7 +71,7 @@ namespace {
         TCellHeader(ui32 rawValue) : RawValue(rawValue) {}
 
         TCellHeader(ui32 cellSize, bool isNull)
-            : RawValue(cellSize | (static_cast<ui32>(isNull) << 31ULL))
+            : RawValue(cellSize | (static_cast<ui32>(isNull) << 31))
         {}
 
         ui32 CellSize() const { return RawValue & ~(1ULL << 31); }
@@ -83,35 +83,18 @@ namespace {
 
     static_assert(sizeof(TCellHeader) == sizeof(ui32));
 
-    static constexpr ui16 CellVecSerializationHeader = -1;
-
-    Y_FORCE_INLINE void SerializeCellVec(TConstArrayRef<TCell> cells, TString &resultBuffer, TVector<TCell> *resultCells,
-                                         bool useOldSerialization = false) {
+    Y_FORCE_INLINE void SerializeCellVec(TConstArrayRef<TCell> cells, TString &resultBuffer, TVector<TCell> *resultCells) {
         resultBuffer.clear();
         if (resultCells)
             resultCells->clear();
 
-        if (cells.empty())
-            return;
-
-        size_t size = 0;
-        if (!useOldSerialization) {
-            size += sizeof(ui16);
-        }
-
-        size += sizeof(ui16);
+        size_t size = sizeof(ui16);
         for (auto& cell : cells) {
             size += sizeof(TCellHeader) + cell.Size();
         }
 
         resultBuffer.resize(size);
         char* resultBufferData = const_cast<char*>(resultBuffer.data());
-
-        if (!useOldSerialization) {
-            ui16 header = CellVecSerializationHeader;
-            WriteUnaligned<ui16>(resultBufferData, header);
-            resultBufferData += sizeof(header);
-        }
 
         ui16 cellsSize = cells.size();
         WriteUnaligned<ui16>(resultBufferData, cellsSize);
@@ -121,32 +104,19 @@ namespace {
             resultCells->resize(cellsSize);
         }
 
-        auto copyCell = [&](size_t cellIndex) {
-            const auto & cell = cells[cellIndex];
-            memcpy(resultBufferData, cell.Data(), cell.Size());
-
-            if (resultCells) {
-                (*resultCells)[cellIndex] = TCell(resultBufferData, cell.Size());
-            }
-
-            resultBufferData += cell.Size();
-        };
-
         for (size_t i = 0; i < cellsSize; ++i) {
             TCellHeader header(cells[i].Size(), cells[i].IsNull());
             WriteUnaligned<ui32>(resultBufferData, header.RawValue);
             resultBufferData += sizeof(header);
 
-            if (useOldSerialization) {
-                copyCell(i);
+            const auto & cell = cells[i];
+            memcpy(resultBufferData, cell.Data(), cell.Size());
+
+            if (resultCells) {
+                (*resultCells)[i] = TCell(resultBufferData, cell.Size());
             }
-        }
 
-        if (useOldSerialization)
-            return;
-
-        for (size_t i = 0; i < cellsSize; ++i) {
-            copyCell(i);
+            resultBufferData += cell.Size();
         }
     }
 
@@ -162,63 +132,30 @@ namespace {
         if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16)))
             return false;
 
-        ui16 header = ReadUnaligned<ui16>(buf);
-        buf += sizeof(header);
-
-        if (header != CellVecSerializationHeader)
-        {
-            ui16 cellsSize = header;
-            resultCells.resize(cellsSize);
-
-            for (ui32 i = 0; i < cellsSize; ++i) {
-                if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(TCellHeader)))
-                    return false;
-
-                TCellHeader cellHeader = ReadUnaligned<TCellHeader>(buf);
-                buf += sizeof(cellHeader);
-
-                if (bufEnd - buf < static_cast<ptrdiff_t>(cellHeader.CellSize()))
-                    return false;
-
-                resultCells[i] = cellHeader.IsNull() ? TCell() : TCell(buf, cellHeader.CellSize());
-                buf += cellHeader.CellSize();
-            }
-
-            resultBuffer = data;
-            return true;
-        }
-
-        if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16)))
-            return false;
-
         ui16 cellsSize = ReadUnaligned<ui16>(buf);
         buf += sizeof(cellsSize);
 
-        if (bufEnd - buf < static_cast<i64>(cellsSize * sizeof(TCellHeader))) {
-            return false;
-        }
-
-        const TCellHeader* cellsHeaders = reinterpret_cast<const TCellHeader*>(buf);
-        buf += sizeof(cellsHeaders[0]) * cellsSize;
-
-        i64 size = 0;
-        for (size_t i = 0; i < cellsSize; ++i) {
-            size += cellsHeaders[i].CellSize();
-        }
-
-        if (bufEnd - buf != size) {
-            return false;
-        }
-
-        resultBuffer = data;
         resultCells.resize(cellsSize);
 
-        for (size_t i = 0; i < cellsSize; ++i) {
-            TCellHeader cellHeader = cellsHeaders[i];
+        for (ui32 i = 0; i < cellsSize; ++i) {
+            if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(TCellHeader))) {
+                resultCells.clear();
+                return false;
+            }
+
+            TCellHeader cellHeader = ReadUnaligned<TCellHeader>(buf);
+            buf += sizeof(cellHeader);
+
+            if (bufEnd - buf < static_cast<ptrdiff_t>(cellHeader.CellSize())) {
+                resultCells.clear();
+                return false;
+            }
+
             resultCells[i] = cellHeader.IsNull() ? TCell() : TCell(buf, cellHeader.CellSize());
             buf += cellHeader.CellSize();
         }
 
+        resultBuffer = data;
         return true;
     }
 

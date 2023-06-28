@@ -422,7 +422,7 @@ public:
         Parse(buf);
     }
 
-    TSerializedCellVec() {}
+    TSerializedCellVec() = default;
 
     TSerializedCellVec(const TSerializedCellVec &other)
         : Buf(other.Buf)
@@ -459,12 +459,7 @@ public:
     }
 
     static bool TryParse(const TString& data, TSerializedCellVec& vec) {
-        bool ok = vec.DoTryParse(data);
-        if (!ok) {
-            vec.Cells.clear();
-            vec.Buf.clear();
-        }
-        return ok;
+        return vec.DoTryParse(data);
     }
 
     void Parse(const TString &buf) {
@@ -487,7 +482,6 @@ public:
     }
 
 private:
-
     bool DoTryParse(const TString& data);
 
 private:

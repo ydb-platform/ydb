@@ -17,11 +17,11 @@ public:
         const std::initializer_list<TString>& aliases = std::initializer_list<TString>(),
         const TString& description = TString()
     );
-    TDriver CreateDriver(TConfig& config);
-    TDriver CreateDriver(TConfig& config, THolder<TLogBackend>&& loggingBackend);
+    TDriver CreateDriver(const TConfig& config);
+    TDriver CreateDriver(const TConfig& config, THolder<TLogBackend>&& loggingBackend);
 
 private:
-    TDriverConfig CreateDriverConfig(TConfig& config);
+    TDriverConfig CreateDriverConfig(const TConfig& config);
 };
 
 class TYdbSimpleCommand : public TYdbCommand {

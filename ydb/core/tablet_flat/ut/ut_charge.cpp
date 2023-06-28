@@ -14,8 +14,6 @@ namespace NKikimr {
 namespace NTable {
 
 namespace {
-    const NTest::TMass Mass(new NTest::TModelStd(true), 4 * 9);
-
     enum TPageIdFlags {
         IfIter = 1,
         IfFail = 2,
@@ -89,24 +87,28 @@ namespace {
         using TArr = std::initializer_list<TFlaggedPageId>;
         using TGroupId = NPage::TGroupId;
 
-        TModel()
-            : Tool(*Mass.Model->Scheme)
+        TModel(bool groups = false, bool history = false)
+            : Mass(new NTest::TModelStd(groups), 4 * 9)
+            , Eggs(MakeEggs(groups, history))
+            , Tool(*Mass.Model->Scheme)
         {
-            auto pages = Eggs.At(0)->Index->End() - Eggs.At(0)->Index->Begin();
+            auto pages = Eggs.Lone()->Index->End() - Eggs.Lone()->Index->Begin();
 
             UNIT_ASSERT(pages == 9);
         }
 
-        static NTest::TPartEggs MakeEggs() noexcept
+        NTest::TPartEggs MakeEggs(bool groups, bool history) noexcept
         {
             NPage::TConf conf{ true, 8192 };
 
-            auto groups = Mass.Model->Scheme->Families.size();
-            for (size_t group : xrange(groups)) {
-                conf.Group(group).PageRows = 3; /* each main page has 3 physical rows, but... */
+            auto families = Mass.Model->Scheme->Families.size();
+            for (size_t family : xrange(families)) {
+                conf.Group(family).PageRows = 3; /* each main page has 3 physical rows, but... */
             }
-            conf.Group(1).PageRows = 2;
-            conf.Group(2).PageRows = 1;
+            if (groups) {
+                conf.Group(1).PageRows = 2;
+                conf.Group(2).PageRows = 1;
+            }
 
             NTest::TPartCook cook(Mass.Model->Scheme, conf);
 
@@ -114,7 +116,14 @@ namespace {
                 /* ... but rows pack has 4 rows per each page, the first row in
                     each pack is ommited and used as spacer between pages. */
 
-                if (seq % 4 > 0) cook.Add(Mass.Saved[seq]);
+                if (seq % 4 > 0) {
+                    if (history) {
+                        for (ui64 v : { 2, 1 })
+                            cook.Ver({0, v}).Add(Mass.Saved[seq]);
+                    } else {
+                        cook.Add(Mass.Saved[seq]);
+                    }
+                }
             }
 
             return cook.Finish();
@@ -166,8 +175,8 @@ namespace {
             }
 
             bool ready = !reverse
-                ? TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>())
-                : TCharge::RangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>());
+                ? TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true)
+                : TCharge::RangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true);
 
             UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.Touched.empty(), ready, AssertMesage(fail));
 
@@ -236,17 +245,29 @@ namespace {
             AssertEqual(env->Touched, precharged, TPageIdFlags::IfIter);
         }
 
+        const NTest::TMass Mass;
+        const NTest::TPartEggs Eggs;
         const NTest::TRowTool Tool;
-        const NTest::TPartEggs Eggs = MakeEggs();
 
     private:
         void AssertEqual(const TMap<TGroupId, TSet<TPageId>>& actual, const TMap<TGroupId, TArr>& expected, TPageIdFlags flags) const {
             for (auto [groupId, arr] : expected) {
+                if (groupId.IsHistoric() && flags == TPageIdFlags::IfIter) {
+                    // isn't supported
+                    continue;
+                }
+
+                TMap<ui64, ui64> absoluteId;
+                auto groupIndex = Eggs.Lone()->GetGroupIndex(groupId);
+                for (auto it = groupIndex->Begin(); it != groupIndex->End(); it++) {
+                    absoluteId[absoluteId.size()] = it->GetPageId();
+                }
+
                 auto actualValue = actual.Value(groupId, TSet<TPageId>());
                 auto expectedValue = TSet<TPageId>{};
                 for (auto p  : arr) {
                     if (flags & p.Flags) {
-                        expectedValue.insert(p.Page);
+                        expectedValue.insert(absoluteId[p.Page]);
                     }
                 }
                 UNIT_ASSERT_VALUES_EQUAL_C(expectedValue, actualValue, AssertMesage(groupId, flags));
@@ -261,12 +282,12 @@ namespace {
         std::string AssertMesage(TGroupId group) const {
             return 
                 "Seq: " + std::to_string(CurrentStep()) + 
-                " Group: " + std::to_string(group.Index);
+                " Group: " + std::to_string(group.Index) + "," + std::to_string(group.IsHistoric());
         }
         std::string AssertMesage(TGroupId group, TPageIdFlags flags) const {
             auto result = 
                 "Seq: " + std::to_string(CurrentStep()) + 
-                " Group: " + std::to_string(group.Index);
+                " Group: " + std::to_string(group.Index) + "," + std::to_string(group.IsHistoric());
 
             if (flags & TPageIdFlags::IfFail) {
                 result += " Fail: Yes";
@@ -383,7 +404,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
     Y_UNIT_TEST(ByKeysGroups)
     {
-        TModel me;
+        TModel me(true);
 
         /*
         
@@ -625,7 +646,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
     Y_UNIT_TEST(ByKeysGroupsLimits)
     {
-        TModel me;
+        TModel me(true);
 
         /*
         
@@ -686,22 +707,22 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         /*_ 1xx: custom spanned loads scenarios */
 
-        me.To(101).CheckByKeys(0, 35, 8 /* rows */, { 0, 1, 2, 3_f });
-        me.To(102).CheckByKeys(0, 35, 11 /* rows */, { 0, 1, 2, 3, 4_f });
-        me.To(103).CheckByKeys(0, 35, 14 /* rows */, { 0, 1, 2, 3, 4, 5_f });
+        me.To(101).CheckByKeys(0, 35, 8 /* rows */, { 0, 1, 2, 3_I });
+        me.To(102).CheckByKeys(0, 35, 11 /* rows */, { 0, 1, 2, 3, 4_I });
+        me.To(103).CheckByKeys(0, 35, 14 /* rows */, { 0, 1, 2, 3, 4, 5_I });
         me.To(104).CheckByKeys(3, 35, 5 /* rows */, { 0, 1, 2 });
-        me.To(105).CheckByKeys(3, 35, 6 /* rows */, { 0, 1, 2, 3_f });
+        me.To(105).CheckByKeys(3, 35, 6 /* rows */, { 0, 1, 2, 3_I });
         me.To(106).CheckByKeys(4, 35, 6 /* rows */, { 0, 1, 2, 3 });
-        me.To(107).CheckByKeys(5, 35, 5 /* rows */, { 1, 2, 3_f });
-        me.To(112).CheckByKeys(9, 35, 11 /* rows */, { 2, 3, 4, 5, 6_f });
-        me.To(113).CheckByKeys(9, 35, 14 /* rows */, { 2, 3, 4, 5, 6, 7_f });
+        me.To(107).CheckByKeys(5, 35, 5 /* rows */, { 1, 2, 3_I });
+        me.To(112).CheckByKeys(9, 35, 11 /* rows */, { 2, 3, 4, 5, 6_I });
+        me.To(113).CheckByKeys(9, 35, 14 /* rows */, { 2, 3, 4, 5, 6, 7_I });
         me.To(120).CheckByKeys(25, 35, 8 /* rows */, { 6, 7, 8 });
 
 
         /*_ 2xx: one row charge limit on two page */
 
         for (const ui16 page : xrange(4)) {
-            const TArr span1{ page, operator""_f(page + 1) };
+            const TArr span1{ page, operator""_I(page + 1) };
             const TArr span2{ page, page + 1 };
 
             const ui32 base = 200 + page * 10, lead = page * 4;
@@ -714,7 +735,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
     Y_UNIT_TEST(ByKeysReverse)
     {
-        TModel me;
+        TModel me(true);
 
         /*
         
@@ -836,9 +857,31 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
     }
 
+    Y_UNIT_TEST(ByKeysHistory)
+    {
+        TModel me(true, true);
+
+        me.To(100).CheckByKeys(9, 23, 0, TMap<TGroupId, TArr>{
+            {TGroupId{0}, {2, 3, 4, 5, 6}},
+            {TGroupId{0, true}, {1_g, 2, 3, 4, 5_g}},
+            {TGroupId{1}, {3_g, 4, 5, 6, 7, 8_g}},
+            {TGroupId{1, true}, {3_g, 4, 5, 6_g, 7_g, 8_g}},
+            {TGroupId{2}, {6_g, 7_g, 8_g, 9, 10, 11, 12, 13, 14, 15_g, 16_g, 17_g}},
+            {TGroupId{2, true}, {6_g, 7_g, 8_g, 9, 10, 11, 12_g, 13_g, 14_g, 15_g, 16_g, 17_g}}
+        });
+
+        me.To(200).CheckByKeys(29, 35, 0, TMap<TGroupId, TArr>{
+            {TGroupId{2, true}, {21_g, 22_g, 23_g, 24_g, 25_g, 26_g}}
+        });
+
+        me.To(201).CheckByKeys(29, 34, 0, TMap<TGroupId, TArr>{
+            {TGroupId{2, true}, {21_g, 22_g, 23_g, 24_g, 25_g}}
+        });
+    }
+
     Y_UNIT_TEST(ByRows)
     {
-        TModel me;
+        TModel me(true);
 
         /*
         
@@ -900,7 +943,7 @@ Y_UNIT_TEST_SUITE(Charge) {
 
     Y_UNIT_TEST(ByRowsLimits)
     {
-        TModel me;
+        TModel me(true);
 
         /*
         

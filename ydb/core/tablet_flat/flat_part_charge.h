@@ -39,7 +39,7 @@ namespace NTable {
                         Groups.emplace_back(Part->GetGroupIndex(groupId), groupId);
                         if (HistoryIndex) {
                             NPage::TGroupId historyGroupId(col->Group, true);
-                            HistoryGroups.emplace_back(Part->GetGroupIndex(historyGroupId), groupId);
+                            HistoryGroups.emplace_back(Part->GetGroupIndex(historyGroupId), historyGroupId);
                         }
                         seen.Set(col->Group);
                     }
@@ -446,6 +446,7 @@ namespace NTable {
                 ui64 bytes = 0;
 
                 TRowId prechargedFirstRowId, prechargedLastRowId;
+                bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first; 
                         current && current <= last && !LimitExceeded(items, itemsLimit) && !LimitExceeded(bytes, bytesLimit); 
@@ -464,8 +465,8 @@ namespace NTable {
                     auto prechargeCurrentLastRowId = Min(currentLastRowId, endRowId);
                     
                     if (key1Page && key1Page == current) {
-                        if (page) {
-                            auto key1RowId = LookupRowId(key1, page, ESeek::Lower, keyDefaults);
+                        if (needExactBounds && page) {
+                            auto key1RowId = LookupRowId(key1, page, Scheme.Groups[0], ESeek::Lower, keyDefaults);
                             prechargeCurrentFirstRowId = Max(prechargeCurrentFirstRowId, key1RowId);
                         } else {
                             prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
@@ -473,8 +474,8 @@ namespace NTable {
                     }
                     if (key2Page && key2Page <= current) {
                         if (key2Page == current) {
-                            if (page) {
-                                auto key2RowId = LookupRowId(key2, page, ESeek::Upper, keyDefaults);
+                            if (needExactBounds && page) {
+                                auto key2RowId = LookupRowId(key2, page, Scheme.Groups[0], ESeek::Upper, keyDefaults);
                                 if (key2RowId) {
                                     prechargeCurrentLastRowId = Min(prechargeCurrentLastRowId, key2RowId - 1);
                                 } else {
@@ -543,6 +544,7 @@ namespace NTable {
                 ui64 bytes = 0;
 
                 TRowId prechargedFirstRowId, prechargedLastRowId;
+                bool needExactBounds = Groups || HistoryIndex;
 
                 for (auto current = first;
                         current >= last && !LimitExceeded(items, itemsLimit) && !LimitExceeded(bytes, bytesLimit);
@@ -561,8 +563,8 @@ namespace NTable {
                     auto prechargeCurrentLastRowId = Max(currentLastRowId, endRowId);
 
                     if (key1Page && key1Page == current) {
-                        if (page) {
-                            auto key1RowId = LookupRowIdReverse(key1, page, ESeek::Lower, keyDefaults);
+                        if (needExactBounds && page) {
+                            auto key1RowId = LookupRowIdReverse(key1, page, Scheme.Groups[0], ESeek::Lower, keyDefaults);
                             prechargeCurrentFirstRowId = Min(prechargeCurrentFirstRowId, key1RowId);
                         } else {
                             prechargeCurrentLastRowId = Max<TRowId>(); // no precharge
@@ -570,8 +572,8 @@ namespace NTable {
                     }
                     if (key2Page && key2Page >= current) {
                         if (key2Page == current) {
-                            if (page) {
-                                auto key2RowId = LookupRowIdReverse(key2, page, ESeek::Upper, keyDefaults);
+                            if (needExactBounds && page) {
+                                auto key2RowId = LookupRowIdReverse(key2, page, Scheme.Groups[0], ESeek::Upper, keyDefaults);
                                 if (key2RowId != Max<TRowId>()) { // Max<TRowId>() means that upper bound is before current page, so doesn't limit current page
                                     prechargeCurrentLastRowId = Max(prechargeCurrentLastRowId, key2RowId + 1);
                                 }
@@ -660,26 +662,53 @@ namespace NTable {
             auto last = HistoryIndex->LookupKey(endKey, scheme, ESeek::Lower, keyDefaults);
 
             bool ready = true;
+            bool hasItems = false;
+            TRowId prechargedFirstRowId, prechargedLastRowId;
 
-            TRowId prechargedFirstRowId = first->GetRowId();
+            for (auto current = first; current && current <= last; current++) {
+                auto page = Env->TryGetPage(Part, current->GetPageId(), NPage::TGroupId(0, true));
+                ready &= bool(page);
 
-            for (;;) {
-                auto page = first->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, page, NPage::TGroupId(0, true)));
-
-                if (first == last) {
-                    ++first;
-                    break;
+                if (!HistoryGroups) {
+                    // don't need to caclulate prechargedFirstRowId/prechargedLastRowId
+                    continue;
                 }
 
-                if (!++first) {
-                    break;
+                auto currentExt = current + 1;
+                auto prechargeCurrentFirstRowId = current->GetRowId();
+                auto prechargeCurrentLastRowId = currentExt ? (currentExt->GetRowId() - 1) : Max<TRowId>();
+
+                if (first == current) {
+                    if (page) {
+                        auto startKeyRowId = LookupRowId(startKey, page, scheme, ESeek::Lower, *keyDefaults);
+                        prechargeCurrentFirstRowId = Max(prechargeCurrentFirstRowId, startKeyRowId);
+                    } else {
+                        prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
+                    }
+                }
+                if (last == current) {
+                    if (page) {
+                        auto endKeyRowId = LookupRowId(endKey, page, scheme, ESeek::Upper, *keyDefaults);
+                        if (endKeyRowId) {
+                            prechargeCurrentLastRowId = Min(prechargeCurrentLastRowId, endKeyRowId - 1);
+                        } else {
+                            prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
+                        }
+                    } else {
+                        prechargeCurrentFirstRowId = Max<TRowId>(); // no precharge
+                    }
+                }
+
+                if (prechargeCurrentFirstRowId <= prechargeCurrentLastRowId) {
+                    if (!hasItems) {
+                        prechargedFirstRowId = prechargeCurrentFirstRowId;
+                        hasItems = true;
+                    }
+                    prechargedLastRowId = prechargeCurrentLastRowId;
                 }
             }
 
-            if (HistoryGroups) {
-                TRowId prechargedLastRowId = first ? (first->GetRowId() - 1) : Max<TRowId>();
-
+            if (hasItems && HistoryGroups) {
                 for (auto& g : HistoryGroups) {
                     ui64 bytes = 0;
                     ready &= DoPrechargeGroup(g, prechargedFirstRowId, prechargedLastRowId, bytes);
@@ -772,19 +801,19 @@ namespace NTable {
         }
 
     private:
-        TRowId LookupRowId(const TCells key, const TSharedData* page, ESeek seek, const TKeyCellDefaults &keyDefaults) const noexcept
+        TRowId LookupRowId(const TCells key, const TSharedData* page, const TPartScheme::TGroupInfo &group, ESeek seek, const TKeyCellDefaults &keyDefaults) const noexcept
         {
             auto data = TDataPage(page);
-            auto lookup = data.LookupKey(key, Scheme.Groups[0], seek, &keyDefaults);
+            auto lookup = data.LookupKey(key, group, seek, &keyDefaults);
             auto rowId = data.BaseRow() + lookup.Off();
             return rowId;
         }
 
     private:
-        TRowId LookupRowIdReverse(const TCells key, const TSharedData* page, ESeek seek, const TKeyCellDefaults &keyDefaults) const noexcept
+        TRowId LookupRowIdReverse(const TCells key, const TSharedData* page, const TPartScheme::TGroupInfo &group, ESeek seek, const TKeyCellDefaults &keyDefaults) const noexcept
         {
             auto data = TDataPage(page);
-            auto lookup = data.LookupKeyReverse(key, Scheme.Groups[0], seek, &keyDefaults);
+            auto lookup = data.LookupKeyReverse(key, group, seek, &keyDefaults);
             auto rowId = lookup
                 ? data.BaseRow() + lookup.Off()
                 : Max<TRowId>();

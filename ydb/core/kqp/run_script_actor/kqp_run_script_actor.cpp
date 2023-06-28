@@ -396,8 +396,8 @@ private:
 
 
     void CheckSaveInflight() {
-        if (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight)) {
-            // wait for save completions
+        if (Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight))) {
+            // waiting for script completion
             return;
         }
 

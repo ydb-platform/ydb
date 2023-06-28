@@ -52,7 +52,9 @@ TString SerializeIssues(const NYql::TIssues& issues) {
         root.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }
     Ydb::Issue::IssueMessage rootMessage;
-    NYql::IssueToMessage(root, &rootMessage);
+    if (issues) {
+        NYql::IssueToMessage(root, &rootMessage);
+    }
     return NProtobufJson::Proto2Json(rootMessage, NProtobufJson::TProto2JsonConfig());
 }
 
@@ -158,8 +160,6 @@ public:
         switch (result.Status) {
             case EStatus::Unknown:
                 [[fallthrough]];
-            case EStatus::LookupError:
-                [[fallthrough]];
             case EStatus::PathNotTable:
                 [[fallthrough]];
             case EStatus::PathNotPath:
@@ -173,6 +173,8 @@ public:
                 Become(&TTableCreator::StateFuncCreate);
                 RunCreateTableRequest();
                 break;
+            case EStatus::LookupError:
+                [[fallthrough]];
             case EStatus::TableCreationNotComplete:
                 Retry();
                 break;

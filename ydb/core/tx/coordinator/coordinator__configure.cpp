@@ -83,6 +83,9 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
                 for (ui64 coordinator : Config.GetCoordinators()) {
                     Self->Config.Coordinators.push_back(coordinator);
                 }
+                if (Config.HasIdlePlanResolution()) {
+                    Self->Config.ReducedResolution = Max(Config.GetIdlePlanResolution(), Self->Config.Resolution);
+                }
                 Self->Config.HaveProcessingParams = true;
             }
         };
@@ -121,6 +124,9 @@ struct TTxCoordinator::TTxConfigure : public TTransactionBase<TTxCoordinator> {
             Self->Execute(Self->CreateTxInit(), ctx);
         } else {
             Self->SetCounter(COUNTER_MISSING_CONFIG, Self->Config.HaveProcessingParams ? 1 : 0);
+            if (Self->Config.HaveProcessingParams) {
+                Self->SubscribeToSiblings();
+            }
         }
 
         if (AckTo && Respond)

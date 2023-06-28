@@ -11,6 +11,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     TVector<TTabletId> Mediators;
     TVector<TTabletId> Coordinators;
     ui64 PlanResolution;
+    ui64 ReducedResolution;
     bool HaveProcessingParams = false;
     ui64 LastPlanned = 0;
     ui64 LastAcquired = 0;
@@ -48,12 +49,16 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
                 Mediators.swap(mediators);
                 Coordinators.clear();
                 PlanResolution = resolution;
+                ReducedResolution = Self->Config.ReducedResolution;
                 HaveProcessingParams = false;
                 auto encodedConfig = rowset.GetValue<Schema::DomainConfiguration::Config>();
                 if (!encodedConfig.empty()) {
                     TProtoBox<NKikimrSubDomains::TProcessingParams> config(encodedConfig);
                     for (ui64 coordinator : config.GetCoordinators()) {
                         Coordinators.push_back(coordinator);
+                    }
+                    if (config.HasIdlePlanResolution()) {
+                        ReducedResolution = Max(config.GetIdlePlanResolution(), PlanResolution);
                     }
                     HaveProcessingParams = true;
                 }
@@ -103,6 +108,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             Self->Config.Mediators = new TMediators(std::move(Mediators));
             Self->Config.Coordinators = Coordinators;
             Self->Config.Resolution = PlanResolution;
+            Self->Config.ReducedResolution = ReducedResolution;
             Self->Config.HaveProcessingParams = HaveProcessingParams;
             Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 1 : 0);
             Self->Execute(Self->CreateTxRestoreTransactions(), ctx);

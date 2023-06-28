@@ -19,7 +19,6 @@ struct TInFlyAccountant {
 
 struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     const ui64 PlanOnStep;
-    const bool Rapid;
     TVector<TQueueType::TSlot> Slots;
 
     TMap<ui64, std::pair<ui64, bool *>> StepsToConfirm;
@@ -30,10 +29,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     ui64 DeclinedCounter;
     TInFlyAccountant InFlyAccountant;
 
-    TTxPlanStep(ui64 toPlan, TVector<TQueueType::TSlot> &slots, TSelf *coordinator, bool rapid)
+    TTxPlanStep(ui64 toPlan, TVector<TQueueType::TSlot> &slots, TSelf *coordinator)
         : TBase(coordinator)
         , PlanOnStep(toPlan)
-        , Rapid(rapid)
         , PlannedCounter(0)
         , DeclinedCounter(0)
         , InFlyAccountant(Self->MonCounters.StepsInFly)
@@ -200,9 +198,6 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
         Plan(txc, ctx);
 
-        if (Rapid)
-            Self->VolatileState.Queue.RapidFreeze = false;
-
         *Self->MonCounters.TxPlanned += PlannedCounter;
         *Self->MonCounters.TxInFly += PlannedCounter;
         Self->MonCounters.CurrentTxInFly += PlannedCounter;
@@ -231,8 +226,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxPlanStep(ui64 toStep, TVector<TQueueType::TSlot> &slots, bool rapid) {
-    return new TTxPlanStep(toStep, slots, this, rapid);
+ITransaction* TTxCoordinator::CreateTxPlanStep(ui64 toStep, TVector<TQueueType::TSlot> &slots) {
+    return new TTxPlanStep(toStep, slots, this);
 }
 
 }

@@ -2850,7 +2850,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         waitFor([&]{ return notifyPlanStep >= snapshot.Step; }, TStringBuilder() << "intercepted TEvNotifyPlanStep for snapshot " << snapshot);
         UNIT_ASSERT_VALUES_EQUAL(waitPlanStep, snapshot.Step);
-        UNIT_ASSERT_VALUES_EQUAL(notifyPlanStep, snapshot.Step);
+        // NOTE: our snapshot is not from coordinator so we may get a reduced
+        // resolution step. Previously we just happened to always generate
+        // snapshot rounded to 1 second.
+        UNIT_ASSERT_GE(notifyPlanStep, snapshot.Step);
 
         CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
             {3, 3, 3, 300}
@@ -2989,7 +2992,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         waitFor([&]{ return notifyPlanStep >= snapshot.Step; }, "intercepted TEvNotifyPlanStep");
         UNIT_ASSERT_VALUES_EQUAL(waitPlanStep, snapshot.Step);
-        UNIT_ASSERT_VALUES_EQUAL(notifyPlanStep, snapshot.Step);
+        // NOTE: our snapshot is not from coordinator so we may get a reduced
+        // resolution step. Previously we just happened to always generate
+        // snapshot rounded to 1 second.
+        UNIT_ASSERT_GE(notifyPlanStep, snapshot.Step);
 
         SimulateSleep(helper.Server, TDuration::Seconds(2));
 

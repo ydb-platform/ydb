@@ -36,6 +36,9 @@ message TProcessingParams {
     optional fixed64 SysViewProcessor = 8;
 
     //put there SubSchemeShard and SubHive at the future
+
+    // Plan resolution for idle coordinators
+    optional uint64 IdlePlanResolution = 9;
 }
 
 message TDiskSpaceUsage {

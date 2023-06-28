@@ -78,11 +78,16 @@ Y_UNIT_TEST_SUITE(ErasureBrandNew) {
             erasure.SplitData(TErasureType::CrcModeNone, buffer, p1);
 
             std::array<TRope, 6> p2;
-            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, TRope(rope), p2);
+            ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p2);
+
+            std::array<TRope, 6> p3;
+            TErasureSplitContext ctx = TErasureSplitContext::Init(32 * (1 + RandomNumber(1000u)));
+            while (!ErasureSplit(TErasureType::CrcModeNone, TErasureType::Erasure4Plus2Block, rope, p3, &ctx)) {}
 
             for (ui32 i = 0; i < 6; ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(p1.Parts[i].OwnedString.size(), p2[i].size());
                 UNIT_ASSERT_EQUAL(p1.Parts[i].OwnedString, p2[i]);
+                UNIT_ASSERT_EQUAL(p2[i], p3[i]);
             }
         }
     }

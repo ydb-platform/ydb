@@ -591,7 +591,8 @@ private:
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
         const TBlobStorageGroupInfo &info);
-void EncryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
+
+void EncryptInplace(TRope& rope, ui32 offset, ui32 size, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
 
 void Decrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
         const TBlobStorageGroupInfo &info);

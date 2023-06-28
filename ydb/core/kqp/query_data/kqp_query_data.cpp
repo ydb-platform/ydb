@@ -385,7 +385,9 @@ NDqProto::TData TQueryData::GetShardParam(ui64 shardId, const TString& name) {
 
     auto guard = TypeEnv().BindAllocator();
     NDq::TDqDataSerializer dataSerializer{AllocState->TypeEnv, AllocState->HolderFactory, NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0};
-    return dataSerializer.Serialize(it->second.Values.begin(), it->second.Values.end(), it->second.ItemType);
+    NDq::TDqSerializedBatch batch = dataSerializer.Serialize(it->second.Values.begin(), it->second.Values.end(), it->second.ItemType);
+    YQL_ENSURE(!batch.IsOOB());
+    return batch.Proto;
 }
 
 NDqProto::TData TQueryData::SerializeParamValue(const TString& name) {

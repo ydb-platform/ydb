@@ -182,8 +182,14 @@ private:
                 break;
         }
 
+        TDqSerializedBatch batch;
+        batch.Proto = std::move(*response.MutableData());
+        if (batch.Proto.HasPayloadId()) {
+            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
+        }
+
         // guid here is redundant and serves only for logic validation
-        OnReceiveData(std::move(*response.MutableData()), TGUID::Create().AsGuidString());
+        OnReceiveData(std::move(batch), TGUID::Create().AsGuidString());
     }
 
 private:

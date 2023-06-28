@@ -198,7 +198,7 @@ std::pair<bool, bool> TKqpTasksRunner::TransferData(ui64 fromTask, ui64 fromChan
 
     // todo: transfer data as-is from input- to output- channel (KIKIMR-10658)
     for (;;) {
-        NDqProto::TData data;
+        NDq::TDqSerializedBatch data;
         if (!src->Pop(data)) {
             break;
         }

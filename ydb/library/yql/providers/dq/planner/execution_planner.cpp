@@ -639,9 +639,15 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         channelDesc.SetSrcTaskId(channel.SrcTask);
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
-        bool fastPickle = Settings->UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
-        channelDesc.SetTransportVersion(fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 :
-                                                     NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
+        const bool fastPickle = Settings->UseFastPickleTransport.Get().GetOrElse(TDqSettings::TDefault::UseFastPickleTransport);
+        const bool oob = Settings->UseOOBTransport.Get().GetOrElse(TDqSettings::TDefault::UseOOBTransport);
+        if (oob) {
+            channelDesc.SetTransportVersion(fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 :
+                                                         NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0);
+        } else {
+            channelDesc.SetTransportVersion(fastPickle ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 :
+                                                         NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
+        }
 
         if (channel.SrcTask) {
             NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId,

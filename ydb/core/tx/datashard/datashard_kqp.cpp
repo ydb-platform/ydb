@@ -75,7 +75,7 @@ bool KqpValidateTask(const NYql::NDqProto::TDqTask& task, bool isImmediate, ui64
     return true;
 }
 
-NUdf::EFetchStatus FetchAllOutput(NDq::IDqOutputChannel* channel, NDqProto::TData& buffer) {
+NUdf::EFetchStatus FetchAllOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerializedBatch& buffer) {
     auto result = channel->PopAll(buffer);
     Y_UNUSED(result);
 
@@ -86,7 +86,7 @@ NUdf::EFetchStatus FetchAllOutput(NDq::IDqOutputChannel* channel, NDqProto::TDat
     return NUdf::EFetchStatus::Yield;
 }
 
-NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDqProto::TData& buffer) {
+NUdf::EFetchStatus FetchOutput(NDq::IDqOutputChannel* channel, NDq::TDqSerializedBatch& buffer) {
     auto result = channel->Pop(buffer);
     Y_UNUSED(result);
 
@@ -154,7 +154,10 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
                         << ", TxId: " << txId << ", task: " << taskId << ", channelId: " << channelId);
 
                     auto channel = tasksRunner.GetInputChannel(taskId, channelId);
-                    channel->Push(std::move(*(channelData->MutableData())));
+                    NDq::TDqSerializedBatch batch;
+                    batch.Proto = std::move(*(channelData->MutableData()));
+                    MKQL_ENSURE_S(!batch.IsOOB());
+                    channel->Push(std::move(batch));
 
                     MKQL_ENSURE_S(channelData->GetFinished());
                     channel->Finish();
@@ -544,11 +547,18 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         dataEv->Record.MutableChannelData()->SetChannelId(channel.GetId());
                         dataEv->Record.SetNoAck(true);
                         auto outputData = dataEv->Record.MutableChannelData()->MutableData();
-                        fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), *outputData);
+                        NDq::TDqSerializedBatch serialized;
+                        fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), serialized);
+                        const size_t outputDataSize = serialized.Size();
+                        *outputData = std::move(serialized.Proto);
+                        outputData->ClearPayloadId();
+                        if (!serialized.Payload.IsEmpty()) {
+                            outputData->SetPayloadId(dataEv->AddPayload(std::move(serialized.Payload)));
+                        }
                         dataEv->Record.MutableChannelData()->SetFinished(fetchStatus == NUdf::EFetchStatus::Finish);
-                        if (outputData->GetRaw().size() > MaxDatashardReplySize) {
+                        if (outputDataSize > MaxDatashardReplySize) {
                             auto message = TStringBuilder() << "Datashard " << origin
-                                << ": reply size limit exceeded (" << outputData->GetRaw().size() << " > "
+                                << ": reply size limit exceeded (" << outputDataSize << " > "
                                 << MaxDatashardReplySize << ")";
                             LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
                             result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
@@ -558,10 +568,10 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         }
                     }
                 } else {
-                    NDqProto::TData outputData;
+                    NDq::TDqSerializedBatch outputData;
                     auto fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
                     MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-                    MKQL_ENSURE_S(outputData.GetRows() == 0);
+                    MKQL_ENSURE_S(outputData.Proto.GetRows() == 0);
                 }
             }
         }
@@ -590,9 +600,10 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
                     MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
                     MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
-                    NDqProto::TData outputData;
+                    NDq::TDqSerializedBatch outputData;
                     auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
                     MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
+                    MKQL_ENSURE(!outputData.IsOOB(), "Out-of-band data transport is not yet supported");
 
                     auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(),
                         channel.GetDstEndpoint().GetTabletId());
@@ -600,7 +611,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
 
                     channelData.SetChannelId(channel.GetId());
                     channelData.SetFinished(true);
-                    channelData.MutableData()->Swap(&outputData);
+                    channelData.MutableData()->Swap(&outputData.Proto);
                 }
             }
         }

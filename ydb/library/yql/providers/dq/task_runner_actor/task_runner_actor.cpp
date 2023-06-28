@@ -314,10 +314,10 @@ private:
                     maxChunks = 1;
                 }
 
-                TVector<NDqProto::TData> chunks;
+                TVector<TDqSerializedBatch> chunks;
                 NDqProto::TPopResponse response;
                 for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
-                    NDqProto::TData data;
+                    TDqSerializedBatch data;
                     const auto lastPop = std::move(channel->Pop(data));
 
                     for (auto& metric : lastPop.GetMetric()) {
@@ -325,7 +325,7 @@ private:
                     }
 
                     hasData = lastPop.GetResult();
-                    dataSize = data.GetRaw().size();
+                    dataSize = data.Size();
                     isFinished = !hasData && channel->IsFinished();
                     response.SetResult(response.GetResult() || hasData);
                     changed = changed || hasData || (isFinished != wasFinished);

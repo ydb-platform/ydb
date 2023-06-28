@@ -121,7 +121,7 @@ struct TEvPush
         , PauseAfterPush(pauseAfterPush)
         , IsOut(isOut)
     { }
-    TEvPush(ui32 channelId, NDqProto::TData&& data, bool finish = false, bool pauseAfterPush = false)
+    TEvPush(ui32 channelId, TDqSerializedBatch&& data, bool finish = false, bool pauseAfterPush = false)
         : ChannelId(channelId)
         , HasData(true)
         , Finish(finish)
@@ -132,7 +132,7 @@ struct TEvPush
     const ui32 ChannelId;
     const bool HasData = false;
     const bool Finish = false;
-    NDqProto::TData Data;
+    TDqSerializedBatch Data;
     bool PauseAfterPush = false;
     const bool IsOut = false;
 };
@@ -251,7 +251,7 @@ struct TEvChannelPopFinished
 
     TEvChannelPopFinished(
             ui32 channelId,
-            TVector<NDqProto::TData>&& data,
+            TVector<TDqSerializedBatch>&& data,
             TMaybe<NDqProto::TWatermark>&& watermark,
             TMaybe<NDqProto::TCheckpoint>&& checkpoint,
             bool finished,
@@ -273,7 +273,7 @@ struct TEvChannelPopFinished
 
     const ui32 ChannelId;
     // The order is Data -> Watermark -> Checkpoint
-    TVector<NDqProto::TData> Data;
+    TVector<TDqSerializedBatch> Data;
     TMaybe<NDqProto::TWatermark> Watermark;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     bool Finished;

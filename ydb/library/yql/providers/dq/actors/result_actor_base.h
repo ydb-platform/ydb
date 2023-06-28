@@ -64,11 +64,11 @@ namespace NYql::NDqs::NExecutionHelpers {
             TBase::Send(FullResultWriterID, MakeHolder<NActors::TEvents::TEvPoison>());
         }
 
-        void OnReceiveData(NYql::NDqProto::TData&& data, const TString& messageId = "", bool autoAck = false) {
+        void OnReceiveData(NDq::TDqSerializedBatch&& data, const TString& messageId = "", bool autoAck = false) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
 
-            if (data.GetRows() > 0 && !ResultBuilder) {
-                Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.GetRows())).SetCode(0, TSeverityIds::S_WARNING));
+            if (data.RowCount() > 0 && !ResultBuilder) {
+                Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.RowCount())).SetCode(0, TSeverityIds::S_WARNING));
             }
             if (Discard || !ResultBuilder || autoAck) {
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(messageId));
@@ -83,7 +83,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                 bool exceedRows = false;
                 try {
                     TFailureInjector::Reach("result_actor_base_fail_on_response_write", [] { throw yexception() << "result_actor_base_fail_on_response_write"; });
-                    full = ResultBuilder->WriteYsonData(WriteQueue.back().WriteRequest.GetData(), [this, &exceedRows](const TString& rawYson) {
+                    full = ResultBuilder->WriteYsonData(WriteQueue.back().Data, [this, &exceedRows](const TString& rawYson) {
                         if (RowsLimit && Rows + 1 > *RowsLimit) {
                             exceedRows = true;
                             return false;
@@ -332,20 +332,31 @@ namespace NYql::NDqs::NExecutionHelpers {
         void UnsafeWriteToFullResultTable() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
-            TBase::Send(FullResultWriterID, MakeHolder<TEvFullResultWriterWriteRequest>(std::move(WriteQueue.front().WriteRequest)));
+
+            auto& src = WriteQueue.front();
+            auto req = MakeHolder<TEvFullResultWriterWriteRequest>();
+
+            req->Record.SetMessageId(src.MessageId);
+            *(req->Record.MutableData()) = std::move(src.Data.Proto);
+            req->Record.MutableData()->ClearPayloadId();
+            if (!src.Data.Payload.IsEmpty()) {
+                req->Record.MutableData()->SetPayloadId(req->AddPayload(std::move(src.Data.Payload)));
+            }
+
+            TBase::Send(FullResultWriterID, std::move(req));
         }
 
     private:
         struct TQueueItem {
-            TQueueItem(NDqProto::TData&& data, const TString& messageId)
-                : WriteRequest()
+            TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
+                : Data(std::move(data))
                 , MessageId(messageId)
-                , SentProcessedEvent(false) {
-                *WriteRequest.MutableData() = std::move(data);
-                WriteRequest.SetMessageId(messageId);
+                , SentProcessedEvent(false)
+            {
             }
 
-            NDqProto::TFullResultWriterWriteRequest WriteRequest;
+            //NDqProto::TFullResultWriterWriteRequest WriteRequest;
+            NDq::TDqSerializedBatch Data;
             const TString MessageId;
             bool SentProcessedEvent;
         };

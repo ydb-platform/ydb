@@ -28,16 +28,16 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
     }
 }
 
-void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, const NYql::NDqProto::TData& rows) {
+void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, const NDq::TDqSerializedBatch& rows) {
     YQL_ENSURE(idx < TxResults.size());
-    ResultRowsCount += rows.GetRows();
-    ResultRowsBytes += rows.GetRaw().size();
+    ResultRowsCount += rows.RowCount();
+    ResultRowsBytes += rows.Size();
     auto guard = AllocState->TypeEnv.BindAllocator();
     auto& result = TxResults[idx];
-    if (rows.GetRows() || !result.IsStream) {
+    if (rows.RowCount() || !result.IsStream) {
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
-            static_cast<NDqProto::EDataTransportVersion>(rows.GetTransportVersion()));
+            static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()));
         dataSerializer.Deserialize(rows, result.MkqlItemType, result.Rows);
     }
 }

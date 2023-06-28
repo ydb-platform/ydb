@@ -191,10 +191,10 @@ void TestSingleRead(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsIn);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
 
-    NDqProto::TData data;
+    TDqSerializedBatch data;
     UNIT_ASSERT(ch->Pop(data));
 
-    UNIT_ASSERT_VALUES_EQUAL(10, data.GetRows());
+    UNIT_ASSERT_VALUES_EQUAL(10, data.RowCount());
     UNIT_ASSERT_VALUES_EQUAL(1, ch->GetStats()->Chunks);
     UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsIn);
     UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsOut);
@@ -232,24 +232,24 @@ void TestPartialRead(TTestContext& ctx) {
     ui32 readChunks = 0;
     ui32 readRows = 0;
     while (readRows < 9) {
-        NDqProto::TData data;
+        TDqSerializedBatch data;
         UNIT_ASSERT(ch->Pop(data));
 
         ui32 v = expected[req];
         ++req;
 
-        UNIT_ASSERT_VALUES_EQUAL(v, data.GetRows());
+        UNIT_ASSERT_VALUES_EQUAL(v, data.RowCount());
         UNIT_ASSERT_VALUES_EQUAL(++readChunks, ch->GetStats()->Chunks);
         UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-        UNIT_ASSERT_VALUES_EQUAL(readRows + data.GetRows(), ch->GetStats()->RowsOut);
+        UNIT_ASSERT_VALUES_EQUAL(readRows + data.RowCount(), ch->GetStats()->RowsOut);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
         ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
-        ValidateBatch(ctx, buffer, readRows, data.GetRows());
-        readRows += data.GetRows();
+        ValidateBatch(ctx, buffer, readRows, data.RowCount());
+        readRows += data.RowCount();
     }
 
-    NDqProto::TData data;
+    TDqSerializedBatch data;
     UNIT_ASSERT(!ch->Pop(data));
 }
 
@@ -299,12 +299,12 @@ void TestPopAll(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(50, ch->GetStats()->RowsIn);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
 
-    NDqProto::TData data;
+    TDqSerializedBatch data;
     TUnboxedValueBatch buffer(ctx.GetOutputType());
 
     UNIT_ASSERT(ch->PopAll(data));
 
-    UNIT_ASSERT_VALUES_EQUAL(50, data.GetRows());
+    UNIT_ASSERT_VALUES_EQUAL(50, data.RowCount());
 
     ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
     ValidateBatch(ctx, buffer, 0, 50);
@@ -339,10 +339,10 @@ void TestBigRow(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
 
     {
-        NDqProto::TData data;
+        TDqSerializedBatch data;
         UNIT_ASSERT(ch->Pop(data));
 
-        UNIT_ASSERT_VALUES_EQUAL(2, data.GetRows());
+        UNIT_ASSERT_VALUES_EQUAL(2, data.RowCount());
         UNIT_ASSERT_VALUES_EQUAL(1, ch->GetStats()->Chunks);
         UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
         UNIT_ASSERT_VALUES_EQUAL(2, ch->GetStats()->RowsOut);
@@ -371,10 +371,10 @@ void TestBigRow(TTestContext& ctx) {
     }
 
     for (ui32 i = 3; i < 10; ++i) {
-        NDqProto::TData data;
+        TDqSerializedBatch data;
         UNIT_ASSERT(ch->Pop(data));
 
-        UNIT_ASSERT_VALUES_EQUAL(1, data.GetRows());
+        UNIT_ASSERT_VALUES_EQUAL(1, data.RowCount());
         UNIT_ASSERT_VALUES_EQUAL(i - 1, ch->GetStats()->Chunks);
         UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
         UNIT_ASSERT_VALUES_EQUAL(i, ch->GetStats()->RowsOut);
@@ -394,7 +394,7 @@ void TestBigRow(TTestContext& ctx) {
         }
     }
 
-    NDqProto::TData data;
+    TDqSerializedBatch data;
     UNIT_ASSERT(!ch->Pop(data));
 }
 
@@ -426,12 +426,12 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
     ui32 loadedRows = 0;
 
-    NDqProto::TData data;
+    TDqSerializedBatch data;
     while (ch->Pop(data)) {
         TUnboxedValueBatch buffer(ctx.GetOutputType());
         ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
-        ValidateBatch(ctx, buffer, loadedRows, data.GetRows());
-        loadedRows += data.GetRows();
+        ValidateBatch(ctx, buffer, loadedRows, data.RowCount());
+        loadedRows += data.RowCount();
     }
     UNIT_ASSERT_VALUES_EQUAL(35, loadedRows);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount());
@@ -448,12 +448,12 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
         UNIT_ASSERT_VALUES_EQUAL(5, ch->GetValuesCount());
 
-        NDqProto::TData data;
+        TDqSerializedBatch data;
         while (ch->Pop(data)) {
             TUnboxedValueBatch buffer(ctx.GetOutputType());
             ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
-            ValidateBatch(ctx, buffer, loadedRows + 100, data.GetRows());
-            loadedRows += data.GetRows();
+            ValidateBatch(ctx, buffer, loadedRows + 100, data.RowCount());
+            loadedRows += data.RowCount();
         }
         UNIT_ASSERT_VALUES_EQUAL(5, loadedRows);
         UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount());

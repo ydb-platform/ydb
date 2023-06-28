@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
+#include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -29,7 +30,7 @@ public:
 
     virtual ~IInputChannel() = default;
 
-    virtual void Push(NDqProto::TData&& data) = 0;
+    virtual void Push(NDq::TDqSerializedBatch&& data) = 0;
 
     virtual i64 GetFreeSpace() = 0;
 
@@ -43,7 +44,7 @@ public:
     virtual ~IOutputChannel() = default;
 
     [[nodiscard]]
-    virtual NDqProto::TPopResponse Pop(NDqProto::TData& data) = 0;
+    virtual NDqProto::TPopResponse Pop(NDq::TDqSerializedBatch& data) = 0;
 
     virtual bool IsFinished() const = 0;
 };

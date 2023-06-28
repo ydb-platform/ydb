@@ -72,7 +72,12 @@ private:
         if (!FinishCalled) {
             const auto messageId = GetMessageId(ev);
             const auto hasData = ev->Get()->Record.GetChannelData().HasData();
-            OnReceiveData(std::move(*ev->Get()->Record.MutableChannelData()->MutableData()), messageId, !hasData);
+            NDq::TDqSerializedBatch batch;
+            batch.Proto = std::move(*ev->Get()->Record.MutableChannelData()->MutableData());
+            if (batch.Proto.HasPayloadId()) {
+                batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
+            }
+            OnReceiveData(std::move(batch), messageId, !hasData);
             const auto [it, inserted] = PendingMessages.insert({messageId, std::move(ev)});
             Y_ENSURE(inserted);
         }

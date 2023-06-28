@@ -657,26 +657,29 @@ public:
         return inputChannel->Channel->GetFreeSpace();
     }
 
-    void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) override {
-        TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelData.GetChannelId());
-        YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelData.GetChannelId());
+    void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) override {
+        TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelData.Proto.GetChannelId());
+        YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelData.Proto.GetChannelId());
 
         auto channel = inputChannel->Channel;
 
-        if (channelData.GetData().GetRows()) {
+        if (channelData.RowCount()) {
+            TDqSerializedBatch batch;
+            batch.Proto = std::move(*channelData.Proto.MutableData());
+            batch.Payload = std::move(channelData.Payload);
             auto guard = BindAllocator();
-            channel->Push(std::move(*channelData.MutableData()));
+            channel->Push(std::move(batch));
         }
 
-        if (channelData.HasCheckpoint()) {
+        if (channelData.Proto.HasCheckpoint()) {
             Y_VERIFY(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_VERIFY(Checkpoints);
-            const auto& checkpoint = channelData.GetCheckpoint();
+            const auto& checkpoint = channelData.Proto.GetCheckpoint();
             inputChannel->Pause(checkpoint);
-            Checkpoints->RegisterCheckpoint(checkpoint, channelData.GetChannelId());
+            Checkpoints->RegisterCheckpoint(checkpoint, channelData.Proto.GetChannelId());
         }
 
-        if (channelData.GetFinished()) {
+        if (channelData.Proto.GetFinished()) {
             channel->Finish();
         }
 
@@ -1007,7 +1010,7 @@ protected:
         THolder<TStats> Stats;
 
         struct TAsyncData { // Is used in case of async compute actor
-            TVector<NDqProto::TData> Data;
+            TVector<TDqSerializedBatch> Data;
             TMaybe<NDqProto::TWatermark> Watermark;
             TMaybe<NDqProto::TCheckpoint> Checkpoint;
             bool Finished = false;
@@ -1326,7 +1329,7 @@ private:
     ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel) {
         auto channel = outputChannel.Channel;
 
-        NDqProto::TData data;
+        TDqSerializedBatch data;
         NDqProto::TWatermark watermark;
         NDqProto::TCheckpoint checkpoint;
 
@@ -1343,25 +1346,26 @@ private:
         outputChannel.Finished = channel->IsFinished();
         const bool becameFinished = !wasFinished && outputChannel.Finished;
 
-        ui32 dataSize = data.GetRaw().size();
+        ui32 dataSize = data.Size();
         ui32 watermarkSize = watermark.ByteSize();
         ui32 checkpointSize = checkpoint.ByteSize();
 
-        NDqProto::TChannelData channelData;
-        channelData.SetChannelId(channel->GetChannelId());
-        channelData.SetFinished(outputChannel.Finished);
+        TChannelDataOOB channelData;
+        channelData.Proto.SetChannelId(channel->GetChannelId());
+        channelData.Proto.SetFinished(outputChannel.Finished);
         if (hasData) {
-            channelData.MutableData()->Swap(&data);
+            channelData.Proto.MutableData()->Swap(&data.Proto);
+            channelData.Payload = std::move(data.Payload);
         }
         if (hasWatermark) {
-            channelData.MutableWatermark()->Swap(&watermark);
+            channelData.Proto.MutableWatermark()->Swap(&watermark);
             CA_LOG_I("Resume inputs by watermark");
             // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
             // But, let it be here, it's better to have the same code as in checkpoints
             ResumeInputsByWatermark(TInstant::MicroSeconds(watermark.GetTimestampUs()));
         }
         if (hasCheckpoint) {
-            channelData.MutableCheckpoint()->Swap(&checkpoint);
+            channelData.Proto.MutableCheckpoint()->Swap(&checkpoint);
             CA_LOG_I("Resume inputs by checkpoint");
             ResumeInputsByCheckpoint();
         }

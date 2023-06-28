@@ -1264,20 +1264,26 @@ private:
         auto& record = ev->Get()->Record;
         auto& channelData = record.GetChannelData();
 
+        TDqSerializedBatch batch;
+        batch.Proto = std::move(*record.MutableChannelData()->MutableData());
+        if (batch.Proto.HasPayloadId()) {
+            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
+        }
+
         auto& channel = TasksGraph.GetChannel(channelData.GetChannelId());
         YQL_ENSURE(channel.DstTask == 0);
         auto shardId = TasksGraph.GetTask(channel.SrcTask).Meta.ShardId;
 
         if (Stats) {
-            Stats->ResultBytes += channelData.GetData().GetRaw().size();
-            Stats->ResultRows += channelData.GetData().GetRows();
+            Stats->ResultBytes += batch.Size();
+            Stats->ResultRows += batch.RowCount();
         }
 
         LOG_T("Got result, channelId: " << channel.Id << ", shardId: " << shardId
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
             << ", finished: " << channelData.GetFinished());
 
-        ResponseEv->TakeResult(channel.DstInputIndex, std::move(*record.MutableChannelData()->MutableData()));
+        ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
         {
             LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
 

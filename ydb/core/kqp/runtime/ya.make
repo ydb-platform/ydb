@@ -34,6 +34,7 @@ PEERDIR(
     ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/utils
     ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
 )
 

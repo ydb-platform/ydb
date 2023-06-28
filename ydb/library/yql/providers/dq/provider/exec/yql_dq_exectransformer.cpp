@@ -147,7 +147,7 @@ public:
             runner->Prepare(runnerSettings, limits);
         }
 
-        TVector<NDqProto::TData> rows;
+        TVector<NDq::TDqSerializedBatch> rows;
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
             YQL_CLOG(DEBUG, ProviderDq) << " NDq::ERunStatus " << runner->Run();
@@ -155,7 +155,7 @@ public:
             NDq::ERunStatus status;
             while ((status = runner->Run()) == NDq::ERunStatus::PendingOutput || status == NDq::ERunStatus::Finished) {
                 if (!fillSettings.Discard) {
-                    NDqProto::TData data;
+                    NDq::TDqSerializedBatch data;
                     while (runner->GetOutputChannel(0)->Pop(data)) {
                         rows.push_back(std::move(data));
                         data = {};

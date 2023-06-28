@@ -35,6 +35,7 @@ target_link_libraries(core-kqp-runtime PUBLIC
   minikql-comp_nodes-llvm
   library-yql-utils
   dq-actors-protos
+  yql-dq-common
   yql-dq-runtime
   tools-enum_parser-enum_serialization_runtime
 )

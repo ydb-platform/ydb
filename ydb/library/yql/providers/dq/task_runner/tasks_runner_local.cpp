@@ -47,7 +47,7 @@ public:
         , Stats(channelId)
     { }
 
-    void Push(NDqProto::TData&& data) override {
+    void Push(TDqSerializedBatch&& data) override {
         Channel->Push(std::move(data));
     }
 
@@ -84,7 +84,7 @@ public:
     { }
 
     [[nodiscard]]
-    NDqProto::TPopResponse Pop(NDqProto::TData& data) override {
+    NDqProto::TPopResponse Pop(TDqSerializedBatch& data) override {
         NDqProto::TPopResponse response;
         response.SetResult(Channel->Pop(data));
         if (Channel->IsFinished()) {

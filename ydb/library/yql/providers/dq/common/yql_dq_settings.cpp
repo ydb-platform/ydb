@@ -61,6 +61,7 @@ TDqConfiguration::TDqConfiguration() {
 
     REGISTER_SETTING(*this, UseWideChannels);
     REGISTER_SETTING(*this, UseFastPickleTransport);
+    REGISTER_SETTING(*this, UseOOBTransport);
 
     REGISTER_SETTING(*this, AggregateStatsByStage);
     REGISTER_SETTING(*this, EnableChannelStats);

@@ -38,7 +38,7 @@ struct TEvKqpExecuter {
         TVector<TKqpExecuterTxResult>& GetTxResults() { return TxResults; }
         void InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx);
         void TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector& rows);
-        void TakeResult(ui32 idx, const NYql::NDqProto::TData& rows);
+        void TakeResult(ui32 idx, const NYql::NDq::TDqSerializedBatch& rows);
 
         ui64 GetResultRowsCount() const {
             return ResultRowsCount;

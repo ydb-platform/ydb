@@ -101,4 +101,34 @@
 
   {% include [auth-anonymous](../../../../_includes/python/async/auth-anonymous.md) %}
 
+- PHP
+  
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\AnonymousAuthentication;
+
+  $config = [
+
+      // Database path
+      'database'    => '/local',
+
+      // Database endpoint
+      'endpoint'    => 'localhost:2136',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          'insecure' => true,
+      ],
+      
+      'credentials' => new AnonymousAuthentication()
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 - {% endlist %}

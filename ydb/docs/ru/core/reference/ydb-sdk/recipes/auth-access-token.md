@@ -128,4 +128,34 @@
 
   {% include [auth-access-token](../../../../_includes/python/async/auth-access-token.md) %}
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\AccessTokenAuthentication;
+
+  $config = [
+
+      // Database path
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+
+      // Database endpoint
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          'root_cert_file' => './CA.pem', // Root CA file (dedicated server only!)
+      ],
+      
+      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 {% endlist %}

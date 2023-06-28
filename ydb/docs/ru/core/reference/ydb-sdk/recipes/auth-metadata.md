@@ -102,4 +102,33 @@
 
   {% include [auth-metadata](../../../../_includes/python/async/auth-metadata.md) %}
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\MetadataAuthentication;
+
+  $config = [
+
+      // Database path
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+
+      // Database endpoint
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          'temp_dir'     => './tmp', // Temp directory
+      ],
+      'credentials' => new MetadataAuthentication()
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 {% endlist %}

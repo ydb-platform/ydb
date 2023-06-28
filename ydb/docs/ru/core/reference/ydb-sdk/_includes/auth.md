@@ -70,6 +70,16 @@
   Определяется по переменным окружения | не поддерживается
   Выполнение внешней команды | ydb.CommandLineYcToken (например, для авторизации с помощью [IAM-токена]{% if lang == "ru"%}(https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/concepts/authorization/iam-token){% endif %} {{ yandex-cloud }} с компьютера разработчика ```ydb::CommandLineYcToken.from_cmd("yc iam create-token")```)
 
+- PHP
+
+  Режим | Метод
+  ----- | -----
+  Anonymous | [AnonymousAuthentication()](https://github.com/ydb-platform/ydb-php-sdk#anonymous)
+  Access Token | [AccessTokenAuthentication( $accessToken )](https://github.com/ydb-platform/ydb-php-sdk#access-token)
+  Oauth Token | [OAuthTokenAuthentication( $oauthToken )](https://github.com/ydb-platform/ydb-php-sdk#oauth-token)
+  Metadata | [MetadataAuthentication()](https://github.com/ydb-platform/ydb-php-sdk#metadata-url)
+  Service Account Key | [JwtWithJsonAuthentication($jsonFilePath)](https://github.com/ydb-platform/ydb-php-sdk#jwt--json-file)  или [JwtWithPrivateKeyAuthentication( $key_id, $service_account_id, $privateKeyFile )](https://github.com/ydb-platform/ydb-php-sdk#jwt--private-key)
+
 {% endlist %}
 
 ## Порядок определения режима и параметров аутентификации из окружения {#env}

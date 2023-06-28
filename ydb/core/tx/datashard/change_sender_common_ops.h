@@ -92,7 +92,7 @@ class TBaseChangeSender: public IChangeSender {
     };
 
     struct TBroadcast {
-        const TChangeRecord Record;
+        const TEnqueuedRecord Record;
         THashSet<ui64> Partitions;
         THashSet<ui64> PendingPartitions;
         THashSet<ui64> CompletedPartitions;

@@ -53,13 +53,6 @@
   - ustat.h
   - xlocale.h
 
-- source_filter: "^contrib/libs/webrtc/modules"
-  includes:
-    - aaudio/AAudio.h
-    - SLES/OpenSLES.h
-    - SLES/OpenSLES_Android.h
-    - SLES/OpenSLES_AndroidConfiguration.h
-
 - includes:
   - jni.h: contrib/libs/jdk/include/jni.h
   - jni_md.h:
@@ -67,12 +60,8 @@
     - contrib/libs/jdk/include/linux/jni_md.h
     - contrib/libs/jdk/include/win32/jni_md.h
 
-- source_filter: "^contrib/python/(coverage|gevent|greenlet)"
-  includes:
-  - internal/pycore_frame.h: contrib/libs/python/Include/internal/pycore_frame.h
-
 # These are stubs for actual resolving into system
-- source_filter: ^(contrib/libs/glibcasm/glibc/include/features\.h)
+- source_filter: "^contrib/libs/glibcasm"
   includes:
   - stdc-predef.h: contrib/libs/glibcasm/glibc/include/stdc-predef.h
   - gnu/stubs.h: contrib/libs/glibcasm/glibc/include/gnu/stubs.h

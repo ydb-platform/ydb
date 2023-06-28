@@ -235,15 +235,17 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
     TLoginUserResponse response;
-    auto itUser = Sids.find(request.User);
-    if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
-        response.Error = "Invalid user";
-        return response;
-    }
+    if (!request.ExternalAuth.has_value()) {
+        auto itUser = Sids.find(request.User);
+        if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+            response.Error = "Invalid user";
+            return response;
+        }
 
-    if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
-        response.Error = "Invalid password";
-        return response;
+        if (!Impl->VerifyHash(request.Password, itUser->second.Hash)) {
+            response.Error = "Invalid password";
+            return response;
+        }
     }
 
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
@@ -274,9 +276,13 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         token.set_audience(Audience);
     }
 
-    if (request.Options.WithUserGroups) {
-        auto groups = GetGroupsMembership(request.User);
-        token.set_payload_claim(GROUPS_CLAIM_NAME, jwt::claim(picojson::value(std::vector<picojson::value>(groups.begin(), groups.end()))));
+    if (request.ExternalAuth.has_value()) {
+        token.set_payload_claim(EXTERNAL_AUTH_CLAIM_NAME, jwt::claim(request.ExternalAuth.value()));
+    } else {
+        if (request.Options.WithUserGroups) {
+            auto groups = GetGroupsMembership(request.User);
+            token.set_payload_claim(GROUPS_CLAIM_NAME, jwt::claim(picojson::value(std::vector<picojson::value>(groups.begin(), groups.end()))));
+        }
     }
 
     auto encoded_token = token.sign(algorithm);
@@ -339,7 +345,12 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
                     response.Groups = groups;
                 }
             }
-            if (!Sids.empty()) {
+            if (decoded_token.has_payload_claim(EXTERNAL_AUTH_CLAIM_NAME)) {
+                const jwt::claim& externalAuthClaim = decoded_token.get_payload_claim(EXTERNAL_AUTH_CLAIM_NAME);
+                if (externalAuthClaim.get_type() == jwt::claim::type::string) {
+                    response.ExternalAuth = externalAuthClaim.as_string();
+                }
+            } else if (!Sids.empty()) {
                 auto itUser = Sids.find(TString(decoded_token.get_subject()));
                 if (itUser == Sids.end()) {
                     response.Error = "Token is valid, but subject wasn't found";

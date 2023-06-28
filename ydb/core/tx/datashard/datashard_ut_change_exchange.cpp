@@ -2366,6 +2366,79 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(InitialScanAndLimits) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetChangesQueueItemsLimit(1)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        TVector<THolder<IEventHandle>> delayed;
+        ui32 progressCount = 0;
+
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            static constexpr ui32 EvCdcStreamScanProgress = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 24;
+
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCdcStreamScanRequest:
+                if (auto* msg = ev->Get<TEvDataShard::TEvCdcStreamScanRequest>()) {
+                    msg->Record.MutableLimits()->SetBatchMaxRows(1);
+                } else {
+                    UNIT_ASSERT(false);
+                }
+                break;
+
+            case TEvChangeExchange::EvEnqueueRecords:
+                delayed.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+
+            case EvCdcStreamScanProgress:
+                ++progressCount;
+                break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        if (delayed.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed, &progressCount](IEventHandle&) {
+                return !delayed.empty() && progressCount >= 2;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+        });
+    }
+
     Y_UNIT_TEST(AwsRegion) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())

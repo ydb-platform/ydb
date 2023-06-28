@@ -320,7 +320,7 @@ public:
                 << ": streamPathId# " << Request->Get()->StreamPathId);
 
             // re-schedule tx
-            ctx.Schedule(TDuration::Seconds(1), Request->Release().Release());
+            ctx.TActivationContext::Schedule(TDuration::Seconds(1), Request->Forward(ctx.SelfID));
         }
     }
 

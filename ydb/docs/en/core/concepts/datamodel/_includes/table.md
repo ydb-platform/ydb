@@ -115,10 +115,10 @@ If there are multiple followers, their delay from the leader may vary: although 
 | `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Yes | Yes |
 
 Where `<unit>`:
-* `SECONDS`
-* `MILLISECONDS`
-* `MICROSECONDS`
-* `NANOSECONDS`
+* `SECONDS`;
+* `MILLISECONDS`;
+* `MICROSECONDS`;
+* `NANOSECONDS`.
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md).
 

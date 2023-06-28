@@ -235,26 +235,10 @@
     - sqltypes.h
     - sqlucode.h
 
-- source_filter: "^contrib/libs/libmemcached"
-  includes:
-    - sasl/sasl.h
-    - sasl/saslutil.h
-
 - source_filter: "^contrib/libs/(apache/apr|httpd|llvm)"
   includes:
     - uuid.h
     - uuid/uuid.h
-
-- source_filter: "^contrib/libs/(kenlm|libxml|re2|sqlite3)"
-  includes:
-    - unicode/ucnv.h
-    - unicode/ucol.h
-    - unicode/uniset.h
-    - unicode/unistr.h
-    - unicode/ustring.h
-    - unicode/utf16.h
-    - unicode/utypes.h
-    - unicode/uversion.h
 
 - source_filter: "^contrib/deprecated/glib"
   includes:
@@ -286,24 +270,9 @@
     - ngx_http.h
     - ngx_log.h
 
-- source_filter: "^contrib/libs/leptonica-1.70"
-  includes:
-    - gif_lib.h
-    - webp/decode.h
-    - webp/encode.h
-
 - source_filter: "^contrib/libs/libpcap"
   includes:
     - strerror.h
-
-- source_filter: "^contrib/libs/libxml"
-  includes:
-    - lzma.h
-    - win32config.h
-
-- source_filter: "^contrib/libs/mod_perl2"
-  includes:
-    - config.h
 
 - source_filter: "^contrib/libs/(apache/apr|httpd|openssl)"
   includes:
@@ -313,10 +282,6 @@
   includes:
     - magic.h
     - xmlparse.h
-
-- source_filter: "^contrib/python/scipy"
-  includes:
-    - matrix.h
 
 - source_filter: "^contrib/python/uWSGI"
   includes:
@@ -355,10 +320,6 @@
     - note.h
     - could_not_find_Perl_patchlevel.h
     - patchlevel.h
-
-- source_filter: "^contrib/libs/(freetype|leptonica-1.70|libtheora|zbar)"
-  includes:
-    - png.h
 
 - source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)"
   includes:
@@ -425,6 +386,7 @@
 - source_filter: "^contrib/libs/h3"
   includes:
     - alloc.h: contrib/libs/h3/h3lib/include/alloc.h
+
 - source_filter: "^cloud/iam/token_agent/daemon"
   includes:
     - contrib/libs/grpc/include/grpcpp/impl/codegen/server_context_impl.h
@@ -612,10 +574,6 @@
 - source_filter: "^contrib/tools/bison/bison/data"
   includes:
     - position.hh
-
-- source_filter: "^contrib/libs/re2/util/pcre.h"
-  includes:
-    - pcre.h
 
 - source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
   includes:

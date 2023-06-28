@@ -59,6 +59,17 @@ public:
             return;
         }
 
+        RowsOffset = req->rows_offset();
+        if (!req->fetch_token().Empty()) {
+            auto fetch_token = TryFromString<ui64>(req->fetch_token());
+            if (fetch_token) {
+                RowsOffset = *fetch_token;
+            } else {
+                Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid fetch token");
+                return;
+            }
+        }
+
         if (!GetExecutionIdFromRequest()) {
             return;
         }
@@ -86,8 +97,8 @@ private:
 
         auto req = MakeHolder<NKqp::TEvKqp::TEvFetchScriptResultsRequest>();
         req->Record.SetResultSetId(userReq->result_set_id());
-        req->Record.SetRowsOffset(userReq->rows_offset());
-        req->Record.SetRowsLimit(userReq->rows_limit());
+        req->Record.SetRowsOffset(RowsOffset);
+        req->Record.SetRowsLimit(userReq->rows_limit() + 1);
 
         const NActors::TActorId runScriptActor = ev->Get()->RunScriptActorId;
         ui64 flags = IEventHandle::FlagTrackDelivery;
@@ -105,6 +116,12 @@ private:
         resp.set_result_set_index(static_cast<i64>(ev->Get()->Record.GetResultSetIndex()));
         if (ev->Get()->Record.HasResultSet()) {
             resp.mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
+
+            const auto* userReq = GetProtoRequest();
+            if (resp.mutable_result_set()->rows_size() == userReq->rows_limit() + 1) {
+                resp.mutable_result_set()->mutable_rows()->DeleteSubrange(userReq->rows_limit(), 1);
+                resp.set_next_fetch_token(ToString(RowsOffset + userReq->rows_limit()));
+            }
         }
         Reply(resp.status(), std::move(resp));
     }
@@ -183,6 +200,7 @@ private:
 private:
     TMaybe<ui32> SubscribedOnSession;
     TString ExecutionId;
+    ui64 RowsOffset = 0;
 };
 
 } // namespace

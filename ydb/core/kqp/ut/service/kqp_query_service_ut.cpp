@@ -646,6 +646,83 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", NYdb::NQuery::TExecuteScriptSettings().ForgetAfter(TDuration::Days(1))).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::UNSUPPORTED, scriptExecutionOperation.Status().GetIssues().ToString());
     }
+
+    TScriptExecutionOperation CreateScriptExecutionOperation(size_t numberOfRows, NYdb::NQuery::TQueryClient& db, const NYdb::TDriver& ydbDriver) {
+        TString sql = "SELECT * FROM AS_TABLE([";
+        for (size_t i = 0; i < numberOfRows; ++i) {
+            sql.append(TStringBuilder() << "<|idx:" << i << "|>");
+            if (i + 1 < numberOfRows) {
+                sql.append(',');
+            } else {
+                sql.append("]);");
+            }
+        }
+        
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), ydbDriver);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+
+        return scriptExecutionOperation;
+    }
+
+    Y_UNIT_TEST(InvalidFetchToken) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+        auto scriptExecutionOperation = CreateScriptExecutionOperation(1, db, kikimr.GetDriver());
+
+        auto settings = TFetchScriptResultsSettings();
+        settings.FetchToken("?");
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(results.GetStatus(), EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(EmptyNextPageToken) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        constexpr size_t NUMBER_OF_ROWS = 10;
+        auto scriptExecutionOperation = CreateScriptExecutionOperation(NUMBER_OF_ROWS, db, kikimr.GetDriver());
+
+        auto settings = TFetchScriptResultsSettings();
+        settings.RowsLimit(NUMBER_OF_ROWS);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        UNIT_ASSERT(results.NextPageToken().Empty());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), NUMBER_OF_ROWS);
+    }
+
+    Y_UNIT_TEST(TestPaging) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        constexpr size_t NUMBER_OF_ROWS = 10;
+        auto scriptExecutionOperation = CreateScriptExecutionOperation(NUMBER_OF_ROWS, db, kikimr.GetDriver());
+
+        constexpr size_t ROWS_LIMIT = 2;
+        auto settings = TFetchScriptResultsSettings();
+        settings.RowsLimit(ROWS_LIMIT);
+
+        constexpr size_t NUMBER_OF_TESTS = 3;
+        for (size_t i = 0; i < NUMBER_OF_TESTS && (i + 1) * ROWS_LIMIT <= NUMBER_OF_ROWS; ++i) {
+            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), ROWS_LIMIT);
+            for (size_t j = 0; j < ROWS_LIMIT; ++j) {
+                UNIT_ASSERT(resultSet.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), i * ROWS_LIMIT + j);
+            }
+
+            settings.FetchToken(results.NextPageToken());
+        }
+    }
 }
 
 } // namespace NKqp

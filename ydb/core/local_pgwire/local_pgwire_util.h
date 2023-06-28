@@ -227,22 +227,17 @@ inline TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
     };
 }
 
-inline bool IsWhitespaceASCII(char c)
-{
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+inline bool IsQueryEmptyChar(char c) {
+    return c == ' ' || c == ';' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
-inline bool IsWhitespace(TStringBuf query) {
+inline bool IsQueryEmpty(TStringBuf query) {
     for (char c : query) {
-        if (!IsWhitespaceASCII(c)) {
+        if (!IsQueryEmptyChar(c)) {
             return false;
         }
     }
     return true;
-}
-
-inline bool IsQueryEmpty(TStringBuf query) {
-    return IsWhitespace(query);
 }
 
 } //namespace NLocalPgWire

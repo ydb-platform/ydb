@@ -2,6 +2,8 @@
 
 With the `import file` command, you can import data from [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %} or [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} files to an existing table.
 
+Data from an imported file is read in batches whose size is set in the `--batch-bytes` option. An independent query is used to write each batch to the database. The queries are executed asynchronously. When the number of executed queries reaches `--max-in-flight`, reading from the file pauses. You can import data from multiple files using a single command. In this case, data from the files will be read asynchronously.
+
 The command implements the `BulkUpsert` method, which ensures high efficiency of multi-row bulk upserts with no atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. When completed successfully, it guarantees that all data is upserted.
 
 If the table already includes data, it's replaced by imported data on primary key match.
@@ -11,17 +13,18 @@ The imported file must be in the [UTF-8]{% if lang == "ru" %}(https://ru.wikiped
 General format of the command:
 
 ```bash
-{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options]
+{{ ydb-cli }} [connection options] import file csv|json|parquet|tsv [options] <input files...>
 ```
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
+
+`<input files>`: Paths to local file system files you want to import.
 
 ## Subcommand options {#options}
 
 ### Required options {#required}
 
 * `-p, --path STRING`: A path to the table in the database.
-* `--input-file STRING`: A path to the imported file in the local file system.
 
 ### Additional options {#optional}
 
@@ -58,7 +61,7 @@ The `release_date` column in the `series` table has the [Date](../../../../yql/r
 To import such a file, use the command:
 
 ```bash
-ydb import file csv -p series --input-file series.csv
+ydb import file csv -p series series.csv
 ```
 
 The following data will be imported:
@@ -73,6 +76,28 @@ The following data will be imported:
 └──────────────┴───────────┴───────────────────────────────────────────────────────────┴──────────────────┘
 ```
 
+### Importing multiple files {#multiple-files}
+
+The following files include CSV data without additional information:
+
+* series1.csv:
+
+   ```text
+   1,IT Crowd,The IT Crowd is a British sitcom.,131822
+   ```
+
+* series2.csv:
+
+   ```text
+   2,Silicon Valley,Silicon Valley is an American comedy television series., 16166
+   ```
+
+To import such files, run the command:
+
+```bash
+ydb import file csv -p series series1.csv series2.csv
+```
+
 ### Import file with the `|` delimiter {#custom-delimiter}
 
 The file includes data without any additional information. The `|` character is used as a delimiter.
@@ -85,7 +110,7 @@ The file includes data without any additional information. The `|` character is 
 To import such a file, use `|` in the `--delimiter` option:
 
 ```bash
-ydb import file csv -p series --input-file series.csv  --delimiter "|"
+ydb import file csv -p series --delimiter "|" series.csv
 ```
 
 ### Skip rows and read column headers {#skip}
@@ -103,7 +128,7 @@ series_id,title,release_date,series_info
 To skip comments in the first and second rows, use `--skip-rows 2`. To process the third row as headers and map the file data to table columns, use the `--header` option:
 
 ```bash
-ydb import file csv -p series --input-file series.csv --skip-rows 2 --header
+ydb import file csv -p series --skip-rows 2 --header series.csv
 ```
 
 ### Replace values to `NULL` {#replace-with-null}
@@ -119,7 +144,7 @@ The file includes the `\N` sequence often used for `NULL`, as well as empty stri
 Use `--null-value "\N"` so that `\N` is interpreted as `NULL`:
 
 ```bash
-ydb import file csv -p series --input-file series.csv --null-value "\N"
+ydb import file csv -p series --null-value "\N" series.csv
 ```
 
 The following data will be imported:

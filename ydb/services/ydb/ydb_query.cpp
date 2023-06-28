@@ -47,6 +47,13 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             new TGrpcRequestNoOperationCall<CreateSessionRequest, CreateSessionResponse>
                 (ctx, &DoCreateSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
+
+    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<AttachSessionRequest, SessionState>
+                (ctx, &DoAttachSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
+
 #undef ADD_REQUEST
 }
 

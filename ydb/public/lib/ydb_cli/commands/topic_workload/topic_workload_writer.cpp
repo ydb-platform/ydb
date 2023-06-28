@@ -229,7 +229,7 @@ void TTopicWorkloadWriterWorker::CreateWorker() {
     WriteSession = NYdb::NTopic::TTopicClient(*Params.Driver).CreateWriteSession(settings);
 }
 
-void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams&& params) {
+void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params) {
     TTopicWorkloadWriterWorker writer(std::move(params));
 
     (*params.StartedCount)++;

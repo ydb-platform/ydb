@@ -97,12 +97,28 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
 }
 
 int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
-    Log = std::make_shared<TLog>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
-    Log->SetFormatter(GetPrefixLogFormatter(""));
-    Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel))));
+    auto makeLogBackend = [&config]() {
+        return CreateLogBackend("cerr",
+                                TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel));
+    };
 
-    StatsCollector = std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount, ConsumerCount * ConsumerThreadCount, Quiet, PrintTimestamp, WindowSec, TotalSec, WarmupSec, Percentile, ErrorFlag);
+    Log = std::make_shared<TLog>(makeLogBackend());
+    Log->SetFormatter(GetPrefixLogFormatter(""));
+
+    Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, makeLogBackend()));
+
+    StatsCollector =
+        std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount,
+                                                       ConsumerCount * ConsumerThreadCount,
+                                                       Quiet,
+                                                       PrintTimestamp,
+                                                       WindowSec,
+                                                       TotalSec,
+                                                       WarmupSec,
+                                                       Percentile,
+                                                       ErrorFlag);
     StatsCollector->PrintHeader();
+
     std::vector<TString> generatedMessages = TTopicWorkloadWriterWorker::GenerateMessages(MessageSize);
 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
@@ -126,7 +142,7 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
                 .ConsumerIdx = consumerIdx,
                 .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
 
-            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(std::move(readerParams)); }));
+            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(readerParams); }));
         }
     }
     while (*consumerStartedCount != ConsumerThreadCount * ConsumerCount)
@@ -152,7 +168,7 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
             .Codec = Codec};
 
-        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(std::move(writerParams)); }));
+        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(writerParams); }));
     }
 
     while (*producerStartedCount != ProducerThreadCount)

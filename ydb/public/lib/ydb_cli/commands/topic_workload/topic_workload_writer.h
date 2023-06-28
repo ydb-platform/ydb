@@ -32,7 +32,7 @@ namespace NYdb {
 
         class TTopicWorkloadWriterWorker {
         public:
-            static void WriterLoop(TTopicWorkloadWriterParams&& params);
+            static void WriterLoop(TTopicWorkloadWriterParams& params);
             static std::vector<TString> GenerateMessages(size_t messageSize);
         private:
             TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);

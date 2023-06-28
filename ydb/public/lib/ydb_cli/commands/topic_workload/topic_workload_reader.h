@@ -25,7 +25,7 @@ namespace NYdb {
 
         class TTopicWorkloadReader {
         public:
-            static void ReaderLoop(TTopicWorkloadReaderParams&& params);
+            static void ReaderLoop(TTopicWorkloadReaderParams& params);
         };
     }
 }

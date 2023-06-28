@@ -100,7 +100,7 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
                 .ConsumerIdx = consumerIdx,
                 .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
 
-            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(std::move(readerParams)); }));
+            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(readerParams); }));
         }
     }
     while (*consumerStartedCount != ConsumerThreadCount * ConsumerCount)

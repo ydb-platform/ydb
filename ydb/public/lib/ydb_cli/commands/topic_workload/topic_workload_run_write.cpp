@@ -124,7 +124,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
             .Codec = Codec};
 
-        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(std::move(writerParams)); }));
+        threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(writerParams); }));
     }
 
     while (*producerStartedCount != ProducerThreadCount)

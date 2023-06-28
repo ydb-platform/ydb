@@ -7,7 +7,7 @@
 
 using namespace NYdb::NConsoleClient;
 
-void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams&& params) {
+void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*params.Driver);
 
     auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerIdx);

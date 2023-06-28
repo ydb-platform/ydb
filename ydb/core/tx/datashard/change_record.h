@@ -25,6 +25,7 @@ public:
     enum class EKind: ui8 {
         AsyncIndex,
         CdcDataChange,
+        CdcHeartbeat,
     };
 
     struct TAwsJsonOptions {
@@ -55,6 +56,7 @@ public:
     i64 GetSeqNo() const;
     TString GetPartitionKey() const;
     TInstant GetApproximateCreationDateTime() const;
+    bool IsBroadcast() const;
 
     TString ToString() const;
     void Out(IOutputStream& out) const;

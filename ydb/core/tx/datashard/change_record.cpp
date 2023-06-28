@@ -33,6 +33,9 @@ void TChangeRecord::SerializeToProto(NKikimrChangeExchange::TChangeRecord& recor
             Y_VERIFY(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
             break;
         }
+        case EKind::CdcHeartbeat: {
+            break;
+        }
     }
 }
 
@@ -347,6 +350,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
             Key.ConstructInPlace(key.GetCells());
             break;
         }
+
+        case EKind::CdcHeartbeat: {
+            Y_FAIL("Not supported");
+        }
     }
 
     Y_VERIFY(Key);
@@ -375,7 +382,8 @@ TString TChangeRecord::GetPartitionKey() const {
             break;
         }
 
-        case EKind::AsyncIndex: {
+        case EKind::AsyncIndex:
+        case EKind::CdcHeartbeat: {
             Y_FAIL("Not supported");
         }
     }
@@ -388,6 +396,15 @@ TInstant TChangeRecord::GetApproximateCreationDateTime() const {
     return GetGroup()
         ? TInstant::FromValue(GetGroup())
         : TInstant::MilliSeconds(GetStep());
+}
+
+bool TChangeRecord::IsBroadcast() const {
+    switch (Kind) {
+        case EKind::CdcHeartbeat:
+            return true;
+        default:
+            return false;
+    }
 }
 
 TString TChangeRecord::ToString() const {

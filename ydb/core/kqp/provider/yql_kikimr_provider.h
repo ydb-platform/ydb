@@ -105,8 +105,8 @@ struct TKikimrQueryContext : TThrRefBase {
     // Operations on document API tables are performed in restricted mode by default,
     // full mode can be enabled explicitly.
     bool DocumentApiRestricted = true;
-
     bool IsInternalCall = false;
+    bool ConcurrentResults = true;
 
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;

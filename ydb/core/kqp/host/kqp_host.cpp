@@ -1329,6 +1329,10 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.ConcurrentResults) {
+            YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
+            SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
+        }
 
         TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;
         if (!sqlVersion) {

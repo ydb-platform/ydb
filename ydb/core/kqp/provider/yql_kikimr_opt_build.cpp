@@ -82,6 +82,8 @@ struct TKiExploreTxResults {
         bool HasUncommittedChangesRead = false;
     };
 
+    bool ConcurrentResults = true;
+
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
     TVector<TKiQueryBlock> QueryBlocks;
@@ -245,6 +247,10 @@ struct TKiExploreTxResults {
             AddQueryBlock();
         }
 
+        if (!ConcurrentResults && QueryBlocks.back().Results.size() > 0) {
+            AddQueryBlock();
+        }
+
         auto& curBlock = QueryBlocks.back();
         curBlock.Results.push_back(result);
     }
@@ -323,7 +329,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
     }
 
     for (const auto& dataSource : types.DataSources) {
-        if (auto* dqIntegration = dataSource->GetDqIntegration(); dqIntegration 
+        if (auto* dqIntegration = dataSource->GetDqIntegration(); dqIntegration
         && dqIntegration->CanRead(*node.Ptr(), ctx)
         && dqIntegration->EstimateReadSize(TDqSettings::TDefault::DataSizePerJob, TDqSettings::TDefault::MaxTasksPerStage, *node.Ptr(), ctx)) {
             txRes.Ops.insert(node.Raw());
@@ -718,7 +724,8 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
 
 } // namespace
 
-TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData, TTypeAnnotationContext& types) {
+TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TKikimrTablesData> tablesData,
+    TTypeAnnotationContext& types, bool concurrentResults) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -728,6 +735,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
     auto kiDataSink = commit.DataSink().Cast<TKiDataSink>();
 
     TKiExploreTxResults txExplore;
+    txExplore.ConcurrentResults = concurrentResults;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types)) {
         return node.Ptr();
     }
@@ -793,13 +801,14 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
             .Done()
             .Ptr();
 
+        int resultIndex = 0;
         for (auto& block : txExplore.QueryBlocks) {
             for (size_t i = 0; i < block.Results.size(); ++i) {
                 auto result = block.Results[i].Cast<TResWriteBase>();
 
                 auto extractValue = Build<TCoNth>(ctx, node.Pos())
                     .Tuple(execRight)
-                    .Index().Build(i)
+                    .Index().Build(resultIndex)
                     .Done()
                     .Ptr();
 
@@ -818,6 +827,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TIntrusivePtr<TK
                     .DataSink<TResultDataSink>()
                         .Build()
                     .Done();
+
+                ++resultIndex;
             }
         }
     }

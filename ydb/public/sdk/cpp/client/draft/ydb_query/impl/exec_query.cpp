@@ -190,6 +190,10 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     request.mutable_query_content()->set_text(query);
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
 
+    if (settings.ConcurrentResultSets_) {
+        request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
+    }
+
     if (txControl.HasTx()) {
         auto requestTxControl = request.mutable_tx_control();
         requestTxControl->set_commit_tx(txControl.CommitTx_);
@@ -256,7 +260,10 @@ TAsyncExecuteQueryResult TExecQueryImpl::ExecuteQuery(const std::shared_ptr<TGRp
     const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
     const TMaybe<TParams>& params, const TExecuteQuerySettings& settings)
 {
-    return StreamExecuteQuery(connections, driverState, query, txControl, params, settings)
+    auto syncSettings = settings;
+    syncSettings.ConcurrentResultSets(true);
+
+    return StreamExecuteQuery(connections, driverState, query, txControl, params, syncSettings)
         .Apply([](TAsyncExecuteQueryIterator itFuture){
             auto it = itFuture.ExtractValue();
 

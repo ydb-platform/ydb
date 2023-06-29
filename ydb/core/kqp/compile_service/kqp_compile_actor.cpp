@@ -141,6 +141,11 @@ public:
                 break;
 
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+                prepareSettings.ConcurrentResults = false;
+                AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings);
+                break;
+
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
                 AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings);
                 break;
 

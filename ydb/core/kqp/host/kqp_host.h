@@ -33,6 +33,7 @@ public:
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> UsePgParser;
         TMaybe<TSqlVersion> SyntaxVersion;
+        TMaybe<bool> ConcurrentResults;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " IsInternalCall: " << IsInternalCall << " }";

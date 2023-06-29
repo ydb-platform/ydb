@@ -257,9 +257,13 @@ private:
             }
         }
 
+        auto queryType = req->concurrent_result_sets()
+            ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+            : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY;
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             queryAction,
-            NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+            queryType,
             SelfId(),
             Request_,
             "", // sessionId

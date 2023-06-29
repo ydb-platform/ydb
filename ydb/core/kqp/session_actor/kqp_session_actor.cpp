@@ -285,6 +285,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
                 return true;
 
@@ -401,6 +402,7 @@ public:
             case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
                 auto type = QueryState->GetType();
                 if (type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
+                    type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY &&
                     type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT)
                 {
                     return ForwardRequest(ev);
@@ -675,6 +677,7 @@ public:
                     type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
                     type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
                     type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+                    type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
                     type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
                 );
                 break;
@@ -1188,6 +1191,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {

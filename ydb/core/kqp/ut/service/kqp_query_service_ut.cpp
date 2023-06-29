@@ -137,11 +137,17 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Basic);
+
         auto result = db.ExecuteQuery(R"(
             SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
             SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         CompareYson(R"([
             [[1];[202u];["Value2"]];
@@ -165,6 +171,40 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[6u]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST(StreamExecuteQueryMultiResult) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto it = db.StreamExecuteQuery(R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT 2;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        ui64 lastResultSetIndex = 0;
+        ui64 count = 0;
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                if (streamPart.GetResultSetIndex() != lastResultSetIndex) {
+                    UNIT_ASSERT_VALUES_EQUAL(streamPart.GetResultSetIndex(), lastResultSetIndex + 1);
+                    ++lastResultSetIndex;
+                }
+
+                auto resultSet = streamPart.ExtractResultSet();
+                count += resultSet.RowsCount();
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(count, 7);
     }
 
     Y_UNIT_TEST(ExecuteQueryWrite) {
@@ -351,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", settings).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(scriptExecutionOperation.Metadata().ExecMode, EExecMode::Explain);
-        
+
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Explain);
@@ -372,12 +412,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
-        
+
         // TODO: change when parse mode will be supported
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
         UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not supported yet", scriptExecutionOperation.Status().GetIssues().ToString());
-        
+
     }
 
     Y_UNIT_TEST(ValidateScript) {
@@ -388,7 +428,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
-        
+
         // TODO: change when validate mode will be supported
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
         UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
@@ -403,7 +443,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
         )", settings).ExtractValueSync();
-        
+
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
         UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not specified", scriptExecutionOperation.Status().GetIssues().ToString());
@@ -500,7 +540,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         for (const auto& op : list.GetList()) {
             UNIT_ASSERT_C(listedOpsAfterForget.emplace(op.Metadata().ExecutionId).second, op.Metadata().ExecutionId);
         }
-        
+
         UNIT_ASSERT_EQUAL(rememberedOps, listedOpsAfterForget);
     }
 
@@ -525,7 +565,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::SUCCESS, forgetStatus.GetIssues().ToString());
         forgetStatus = opClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
         UNIT_ASSERT_C(forgetStatus.GetStatus() == NYdb::EStatus::NOT_FOUND, forgetStatus.GetIssues().ToString());
-        
+
     }
 
     Y_UNIT_TEST(ForgetScriptExecutionRace) {

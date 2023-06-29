@@ -16,6 +16,7 @@ ui64 GetDefaultQueryTimeoutMs(NKikimrKqp::EQueryType queryType, const NKikimrCon
         case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
         case NKikimrKqp::QUERY_TYPE_AST_DML:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
             return queryLimits.GetDataQueryTimeoutMs();
 

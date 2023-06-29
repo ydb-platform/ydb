@@ -105,6 +105,8 @@ void TKqpCountersBase::Init() {
         KqpGroup->GetCounter("Request/QueryTypeAstScan", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY] =
         KqpGroup->GetCounter("Request/QueryTypeGenericQuery", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY] =
+        KqpGroup->GetCounter("Request/QueryTypeGenericConcurrentQuery", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT] =
         KqpGroup->GetCounter("Request/QueryTypeGenericScript", true);
     OtherQueryTypes = KqpGroup->GetCounter("Requests/QueryTypeOther", true);

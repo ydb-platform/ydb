@@ -219,6 +219,7 @@ public:
         LOG_D("Progress"
             << ": streamPathId# " << streamPathId);
 
+        ChangeRecords.clear();
         if (Self->CheckChangesQueueOverflow()) {
             return true;
         }
@@ -230,6 +231,8 @@ public:
         Y_VERIFY(it != table->CdcStreams.end());
 
         NIceDb::TNiceDb db(txc.DB);
+        bool pageFault = false;
+
         for (const auto& [k, v] : ev.Rows) {
             const auto key = MakeKey(k.GetCells(), table);
             const auto& keyTags = table->KeyColumnIds;
@@ -238,10 +241,10 @@ public:
             TSelectStats stats;
             auto ready = txc.DB.Select(table->LocalTid, key, {}, row, stats, 0, readVersion);
             if (ready == EReady::Page) {
-                return false;
+                pageFault = true;
             }
 
-            if (ready == EReady::Gone || stats.InvisibleRowSkips) {
+            if (pageFault || ready == EReady::Gone || stats.InvisibleRowSkips) {
                 continue;
             }
 
@@ -291,6 +294,10 @@ public:
             });
 
             Self->PersistChangeRecord(db, record);
+        }
+
+        if (pageFault) {
+            return false;
         }
 
         if (ev.Rows) {

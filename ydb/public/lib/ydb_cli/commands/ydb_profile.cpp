@@ -288,7 +288,7 @@ int TCommandConnectionInfo::Run(TConfig& config) {
         }
     }
     if (config.CaCerts) {
-        Cout << "  ca-certs:" << config.CaCertsFile << Endl;
+        Cout << "  ca-file: " << config.CaCertsFile << Endl;
     }
     return EXIT_SUCCESS;
 }

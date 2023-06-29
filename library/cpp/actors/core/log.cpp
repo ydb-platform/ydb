@@ -99,7 +99,7 @@ namespace NActors {
 
     void TLoggerActor::FlushLogBufferMessage() {
         if (!LogBuffer.IsEmpty()) {
-            NLog::TEvLog *log = LogBuffer.Pop();  
+            NLog::TEvLog *log = LogBuffer.Pop();
             if (!OutputRecord(log)) {
                 BecomeDefunct();
             }
@@ -110,7 +110,7 @@ namespace NActors {
     void TLoggerActor::FlushLogBufferMessageEvent(TFlushLogBuffer::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ev);
         FlushLogBufferMessage();
-        
+
         ui64 ignoredCount = LogBuffer.GetIgnoredCount();
         if (ignoredCount > 0) {
             NLog::EPrio prio = LogBuffer.GetIgnoredHighestPrio();
@@ -158,9 +158,9 @@ namespace NActors {
                 if (delayMillisec < (i64)Settings->TimeThresholdMs && !LogBuffer.CheckLogIgnoring()) {
                     FlushLogBufferMessage();
                 }
-                return; 
+                return;
             }
-            
+
             PassedCount++;
         }
 
@@ -626,4 +626,98 @@ namespace NActors {
     TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends) {
         return new TCompositeLogBackend(std::move(underlyingBackends));
     }
+
+    class TLogContext: TNonCopyable {
+    private:
+        class TStackedContext {
+        private:
+            const TLogContextGuard* Guard;
+            std::optional<NLog::EComponent> Component;
+            mutable std::optional<TString> CurrentHeader;
+        public:
+            TStackedContext(const TLogContextGuard* guard, std::optional<NLog::EComponent>&& component)
+                : Guard(guard)
+                , Component(std::move(component))
+            {
+
+            }
+
+            ui64 GetId() const {
+                return Guard->GetId();
+            }
+
+            const std::optional<NLog::EComponent>& GetComponent() const {
+                return Component;
+            }
+
+            TString GetCurrentHeader() const {
+                if (!CurrentHeader) {
+                    CurrentHeader = Guard->GetResult();
+                }
+                return *CurrentHeader;
+            }
+        };
+
+        std::vector<TStackedContext> Stack;
+    public:
+        void Push(const TLogContextGuard& context) {
+            std::optional<NLog::EComponent> component;
+            if (Stack.empty() || context.GetComponent()) {
+                component = context.GetComponent();
+            } else {
+                component = Stack.back().GetComponent();
+            }
+            Stack.emplace_back(&context, std::move(component));
+        }
+
+        void Pop(const TLogContextGuard& context) {
+            Y_VERIFY(Stack.size() && Stack.back().GetId() == context.GetId());
+            Stack.pop_back();
+        }
+
+        std::optional<NLog::EComponent> GetCurrentComponent() const {
+            if (Stack.empty()) {
+                return {};
+            }
+            return Stack.back().GetComponent();
+        }
+
+        TString GetCurrentHeader() {
+            TStringBuilder sb;
+            for (auto&& i : Stack) {
+                sb << i.GetCurrentHeader();
+            }
+            return sb;
+        }
+    };
+
+    namespace {
+        Y_POD_THREAD(ui64) GuardId;
+        Y_THREAD(TLogContext) TlsLogContext;
+
+    }
+
+    TLogContextGuard::~TLogContextGuard() {
+        TlsLogContext.Get().Pop(*this);
+    }
+
+    TLogContextGuard::TLogContextGuard(const TLogContextBuilder& builder)
+        : TBase(builder.GetResult())
+        , Component(builder.GetComponent())
+        , Id(++GuardId)
+    {
+        TlsLogContext.Get().Push(*this);
+    }
+
+    int TLogContextGuard::GetCurrentComponent() {
+        return TlsLogContext.Get().GetCurrentComponent().value_or(0);
+    }
+
+    TFormattedRecordWriter::TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
+        : ActorContext(NActors::TlsActivationContext ? &NActors::TlsActivationContext->AsActorContext() : nullptr)
+        , Priority(priority)
+        , Component(component) {
+        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
+    }
+
 }

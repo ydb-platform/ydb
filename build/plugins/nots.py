@@ -461,6 +461,7 @@ def on_ts_test_for_configure(unit, test_runner, default_config):
     for_mod_path = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([for_mod_path])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
+    unit.on_setup_extract_peer_tars_recipe([for_mod_path])
 
     unit.set(["TS_TEST_NM", os.path.join(("$B"), for_mod_path, "node_modules.tar")])
 

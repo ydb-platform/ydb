@@ -109,7 +109,7 @@ void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::
     if (batch.GetFetchedInfo().GetFilter()) {
         Counters.PostFilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataAdditionalBytes += range.Size;
-        FetchBlobsQueue.emplace_front(batch.GetGranule(), range);
+        PriorityBlobsQueue.emplace_back(batch.GetGranule(), range);
     } else {
         Counters.FilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataFilterBytes += range.Size;
@@ -129,12 +129,18 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
     Y_VERIFY(!GranulesContext);
     GranulesContext = std::make_unique<NIndexedReader::TGranulesFillingContext>(ReadMetadata, *this, OnePhaseReadMode);
     ui64 portionsBytes = 0;
+    std::set<ui64> granulesReady;
+    ui64 prevGranule = 0;
     for (auto& portionInfo : ReadMetadata->SelectInfo->GetPortionsOrdered(ReadMetadata->IsDescSorted())) {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
         NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.Records[0].Granule);
         granule->RegisterBatchForFetching(portionInfo);
+        if (prevGranule != portionInfo.Granule()) {
+            Y_VERIFY(granulesReady.emplace(portionInfo.Granule()).second);
+            prevGranule = portionInfo.Granule();
+        }
     }
     GranulesContext->PrepareForStart();
 
@@ -445,22 +451,33 @@ TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
 
 bool TIndexedReadData::IsFinished() const {
     Y_VERIFY(GranulesContext);
-    return NotIndexed.empty() && FetchBlobsQueue.empty() && GranulesContext->IsFinished();
+    return NotIndexed.empty() && FetchBlobsQueue.empty() && PriorityBlobsQueue.empty() && GranulesContext->IsFinished();
 }
 
 void TIndexedReadData::Abort() {
     Y_VERIFY(GranulesContext);
     FetchBlobsQueue.Stop();
+    PriorityBlobsQueue.Stop();
     GranulesContext->Abort();
 }
 
 NKikimr::NOlap::TBlobRange TIndexedReadData::ExtractNextBlob() {
     Y_VERIFY(GranulesContext);
+    {
+        auto* f = PriorityBlobsQueue.front();
+        if (f) {
+            GranulesContext->ForceStartProcessGranule(f->GetGranuleId(), f->GetRange());
+            Counters.OnPriorityFetch(f->GetRange().Size);
+            return PriorityBlobsQueue.pop_front();
+        }
+    }
+
     auto* f = FetchBlobsQueue.front();
     if (!f) {
         return TBlobRange();
     }
-    if (!f->GetGranuleId() || GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
+    if (GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
+        Counters.OnGeneralFetch(f->GetRange().Size);
         return FetchBlobsQueue.pop_front();
     } else {
         Counters.OnProcessingOverloaded();

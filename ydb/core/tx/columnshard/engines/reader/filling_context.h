@@ -11,7 +11,7 @@ class TIndexedReadData;
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-class TGranulesFillingContext {
+class TGranulesFillingContext: TNonCopyable {
 private:
     YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
     TReadMetadata::TConstPtr ReadMetadata;
@@ -33,7 +33,8 @@ private:
     static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
     bool CheckBufferAvailable() const;
 public:
-    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
+    bool ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
+    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange & range);
     TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData & owner, const bool internalReading);
 
     void OnBlobReady(const ui64 /*granuleId*/, const TBlobRange& /*range*/) noexcept {
@@ -55,7 +56,7 @@ public:
         return SortingPolicy;
     }
 
-    NColumnShard::TScanCounters GetCounters() const noexcept {
+    const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
         return Counters;
     }
 
@@ -63,6 +64,7 @@ public:
 
     void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
     NIndexedReader::TBatch* GetBatchInfo(const TBatchAddress& address);
+    NIndexedReader::TBatch& GetBatchInfoVerified(const TBatchAddress& address);
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
     void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);

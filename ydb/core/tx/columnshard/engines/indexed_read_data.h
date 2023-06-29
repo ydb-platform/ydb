@@ -24,6 +24,7 @@ private:
     NColumnShard::TConcreteScanCounters Counters;
     NColumnShard::TDataTasksProcessorContainer TasksProcessor;
     TFetchBlobsQueue FetchBlobsQueue;
+    TFetchBlobsQueue PriorityBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     bool OnePhaseReadMode = false;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
@@ -87,11 +88,11 @@ public:
     }
 
     void AddBlobToFetchInFront(const ui64 granuleId, const TBlobRange& range) {
-        FetchBlobsQueue.emplace_front(granuleId, range);
+        PriorityBlobsQueue.emplace_back(granuleId, range);
     }
 
     bool HasMoreBlobs() const {
-        return FetchBlobsQueue.size();
+        return FetchBlobsQueue.size() || PriorityBlobsQueue.size();
     }
 
     TBlobRange ExtractNextBlob();

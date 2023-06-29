@@ -20,6 +20,7 @@ public:
     void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
 
     NIndexedReader::TBatch* GetBatchInfo(const TBatchAddress& address);
+    NIndexedReader::TBatch& GetBatchInfoVerified(const TBatchAddress& address);
 
     ui32 GetProcessingGranulesCount() const {
         return GranulesInProcessing.size();

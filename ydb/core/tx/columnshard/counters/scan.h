@@ -92,6 +92,11 @@ private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingOverload;
     NMonitoring::TDynamicCounters::TCounterPtr ReadingOverload;
+
+    NMonitoring::TDynamicCounters::TCounterPtr PriorityFetchBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr PriorityFetchCount;
+    NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchCount;
 public:
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -125,7 +130,17 @@ public:
 
     TScanCounters(const TString& module = "Scan");
 
-    void OnProcessingOverloaded() {
+    void OnPriorityFetch(const ui64 size) const {
+        PriorityFetchBytes->Add(size);
+        PriorityFetchCount->Add(1);
+    }
+
+    void OnGeneralFetch(const ui64 size) const {
+        GeneralFetchBytes->Add(size);
+        GeneralFetchCount->Add(1);
+    }
+
+    void OnProcessingOverloaded() const {
         ProcessingOverload->Add(1);
     }
     void OnReadingOverloaded() const {

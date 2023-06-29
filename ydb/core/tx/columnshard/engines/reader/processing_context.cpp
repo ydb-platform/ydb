@@ -8,6 +8,7 @@ void TProcessingController::DrainNotIndexedBatches(THashMap<ui64, std::shared_pt
         return;
     }
     NotIndexedBatchesInitialized = true;
+    GranulesInProcessing.erase(0);
     auto granules = GranulesWaiting;
     for (auto&& [_, gPtr] : granules) {
         if (!batches) {
@@ -68,8 +69,13 @@ TGranule::TPtr TProcessingController::InsertGranule(TGranule::TPtr g) {
 void TProcessingController::StartBlobProcessing(const ui64 granuleId, const TBlobRange& range) {
     Counters.Aggregations->AddGranuleProcessingBytes(range.Size);
     if (GranulesInProcessing.emplace(granuleId).second) {
-        Y_VERIFY(GranulesWaiting.contains(granuleId));
-        Counters.Aggregations->AddGranuleProcessing();
+        if (granuleId) {
+            Y_VERIFY(GranulesWaiting.contains(granuleId));
+            Counters.Aggregations->AddGranuleProcessing();
+        }
+    }
+    if (!granuleId) {
+        Y_VERIFY(!NotIndexedBatchesInitialized);
     }
     BlobsSize += range.Size;
 }
@@ -79,6 +85,12 @@ void TProcessingController::Abort() {
     GranulesInProcessing.clear();
     Counters.Aggregations->RemoveGranuleProcessingInfo(BlobsSize);
     BlobsSize = 0;
+}
+
+NKikimr::NOlap::NIndexedReader::TBatch& TProcessingController::GetBatchInfoVerified(const TBatchAddress& address) {
+    NIndexedReader::TBatch* bInfo = GetBatchInfo(address);
+    Y_VERIFY(bInfo);
+    return *bInfo;
 }
 
 }

@@ -52,6 +52,10 @@ NIndexedReader::TBatch* TGranulesFillingContext::GetBatchInfo(const TBatchAddres
     return Processing.GetBatchInfo(address);
 }
 
+NIndexedReader::TBatch& TGranulesFillingContext::GetBatchInfoVerified(const TBatchAddress& address) {
+    return Processing.GetBatchInfoVerified(address);
+}
+
 NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::GetTasksProcessor() const {
     return Owner.GetTasksProcessor();
 }
@@ -78,18 +82,19 @@ bool TGranulesFillingContext::CheckBufferAvailable() const {
         Result.GetBlobsSize() + Processing.GetBlobsSize() < ProcessingBytesLimit;
 }
 
+bool TGranulesFillingContext::ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range) {
+    Y_VERIFY_DEBUG(!Result.IsReady(granuleId));
+    Processing.StartBlobProcessing(granuleId, range);
+    return true;
+}
+
 void TGranulesFillingContext::OnGranuleReady(const ui64 granuleId) {
     Result.AddResult(Processing.ExtractReadyVerified(granuleId));
 }
 
 std::vector<NKikimr::NOlap::NIndexedReader::TGranule::TPtr> TGranulesFillingContext::DetachReadyInOrder() {
     Y_VERIFY(SortingPolicy);
-    const ui32 sizeBefore = Result.GetCount();
-    auto result = SortingPolicy->DetachReadyGranules(Result);
-    if (sizeBefore == Result.GetCount()) {
-        Y_VERIFY(InternalReading || CheckBufferAvailable() || Processing.GetProcessingGranulesCount());
-    }
-    return result;
+    return SortingPolicy->DetachReadyGranules(Result);
 }
 
 }

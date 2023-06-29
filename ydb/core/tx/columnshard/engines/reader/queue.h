@@ -59,7 +59,6 @@ public:
     }
     TBlobRange pop_front();
 
-    void emplace_front(const ui64 granuleId, const TBlobRange& range);
     void emplace_back(const ui64 granuleId, const TBlobRange& range);
 };
 

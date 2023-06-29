@@ -450,7 +450,7 @@ namespace NActors {
 
         ~TLogContextGuard();
 
-        static int GetCurrentComponent();
+        static int GetCurrentComponent(const ::NActors::NLog::EComponent defComponent = 0);
 
         const std::optional<::NActors::NLog::EComponent>& GetComponent() const {
             return Component;
@@ -527,12 +527,34 @@ namespace NActors {
 #define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
 #define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
 
-#define ACFL_TRACE ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_DEBUG ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_INFO ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_NOTICE ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_WARN ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_ERROR ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_CRIT ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_ALERT ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent())
-#define ACFL_EMERG ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent())
+#define DETECT_LOG_MACRO(_1, _2, NAME, ...) NAME
+
+#define BASE_CFL_TRACE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_DEBUG2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_INFO2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_NOTICE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_WARN2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_ERROR2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_CRIT2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_ALERT2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_EMERG2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+
+#define BASE_CFL_TRACE1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_DEBUG1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_INFO1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_NOTICE1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_WARN1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_ERROR1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_CRIT1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_ALERT1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_EMERG1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+
+#define ACFL_TRACE(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_TRACE2, BASE_CFL_TRACE1)(__VA_ARGS__)
+#define ACFL_DEBUG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_DEBUG2, BASE_CFL_DEBUG1)(__VA_ARGS__)
+#define ACFL_INFO(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_INFO2, BASE_CFL_INFO1)(__VA_ARGS__)
+#define ACFL_NOTICE(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_NOTICE2, BASE_CFL_NOTICE1)(__VA_ARGS__)
+#define ACFL_WARN(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_WARN2, BASE_CFL_WARN1)(__VA_ARGS__)
+#define ACFL_ERROR(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ERROR2, BASE_CFL_ERROR1)(__VA_ARGS__)
+#define ACFL_CRIT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_CRIT2, BASE_CFL_CRIT1)(__VA_ARGS__)
+#define ACFL_ALERT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ALERT2, BASE_CFL_ALERT1)(__VA_ARGS__)
+#define ACFL_EMERG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_EMERG2, BASE_CFL_EMERG1)(__VA_ARGS__)

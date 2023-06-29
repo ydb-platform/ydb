@@ -709,8 +709,8 @@ namespace NActors {
         TlsLogContext.Get().Push(*this);
     }
 
-    int TLogContextGuard::GetCurrentComponent() {
-        return TlsLogContext.Get().GetCurrentComponent().value_or(0);
+    int TLogContextGuard::GetCurrentComponent(const ::NActors::NLog::EComponent defComponent) {
+        return TlsLogContext.Get().GetCurrentComponent().value_or(defComponent);
     }
 
     TFormattedRecordWriter::TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)

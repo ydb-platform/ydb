@@ -69,6 +69,7 @@ class PnpmPackageManager(BasePackageManager):
     def calc_node_modules_inouts(self):
         """
         Returns input and output paths for command that creates `node_modules` bundle.
+        Errors: errors catched while processing lockfiles
         Inputs:
             - source package.json and lockfile,
             - built package.jsons of all deps,
@@ -78,7 +79,7 @@ class PnpmPackageManager(BasePackageManager):
             - merged lockfile,
             - generated workspace config,
             - created node_modules bundle.
-        :rtype: (list of str, list of str)
+        :rtype: (list of errors, list of str, list of str)
         """
         ins = [
             s_rooted(build_pj_path(self.module_path)),
@@ -109,10 +110,15 @@ class PnpmPackageManager(BasePackageManager):
                 ins.append(b_rooted(build_ws_config_path(dep_mod_path)))
                 ins.append(b_rooted(build_lockfile_path(dep_mod_path)))
 
-        for pkg in self.extract_packages_meta_from_lockfiles(src_lf_paths):
-            ins.append(b_rooted(self._contrib_tarball_path(pkg)))
+        errors = []
+        try:
+            for pkg in self.extract_packages_meta_from_lockfiles(src_lf_paths):
+                ins.append(b_rooted(self._contrib_tarball_path(pkg)))
+        except Exception as e:
+            errors.append(e)
+            pass
 
-        return (ins, outs)
+        return (errors, ins, outs)
 
     def extract_packages_meta_from_lockfiles(self, lf_paths):
         """

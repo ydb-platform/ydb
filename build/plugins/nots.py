@@ -121,8 +121,15 @@ def on_from_npm_lockfiles(unit, *args):
         elif unit.get("TS_STRICT_FROM_NPM_LOCKFILES") == "yes":
             ymake.report_configure_error("lockfile not found: {}".format(lf_path))
 
-    for pkg in pm.extract_packages_meta_from_lockfiles(lf_paths):
-        unit.on_from_npm([pkg.name, pkg.version, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path])
+    try:
+        for pkg in pm.extract_packages_meta_from_lockfiles(lf_paths):
+            unit.on_from_npm([pkg.name, pkg.version, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path])
+    except Exception as e:
+        if unit.get("TS_RAISE") == "yes":
+            raise e
+        else:
+            unit.message(["WARN", "on_from_npm_lockfiles exception: {}".format(e)])
+            pass
 
 
 @_with_report_configure_error
@@ -426,7 +433,12 @@ def on_node_modules_configure(unit):
 
     if pj.has_dependencies():
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        ins, outs = pm.calc_node_modules_inouts()
+        message_level = "ERROR" if unit.get("TS_RAISE") == "yes" else "WARN"
+        errors, ins, outs = pm.calc_node_modules_inouts()
+
+        for err in errors:
+            unit.message([message_level, "calc_node_modules_inouts exception: {}".format(err)])
+
         unit.on_set_node_modules_ins_outs(["IN"] + sorted(ins) + ["OUT"] + sorted(outs))
     else:
         # default "noop" command

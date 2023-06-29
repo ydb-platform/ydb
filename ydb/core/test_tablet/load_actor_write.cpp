@@ -4,12 +4,11 @@
 namespace NKikimr::NTestShard {
 
     void TLoadActor::GenerateKeyValue(TString *key, TString *value, bool *isInline) {
-        const size_t len = GenerateRandomSize(Settings.GetSizes(), isInline) + sizeof(ui64);
-        ui64 seed = TAppData::RandomProvider->GenRand64();
-        TString data = FastGenDataForLZ4(len, seed);
-        memcpy(data.Detach(), &seed, Min(data.size(), sizeof(seed)));
-        *key = HashForValue(data);
-        *value = std::move(data);
+        const size_t len = GenerateRandomSize(Settings.GetSizes(), isInline);
+        const ui64 id = TAppData::RandomProvider->GenRand64();
+        const ui64 seed = TAppData::RandomProvider->GenRand64();
+        *key = TStringBuilder() << len << ',' << seed << ',' << id;
+        *value = FastGenDataForLZ4(len, seed);
     }
 
     void TLoadActor::IssueWrite() {

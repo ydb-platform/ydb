@@ -9,8 +9,10 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     ydb/core/base
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/actors
+    ydb/core/fq/libs/actors/logging
+    ydb/core/fq/libs/compute/ydb
+    ydb/core/fq/libs/compute/ydb/control_plane
     ydb/core/fq/libs/control_plane_config
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/control_plane_storage

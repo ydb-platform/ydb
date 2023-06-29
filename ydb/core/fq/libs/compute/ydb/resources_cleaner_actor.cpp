@@ -72,23 +72,23 @@ public:
     void Start() {
         LOG_I("Start resources cleaner actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         Become(&TResourcesCleanerActor::StateFunc);
-        Register(new TRetryActor<TEvPrivate::TEvForgetOperationRequest, TEvPrivate::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), SelfId(), Connector, OperationId));
+        Register(new TRetryActor<TEvYdbCompute::TEvForgetOperationRequest, TEvYdbCompute::TEvForgetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_FORGET_OPERATION), SelfId(), Connector, OperationId));
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvForgetOperationResponse, Handle);
+        hFunc(TEvYdbCompute::TEvForgetOperationResponse, Handle);
     )
 
-    void Handle(const TEvPrivate::TEvForgetOperationResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't forget operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvPrivate::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
+            Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
         }
         LOG_I("Operation successfully forgotten");
-        Send(Parent, new TEvPrivate::TEvResourcesCleanerResponse({}, NYdb::EStatus::SUCCESS));
+        Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }
 

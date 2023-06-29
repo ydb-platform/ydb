@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include "ydb/core/fq/libs/config/protos/compute.pb.h"
+#include <ydb/core/fq/libs/config/protos/compute.pb.h>
 #include <ydb/core/fq/libs/config/protos/control_plane_proxy.pb.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>

@@ -72,23 +72,23 @@ public:
     void Start() {
         LOG_I("Start stopper actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         Become(&TStopperActor::StateFunc);
-        Register(new TRetryActor<TEvPrivate::TEvCancelOperationRequest, TEvPrivate::TEvCancelOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_CANCEL_OPERATION), SelfId(), Connector, OperationId));
+        Register(new TRetryActor<TEvYdbCompute::TEvCancelOperationRequest, TEvYdbCompute::TEvCancelOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_CANCEL_OPERATION), SelfId(), Connector, OperationId));
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvCancelOperationResponse, Handle);
+        hFunc(TEvYdbCompute::TEvCancelOperationResponse, Handle);
     )
 
-    void Handle(const TEvPrivate::TEvCancelOperationResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvCancelOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't cancel operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvPrivate::TEvStopperResponse(ev->Get()->Issues, ev->Get()->Status));
+            Send(Parent, new TEvYdbCompute::TEvStopperResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
         }
         LOG_I("Operation successfully canceled");
-        Send(Parent, new TEvPrivate::TEvStopperResponse({}, NYdb::EStatus::SUCCESS));
+        Send(Parent, new TEvYdbCompute::TEvStopperResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }
 

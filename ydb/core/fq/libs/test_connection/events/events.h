@@ -32,7 +32,8 @@ struct TEvTestConnection {
                                           const TString& cloudId,
                                           const TPermissions& permissions,
                                           TMaybe<TQuotaMap> quotas,
-                                          TTenantInfo::TPtr tenantInfo)
+                                          TTenantInfo::TPtr tenantInfo,
+                                          const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
             : CloudId(cloudId)
             , Scope(scope)
             , Request(request)
@@ -41,6 +42,7 @@ struct TEvTestConnection {
             , Permissions(permissions)
             , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
+            , ComputeDatabase(computeDatabase)
         {
         }
 
@@ -52,6 +54,7 @@ struct TEvTestConnection {
         TPermissions Permissions;
         const TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
+        TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
     };
 
     struct TEvTestConnectionResponse : NActors::TEventLocal<TEvTestConnectionResponse, EvTestConnectionResponse> {

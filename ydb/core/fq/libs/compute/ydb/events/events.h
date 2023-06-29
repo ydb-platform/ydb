@@ -1,23 +1,24 @@
 #pragma once
 
-#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/fq/libs/quota_manager/events/events.h>
-
-#include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
+#include <ydb/core/fq/libs/events/event_subspace.h>
+#include <ydb/core/fq/libs/protos/fq_private.pb.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_query/query.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-
 namespace NFq {
 
-struct TEvPrivate {
+struct TEvYdbCompute {
     // Event ids
     enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvBegin = YqEventSubspaceBegin(NFq::TYqEventSubspace::YdbCompute),
 
         EvExecuteScriptRequest = EvBegin,
         EvExecuteScriptResponse,
@@ -29,6 +30,8 @@ struct TEvPrivate {
         EvCancelOperationResponse,
         EvForgetOperationRequest,
         EvForgetOperationResponse,
+        EvCreateDatabaseRequest,
+        EvCreateDatabaseResponse,
 
         EvExecuterResponse,
         EvStatusTrackerResponse,
@@ -158,6 +161,44 @@ struct TEvPrivate {
 
         NYql::TIssues Issues;
         NYdb::EStatus Status;
+    };
+
+    struct TEvCreateDatabaseRequest : public NActors::TEventLocal<TEvCreateDatabaseRequest, EvCreateDatabaseRequest> {
+        TEvCreateDatabaseRequest(const TString& cloudId, const TString& scope)
+            : CloudId(cloudId)
+            , Scope(scope)
+        {}
+
+        TEvCreateDatabaseRequest(const TString& cloudId,
+                                 const TString& scope,
+                                 const TString& basePath,
+                                 const TString& path)
+            : CloudId(cloudId)
+            , Scope(scope)
+            , BasePath(basePath)
+            , Path(path)
+        {}
+
+        TString CloudId;
+        TString Scope;
+        TString BasePath;
+        TString Path;
+    };
+
+    struct TEvCreateDatabaseResponse : public NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {
+        TEvCreateDatabaseResponse()
+        {}
+
+        explicit TEvCreateDatabaseResponse(NYql::TIssues issues)
+            : Issues(issues)
+        {}
+
+        TEvCreateDatabaseResponse(const FederatedQuery::Internal::ComputeDatabaseInternal& result)
+            : Result(result)
+        {}
+
+        FederatedQuery::Internal::ComputeDatabaseInternal Result;
+        NYql::TIssues Issues;
     };
 
     struct TEvExecuterResponse : public NActors::TEventLocal<TEvExecuterResponse, EvExecuterResponse> {

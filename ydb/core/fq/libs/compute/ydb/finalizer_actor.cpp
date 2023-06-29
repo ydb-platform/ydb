@@ -94,12 +94,12 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             LOG_I("Query moved to terminal state ");
-            Send(Parent, new TEvPrivate::TEvFinalizerResponse({}, NYdb::EStatus::SUCCESS));
+            Send(Parent, new TEvYdbCompute::TEvFinalizerResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             LOG_E("Error moving the query to the terminal state");
-            Send(Parent, new TEvPrivate::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }

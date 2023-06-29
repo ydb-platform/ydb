@@ -42,8 +42,4 @@ TControlPlaneProxyConfig::TControlPlaneProxyConfig(
     , ConfigRetryPeriod(
           GetDuration(Proto.GetConfigRetryPeriod(), TDuration::MilliSeconds(100))) { }
 
-bool TControlPlaneProxyConfig::IsYDBComputeEngineEnabled() const {
-    return ComputeConfig.HasYdb() && ComputeConfig.GetYdb().GetEnable();
-}
-
 } // NFq

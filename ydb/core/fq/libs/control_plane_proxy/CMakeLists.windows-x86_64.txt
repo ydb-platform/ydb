@@ -18,8 +18,10 @@ target_link_libraries(fq-libs-control_plane_proxy PUBLIC
   yutil
   cpp-actors-core
   ydb-core-base
-  libs-actors-logging
   fq-libs-actors
+  libs-actors-logging
+  libs-compute-ydb
+  compute-ydb-control_plane
   fq-libs-control_plane_config
   libs-control_plane_proxy-events
   fq-libs-control_plane_storage

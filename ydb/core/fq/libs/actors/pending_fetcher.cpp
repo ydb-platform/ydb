@@ -349,6 +349,11 @@ private:
             *resources.mutable_topic_consumers() = task.created_topic_consumers();
         }
 
+        NFq::NConfig::TYdbStorageConfig computeConnection = ComputeConfig.GetConnection(task.scope());
+        computeConnection.set_endpoint(task.compute_connection().endpoint());
+        computeConnection.set_database(task.compute_connection().database());
+        computeConnection.set_usessl(task.compute_connection().usessl());
+
         TRunActorParams params(
             YqSharedResources, CredentialsProviderFactory, S3Gateway,
             FunctionRegistry, RandomProvider,
@@ -386,7 +391,8 @@ private:
             task.job_id().value(),
             resources,
             task.execution_id(),
-            task.operation_id()
+            task.operation_id(),
+            computeConnection
             );
 
         auto runActorId =

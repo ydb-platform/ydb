@@ -381,6 +381,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTS_MODIFY_BINDING,
         RTS_DELETE_BINDING,
         RTS_PING_TASK,
+        RTS_CREATE_DATABASE,
+        RTS_DESCRIBE_DATABASE,
         RTS_MAX,
     };
 
@@ -405,7 +407,9 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         "DescribeBinding",
         "ModifyBinding",
         "DeleteBinding",
-        "PingTask"
+        "PingTask",
+        "CreateDatabase",
+        "DescribeDatabase"
     };
 
     enum ERequestTypeCommon {
@@ -436,6 +440,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTC_MODIFY_BINDING,
         RTC_DELETE_BINDING,
         RTC_PING_TASK,
+        RTC_CREATE_DATABASE,
+        RTC_DESCRIBE_DATABASE,
         RTC_MAX,
     };
 
@@ -487,6 +493,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             { MakeIntrusive<TRequestCommonCounters>("ModifyBinding") },
             { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
+            { MakeIntrusive<TRequestCommonCounters>("CreateDatabase") },
+            { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") }
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -621,6 +629,8 @@ public:
         hFunc(TEvQuotaService::TQuotaLimitChangeRequest, Handle);
         hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
         hFunc(TEvents::TEvSchemaCreated, Handle);
+        hFunc(TEvControlPlaneStorage::TEvCreateDatabaseRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvDescribeDatabaseRequest, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -659,6 +669,9 @@ public:
     void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev);
     void Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev);
 
+    void Handle(TEvControlPlaneStorage::TEvCreateDatabaseRequest::TPtr& ev);
+    void Handle(TEvControlPlaneStorage::TEvDescribeDatabaseRequest::TPtr& ev);
+
     template <class TEventPtr, class TRequestActor, ERequestTypeCommon requestType>
     void HandleRateLimiterImpl(TEventPtr& ev);
 
@@ -690,6 +703,7 @@ public:
     void CreateTenantsTable();
     void CreateTenantAcksTable();
     void CreateMappingsTable();
+    void CreateComputeDatabasesTable();
 
     void RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc);
     void AfterTablesCreated();

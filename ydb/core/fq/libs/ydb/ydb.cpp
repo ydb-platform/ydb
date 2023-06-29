@@ -296,4 +296,22 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     return future;
 }
 
+NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const NConfig::TYdbStorageConfig& config) {
+    TString oauth;
+    if (config.GetToken()) {
+        oauth = config.GetToken();
+    } else if (config.GetOAuthFile()) {
+        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
+    } else {
+        oauth = GetEnv("YDB_TOKEN");
+    }
+
+    NKikimr::TYdbCredentialsSettings credSettings;
+    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
+    credSettings.OAuthToken = oauth;
+    credSettings.SaKeyFile = config.GetSaKeyFile();
+    credSettings.IamEndpoint = config.GetIamEndpoint();
+    return credSettings;
+}
+
 } // namespace NFq

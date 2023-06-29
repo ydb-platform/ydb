@@ -1,15 +1,14 @@
 #include "init.h"
 
-#include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
-#include <ydb/core/fq/libs/test_connection/test_connection.h>
-
 #include <ydb/core/fq/libs/audit/yq_audit_service.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/cloud_audit/yq_cloud_audit_service.h>
+#include <ydb/core/fq/libs/compute/ydb/control_plane/compute_database_control_plane_service.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
+#include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/health/health.h>
-#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/core/fq/libs/private_client/loopback_service.h>
 #include <ydb/core/fq/libs/quota_manager/quota_manager.h>
@@ -19,6 +18,8 @@
 #include <ydb/core/fq/libs/rate_limiter/events/data_plane.h>
 #include <ydb/core/fq/libs/rate_limiter/quoter_service/quoter_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
+#include <ydb/core/fq/libs/test_connection/test_connection.h>
+
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
@@ -105,6 +106,11 @@ void Init(
             yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"),
             protoConfig.GetQuotasManager().GetEnabled());
         actorRegistrator(NFq::ControlPlaneProxyActorId(), controlPlaneProxy);
+    }
+
+    if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
+        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), NKikimr::CreateYdbCredentialsProviderFactory);
+        actorRegistrator(NFq::ComputeDatabaseControlPlaneServiceActorId(), computeDatabaseService.release());
     }
 
     if (protoConfig.GetRateLimiter().GetControlPlaneEnabled()) {

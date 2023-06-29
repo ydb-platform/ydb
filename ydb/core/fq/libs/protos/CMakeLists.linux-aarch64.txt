@@ -36,8 +36,9 @@ target_link_libraries(fq-libs-protos PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  api-protos
+  libs-config-protos
   dq-actors-protos
+  api-protos
   contrib-libs-protobuf
 )
 target_proto_messages(fq-libs-protos PRIVATE

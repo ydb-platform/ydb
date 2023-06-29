@@ -13,6 +13,7 @@
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -83,7 +84,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvFetchScriptResultResponse, Handle);
+        hFunc(TEvYdbCompute::TEvFetchScriptResultResponse, Handle);
         hFunc(NFq::TEvInternalService::TEvWriteResultResponse, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
     )
@@ -95,21 +96,21 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             LOG_I("The result has been moved");
-            Send(Parent, new TEvPrivate::TEvResultWriterResponse({}, NYdb::EStatus::SUCCESS));
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse({}, NYdb::EStatus::SUCCESS));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             LOG_E("Move result error");
-            Send(Parent, new TEvPrivate::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Move result error. ExecutionId: " << ExecutionId}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Move result error. ExecutionId: " << ExecutionId}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
 
-    void Handle(const TEvPrivate::TEvFetchScriptResultResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvFetchScriptResultResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvPrivate::TEvResultWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
@@ -150,7 +151,7 @@ public:
         } else {
             writeResultCounters->Error->Inc();
             LOG_E("Error writing result for offset " << Offset);
-            Send(Parent, new TEvPrivate::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error writing result for offset " << Offset}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error writing result for offset " << Offset}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -159,7 +160,7 @@ public:
         auto fetchScriptResultCounters = Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT);
         fetchScriptResultCounters->InFly->Inc();
         StartTime = TInstant::Now();
-        Register(new TRetryActor<TEvPrivate::TEvFetchScriptResultRequest, TEvPrivate::TEvFetchScriptResultResponse, TString, int64_t, int64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, ExecutionId, 0, Offset));
+        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, TString, int64_t, int64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, ExecutionId, 0, Offset));
     }
 
     Fq::Private::WriteTaskResultRequest CreateProtoRequestWithoutResultSet(ui64 startRowIndex) {

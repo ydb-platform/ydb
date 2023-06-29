@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
+#include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
@@ -69,7 +70,8 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& jobId,
         const Fq::Private::TaskResources& resources,
         const TString& executionId,
-        const TString& operationId
+        const TString& operationId,
+        const NFq::NConfig::TYdbStorageConfig& computeConnection
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -127,6 +129,7 @@ struct TRunActorParams { // TODO2 : Change name
     Fq::Private::TaskResources Resources;
     TString ExecutionId;
     NYdb::TOperation::TOperationId OperationId;
+    NFq::NConfig::TYdbStorageConfig ComputeConnection;
 };
 
 } /* NFq */

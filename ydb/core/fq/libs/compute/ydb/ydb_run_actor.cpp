@@ -61,15 +61,15 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvExecuterResponse, Handle);
-        hFunc(TEvPrivate::TEvStatusTrackerResponse, Handle);
-        hFunc(TEvPrivate::TEvResultWriterResponse, Handle);
-        hFunc(TEvPrivate::TEvResourcesCleanerResponse, Handle);
-        hFunc(TEvPrivate::TEvFinalizerResponse, Handle);
-        hFunc(TEvPrivate::TEvStopperResponse, Handle);
+        hFunc(TEvYdbCompute::TEvExecuterResponse, Handle);
+        hFunc(TEvYdbCompute::TEvStatusTrackerResponse, Handle);
+        hFunc(TEvYdbCompute::TEvResultWriterResponse, Handle);
+        hFunc(TEvYdbCompute::TEvResourcesCleanerResponse, Handle);
+        hFunc(TEvYdbCompute::TEvFinalizerResponse, Handle);
+        hFunc(TEvYdbCompute::TEvStopperResponse, Handle);
     )
 
-    void Handle(const TEvPrivate::TEvExecuterResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvExecuterResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (!response.Success) {
             LOG_I("ExecuterResponse (failed). Issues: " << response.Issues.ToOneLineString());
@@ -82,7 +82,7 @@ public:
         Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
     }
 
-    void Handle(const TEvPrivate::TEvStatusTrackerResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvStatusTrackerResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StatusTrackerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -98,7 +98,7 @@ public:
         }
     }
 
-    void Handle(const TEvPrivate::TEvResultWriterResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvResultWriterResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("ResultWriterResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -109,7 +109,7 @@ public:
         Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
     }
 
-    void Handle(const TEvPrivate::TEvResourcesCleanerResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvResourcesCleanerResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::UNSUPPORTED) {
             LOG_I("ResourcesCleanerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -120,7 +120,7 @@ public:
         Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus).release());
     }
 
-    void Handle(const TEvPrivate::TEvFinalizerResponse::TPtr ev) {
+    void Handle(const TEvYdbCompute::TEvFinalizerResponse::TPtr ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("FinalizerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -139,7 +139,7 @@ public:
         }
     }
 
-    void Handle(const TEvPrivate::TEvStopperResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvStopperResponse::TPtr& ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StopperResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());

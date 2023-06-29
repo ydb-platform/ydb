@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/cloud_audit
     ydb/core/fq/libs/common
+    ydb/core/fq/libs/compute/ydb/control_plane
     ydb/core/fq/libs/control_plane_config
     ydb/core/fq/libs/control_plane_proxy
     ydb/core/fq/libs/control_plane_storage

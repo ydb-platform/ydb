@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(control_plane)
+add_subdirectory(events)
 
 add_library(libs-compute-ydb)
 target_compile_options(libs-compute-ydb PRIVATE

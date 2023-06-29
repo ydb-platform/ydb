@@ -23,6 +23,7 @@ target_link_libraries(fq-libs-init PUBLIC
   fq-libs-checkpointing
   fq-libs-cloud_audit
   fq-libs-common
+  compute-ydb-control_plane
   fq-libs-control_plane_config
   fq-libs-control_plane_proxy
   fq-libs-control_plane_storage

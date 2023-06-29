@@ -35,3 +35,8 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    control_plane
+    events
+)

@@ -1,9 +1,10 @@
 #pragma once
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/grpc/client/grpc_client_low.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
+#include <library/cpp/grpc/client/grpc_client_low.h>
+#include <ydb/core/protos/services.pb.h>
 #include "grpc_service_settings.h"
 
 #define BLOG_GRPC_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::GRPC_CLIENT, stream)
@@ -97,10 +98,12 @@ public:
                     BLOG_GRPC_DC(*actorSystem, prefix << "Status " << status);
                 }
                 auto respEv = MakeHolder<typename TCallType::TResponseEventType>();
+                const auto sender = request->Sender;
+                const auto cookie = request->Cookie;
                 respEv->Request = request;
                 respEv->Status = status;
                 respEv->Response = response;
-                actorSystem->Send(respEv->Request->Sender, respEv.Release());
+                actorSystem->Send(sender, respEv.Release(), 0, cookie);
             };
 
         BLOG_GRPC_D(Prefix(requestId) << "Request " << Trim(TCallType::Obfuscate(request)));

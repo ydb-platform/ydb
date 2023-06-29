@@ -176,6 +176,14 @@ struct TEvStateStorage::TEvListStateStorageResult : public TEventLocal<TEvListSt
     {}
 };
 
+struct TEvStateStorage::TEvPublishActorGone : public TEventLocal<TEvPublishActorGone, EvPublishActorGone> {
+    TActorId Replica;
+
+    TEvPublishActorGone(const TActorId& replica)
+        : Replica(replica)
+    {}
+};
+
 struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvReplicaLookup, NKikimrStateStorage::TEvLookup, TEvStateStorage::EvReplicaLookup>{
     struct TActualityCounter : public TRefCounted<TActualityCounter, TAtomicCounter> {};
     using TActualityCounterPtr = TIntrusivePtr<TActualityCounter>;

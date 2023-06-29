@@ -27,6 +27,7 @@ struct TEvStateStorage {
         EvUpdateGroupConfig,
         EvListStateStorage,
         EvBoardInfoUpdate,
+        EvPublishActorGone,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -382,6 +383,7 @@ struct TEvStateStorage {
     struct TEvListSchemeBoardResult;
     struct TEvListStateStorage;
     struct TEvListStateStorageResult;
+    struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
     struct TEvReplicaProbeSubscribe;
     struct TEvReplicaProbeUnsubscribe;

@@ -70,7 +70,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     ui32 WaitForReplicasToSuccess;
 
     TDuration GetReconnectDelayForReplica(TReplica& replica) {
-        auto ret = replica.CurrentDelay;
         auto newDelay = replica.CurrentDelay;
         newDelay *= 2;
         if (newDelay > TDuration::Seconds(5)) {
@@ -79,7 +78,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         newDelay *= AppData()->RandomProvider->Uniform(100, 115);
         newDelay /= 100;
         replica.CurrentDelay = newDelay;
-        return ret;
+        return replica.CurrentDelay;
     }
 
     struct {

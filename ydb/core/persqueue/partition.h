@@ -189,7 +189,7 @@ private:
     void CheckHeadConsistency() const;
     void HandleWrites(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
-    void WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request);
+    void WriteBlobWithQuota(const TActorContext& ctx, THolder<TEvKeyValue::TEvRequest>&& request);
 
     void UpdateUserInfoEndOffset(const TInstant& now);
     void UpdateWriteBufferIsFullState(const TInstant& now);

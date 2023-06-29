@@ -7,6 +7,8 @@
 
 namespace NYql::NDq {
 
+NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, TExprContext& ctx);
+
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx);
 
 NNodes::TExprBase DqBuildJoin(const NNodes::TExprBase& node, TExprContext& ctx,

@@ -39,7 +39,10 @@
     {
         "Name": "TDqJoin",
         "Base": "TDqJoinBase",
-        "Match": {"Type": "Callable", "Name": "DqJoin"}
+        "Match": {"Type": "Callable", "Name": "DqJoin"},
+        "Children": [
+            {"Index": 6, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+        ]
     },
     {
         "Name": "TDqPhyMapJoin",

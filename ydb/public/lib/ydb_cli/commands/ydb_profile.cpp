@@ -27,7 +27,7 @@ TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
     AddCommand(std::make_unique<TCommandProfile>());
-    AddCommand(std::make_unique<TCommandGetConnection>());
+    AddCommand(std::make_unique<TCommandConnectionInfo>());
 }
 
 void TCommandConfig::Config(TConfig& config) {
@@ -243,11 +243,11 @@ namespace {
     }
 }
 
-TCommandGetConnection::TCommandGetConnection()
+TCommandConnectionInfo::TCommandConnectionInfo()
     : TClientCommand("info", {}, "List current connection parameters")
 {}
 
-void TCommandGetConnection::Config(TConfig& config) {
+void TCommandConnectionInfo::Config(TConfig& config) {
     TClientCommand::Config(config);
 
     config.NeedToConnect = false;
@@ -255,7 +255,7 @@ void TCommandGetConnection::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 }
 
-int TCommandGetConnection::Run(TConfig& config) {
+int TCommandConnectionInfo::Run(TConfig& config) {
     if (config.Address) {
         Cout << "  endpoint (" << config.Sources["address"] << "): " << config.Address << Endl;
     }

@@ -17,8 +17,6 @@
 #include <util/generic/guid.h>
 
 #include <sstream>
-#include <future>
-#include <thread>
 #include <iomanip>
 
 using namespace NYdb::NConsoleClient;
@@ -96,17 +94,27 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     }
 }
 
-int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
-    auto makeLogBackend = [&config]() {
-        return CreateLogBackend("cerr",
-                                TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel));
-    };
+THolder<TLogBackend> TCommandWorkloadTopicRunFull::MakeLogBackend(TConfig::EVerbosityLevel level)
+{
+    return CreateLogBackend("cerr",
+                            TConfig::VerbosityLevelToELogPriority(level));
+}
 
-    Log = std::make_shared<TLog>(makeLogBackend());
+void TCommandWorkloadTopicRunFull::InitLog(const TConfig& config)
+{
+    Log = std::make_shared<TLog>(MakeLogBackend(config.VerbosityLevel));
     Log->SetFormatter(GetPrefixLogFormatter(""));
+}
 
-    Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config, makeLogBackend()));
+void TCommandWorkloadTopicRunFull::InitDriver(const TConfig& config)
+{
+    Driver =
+        std::make_unique<NYdb::TDriver>(CreateDriver(config,
+                                                     MakeLogBackend(config.VerbosityLevel)));
+}
 
+void TCommandWorkloadTopicRunFull::InitStatsCollector()
+{
     StatsCollector =
         std::make_shared<TTopicWorkloadStatsCollector>(ProducerThreadCount,
                                                        ConsumerCount * ConsumerThreadCount,
@@ -117,38 +125,43 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
                                                        WarmupSec,
                                                        Percentile,
                                                        ErrorFlag);
-    StatsCollector->PrintHeader();
+}
 
-    std::vector<TString> generatedMessages = TTopicWorkloadWriterWorker::GenerateMessages(MessageSize);
+void TCommandWorkloadTopicRunFull::StartConsumerThreads(std::vector<std::future<void>>& threads,
+                                                        const TString& database)
+{
+    auto count = std::make_shared<std::atomic_uint>();
 
-    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
-    ui32 partitionCount = describeTopicResult.GetTotalPartitionsCount();
-    ui32 partitionSeed = RandomNumber<ui32>(partitionCount);
-
-    std::vector<std::future<void>> threads;
-
-    auto consumerStartedCount = std::make_shared<std::atomic_uint>();
-    for (ui32 consumerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
-        for (ui32 consumerThreadIdx = 0; consumerThreadIdx < ConsumerThreadCount; ++consumerThreadIdx) {
+    for (ui32 consumerIdx = 0, readerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
+        for (ui32 threadIdx = 0; threadIdx < ConsumerThreadCount; ++threadIdx, ++readerIdx) {
             TTopicWorkloadReaderParams readerParams{
                 .TotalSec = TotalSec,
                 .Driver = Driver.get(),
                 .Log = Log,
                 .StatsCollector = StatsCollector,
                 .ErrorFlag = ErrorFlag,
-                .StartedCount = consumerStartedCount,
-                .Database = config.Database,
+                .StartedCount = count,
+                .Database = database,
                 .TopicName = TopicName,
                 .ConsumerIdx = consumerIdx,
-                .ReaderIdx = consumerIdx * ConsumerCount + consumerThreadIdx};
+                .ReaderIdx = readerIdx
+            };
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(readerParams); }));
         }
     }
-    while (*consumerStartedCount != ConsumerThreadCount * ConsumerCount)
-        Sleep(TDuration::MilliSeconds(10));
 
-    auto producerStartedCount = std::make_shared<std::atomic_uint>();
+    while (*count != ConsumerThreadCount * ConsumerCount) {
+        Sleep(TDuration::MilliSeconds(10));
+    }
+}
+
+void TCommandWorkloadTopicRunFull::StartProducerThreads(std::vector<std::future<void>>& threads,
+                                                        ui32 partitionCount,
+                                                        ui32 partitionSeed,
+                                                        const std::vector<TString>& generatedMessages)
+{
+    auto count = std::make_shared<std::atomic_uint>();
     for (ui32 writerIdx = 0; writerIdx < ProducerThreadCount; ++writerIdx) {
         TTopicWorkloadWriterParams writerParams{
             .TotalSec = TotalSec,
@@ -157,7 +170,7 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
             .Log = Log,
             .StatsCollector = StatsCollector,
             .ErrorFlag = ErrorFlag,
-            .StartedCount = producerStartedCount,
+            .StartedCount = count,
             .GeneratedMessages = generatedMessages,
             .TopicName = TopicName,
             .ByteRate = MessageRate != 0 ? MessageRate * MessageSize : ByteRate,
@@ -166,19 +179,48 @@ int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
             .WriterIdx = writerIdx,
             .ProducerId = TGUID::CreateTimebased().AsGuidString(),
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
-            .Codec = Codec};
+            .Codec = Codec
+        };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(writerParams); }));
     }
 
-    while (*producerStartedCount != ProducerThreadCount)
+    while (*count != ProducerThreadCount) {
         Sleep(TDuration::MilliSeconds(10));
+    }
+}
+
+void TCommandWorkloadTopicRunFull::JoinThreads(const std::vector<std::future<void>>& threads)
+{
+    for (auto& future : threads) {
+        future.wait();
+    }
+
+    WRITE_LOG(Log, ELogPriority::TLOG_INFO, "All thread joined.");
+}
+
+int TCommandWorkloadTopicRunFull::Run(TConfig& config) {
+    InitLog(config);
+    InitDriver(config);
+    InitStatsCollector();
+
+    StatsCollector->PrintHeader();
+
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
+    ui32 partitionCount = describeTopicResult.GetTotalPartitionsCount();
+    ui32 partitionSeed = RandomNumber<ui32>(partitionCount);
+
+    std::vector<TString> generatedMessages =
+        TTopicWorkloadWriterWorker::GenerateMessages(MessageSize);
+
+    std::vector<std::future<void>> threads;
+
+    StartConsumerThreads(threads, config.Database);
+    StartProducerThreads(threads, partitionCount, partitionSeed, generatedMessages);
 
     StatsCollector->PrintWindowStatsLoop();
 
-    for (auto& future : threads)
-        future.wait();
-    WRITE_LOG(Log, ELogPriority::TLOG_INFO, "All thread joined.");
+    JoinThreads(threads);
 
     StatsCollector->PrintTotalStats();
 

@@ -6,6 +6,9 @@
 
 #include <library/cpp/logger/log.h>
 
+#include <future>
+#include <thread>
+
 namespace NYdb {
     namespace NConsoleClient {
         class TCommandWorkloadTopicRunFull: public TWorkloadCommand {
@@ -16,6 +19,20 @@ namespace NYdb {
             virtual int Run(TConfig& config) override;
 
         private:
+            static THolder<TLogBackend> MakeLogBackend(TConfig::EVerbosityLevel level);
+
+            void InitLog(const TConfig& config);
+            void InitDriver(const TConfig& config);
+            void InitStatsCollector();
+
+            void StartConsumerThreads(std::vector<std::future<void>>& threads,
+                                      const TString& database);
+            void StartProducerThreads(std::vector<std::future<void>>& threads,
+                                      ui32 partitionCount,
+                                      ui32 partitionSeed,
+                                      const std::vector<TString>& generatedMessages);
+            void JoinThreads(const std::vector<std::future<void>>& threads);
+
             TString TopicName;
             ui32 WarmupSec;
             double Percentile;

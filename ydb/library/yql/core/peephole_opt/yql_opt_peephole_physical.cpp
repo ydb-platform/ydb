@@ -440,8 +440,8 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const auto lUnique = list1->GetConstraint<TUniqueConstraintNode>();
     const auto rUnique = list2->GetConstraint<TUniqueConstraintNode>();
 
-    const bool uniqueLeft  = lUnique && lUnique->HasEqualColumns(lKeys) || linkSettings.LeftHints.contains("unique") || linkSettings.LeftHints.contains("any");
-    const bool uniqueRight = rUnique && rUnique->HasEqualColumns(rKeys) || linkSettings.RightHints.contains("unique") || linkSettings.RightHints.contains("any");
+    const bool uniqueLeft  = lUnique && lUnique->ContainsCompleteSet(lKeys) || linkSettings.LeftHints.contains("unique") || linkSettings.LeftHints.contains("any");
+    const bool uniqueRight = rUnique && rUnique->ContainsCompleteSet(rKeys) || linkSettings.RightHints.contains("unique") || linkSettings.RightHints.contains("any");
 
     TExprNode::TListType flags;
     if (uniqueLeft)

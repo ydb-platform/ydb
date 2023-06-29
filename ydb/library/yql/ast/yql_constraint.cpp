@@ -834,22 +834,14 @@ bool TUniqueConstraintNodeBase<Distinct>::IsOrderBy(const TSortedConstraintNode&
 }
 
 template<bool Distinct>
-bool TUniqueConstraintNodeBase<Distinct>::HasEqualColumns(const std::vector<std::string_view>& columns) const {
+bool TUniqueConstraintNodeBase<Distinct>::ContainsCompleteSet(const std::vector<std::string_view>& columns) const {
     if (columns.empty())
         return false;
 
     const std::unordered_set<std::string_view> ordered(columns.cbegin(), columns.cend());
-    std::unordered_set<std::string_view> uniques(columns.size());
     for (const auto& set : Sets_) {
-        if (std::all_of(set.cbegin(), set.cend(), [&ordered](const TPathType& path) { return !path.empty() && ordered.contains(path.front()); })) {
-            for (const auto& path : set) {
-                if (!path.empty()) {
-                    uniques.emplace(path.front());
-                }
-            }
-            if (uniques.size() == ordered.size())
-                return true;
-        }
+        if (std::all_of(set.cbegin(), set.cend(), [&ordered](const TPathType& path) { return !path.empty() && ordered.contains(path.front()); }))
+            return true;
     }
     return false;
 }

@@ -2366,7 +2366,7 @@ private:
                     input->AddConstraint(renamed);
         } else {
             if (const auto unique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>()) {
-                if (unique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref())) && core.RightDict().Ref().GetTypeAnn()->Cast<TDictExprType>()->GetPayloadType()->GetKind() != ETypeAnnotationKind::List) {
+                if (unique->ContainsCompleteSet(GetKeys(core.LeftKeysColumns().Ref())) && core.RightDict().Ref().GetTypeAnn()->Cast<TDictExprType>()->GetPayloadType()->GetKind() != ETypeAnnotationKind::List) {
                     const auto rename = GetRenames(core.LeftRenames().Ref());
                     const auto rightRename = GetRenames<true>(core.RightRenames().Ref());
                     auto commonUnique = unique->RenameFields(ctx, rename);
@@ -2425,8 +2425,8 @@ private:
         const auto lUnique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
         const auto rUnique = core.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
 
-        const bool lOneRow = lUnique && (leftAny || lUnique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref())));
-        const bool rOneRow = rUnique && (rigthAny || rUnique->HasEqualColumns(GetKeys(core.RightKeysColumns().Ref())));
+        const bool lOneRow = lUnique && (leftAny || lUnique->ContainsCompleteSet(GetKeys(core.LeftKeysColumns().Ref())));
+        const bool rOneRow = rUnique && (rigthAny || rUnique->ContainsCompleteSet(GetKeys(core.RightKeysColumns().Ref())));
 
         const bool singleSide = joinType.Content().ends_with("Semi") || joinType.Content().ends_with("Only");
 

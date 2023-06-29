@@ -185,8 +185,8 @@ public:
             const bool leftSide = joinType.Content().starts_with("Left");
             const bool rightSide = joinType.Content().starts_with("Right");
 
-            const bool lOneRow = leftAny || lUnique && lUnique->HasEqualColumns(leftJoinKeys);
-            const bool rOneRow = rightAny || rUnique && rUnique->HasEqualColumns(rightJoinKeys);
+            const bool lOneRow = leftAny || lUnique && lUnique->ContainsCompleteSet(leftJoinKeys);
+            const bool rOneRow = rightAny || rUnique && rUnique->ContainsCompleteSet(rightJoinKeys);
 
             const auto makeRename = [&ctx](const TExprBase& label) -> TConstraintNode::TPathReduce {
                 if (label.Ref().IsAtom()) {

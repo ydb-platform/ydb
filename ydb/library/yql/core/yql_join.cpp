@@ -337,8 +337,8 @@ namespace {
         const bool lAny = leftHints && (leftHints->contains("unique") || leftHints->contains("any"));
         const bool rAny = rightHints && (rightHints->contains("unique") || rightHints->contains("any"));
 
-        const bool lOneRow = lAny || lUnique && lUnique->HasEqualColumns(lCheck);
-        const bool rOneRow = rAny || rUnique && rUnique->HasEqualColumns(rCheck);
+        const bool lOneRow = lAny || lUnique && lUnique->ContainsCompleteSet(lCheck);
+        const bool rOneRow = rAny || rUnique && rUnique->ContainsCompleteSet(rCheck);
 
         if (unique) {
             if (singleSide) {

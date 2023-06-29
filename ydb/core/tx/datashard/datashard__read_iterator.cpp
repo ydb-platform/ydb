@@ -46,48 +46,6 @@ private:
     }
 };
 
-class TCellsStorage
-{
-public:
-    TCellsStorage() = default;
-
-    void Reset(TArrayRef<const TCell> cells)
-    {
-        size_t CellsSize = cells.size();
-        Cells.resize(CellsSize);
-
-        size_t cellsDataSize = 0;
-        for (size_t i = 0; i < CellsSize; ++i) {
-            auto cell = cells[i];
-            Cells[i] = cell;
-
-            if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
-                cellsDataSize += cell.Size();
-            }
-        }
-
-        CellsData.resize(cellsDataSize);
-        char *cellsData = CellsData.data();
-
-        for (size_t i = 0; i < CellsSize; ++i) {
-            auto cell = Cells[i];
-
-            if (!cell.IsNull() && !cell.IsInline() && cell.Size() != 0) {
-                memcpy(cellsData, cell.Data(), cell.Size());
-                Cells[i] = TCell(cellsData, cell.Size());
-                cellsData += cell.Size();
-            }
-        }
-    }
-
-    TArrayRef<const TCell> GetCells() const {
-        return Cells;
-    }
-private:
-    TSmallVec<TCell> Cells;
-    std::vector<char> CellsData;
-};
-
 class TCellBlockBuilder : public IBlockBuilder {
 public:
     bool Start(

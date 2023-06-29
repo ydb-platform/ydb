@@ -350,23 +350,24 @@ public:
             }
         }
 
-        TVector<NTable::TTag> valueColumns;
-        TVector<NScheme::TTypeInfo> valueColumnTypes;
-        TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
-
         if (Ev->Get()->Record.GetColumns().empty()) {
             SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT, "Empty column list");
             return true;
         }
 
+        TVector<NTable::TTag> valueColumns;
+        TVector<NScheme::TTypeInfo> valueColumnTypes;
+        TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
+
         for (const auto& col : Ev->Get()->Record.GetColumns()) {
-            if (!columnsByName.contains(col)) {
+            auto columnIt = columnsByName.find(col);
+            if (columnIt == columnsByName.end()) {
                 SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
                          Sprintf("Unknown column: %s", col.data()));
                 return true;
             }
 
-            NTable::TTag colId = columnsByName[col];
+            NTable::TTag colId = columnIt->second;
             valueColumns.push_back(colId);
             valueColumnTypes.push_back(tableInfo.Columns.at(colId).Type);
             columns.push_back({col, tableInfo.Columns.at(colId).Type});
@@ -434,11 +435,14 @@ public:
 
             auto iter = txc.DB.IterateRange(localTableId, iterRange, valueColumns, ReadVersion);
 
-            TString lastKeySerialized;
+            bool hasLastProcessedKey = false;
+            TCellsStorage lastProcessedKeyCellsStorage;
+
             bool lastKeyInclusive = true;
             while (iter->Next(NTable::ENext::All) == NTable::EReady::Data) {
                 TDbTupleRef rowKey = iter->GetKey();
-                lastKeySerialized = TSerializedCellVec::Serialize(rowKey.Cells());
+                hasLastProcessedKey = true;
+                lastProcessedKeyCellsStorage.Reset(rowKey.Cells());
 
                 // Compare current row with right boundary
                 int cmp = -1;// CompareTypedCellVectors(tuple.Columns, KeyTo.data(), tuple.Types, KeyTo.size());
@@ -468,6 +472,11 @@ public:
 
                 if (rows >= RowsLimit || bytes >= BytesLimit)
                     break;
+            }
+
+            TString lastKeySerialized;
+            if (hasLastProcessedKey) {
+                lastKeySerialized = TSerializedCellVec::Serialize(lastProcessedKeyCellsStorage.GetCells());
             }
 
             // We don't want to do many restarts if pages weren't precharged

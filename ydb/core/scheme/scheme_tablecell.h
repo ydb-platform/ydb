@@ -568,6 +568,22 @@ private:
     TVector<TCell> Cells;
 };
 
+class TCellsStorage
+{
+public:
+    TCellsStorage() = default;
+
+    TArrayRef<const TCell> GetCells() const {
+        return Cells;
+    }
+
+    void Reset(TArrayRef<const TCell> cells);
+
+private:
+    TSmallVec<TCell> Cells;
+    std::vector<char> CellsData;
+};
+
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);

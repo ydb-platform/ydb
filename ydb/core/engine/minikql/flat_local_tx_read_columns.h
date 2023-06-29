@@ -120,11 +120,15 @@ public:
 
             auto iter = txc.DB.IterateRange(tableId, iterRange, valueColumns);
 
+            bool hasLastProcessedKey = false;
+            TCellsStorage lastProcessedKeyCellsStorage;
+
             TString lastKeySerialized;
             bool lastKeyInclusive = true;
             while (iter->Next(NTable::ENext::All) == NTable::EReady::Data) {
                 TDbTupleRef rowKey = iter->GetKey();
-                lastKeySerialized = TSerializedCellVec::Serialize(rowKey.Cells());
+                hasLastProcessedKey = true;
+                lastProcessedKeyCellsStorage.Reset(rowKey.Cells());
 
                 // Skip erased row
                 if (iter->Row().GetRowState() == NTable::ERowOp::Erase) {
@@ -140,6 +144,10 @@ public:
 
                 if (rows >= RowsLimit || bytes >= BytesLimit)
                     break;
+            }
+
+            if (hasLastProcessedKey) {
+                lastKeySerialized = TSerializedCellVec::Serialize(lastProcessedKeyCellsStorage.GetCells());
             }
 
             // We don't want to do many restarts if pages weren't precharged

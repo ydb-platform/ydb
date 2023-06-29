@@ -140,22 +140,43 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
 
 ## Build
 
-To build both YDB server (ydbd) and YDB CLI (ydb) run:
+To build all binary artifacts (server YDBD, client YDB, unittest binaries) run:
 ```bash
 ninja
-```
-
-To build only YDB CLI (ydb) run:
-```bash
-ninja ydb/apps/ydb/all
 ```
 
 A YDB server binary can be found at:
 ```
 ydb/apps/ydbd/ydbd
 ```
+
+## Build and Test YDB CLI
+
+To build YDB CLI (ydb):
+```bash
+ninja ydb/apps/ydb/all
+```
+
 A YDB CLI binary can be found at:
 ```
 ydb/apps/ydb/ydb
 ```
 
+### Unit tests
+
+To build YDB CLI unit tests:
+```bash
+ninja ydb/public/lib/ydb_cli/all
+```
+
+To run tests execute:
+```bash
+cd ydb/public/lib/ydb_cli/
+ctest
+```
+
+### Functional tests
+
+Before launch tests you need to build YDB CLI and YDB server binaries. 
+Also you can load [ydbd](https://ydb.tech/en/docs/downloads/#ydb-server) binary file and use it.
+To launch YDB CLI python tests run `ydb_cli` test suite via pytest according to this [instruction](ydb/tests/functional/README.md).

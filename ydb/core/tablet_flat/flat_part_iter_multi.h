@@ -679,8 +679,6 @@ namespace NTable {
             , SkipMainVersion(false)
             , SkipEraseVersion(false)
         {
-            Key.reserve(KeyCellDefaults->Size());
-
             Groups.reserve(Pinout.AltGroups().size());
             GroupRemap.resize(Part->Scheme->Groups.size(), Max<ui32>());
 
@@ -689,6 +687,13 @@ namespace NTable {
                 TGroupId groupId(group);
                 Groups.emplace_back(Part->GetGroupIndex(groupId), groupId);
                 GroupRemap[group] = idx;
+            }
+
+            size_t KeyCellDefaultsSize = KeyCellDefaults->Size();
+            Key.resize(KeyCellDefaultsSize);
+
+            for (size_t pos = 0; pos < KeyCellDefaultsSize; ++pos) {
+                Key[pos] = (*KeyCellDefaults)[pos];
             }
         }
 
@@ -1133,7 +1138,7 @@ namespace NTable {
     private:
         Y_FORCE_INLINE void ClearKey() noexcept
         {
-            Key.clear();
+            KeyInitialized = false;
             SkipMainDeltas = 0;
             SkipMainVersion = false;
             SkipEraseVersion = false;
@@ -1142,17 +1147,15 @@ namespace NTable {
         Y_FORCE_INLINE void InitKey() const noexcept
         {
             Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to get an invalid key");
+            if (KeyInitialized)
+                return;
 
-            if (!Key) {
-                auto& info = Part->Scheme->Groups[0].ColsKeyData;
+            KeyInitialized = true;
 
-                for (size_t pos = 0; pos < info.size(); ++pos) {
-                    Key.push_back(Main.GetRecord()->Cell(info[pos]));
-                }
-
-                for (size_t pos = info.size(); pos < KeyCellDefaults->Size(); ++pos) {
-                    Key.push_back((*KeyCellDefaults)[pos]);
-                }
+            auto& info = Part->Scheme->Groups[0].ColsKeyData;
+            size_t infoSize = info.size();
+            for (size_t pos = 0; pos < infoSize; ++pos) {
+                Key[pos] = Main.GetRecord()->Cell(info[pos]);
             }
         }
 
@@ -1247,7 +1250,8 @@ namespace NTable {
         mutable TSmallVec<TPartGroupRowIt> Groups;
 
         // Key is lazily initialized so needs to be mutable
-        mutable TSmallVec<TCell> Key;
+        mutable bool KeyInitialized = false;
+        mutable TVector<TCell> Key;
 
         // History state is used when we need to position into history data
         struct THistoryState {

@@ -435,7 +435,6 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
     if (!profile || !profile->Has("authentication")) {
         return false;
     }
-    TStringBuilder sourceDescription;
     auto authValue = profile->GetValue("authentication");
     if (!authValue["method"]) {
         MisuseErrors.push_back("Configuration profile has \"authentication\" but does not has \"method\" in it");
@@ -558,7 +557,9 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             if (!config.StaticCredentials.Password) {
                 DoNotAskForPassword = true;
             }
+
         }
+
     } else {
         return false;
     }

@@ -259,7 +259,7 @@ struct TSelectInfo {
         return NColumnShard::TContainerAccessorWithDirection<std::vector<TPortionInfo>>(Portions, reverse);
     }
 
-    NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>> GetGranulesOrdered(bool reverse = false) const {
+    NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>> GetGranulesOrdered(const bool reverse) const {
         return NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>>(Granules, reverse);
     }
 

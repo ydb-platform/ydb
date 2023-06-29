@@ -1166,11 +1166,11 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                     }
                     Y_VERIFY(outPortion.Produced());
                     if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
+                        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
                             ("granule", granule)("portion", portionInfo->Portion());
                         continue;
                     } else {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
+                        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
                             ("granule", granule)("portion", portionInfo->Portion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));

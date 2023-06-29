@@ -240,6 +240,21 @@ struct TPortionInfo {
         return Meta.NumRows();
     }
 
+    ui64 GetRawBytes(const std::vector<ui32>& columnIds) const {
+        ui64 sum = 0;
+        const ui32 numRows = NumRows();
+        for (auto&& i : columnIds) {
+            if (TIndexInfo::IsSpecialColumn(i)) {
+                sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+            } else {
+                auto it = Meta.ColumnMeta.find(i);
+                Y_VERIFY(it != Meta.ColumnMeta.end());
+                sum += it->second.RawBytes;
+            }
+        }
+        return sum;
+    }
+
     ui64 RawBytesSum() const {
         ui64 sum = 0;
         for (auto& [columnId, colMeta] : Meta.ColumnMeta) {
@@ -324,10 +339,10 @@ public:
             } else {
                 auto result = loader.Apply(Data);
                 if (!result.ok()) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString());
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot unpack batch")("error", result.status().ToString())("loader", loader.DebugString());
                     return nullptr;
                 }
-                return NArrow::DictionaryToArray(*result);
+                return *result;
             }
         }
     };

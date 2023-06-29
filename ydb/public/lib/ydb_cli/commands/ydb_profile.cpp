@@ -257,41 +257,38 @@ void TCommandConnectionInfo::Config(TConfig& config) {
 
 int TCommandConnectionInfo::Run(TConfig& config) {
     if (config.Address) {
-        Cout << "  endpoint (" << config.Sources["address"] << "): " << config.Address << Endl;
+        Cout << "  endpoint: " << config.Address << Endl;
     }
     if (config.Database) {
-        Cout << "  database (" << config.Sources["database"] << "): " << config.Database << Endl;
+        Cout << "  database: " << config.Database << Endl;
     }
     if (config.SecurityToken) {
-        Cout << "  token (" << config.Sources["security-token"] << "): " << BlurSecret(config.SecurityToken) << Endl;
+        Cout << "  token: " << config.SecurityToken << Endl;
     }
     if (config.UseIamAuth) {
         if (config.YCToken) {
-            Cout << "  yc-token (" << config.Sources["yc-token"] << "): " << BlurSecret(config.YCToken) << Endl;
+            Cout << "  yc-token: " << BlurSecret(config.YCToken) << Endl;
         }
         if (config.SaKeyFile) {
-            Cout << "  sa-key-file (" << config.Sources["sa-key-file"] << "): " << config.SaKeyFile << Endl;
+            Cout << "  sa-key-file: " << config.SaKeyFile << Endl;
         }
         if (config.UseMetadataCredentials) {
-            Cout << "  use-metadata-credentials (" << config.Sources["metadata-credentials"] << ") " << Endl;
+            Cout << "  use-metadata-credentials" << Endl;
         }
         if (config.IamEndpoint) {
-            Cout << "  iam-endpoint (" << config.Sources["iam-endpoint"] << "): " << config.IamEndpoint << Endl;
+            Cout << "  iam-endpoint: " << config.IamEndpoint << Endl;
         }
     }
     if (config.UseStaticCredentials) {
         if (config.StaticCredentials.User) {
-            Cout << "  user (" << config.Sources["user"] << "): " << config.StaticCredentials.User << Endl;
+            Cout << "  user: " << config.StaticCredentials.User << Endl;
         }
         if (config.StaticCredentials.Password) {
-            Cout << "  password (" << config.Sources["password"] << "): " << ReplaceWithAsterisks(config.StaticCredentials.Password) << Endl;
+            Cout << "  password: " << ReplaceWithAsterisks(config.StaticCredentials.Password) << Endl;
         }
     }
-    if (config.Sources.contains("anonymous-auth")) {
-        Cout << "  anonymous-auth (" << config.Sources["anonymous-auth"] << ") " << Endl;
-    }
     if (config.CaCerts) {
-        Cout << "  " << config.Sources["ca-certs"] << Endl;
+        Cout << "  ca-certs:" << config.CaCertsFile << Endl;
     }
     return EXIT_SUCCESS;
 }

@@ -75,7 +75,6 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
-    config.Sources["iam-endpoint"] = "default value";
     SetCredentialsGetter(config);
 }
 
@@ -256,6 +255,13 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     config.VerbosityLevel = std::min(static_cast<TConfig::EVerbosityLevel>(VerbosityLevel), TConfig::EVerbosityLevel::DEBUG);
 }
 
+namespace {
+    inline void PrintSettingFromProfile(const TString& setting, std::shared_ptr<IProfile> profile, bool explicitOption) {
+        Cout << "Using " << setting << " due to configuration in" << (explicitOption ? "" : " active") << " profile \""
+            << profile->GetName() << "\"" << (explicitOption ? " from explicit --profile option" : "") << Endl;
+    }
+}
+
 void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
     if (CaCertsFile.empty()) {
         auto profile = Profile;
@@ -264,11 +270,12 @@ void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
         }
         if (profile && profile->Has("ca-file")) {
             CaCertsFile = profile->GetValue("ca-file").as<TString>();
-            config.Sources["ca-certs"] = TStringBuilder() << "ca-certs (recieved from " <<
-                    (Profile ? "profile provided with \"--profile\" option" : "active profile") << ": \"" << profile->GetName() << "\"): " << CaCertsFile;
+            if (IsVerbose()) {
+                PrintSettingFromProfile("CA certificates", profile, Profile != nullptr);
+            }
         }
-    } else {
-        config.Sources["ca-certs"] = TStringBuilder() << "ca-certs (recieved from \"--ca-file\" option): " << CaCertsFile;
+    } else if (IsVerbose()) {
+        Cout << "Using CA certificates provided with --ca-file option" << Endl;
     }
 
     if (!config.EnableSsl && !CaCertsFile.empty()) {
@@ -277,6 +284,7 @@ void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
     }
     if (!CaCertsFile.empty()) {
         config.CaCerts = ReadFromFile(CaCertsFile, "CA certificates");
+        config.CaCertsFile = CaCertsFile;
     }
 }
 
@@ -291,11 +299,12 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
         }
         if (profile && profile->Has("endpoint")) {
             Address = profile->GetValue("endpoint").as<TString>();
-            config.Sources["address"] = TStringBuilder() << "recieved from " <<
-                    (Profile ? "profile provided with \"--profile\" option" : "active profile") << ": \"" << profile->GetName() << "\"";
+            if (IsVerbose()) {
+                PrintSettingFromProfile("address", profile, Profile != nullptr);
+            }
         }
-    } else {
-        config.Sources["address"] = "recieved from \"--endpoint\" option";
+    } else if (IsVerbose()) {
+        Cout << "Using address provided with --endpoint option" << Endl;
     }
 
     if (!Address.empty()) {
@@ -338,11 +347,12 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         }
         if (profile && profile->Has("database")) {
             Database = profile->GetValue("database").as<TString>();
-            config.Sources["database"] = TStringBuilder() << "recieved from " <<
-                    (Profile ? "profile provided with \"--profile\" option" : "active profile") << ": \"" << profile->GetName() << "\"";
+            if (IsVerbose()) {
+                PrintSettingFromProfile("database", profile, Profile != nullptr);
+            }
         }
-    } else {
-        config.Sources["database"] = "recieved from \"--database\" option";
+    } else if (IsVerbose()) {
+        Cout << "Using database provided with --database option" << Endl;
     }
 
     config.Database = Database;
@@ -356,11 +366,14 @@ void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
         }
         if (profile && profile->Has("iam-endpoint")) {
             IamEndpoint = profile->GetValue("iam-endpoint").as<TString>();
-            config.Sources["iam-endpoint"] = TStringBuilder() << "recieved from " <<
-                    (Profile ? "profile provided with \"--profile\" option" : "active profile") << ": \"" << profile->GetName() << "\"";
+            if (IsVerbose()) {
+                PrintSettingFromProfile("endpoint of IAM service", profile, Profile != nullptr);
+            }
+        } else if (IsVerbose() && config.IamEndpoint) {
+            Cout << "Using endpoint of IAM service with default value" << Endl;
         }
-    } else {
-        config.Sources["iam-endpoint"] = "recieved from \"--iam-endpoint\" option";
+    } else if (IsVerbose()) {
+        Cout << "Using endpoint of IAM service provided with --iam-endpoint option" << Endl;
     }
 
     if (!IamEndpoint.empty()) {
@@ -418,20 +431,11 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-namespace {
-    inline void PrintSettingFromProfile(const TString& setting, std::shared_ptr<IProfile> profile, bool explicitOption) {
-        Cout << "Using " << setting << " due to configuration in" << (explicitOption ? "" : " active") << " profile \""
-            << profile->GetName() << "\"" << (explicitOption ? " from explicit --profile option" : "") << Endl;
-    }
-}
-
 bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfile> profile, TConfig& config, bool explicitOption) {
     if (!profile || !profile->Has("authentication")) {
         return false;
     }
     TStringBuilder sourceDescription;
-    sourceDescription << "recieved from " <<
-            (explicitOption ? "profile provided with \"--profile\" option" : "active profile") << ": \"" << profile->GetName() << "\"";
     auto authValue = profile->GetValue("authentication");
     if (!authValue["method"]) {
         MisuseErrors.push_back("Configuration profile has \"authentication\" but does not has \"method\" in it");
@@ -444,14 +448,12 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             PrintSettingFromProfile("metadata service", profile, explicitOption);
         }
         config.UseMetadataCredentials = true;
-        config.Sources["metadata-credentials"] = sourceDescription;
         return true;
     }
     if (authMethod == "anonymous-auth") {
         if (IsVerbose()) {
             PrintSettingFromProfile("anonymous authentication", profile, explicitOption);
         }
-        config.Sources["anonymous-auth"] = sourceDescription;
         return true;
     }
     bool knownMethod = false;
@@ -482,7 +484,6 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             PrintSettingFromProfile("iam token", profile, explicitOption);
         }
         config.SecurityToken = authData.as<TString>();
-        config.Sources["security-token"] = sourceDescription;
     } else if (authMethod == "token-file") {
         if (IsVerbose()) {
             PrintSettingFromProfile("token file", profile, explicitOption);
@@ -498,13 +499,11 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             return false;
         }
         config.SecurityToken = fileContent;
-        config.Sources["security-token"] = sourceDescription;
     } else if (authMethod == "yc-token") {
         if (IsVerbose()) {
             PrintSettingFromProfile("Yandex.Cloud Passport token (yc-token)", profile, explicitOption);
         }
         config.YCToken = authData.as<TString>();
-        config.Sources["yc-token"] = sourceDescription;
     } else if (authMethod == "yc-token-file") {
         if (IsVerbose()) {
             PrintSettingFromProfile("Yandex.Cloud Passport token file (yc-token-file)", profile, explicitOption);
@@ -520,7 +519,6 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             return false;
         }
         config.YCToken = fileContent;
-        config.Sources["yc-token"] = sourceDescription;
     } else if (authMethod == "sa-key-file") {
         if (IsVerbose()) {
             PrintSettingFromProfile("service account key file (sa-key-file)", profile, explicitOption);
@@ -530,7 +528,6 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             filePath = HomeDir + filePath.substr(1);
         }
         config.SaKeyFile = filePath;
-        config.Sources["sa-key-file"] = sourceDescription;
     } else if (authMethod == "ydb-token") {
         if (IsVerbose()) {
             PrintSettingFromProfile("OAuth token (ydb-token)", profile, explicitOption);
@@ -542,11 +539,9 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
         }
         if (authData["user"]) {
             config.StaticCredentials.User = authData["user"].as<TString>();
-            config.Sources["user"] = sourceDescription;
         }
         if (authData["password"]) {
             config.StaticCredentials.Password = authData["password"].as<TString>();
-            config.Sources["password"] = sourceDescription;
             if (!config.StaticCredentials.Password) {
                 DoNotAskForPassword = true;
             }
@@ -560,7 +555,6 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 return false;
             }
             config.StaticCredentials.Password = fileContent;
-            config.Sources["password"] = sourceDescription;
             if (!config.StaticCredentials.Password) {
                 DoNotAskForPassword = true;
             }
@@ -592,7 +586,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using iam token from IAM_TOKEN env variable" << Endl;
                 }
                 config.SecurityToken = envIamToken;
-                config.Sources["security-token"] = "recieved from IAM_TOKEN env variable";
                 break;
             }
             TString envYcToken = GetEnv("YC_TOKEN");
@@ -601,7 +594,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using Yandex.Cloud Passport token from YC_TOKEN env variable" << Endl;
                 }
                 config.YCToken = envYcToken;
-                config.Sources["yc-token"] = "recieved from YC_TOKEN env variable";
                 break;
             }
             if (GetEnv("USE_METADATA_CREDENTIALS") == "1") {
@@ -609,7 +601,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using metadata service due to USE_METADATA_CREDENTIALS=\"1\" env variable" << Endl;
                 }
                 config.UseMetadataCredentials = true;
-                config.Sources["metadata-credentials"] = "recieved from USE_METADATA_CREDENTIALS env variable";
                 break;
             }
             TString envSaKeyFile = GetEnv("SA_KEY_FILE");
@@ -618,7 +609,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using service account key file from SA_KEY_FILE env variable" << Endl;
                 }
                 config.SaKeyFile = envSaKeyFile;
-                config.Sources["sa-key-file"] = "recieved from SA_KEY_FILE env variable";
                 break;
             }
         }
@@ -629,7 +619,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using OAuth token from YDB_TOKEN env variable" << Endl;
                 }
                 config.SecurityToken = envYdbToken;
-                config.Sources["security-token"] = "recieved from YDB_TOKEN env variable";
                 break;
             }
         }
@@ -640,7 +629,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using user name from YDB_USER env variable" << Endl;
                 }
                 config.StaticCredentials.User = userName;
-                config.Sources["user"] = "recieved from YDB_USER env variable";
             }
 
             TString password = GetEnv("YDB_PASSWORD");
@@ -649,7 +637,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     Cout << "Using user password from YDB_PASSWORD env variable" << Endl;
                 }
                 config.StaticCredentials.Password = password;
-                config.Sources["password"] = "recieved from YDB_PASSWORD env variable";
             }
             if (!userName.empty() || !password.empty()) {
                 break;
@@ -666,7 +653,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             // Priority 5. No auth methods from active configuration profile. Checking default token file.
             TString tokenFile = defaultTokenFile;
             if (ReadFromFileIfExists(tokenFile, "default token", config.SecurityToken)) {
-                config.Sources["security-token"] = "recieved from default token file: \"" + defaultTokenFile + "\"";
                 if (IsVerbose()) {
                     Cout << "Using auth token from default token file " << defaultTokenFile << Endl;
                 }
@@ -685,39 +671,33 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 Cout << "Using token from file provided with explicit option" << Endl;
             }
             config.SecurityToken = ReadFromFile(TokenFile, "token");
-            config.Sources["security-token"] = "recieved from \"--token-file\" option";
         } else if (YCTokenFile) {
             if (IsVerbose()) {
                 Cout << "Using Yandex.Cloud Passport token from file provided with --yc-token-file option" << Endl;
             }
             config.YCToken = ReadFromFile(YCTokenFile, "token");
-            config.Sources["yc-token"] = "recieved from \"--yc-token-file\" option";
         } else if (UseMetadataCredentials) {
             if (IsVerbose()) {
                 Cout << "Using metadata service due to --use-metadata-credentials option" << Endl;
             }
             config.UseMetadataCredentials = true;
-            config.Sources["metadata-credentials"] = "recieved from \"--use-metadata-credentials\" option";
         } else if (SaKeyFile) {
             if (IsVerbose()) {
                 Cout << "Using service account key file provided with --sa-key-file option" << Endl;
             }
             config.SaKeyFile = SaKeyFile;
-            config.Sources["sa-key-file"] = "recieved from \"--sa-key-file\" option";
         } else if (UserName || PasswordFile) {
             if (UserName) {
                 if (IsVerbose()) {
                     Cout << "Using user name provided with --user option" << Endl;
                 }
                 config.StaticCredentials.User = UserName;
-                config.Sources["user"] = "recieved from \"--user\" option";
             }
             if (PasswordFile) {
                 if (IsVerbose()) {
                     Cout << "Using user password from file provided with --password-file option" << Endl;
                 }
                 config.StaticCredentials.Password = ReadFromFile(PasswordFile, "password", true);
-                config.Sources["password"] = "recieved from \"--password\" option";
                 if (!config.StaticCredentials.Password) {
                     DoNotAskForPassword = true;
                 }
@@ -749,7 +729,6 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             if (!config.StaticCredentials.Password && !DoNotAskForPassword) {
                 Cerr << "Enter password for user " << config.StaticCredentials.User << ": ";
                 config.StaticCredentials.Password = InputPassword();
-                config.Sources["password"] = "recieved from standard input";
             }
         } else {
             if (config.StaticCredentials.Password) {

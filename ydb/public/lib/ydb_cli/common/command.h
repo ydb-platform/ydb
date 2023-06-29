@@ -11,7 +11,6 @@
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 #include <util/string/type.h>
-#include <unordered_map>
 #include <string>
 
 namespace NYdb {
@@ -90,6 +89,7 @@ public:
         TString Address;
         TString Database;
         TString CaCerts;
+        TString CaCertsFile;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
 
@@ -110,8 +110,6 @@ public:
         TString SaKeyFile;
         TString IamEndpoint;
         TString YScope;
-
-        std::unordered_map<TString, TString> Sources;
 
         TString ProfileFile;
         bool UseOAuthToken = true;

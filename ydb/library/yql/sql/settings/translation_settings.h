@@ -24,6 +24,17 @@ namespace NSQLTranslation {
         DISCOVERY = 4,
     };
 
+    enum class EBindingsMode {
+        // raise error 
+        DISABLED,
+        // classic support for bindings
+        ENABLED,
+        // bindings.my_binding -> current_cluster.my_binding + raise warning
+        DROP_WITH_WARNING,
+        // bindings.my_binding -> current_cluster.my_binding
+        DROP
+    };
+
     inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
         return mode == NSQLTranslation::ESqlMode::QUERY || mode == NSQLTranslation::ESqlMode::DISCOVERY;
     }
@@ -66,6 +77,7 @@ namespace NSQLTranslation {
         THashSet<TString> Libraries;
         THashSet<TString> Flags;
 
+        EBindingsMode BindingsMode;
         THashMap<TString, TTableBindingSettings> Bindings;
 
         // each (name, type) entry in this map is equivalent to

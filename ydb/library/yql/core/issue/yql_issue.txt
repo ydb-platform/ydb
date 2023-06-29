@@ -632,3 +632,11 @@ ids {
   code: YQL_OFFSET_WITHOUT_SORT
   severity: S_WARNING
 }
+ids {
+  code: YQL_DEPRECATED_BINDINGS
+  severity: S_WARNING
+}
+ids {
+  code: YQL_DISABLED_BINDINGS
+  severity: S_ERROR
+}

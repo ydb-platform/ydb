@@ -1447,7 +1447,24 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
         if (value.GetLiteral()) {
             TString clusterName = *value.GetLiteral();
             if (allowBinding && to_lower(clusterName) == "bindings") {
-                isBinding = true;
+                switch (Ctx.Settings.BindingsMode) {
+                case NSQLTranslation::EBindingsMode::DISABLED:
+                    Ctx.Error(Ctx.Pos(), TIssuesIds::YQL_DISABLED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax has ended";
+                    Ctx.IncrementMonCounter("sql_errors", "DisabledBinding");
+                    return false;
+                case NSQLTranslation::EBindingsMode::ENABLED:
+                    isBinding = true;
+                    break;
+                case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
+                    Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon";
+                    Ctx.IncrementMonCounter("sql_errors", "DeprecatedBinding");
+                    [[fallthrough]];
+                case NSQLTranslation::EBindingsMode::DROP:
+                    service = Context().Scoped->CurrService;
+                    cluster = Context().Scoped->CurrCluster;
+                    break;
+                }
+
                 return true;
             }
             TString normalizedClusterName;

@@ -22,6 +22,9 @@ private:
     const std::shared_ptr<arrow::Schema> Schema;
 protected:
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const override;
+    virtual TString DoDebugString() const override {
+        return "type=BATCH_PAYLOAD;";
+    }
 public:
     TBatchPayloadDeserializer(const std::shared_ptr<arrow::Schema> schema)
         : Schema(schema) {

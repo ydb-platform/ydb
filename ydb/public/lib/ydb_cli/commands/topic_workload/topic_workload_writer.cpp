@@ -138,7 +138,7 @@ void TTopicWorkloadWriterWorker::Process() {
 
                 WriteSession->Write(std::move(ContinuationToken.GetRef()), data, MessageId, createTimestamp);
 
-                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << now - *createTimestamp.Get());
+                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << (Params.ByteRate == 0 ? TDuration() : now - *createTimestamp.Get()));
                 ContinuationToken.Clear();
                 MessageId++;
             }

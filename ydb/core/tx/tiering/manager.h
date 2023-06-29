@@ -31,6 +31,10 @@ public:
     }
     bool Stop();
     bool Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
+
+    TString GetTierName() const {
+        return GetConfig().GetTierName();
+    }
 };
 }
 

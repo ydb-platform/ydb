@@ -46,4 +46,8 @@ std::shared_ptr<TValueAggregationClient> TCommonCountersOwner::GetValueAutoAggre
     return agent->GetClient();
 }
 
+void TCommonCountersOwner::DeepSubGroup(const TString& id, const TString& value) {
+    SubGroup = SubGroup->GetSubgroup(id, value);
+}
+
 }

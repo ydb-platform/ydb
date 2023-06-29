@@ -12,6 +12,14 @@ public:
     virtual void Config(TConfig& config) override;
 };
 
+class TCommandGetConnection : public TClientCommand {
+public:
+    TCommandGetConnection();
+		
+    virtual void Config(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
 class TCommandProfile : public TClientCommandTree {
 public:
     TCommandProfile();

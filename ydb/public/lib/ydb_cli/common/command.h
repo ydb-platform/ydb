@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <unordered_map>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <library/cpp/getopt/last_getopt.h>
@@ -109,6 +110,8 @@ public:
         TString SaKeyFile;
         TString IamEndpoint;
         TString YScope;
+
+        std::unordered_map<TString, TString> Sources;
 
         TString ProfileFile;
         bool UseOAuthToken = true;

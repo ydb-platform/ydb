@@ -27,6 +27,7 @@ TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
     AddCommand(std::make_unique<TCommandProfile>());
+    AddCommand(std::make_unique<TCommandGetConnection>());
 }
 
 void TCommandConfig::Config(TConfig& config) {
@@ -240,6 +241,59 @@ namespace {
             Cout << "  ca-file: " << profile->GetValue("ca-file").as<TString>() << Endl;
         }
     }
+}
+
+TCommandGetConnection::TCommandGetConnection()
+    : TClientCommand("info", {}, "List current connection parameters")
+{}
+
+void TCommandGetConnection::Config(TConfig& config) {
+    TClientCommand::Config(config);
+
+    config.NeedToConnect = false;
+
+    config.SetFreeArgsNum(0);
+}
+
+int TCommandGetConnection::Run(TConfig& config) {
+    if (config.Address) {
+        Cout << "  endpoint (" << config.Sources["address"] << "): " << config.Address << Endl;
+    }
+    if (config.Database) {
+        Cout << "  database (" << config.Sources["database"] << "): " << config.Database << Endl;
+    }
+    if (config.SecurityToken) {
+        Cout << "  token (" << config.Sources["security-token"] << "): " << BlurSecret(config.SecurityToken) << Endl;
+    }
+    if (config.UseIamAuth) {
+        if (config.YCToken) {
+            Cout << "  yc-token (" << config.Sources["yc-token"] << "): " << BlurSecret(config.YCToken) << Endl;
+        }
+        if (config.SaKeyFile) {
+            Cout << "  sa-key-file (" << config.Sources["sa-key-file"] << "): " << config.SaKeyFile << Endl;
+        }
+        if (config.UseMetadataCredentials) {
+            Cout << "  use-metadata-credentials (" << config.Sources["metadata-credentials"] << ") " << Endl;
+        }
+        if (config.IamEndpoint) {
+            Cout << "  iam-endpoint (" << config.Sources["iam-endpoint"] << "): " << config.IamEndpoint << Endl;
+        }
+    }
+    if (config.UseStaticCredentials) {
+        if (config.StaticCredentials.User) {
+            Cout << "  user (" << config.Sources["user"] << "): " << config.StaticCredentials.User << Endl;
+        }
+        if (config.StaticCredentials.Password) {
+            Cout << "  password (" << config.Sources["password"] << "): " << ReplaceWithAsterisks(config.StaticCredentials.Password) << Endl;
+        }
+    }
+    if (config.Sources.contains("anonymous-auth")) {
+        Cout << "  anonymous-auth (" << config.Sources["anonymous-auth"] << ") " << Endl;
+    }
+    if (config.CaCerts) {
+        Cout << "  " << config.Sources["ca-certs"] << Endl;
+    }
+    return EXIT_SUCCESS;
 }
 
 TCommandInit::TCommandInit()

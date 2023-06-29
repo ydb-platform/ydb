@@ -22,6 +22,7 @@ target_link_libraries(ydb-library-yql-providers-dq-actors-ut PUBLIC
   yql-dq-actors
   dq-actors-compute
   udf-service-stub
+  yql-sql-pg_dummy
 )
 target_sources(ydb-library-yql-providers-dq-actors-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues_ut.cpp

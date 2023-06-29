@@ -211,9 +211,7 @@ namespace NPage {
 
             NUtil::NBin::TPut out(buf.mutable_begin());
 
-            if (auto* label = out.Skip<NPage::TLabel>()) {
-                label->Init(EPage::GarbageStats, 0, pageSize);
-            }
+            WriteUnaligned<TLabel>(out.Skip<TLabel>(), TLabel::Encode(EPage::GarbageStats, 0, pageSize));
 
             if (auto* header = out.Skip<THeader>()) {
                 Zero(*header);

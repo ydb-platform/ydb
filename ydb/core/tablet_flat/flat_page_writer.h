@@ -23,7 +23,7 @@ namespace NPage {
             , Version(version)
             , V2Label(label)
             , Extra(extra)
-            , Prefix(sizeof(TLabel) + (label ? 8 : 0) + sizeof(TRecordsHeader) + Extra)
+            , Prefix(sizeof(TLabel) + (label ? sizeof(TLabelExt) : 0) + sizeof(TRecordsHeader) + Extra)
         {
             Y_VERIFY((version & 0x8000) == 0, "Invalid version value");
         }
@@ -82,15 +82,14 @@ namespace NPage {
 
             char *ptr = Blob.mutable_begin();
 
-            if (auto *label = TDeref<NPage::TLabel>::At(ptr, 0)) {
-                label->Init(Type, Version, Blob.size());
-
-                if (V2Label) {
-                    label->Format |= 0x8000;
-                    *TDeref<ui8>::At(label + 1, 0) = 0; /* page as-is */
-                }
-
-                ptr += sizeof(NPage::TLabel) + (V2Label ? 8 : 0);
+            if (V2Label) {
+                WriteUnaligned<NPage::TLabel>(ptr, TLabel::Encode(Type, Version | 0x8000, Blob.size()));
+                ptr += sizeof(TLabel);
+                WriteUnaligned<NPage::TLabelExt>(ptr, TLabelExt::Encode(ECodec::Plain));
+                ptr += sizeof(TLabelExt);
+            } else {
+                WriteUnaligned<NPage::TLabel>(ptr, TLabel::Encode(Type, Version, Blob.size()));
+                ptr += sizeof(TLabel);
             }
 
             if (auto *hdr = TDeref<TRecordsHeader>::At(ptr, 0)) {

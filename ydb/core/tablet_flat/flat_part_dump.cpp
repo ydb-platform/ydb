@@ -90,13 +90,13 @@ namespace {
     {
         Key.reserve(part.Scheme->Groups[0].KeyTypes.size());
 
-        auto *label = part.Index.Label();
+        auto label = part.Index.Label();
 
         const auto items = (part.Index->End() - part.Index->Begin());
 
         Out
-            << " + Index{" << (ui16)label->Type << " rev "
-            << label->Format << ", " << label->Size << "b}"
+            << " + Index{" << (ui16)label.Type << " rev "
+            << label.Format << ", " << label.Size << "b}"
             << " " << items << " rec" << Endl
             << " |  Page     Row    Bytes  (";
 
@@ -145,10 +145,11 @@ namespace {
         // TODO: need to join with other column groups
         auto data = NPage::TDataPage(Env->TryGetPage(&part, page));
 
-        if (auto *label = data.Label()) {
+        if (data) {
+            auto label = data.Label();
             Out
-                << " + Rows{" << page << "} Label{" << page << (ui16)label->Type
-                << " rev " << label->Format << ", " << label->Size << "b}"
+                << " + Rows{" << page << "} Label{" << page << (ui16)label.Type
+                << " rev " << label.Format << ", " << label.Size << "b}"
                 << ", [" << data.BaseRow() << ", +" << data->Records << ")row"
                 << Endl;
 

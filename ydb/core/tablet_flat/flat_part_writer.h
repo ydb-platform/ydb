@@ -829,14 +829,16 @@ namespace NTable {
             if (!force && out.size() + (page.size() >> 3) > page.size()) {
                 return { }; /* Compressed page is almost the same in size */
             } else {
-                std::copy(page.begin(), page.begin() + 16, out.mutable_begin());
+                auto label = ReadUnaligned<NPage::TLabel>(page.begin());
 
-                auto *label = TDeref<NPage::TLabel>::At(out.mutable_begin(), 0);
-                label->SetSize(out.size());
+                Y_VERIFY(label.IsExtended(), "Expected an extended label");
 
-                *TDeref<ui8>::At(label + 1, 0) = ui8(ECodec::LZ4);
+                auto ext = ReadUnaligned<NPage::TLabelExt>(page.begin() + 8);
 
-                Y_VERIFY(label->Format & 0x8000, "Unexpected label version");
+                ext.Codec = ECodec::LZ4;
+
+                WriteUnaligned<NPage::TLabel>(out.mutable_begin(), NPage::TLabel::Encode(label.Type, label.Format, out.size()));
+                WriteUnaligned<NPage::TLabelExt>(out.mutable_begin() + 8, ext);
 
                 NSan::CheckMemIsInitialized(out.data(), out.size());
 

@@ -160,9 +160,9 @@ namespace NTest {
 
                 TSharedData to = TSharedData::Uninitialized(label.Size);
 
-                *TDeref<NPage::TLabel>::At(to.mutable_begin(), 0) = label;
+                WriteUnaligned<NPage::TLabel>(to.mutable_begin(), label);
 
-                auto *begin = TDeref<char>::At(to.mutable_begin(), sizeof(label));
+                auto *begin = to.mutable_begin() + sizeof(NPage::TLabel);
 
                 got = in.Load(begin,  to.mutable_end() - begin);
 

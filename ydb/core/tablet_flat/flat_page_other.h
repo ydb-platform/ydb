@@ -90,11 +90,7 @@ namespace NPage {
 
             NUtil::NBin::TPut out(buf.mutable_begin());
 
-            if (auto *hdr = out.Skip<NPage::TLabel>()) {
-                hdr->Type = EPage::Frames;
-                hdr->Format = 0;
-                hdr->Size = size;
-            }
+            WriteUnaligned<TLabel>(out.Skip<TLabel>(), TLabel::Encode(EPage::Frames, 0, size));
 
             if (auto *post = out.Skip<THeader>()) {
                 Zero(*post);
@@ -183,11 +179,7 @@ namespace NPage {
 
             NUtil::NBin::TPut out(buf.mutable_begin());
 
-            if (auto *hdr = out.Skip<NPage::TLabel>()) {
-                hdr->Type = EPage::Globs;
-                hdr->Format = 1;
-                hdr->Size = size < Max<ui32>() ? ui32(size) : Max<ui32>();
-            }
+            WriteUnaligned<TLabel>(out.Skip<TLabel>(), TLabel::Encode(EPage::Globs, 1, size));
 
             if (auto *post = out.Skip<THeader>()) {
                 Zero(*post);

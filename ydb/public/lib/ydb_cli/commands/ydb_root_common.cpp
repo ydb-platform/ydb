@@ -1,6 +1,4 @@
 #include "ydb_root_common.h"
-#include "util/string/builder.h"
-#include "ydb/public/lib/ydb_cli/common/root.h"
 #include "ydb_profile.h"
 #include "ydb_service_auth.h"
 #include "ydb_service_discovery.h"
@@ -21,6 +19,7 @@
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
+#include <util/string/builder.h>
 #include <util/system/env.h>
 
 namespace NYdb {

@@ -366,7 +366,7 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
 
     for k, v in full_test_record.items():
         if not isinstance(v, str):
-            unit.message(["WARN", k])
+            logger.warn(k, type(k))
 
     if test_record:
         full_test_record.update(test_record)

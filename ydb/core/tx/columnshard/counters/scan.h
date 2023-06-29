@@ -116,15 +116,19 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterFetchedBytes;
     NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterUsefulBytes;
 
-    NMonitoring::THistogramPtr HistogramCacheBlobsDuration;
-    NMonitoring::THistogramPtr HistogramMissCacheBlobsDuration;
+    NMonitoring::TDynamicCounters::TCounterPtr Hanging;
+
+    NMonitoring::THistogramPtr HistogramCacheBlobsCountDuration;
+    NMonitoring::THistogramPtr HistogramMissCacheBlobsCountDuration;
+    NMonitoring::THistogramPtr HistogramCacheBlobBytesDuration;
+    NMonitoring::THistogramPtr HistogramMissCacheBlobBytesDuration;
 
     TScanCounters(const TString& module = "Scan");
 
     void OnProcessingOverloaded() {
         ProcessingOverload->Add(1);
     }
-    void OnReadingOverloaded() {
+    void OnReadingOverloaded() const {
         ReadingOverload->Add(1);
     }
 

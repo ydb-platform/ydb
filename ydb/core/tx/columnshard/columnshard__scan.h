@@ -32,6 +32,9 @@ public:
     virtual NOlap::TPartialReadResult GetBatch() = 0;
     virtual NBlobCache::TBlobRange GetNextBlobToRead() { return NBlobCache::TBlobRange(); }
     virtual size_t ReadyResultsCount() const = 0;
+    virtual TString DebugString() const {
+        return "NO_DATA";
+    }
 };
 
 }

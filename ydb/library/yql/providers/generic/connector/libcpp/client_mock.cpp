@@ -2,9 +2,9 @@
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
-namespace NYql::Connector {
-    DescribeTableResult::TPtr ClientMock::DescribeTable(const API::DescribeTableRequest&) {
-        auto out = std::make_shared<DescribeTableResult>();
+namespace NYql::NConnector {
+    TDescribeTableResult::TPtr TClientMock::DescribeTable(const NApi::TDescribeTableRequest&) {
+        auto out = std::make_shared<TDescribeTableResult>();
         out->Error.set_status(Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
         auto schema = &out->Schema;
 
@@ -27,7 +27,7 @@ namespace NYql::Connector {
         return out;
     }
 
-    arrow::Status ClientMock::PrepareRecordBatch(std::shared_ptr<arrow::RecordBatch>& recordBatch) {
+    arrow::Status TClientMock::PrepareRecordBatch(std::shared_ptr<arrow::RecordBatch>& recordBatch) {
         arrow::Int8Builder int8builder;
         int8_t days_raw[5] = {1, 12, 17, 23, 28};
         ARROW_RETURN_NOT_OK(int8builder.AppendValues(days_raw, 5));
@@ -61,21 +61,21 @@ namespace NYql::Connector {
         return arrow::Status::OK();
     }
 
-    ListSplitsResult::TPtr ClientMock::ListSplits(const API::ListSplitsRequest& request) {
+    TListSplitsResult::TPtr TClientMock::ListSplits(const NApi::TListSplitsRequest& request) {
         YQL_ENSURE(request.selects().size() == 1);
 
-        auto out = std::make_shared<ListSplitsResult>();
+        auto out = std::make_shared<TListSplitsResult>();
         out->Error.set_status(::Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
 
-        API::Split split;
+        NApi::TSplit split;
         split.mutable_select()->CopyFrom(request.selects()[0]);
 
         out->Splits.push_back(split);
         return out;
     }
 
-    ReadSplitsResult::TPtr ClientMock::ReadSplits(const API::ReadSplitsRequest&) {
-        auto out = std::make_shared<ReadSplitsResult>();
+    TReadSplitsResult::TPtr TClientMock::ReadSplits(const NApi::TReadSplitsRequest&) {
+        auto out = std::make_shared<TReadSplitsResult>();
         out->Error.set_status(::Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS);
 
         out->RecordBatches.resize(1);
@@ -87,8 +87,8 @@ namespace NYql::Connector {
         return out;
     }
 
-    IClient::TPtr MakeClientMock() {
-        return std::make_shared<ClientMock>();
+    IClient::TPtr MakeTClientMock() {
+        return std::make_shared<TClientMock>();
     }
 
-} // namespace NYql::Connector
+}

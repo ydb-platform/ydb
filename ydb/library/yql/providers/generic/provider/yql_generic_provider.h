@@ -20,8 +20,8 @@ namespace NYql {
         struct TTableMeta {
             const TStructExprType* ItemType = nullptr;
             TVector<TString> ColumnOrder;
-            NYql::Connector::API::Schema Schema;
-            NYql::Connector::API::DataSourceInstance DataSourceInstance;
+            NYql::NConnector::NApi::TSchema Schema;
+            NYql::NConnector::NApi::TDataSourceInstance DataSourceInstance;
 
             TString ToString() const {
                 TStringBuilder sb;
@@ -73,11 +73,11 @@ namespace NYql {
     };
 
     TDataProviderInitializer
-    GetGenericDataProviderInitializer(Connector::IClient::TPtr genericClient,
+    GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
                                       std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr);
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state,
-                                                         Connector::IClient::TPtr genericClient);
+                                                         NConnector::IClient::TPtr genericClient);
     TIntrusivePtr<IDataProvider> CreateGenericDataSink(TGenericState::TPtr state);
 
 } // namespace NYql

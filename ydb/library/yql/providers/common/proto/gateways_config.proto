@@ -542,19 +542,19 @@ message TGenericClusterConfig {
     required string Name = 1;
 
     // Data source kind
-    required NYql.Connector.API.DataSourceKind Kind = 2;
+    required NYql.NConnector.NApi.EDataSourceKind Kind = 8;
 
     // Location represents the network address of a data source instance we want to connect
     oneof Location {
         // Endpoint must be used for on-premise deployments.
-        NYql.Connector.API.Endpoint Endpoint = 3;
+        NYql.NConnector.NApi.TEndpoint Endpoint = 9;
         // DatabaseId must be used when the data source is deployed in cloud.
         // Data source FQDN and port will be resolved by MDB service.
         string DatabaseId = 4;
     }
 
     // Credentials used to access data source instance
-    required NYql.Connector.API.Credentials Credentials = 5;
+    required NYql.NConnector.NApi.TCredentials Credentials = 10;
 
     // Credentials used to access MDB API.
     // When working with data source instances deployed in a cloud, 
@@ -562,14 +562,18 @@ message TGenericClusterConfig {
     // or set IAM Token via env variable / credential table.
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
+
+    reserved 2, 3, 5;
 }
 
 message TGenericConnectorConfig {
     // Connector instance network endpoint
-    required NYql.Connector.API.Endpoint Endpoint = 1;
+    required NYql.NConnector.NApi.TEndpoint Endpoint = 3;
     // If true, GRPC Client will use TLS encryption.
     // Server cert will be verified with system CA cert pool.
     required bool UseTLS = 2;
+
+    reserved 1;
 }
 
 message TGenericGatewayConfig {

@@ -5,8 +5,8 @@
 
 namespace NYql {
 
-    TDataProviderInitializer GetGenericDataProviderInitializer(Connector::IClient::TPtr genericClient,
-                                                               const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver)
+    TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
+                                                               const std::shared_ptr<IDatabaseAsyncResolver> dbResolver)
     {
         return [genericClient, dbResolver](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
                                            const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

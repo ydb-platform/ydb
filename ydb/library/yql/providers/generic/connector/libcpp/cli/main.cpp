@@ -4,7 +4,7 @@
 
 const TString TableName = "example_3";
 
-void SetDatabaseSourceInstance(NYql::Connector::API::DataSourceInstance* dsi) {
+void SetDatabaseSourceInstance(NYql::NConnector::NApi::TDataSourceInstance* dsi) {
     dsi->set_database("dqrun");
     dsi->mutable_endpoint()->set_host("localhost");
     dsi->mutable_endpoint()->set_port(9000);
@@ -12,14 +12,14 @@ void SetDatabaseSourceInstance(NYql::Connector::API::DataSourceInstance* dsi) {
     dsi->mutable_credentials()->mutable_basic()->set_password("qwerty12345");
 }
 
-std::shared_ptr<NYql::Connector::DescribeTableResult> DescribeTable(NYql::Connector::IClient::TPtr client) {
-    NYql::Connector::API::DescribeTableRequest request;
+std::shared_ptr<NYql::NConnector::TDescribeTableResult> DescribeTable(NYql::NConnector::IClient::TPtr client) {
+    NYql::NConnector::NApi::TDescribeTableRequest request;
     request.set_table(TableName);
     SetDatabaseSourceInstance(request.mutable_data_source_instance());
 
     auto result = client->DescribeTable(request);
 
-    if (NYql::Connector::ErrorIsSuccess(result->Error)) {
+    if (NYql::NConnector::ErrorIsSuccess(result->Error)) {
         YQL_LOG(INFO) << "DescribeTable: succeded: ";
         YQL_LOG(INFO) << "\n"
                       << result->Schema.ShortDebugString();
@@ -30,9 +30,9 @@ std::shared_ptr<NYql::Connector::DescribeTableResult> DescribeTable(NYql::Connec
     return result;
 }
 
-std::shared_ptr<NYql::Connector::ListSplitsResult>
-ListSplits(NYql::Connector::IClient::TPtr client, const google::protobuf::RepeatedPtrField<Ydb::Column>& columns) {
-    NYql::Connector::API::ListSplitsRequest request;
+std::shared_ptr<NYql::NConnector::TListSplitsResult>
+ListSplits(NYql::NConnector::IClient::TPtr client, const google::protobuf::RepeatedPtrField<Ydb::Column>& columns) {
+    NYql::NConnector::NApi::TListSplitsRequest request;
     SetDatabaseSourceInstance(request.mutable_data_source_instance());
 
     auto select = request.add_selects();
@@ -48,7 +48,7 @@ ListSplits(NYql::Connector::IClient::TPtr client, const google::protobuf::Repeat
 
     auto result = client->ListSplits(request);
 
-    if (NYql::Connector::ErrorIsSuccess(result->Error)) {
+    if (NYql::NConnector::ErrorIsSuccess(result->Error)) {
         YQL_LOG(INFO) << "ListSplits: succeded: splits=" << result->Splits.size();
         std::for_each(result->Splits.cbegin(), result->Splits.cend(), [](const auto& split) {
             YQL_LOG(INFO) << "\n"
@@ -61,18 +61,18 @@ ListSplits(NYql::Connector::IClient::TPtr client, const google::protobuf::Repeat
     return result;
 }
 
-std::shared_ptr<NYql::Connector::ReadSplitsResult> ReadSplits(NYql::Connector::IClient::TPtr client,
-                                                              const std::vector<NYql::Connector::API::Split>& splits) {
-    NYql::Connector::API::ReadSplitsRequest request;
+std::shared_ptr<NYql::NConnector::TReadSplitsResult> ReadSplits(NYql::NConnector::IClient::TPtr client,
+                                                                const std::vector<NYql::NConnector::NApi::TSplit>& splits) {
+    NYql::NConnector::NApi::TReadSplitsRequest request;
     SetDatabaseSourceInstance(request.mutable_data_source_instance());
-    request.set_format(NYql::Connector::API::ReadSplitsRequest_Format::ReadSplitsRequest_Format_ARROW_IPC_STREAMING);
+    request.set_format(NYql::NConnector::NApi::TReadSplitsRequest_EFormat::TReadSplitsRequest_EFormat_ARROW_IPC_STREAMING);
 
     std::for_each(splits.begin(), splits.end(), [&](const auto& c) { request.mutable_splits()->Add()->CopyFrom(c); });
 
     auto result = client->ReadSplits(request);
     // client->ReadSplits(splits, );
 
-    if (NYql::Connector::ErrorIsSuccess(result->Error)) {
+    if (NYql::NConnector::ErrorIsSuccess(result->Error)) {
         YQL_LOG(INFO) << "ReadSplits: succeded: record_batches=" << result->RecordBatches.size();
 
         for (const auto& recordBatch : result->RecordBatches) {
@@ -94,7 +94,7 @@ int main() {
     cfg.mutable_endpoint()->set_port(50051);
     cfg.SetUseTLS(true);
 
-    auto client = NYql::Connector::MakeClientGRPC(cfg);
+    auto client = NYql::NConnector::MakeClientGRPC(cfg);
 
     try {
         auto columns = DescribeTable(client)->Schema.columns();

@@ -23,8 +23,8 @@
         }                                                                                                  \
     })
 
-namespace NYql::Connector {
-    ClientGRPC::ClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
+namespace NYql::NConnector {
+    TClientGRPC::TClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
         std::shared_ptr<grpc::ChannelCredentials> credentials;
         auto networkEndpoint = cfg.GetEndpoint().host() + ":" + std::to_string(cfg.GetEndpoint().port());
 
@@ -36,13 +36,13 @@ namespace NYql::Connector {
         }
 
         auto channel = grpc::CreateChannel(networkEndpoint, credentials);
-        Stub_ = API::Connector::NewStub(channel);
+        Stub_ = NApi::Connector::NewStub(channel);
     };
 
-    std::shared_ptr<DescribeTableResult> ClientGRPC::DescribeTable(const API::DescribeTableRequest& request) {
+    std::shared_ptr<TDescribeTableResult> TClientGRPC::DescribeTable(const NApi::TDescribeTableRequest& request) {
         grpc::ClientContext ctx;
-        API::DescribeTableResponse response;
-        auto out = std::make_shared<Connector::DescribeTableResult>();
+        NApi::TDescribeTableResponse response;
+        auto out = std::make_shared<TDescribeTableResult>();
 
         REQUEST_START();
         grpc::Status status = Stub_->DescribeTable(&ctx, request, &response);
@@ -54,13 +54,13 @@ namespace NYql::Connector {
         return out;
     };
 
-    std::shared_ptr<ListSplitsResult> ClientGRPC::ListSplits(const API::ListSplitsRequest& request) {
+    std::shared_ptr<TListSplitsResult> TClientGRPC::ListSplits(const NApi::TListSplitsRequest& request) {
         REQUEST_START();
         grpc::ClientContext ctx;
-        std::unique_ptr<grpc::ClientReader<API::ListSplitsResponse>> reader(Stub_->ListSplits(&ctx, request));
+        std::unique_ptr<grpc::ClientReader<NApi::TListSplitsResponse>> reader(Stub_->ListSplits(&ctx, request));
 
-        API::ListSplitsResponse response;
-        auto out = std::make_shared<ListSplitsResult>();
+        NApi::TListSplitsResponse response;
+        auto out = std::make_shared<TListSplitsResult>();
         out->Error.Clear();
 
         while (reader->Read(&response)) {
@@ -80,13 +80,13 @@ namespace NYql::Connector {
         return out;
     };
 
-    std::shared_ptr<ReadSplitsResult> ClientGRPC::ReadSplits(const API::ReadSplitsRequest& request) {
+    std::shared_ptr<TReadSplitsResult> TClientGRPC::ReadSplits(const NApi::TReadSplitsRequest& request) {
         REQUEST_START();
         grpc::ClientContext ctx;
-        std::unique_ptr<grpc::ClientReader<API::ReadSplitsResponse>> reader(Stub_->ReadSplits(&ctx, request));
+        std::unique_ptr<grpc::ClientReader<NApi::TReadSplitsResponse>> reader(Stub_->ReadSplits(&ctx, request));
 
-        API::ReadSplitsResponse response;
-        auto out = std::make_shared<ReadSplitsResult>();
+        NApi::TReadSplitsResponse response;
+        auto out = std::make_shared<TReadSplitsResult>();
         out->Error.Clear();
 
         while (reader->Read(&response)) {
@@ -104,7 +104,7 @@ namespace NYql::Connector {
     };
 
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
-        std::shared_ptr<IClient> out = std::make_shared<ClientGRPC>(cfg);
+        std::shared_ptr<IClient> out = std::make_shared<TClientGRPC>(cfg);
         return out;
     }
 }

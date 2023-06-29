@@ -36,12 +36,12 @@ namespace NYql::NDq {
 
             // Events
             struct TEvReadResult: public TEventLocal<TEvReadResult, EvReadResult> {
-                TEvReadResult(const Connector::ReadSplitsResult::TPtr& result)
+                TEvReadResult(const NConnector::TReadSplitsResult::TPtr& result)
                     : Result(result)
                 {
                 }
 
-                Connector::ReadSplitsResult::TPtr Result;
+                NConnector::TReadSplitsResult::TPtr Result;
             };
 
             struct TEvReadError: public TEventLocal<TEvReadError, EvReadError> {
@@ -57,8 +57,8 @@ namespace NYql::NDq {
 
     class TGenericReadActor: public TActorBootstrapped<TGenericReadActor>, public IDqComputeActorAsyncInput {
     public:
-        TGenericReadActor(ui64 inputIndex, Connector::IClient::TPtr genericClient, const NYql::Connector::API::Select& select,
-                          const NYql::Connector::API::DataSourceInstance& dataSourceInstance,
+        TGenericReadActor(ui64 inputIndex, NConnector::IClient::TPtr genericClient, const NConnector::NApi::TSelect& select,
+                          const NConnector::NApi::TDataSourceInstance& dataSourceInstance,
                           const NActors::TActorId& computeActorId, const NKikimr::NMiniKQL::THolderFactory& holderFactory)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
@@ -73,33 +73,33 @@ namespace NYql::NDq {
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
 
-            Connector::API::ListSplitsRequest listSplitsRequest;
+            NConnector::NApi::TListSplitsRequest listSplitsRequest;
             listSplitsRequest.mutable_selects()->Add()->CopyFrom(Select_);
             listSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
 
             auto listSplitsResult = ConnectorClient_->ListSplits(listSplitsRequest);
-            if (!Connector::ErrorIsSuccess(listSplitsResult->Error)) {
+            if (!NConnector::ErrorIsSuccess(listSplitsResult->Error)) {
                 YQL_CLOG(ERROR, ProviderGeneric) << "ListSplits failure" << listSplitsResult->Error.DebugString();
                 ActorSystem_->Send(new IEventHandle(
-                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(Connector::ErrorToIssues(listSplitsResult->Error))));
+                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(NConnector::ErrorToIssues(listSplitsResult->Error))));
                 return;
             }
 
             YQL_CLOG(INFO, ProviderGeneric) << "ListSplits succeess, total splits: " << listSplitsResult->Splits.size();
 
-            Connector::API::ReadSplitsRequest readSplitsRequest;
-            readSplitsRequest.set_format(Connector::API::ReadSplitsRequest::ARROW_IPC_STREAMING);
+            NConnector::NApi::TReadSplitsRequest readSplitsRequest;
+            readSplitsRequest.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             readSplitsRequest.mutable_splits()->Reserve(listSplitsResult->Splits.size());
             std::for_each(
                 listSplitsResult->Splits.cbegin(), listSplitsResult->Splits.cend(),
-                [&](const Connector::API::Split& split) { readSplitsRequest.mutable_splits()->Add()->CopyFrom(split); });
+                [&](const NConnector::NApi::TSplit& split) { readSplitsRequest.mutable_splits()->Add()->CopyFrom(split); });
             readSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
 
             auto readSplitsResult = ConnectorClient_->ReadSplits(readSplitsRequest);
-            if (!Connector::ErrorIsSuccess(listSplitsResult->Error)) {
+            if (!NConnector::ErrorIsSuccess(listSplitsResult->Error)) {
                 YQL_CLOG(ERROR, ProviderGeneric) << "ReadSplits failure" << readSplitsResult->Error.DebugString();
                 ActorSystem_->Send(new IEventHandle(
-                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(Connector::ErrorToIssues(listSplitsResult->Error))));
+                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(NConnector::ErrorToIssues(listSplitsResult->Error))));
                 return;
             }
 
@@ -200,16 +200,16 @@ namespace NYql::NDq {
         TActorSystem* const ActorSystem_;
 
         // Changed:
-        Connector::IClient::TPtr ConnectorClient_;
-        Connector::ReadSplitsResult::TPtr Result_;
+        NConnector::IClient::TPtr ConnectorClient_;
+        NConnector::TReadSplitsResult::TPtr Result_;
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        const NYql::Connector::API::Select Select_;
-        const NYql::Connector::API::DataSourceInstance DataSourceInstance_;
+        const NYql::NConnector::NApi::TSelect Select_;
+        const NYql::NConnector::NApi::TDataSourceInstance DataSourceInstance_;
     };
 
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
-    CreateGenericReadActor(Connector::IClient::TPtr genericClient, Generic::TSource&& params, ui64 inputIndex,
+    CreateGenericReadActor(NConnector::IClient::TPtr genericClient, Generic::TSource&& params, ui64 inputIndex,
                            const THashMap<TString, TString>& /*secureParams*/,
                            const THashMap<TString, TString>& /*taskParams*/, const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr /*credentialsFactory*/,

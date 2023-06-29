@@ -128,7 +128,7 @@ namespace NYql {
                         column->mutable_name()->assign(column_name);
 
                         // assign column type
-                        auto type = Connector::GetColumnTypeByName(tableMeta.Schema, column_name);
+                        auto type = NConnector::GetColumnTypeByName(tableMeta.Schema, column_name);
                         column->mutable_type()->CopyFrom(type);
                     }
 

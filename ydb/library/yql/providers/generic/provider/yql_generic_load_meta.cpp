@@ -25,11 +25,11 @@ namespace NYql {
     using namespace NKikimr::NMiniKQL;
 
     struct TGenericTableDescription {
-        Connector::API::DataSourceInstance DataSourceInstance;
-        Connector::DescribeTableResult::TPtr Result;
+        NConnector::NApi::TDataSourceInstance DataSourceInstance;
+        NConnector::TDescribeTableResult::TPtr Result;
 
-        TGenericTableDescription(const Connector::API::DataSourceInstance& dsi,
-                                 Connector::DescribeTableResult::TPtr&& result)
+        TGenericTableDescription(const NConnector::NApi::TDataSourceInstance& dsi,
+                                 NConnector::TDescribeTableResult::TPtr&& result)
             : DataSourceInstance(dsi)
             , Result(std::move(result))
         {
@@ -41,7 +41,7 @@ namespace NYql {
             std::unordered_map<std::pair<TString, TString>, TGenericTableDescription, THash<std::pair<TString, TString>>>;
 
     public:
-        TGenericLoadTableMetadataTransformer(TGenericState::TPtr state, Connector::IClient::TPtr client)
+        TGenericLoadTableMetadataTransformer(TGenericState::TPtr state, NConnector::IClient::TPtr client)
             : State_(std::move(state))
             , Client_(std::move(client))
         {
@@ -101,7 +101,7 @@ namespace NYql {
             Results_.reserve(pendingTables.size());
 
             for (const auto& item : pendingTables) {
-                Connector::API::DescribeTableRequest request;
+                NConnector::NApi::TDescribeTableRequest request;
 
                 const auto& clusterName = item.first;
                 const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
@@ -177,7 +177,7 @@ namespace NYql {
                 if (Results_.cend() != it) {
                     const auto& result = it->second.Result;
                     const auto& error = result->Error;
-                    if (Connector::ErrorIsSuccess(error)) {
+                    if (NConnector::ErrorIsSuccess(error)) {
                         TGenericState::TTableMeta meta;
                         meta.Schema = result->Schema;
                         meta.DataSourceInstance = it->second.DataSourceInstance;
@@ -204,9 +204,9 @@ namespace NYql {
                             break;
                         }
                     } else {
-                        Connector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
-                                                  TStringBuilder()
-                                                      << "loading metadata for table: " << cluster << '.' << table);
+                        NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
+                                                   TStringBuilder()
+                                                       << "loading metadata for table: " << cluster << '.' << table);
                         hasErrors = true;
                         break;
                     }
@@ -231,7 +231,7 @@ namespace NYql {
         }
 
     private:
-        std::pair<const TStructExprType*, TString> ParseTableMeta(const Connector::API::Schema& schema,
+        std::pair<const TStructExprType*, TString> ParseTableMeta(const NConnector::NApi::TSchema& schema,
                                                                   const std::string_view& cluster,
                                                                   const std::string_view& table, TExprContext& ctx,
                                                                   TVector<TString>& columnOrder) try {
@@ -261,14 +261,14 @@ namespace NYql {
 
     private:
         const TGenericState::TPtr State_;
-        const Connector::IClient::TPtr Client_;
+        const NConnector::IClient::TPtr Client_;
 
         TMapType Results_;
         NThreading::TFuture<void> AsyncFuture_;
     };
 
     THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state,
-                                                                         Connector::IClient::TPtr client) {
+                                                                         NConnector::IClient::TPtr client) {
         return MakeHolder<TGenericLoadTableMetadataTransformer>(std::move(state), std::move(client));
     }
 

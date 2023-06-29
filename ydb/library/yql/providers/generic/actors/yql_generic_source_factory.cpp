@@ -8,7 +8,7 @@ namespace NYql::NDq {
 
     void RegisterGenericReadActorFactory(TDqAsyncIoFactory& factory,
                                          ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-                                         NYql::Connector::IClient::TPtr genericClient) {
+                                         NYql::NConnector::IClient::TPtr genericClient) {
         factory.RegisterSource<Generic::TSource>("GenericSource", [credentialsFactory, genericClient](
                                                                       Generic::TSource&& settings,
                                                                       IDqAsyncIoFactory::TSourceArguments&& args) {

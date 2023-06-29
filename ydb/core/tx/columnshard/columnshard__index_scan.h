@@ -41,6 +41,10 @@ public:
     TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TConcreteScanCounters& scanCounters);
     ~TColumnShardScanIterator();
 
+    virtual std::optional<ui32> GetAvailableResultsCount() const override {
+        return ReadyResults.size();
+    }
+
     virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
 
     virtual bool HasWaitingTasks() const override;

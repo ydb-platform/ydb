@@ -26,6 +26,9 @@ public:
     virtual void Apply(IDataTasksProcessor::ITask::TPtr /*processor*/) {
 
     }
+    virtual std::optional<ui32> GetAvailableResultsCount() const {
+        return {};
+    }
     virtual void AddData(const NBlobCache::TBlobRange& /*blobRange*/, TString /*data*/) {}
     virtual bool HasWaitingTasks() const = 0;
     virtual bool Finished() const = 0;

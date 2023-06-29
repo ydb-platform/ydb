@@ -458,6 +458,9 @@ private:
         Result->PageFault = pageFault;
         Result->PageFaults = PageFaults;
         Result->Finished = lastBatch;
+        if (ScanIterator) {
+            Result->AvailablePacks = ScanIterator->GetAvailableResultsCount();
+        }
         TDuration totalElapsedTime = TDuration::Seconds(GetElapsedTicksAsSeconds());
         // Result->TotalTime = totalElapsedTime - LastReportedElapsedTime;
         // TODO: Result->CpuTime = ...

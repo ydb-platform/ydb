@@ -12,11 +12,9 @@
 #include "grpc_pq_read.h"
 #include "grpc_pq_write.h"
 #include "grpc_pq_schema.h"
+#include "services_initializer.h"
 
 namespace NKikimr::NGRpcService::V1 {
-
-static const ui32 TopicWriteSessionsMaxCount = 1000000;
-static const ui32 TopicReadSessionsMaxCount = 100000;
 
 TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system,
                                      TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
@@ -30,32 +28,12 @@ TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system,
 
 void TGRpcTopicService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
     CQ_ = cq;
-    InitNewSchemeCacheActor();
+
+    ServicesInitializer(ActorSystem_, SchemeCache, Counters_).Execute();
 
     if (ActorSystem_->AppData<TAppData>()->PQConfig.GetEnabled()) {
-
-        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, Counters_, TopicWriteSessionsMaxCount);
-        TActorId actorId = ActorSystem_->Register(writeSvc, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
-        ActorSystem_->RegisterLocalService(NGRpcProxy::V1::GetPQWriteServiceActorID(), actorId);
-
-        IActor* readSvc = NGRpcProxy::V1::CreatePQReadService(SchemeCache, NewSchemeCache, Counters_, TopicReadSessionsMaxCount);
-        actorId = ActorSystem_->Register(readSvc, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
-        ActorSystem_->RegisterLocalService(NGRpcProxy::V1::GetPQReadServiceActorID(), actorId);
-
-        IActor* schemaSvc = NGRpcProxy::V1::CreatePQSchemaService(SchemeCache, Counters_);
-        actorId = ActorSystem_->Register(schemaSvc, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
-        ActorSystem_->RegisterLocalService(NGRpcProxy::V1::GetPQSchemaServiceActorID(), actorId);
-
         SetupIncomingRequests(std::move(logger));
     }
-}
-
-void TGRpcTopicService::InitNewSchemeCacheActor() {
-    auto appData = ActorSystem_->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(Counters_, "pqproxy|schemecache");
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
-    NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
-        TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
 }
 
 void TGRpcTopicService::DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &)

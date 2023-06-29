@@ -26,13 +26,10 @@ public:
 private:
     void SetupIncomingRequests(NGrpc::TLoggerPtr logger) override;
 
-    void InitNewSchemeCacheActor();
-
     static void DoUpdateOffsetsInTransaction(std::unique_ptr<IRequestOpCtx> p,
                                              const IFacilityProvider &);
 
     NActors::TActorId SchemeCache;
-    NActors::TActorId NewSchemeCache;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 };

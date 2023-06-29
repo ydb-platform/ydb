@@ -27,10 +27,7 @@ public:
 private:
     void SetupIncomingRequests(NGrpc::TLoggerPtr logger) override;
 
-    void InitNewSchemeCacheActor();
-
     NActors::TActorId SchemeCache;
-    NActors::TActorId NewSchemeCache;
 };
 
 } // namespace V1

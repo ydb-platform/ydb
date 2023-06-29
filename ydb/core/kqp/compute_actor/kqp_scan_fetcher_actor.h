@@ -50,9 +50,10 @@ private:
     const NMiniKQL::TScanDataMetaFull ScanDataMeta;
     const NYql::NDq::TComputeRuntimeSettings RuntimeSettings;
     const NYql::NDq::TTxId TxId;
+    bool ReturnShardInPool(TShardState::TPtr state);
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
+        return NKikimrServices::TActivity::KQP_SCAN_FETCH_ACTOR;
     }
 
     TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const NYql::NDq::TComputeRuntimeSettings& settings,
@@ -102,7 +103,7 @@ private:
 
     bool SendGlobalFail(const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
 
-    bool ProvideDataToCompute(TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state);
+    bool ProvideDataToCompute(const NActors::TActorId& scannerId, TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state) noexcept;
 
     bool SendScanFinished();
 
@@ -112,7 +113,7 @@ private:
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev);
 
-    void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt);
+    void ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) noexcept;
 
     void ProcessScanData();
 

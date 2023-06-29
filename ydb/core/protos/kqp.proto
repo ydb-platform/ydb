@@ -585,6 +585,7 @@ message TEvRemoteScanData {
     optional TArrowBatch ArrowBatch = 10;
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
+    optional uint32 AvailablePacks = 12;
 }
 
 message TEvRemoteScanDataAck {

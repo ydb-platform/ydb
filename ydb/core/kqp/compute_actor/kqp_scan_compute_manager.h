@@ -18,6 +18,10 @@ public:
             : ShardState(shardState) {
 
         }
+
+        bool operator<(const TWaitingShard& item) const {
+            return ShardState->AvailablePacks.value_or(0) < item.ShardState->AvailablePacks.value_or(0);
+        }
     };
 
     class TFreeComputeActor {
@@ -42,7 +46,7 @@ private:
     std::map<ui64, TFreeComputeActor> ComputeActorsWaitData;
 
     std::set<ui64> ShardsWaitingIds;
-    std::deque<TWaitingShard> ShardsWaiting;
+    std::vector<TWaitingShard> ShardsWaiting;
 
     void DetachComputeActorFromShard(const ui64 tabletId) {
         ShardsWaitingIds.erase(tabletId);
@@ -97,8 +101,9 @@ public:
             return false;
         } else {
             Y_VERIFY(ShardsWaitingIds.erase(ShardsWaiting.front().GetShardState()->TabletId));
-            result = std::move(ShardsWaiting.front());
-            ShardsWaiting.pop_front();
+            std::pop_heap(ShardsWaiting.begin(), ShardsWaiting.end());
+            result = std::move(ShardsWaiting.back());
+            ShardsWaiting.pop_back();
             return true;
         }
     }
@@ -126,10 +131,18 @@ public:
         }
     }
 
+    bool ReturnShardInPool(TShardState::TPtr state) {
+        Y_VERIFY(ShardsWaitingIds.emplace(state->TabletId).second);
+        ShardsWaiting.emplace_back(TWaitingShard(state));
+        std::push_heap(ShardsWaiting.begin(), ShardsWaiting.end());
+        return true;
+    }
+
     bool PrepareShardAck(TShardState::TPtr state, ui64& freeSpace) {
         if (ComputeActorsWaitShard.empty()) {
             Y_VERIFY(ShardsWaitingIds.emplace(state->TabletId).second);
             ShardsWaiting.emplace_back(TWaitingShard(state));
+            std::push_heap(ShardsWaiting.begin(), ShardsWaiting.end());
             return false;
         }
         std::pop_heap(ComputeActorsWaitShard.begin(), ComputeActorsWaitShard.end());

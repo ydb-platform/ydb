@@ -371,6 +371,8 @@ enum EServiceKikimr {
     ARROW_HELPER = 2100;
 
     KAFKA_PROXY = 2200;
+
+    OBJECTS_MONITORING = 2300;
 };
 
 message TActivity {
@@ -991,5 +993,7 @@ message TActivity {
         FEDERATION_DISCOVERY = 611;
         GRPC_REQ_SHARD_WRITER = 612;
         CMS_API_ADAPTER = 613;
+        KQP_SCAN_FETCH_ACTOR = 614;
+        COLUMNSHARD_CONVEYOR = 615;
     };
 };

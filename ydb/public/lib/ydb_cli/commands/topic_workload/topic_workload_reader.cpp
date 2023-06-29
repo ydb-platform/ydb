@@ -8,10 +8,10 @@
 using namespace NYdb::NConsoleClient;
 
 void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
-    auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*params.Driver);
+    auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(params.Driver);
 
     auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerIdx);
-    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, *params.Driver);
+    auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     auto consumers = describeTopicResult.GetConsumers();
     if (!std::any_of(consumers.begin(), consumers.end(), [consumerName](const auto& consumer) { return consumer.GetConsumerName() == consumerName; }))
     {

@@ -14,7 +14,7 @@ namespace NYdb {
         struct TTopicWorkloadWriterParams {
             size_t TotalSec;
             ui32 WarmupSec;
-            NYdb::TDriver* Driver;
+            const NYdb::TDriver& Driver;
             std::shared_ptr<TLog> Log;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
             std::shared_ptr<std::atomic<bool>> ErrorFlag;

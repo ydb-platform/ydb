@@ -136,7 +136,7 @@ void TCommandWorkloadTopicRunFull::StartConsumerThreads(std::vector<std::future<
         for (ui32 threadIdx = 0; threadIdx < ConsumerThreadCount; ++threadIdx, ++readerIdx) {
             TTopicWorkloadReaderParams readerParams{
                 .TotalSec = TotalSec,
-                .Driver = Driver.get(),
+                .Driver = *Driver,
                 .Log = Log,
                 .StatsCollector = StatsCollector,
                 .ErrorFlag = ErrorFlag,
@@ -166,7 +166,7 @@ void TCommandWorkloadTopicRunFull::StartProducerThreads(std::vector<std::future<
         TTopicWorkloadWriterParams writerParams{
             .TotalSec = TotalSec,
             .WarmupSec = WarmupSec,
-            .Driver = Driver.get(),
+            .Driver = *Driver,
             .Log = Log,
             .StatsCollector = StatsCollector,
             .ErrorFlag = ErrorFlag,

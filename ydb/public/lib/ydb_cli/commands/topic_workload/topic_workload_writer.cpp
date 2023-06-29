@@ -220,13 +220,12 @@ bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
 
 void TTopicWorkloadWriterWorker::CreateWorker() {
     WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
-    Y_VERIFY(Params.Driver);
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
     settings.PartitionId(Params.PartitionId);
-    WriteSession = NYdb::NTopic::TTopicClient(*Params.Driver).CreateWriteSession(settings);
+    WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
 }
 
 void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params) {

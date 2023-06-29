@@ -109,7 +109,7 @@ int TCommandWorkloadTopicRunWrite::Run(TConfig& config) {
         TTopicWorkloadWriterParams writerParams{
             .TotalSec = TotalSec,
             .WarmupSec = WarmupSec,
-            .Driver = Driver.get(),
+            .Driver = *Driver,
             .Log = Log,
             .StatsCollector = StatsCollector,
             .ErrorFlag = ErrorFlag,

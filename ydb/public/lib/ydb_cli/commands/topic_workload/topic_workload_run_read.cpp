@@ -90,7 +90,7 @@ int TCommandWorkloadTopicRunRead::Run(TConfig& config) {
         for (ui32 consumerThreadIdx = 0; consumerThreadIdx < ConsumerThreadCount; ++consumerThreadIdx) {
             TTopicWorkloadReaderParams readerParams{
                 .TotalSec = TotalSec,
-                .Driver = Driver.get(),
+                .Driver = *Driver,
                 .Log = Log,
                 .StatsCollector = StatsCollector,
                 .ErrorFlag = ErrorFlag,

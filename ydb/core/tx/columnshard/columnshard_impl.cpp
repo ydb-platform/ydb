@@ -818,14 +818,15 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     if (eviction.empty()) {
-        LOG_S_TRACE("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
+        if (Tiers || TablesManager.GetTtl().PathsCount()) {
+            LOG_S_DEBUG("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
+        }
         return {};
     }
 
-    LOG_S_DEBUG("Prepare TTL at tablet " << TabletID());
-
     for (auto&& i : eviction) {
-        LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
+        LOG_S_DEBUG("Prepare TTL evicting path " << i.first << " with " << i.second.GetDebugString()
+            << " at tablet " << TabletID());
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
@@ -833,7 +834,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
 
     if (!indexChanges) {
-        LOG_S_DEBUG("Cannot prepare TTL at tablet " << TabletID());
+        LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());
         return {};
     }
     if (indexChanges->NeedRepeat) {
@@ -841,6 +842,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
+    LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
     BackgroundController.StartTtl();
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
@@ -859,7 +861,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
 
     auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, CompactionLimits.Get(), TLimits::MAX_TX_RECORDS);
     if (!changes) {
-        LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
+        LOG_S_INFO("Cannot prepare cleanup at tablet " << TabletID());
         return {};
     }
 
@@ -958,7 +960,7 @@ void TColumnShard::Reexport(const TActorContext& ctx) {
 
 void TColumnShard::SendExport(const TActorContext& ctx, ui64 exportNo, TString tierName, ui64 pathId,
                             THashSet<TUnifiedBlobId>&& blobs) {
-    LOG_S_DEBUG("Init export " << exportNo << " for pathId " << pathId << " of " << blobs.size() << " blobs, tier '"
+    LOG_S_INFO("Init export " << exportNo << " for pathId " << pathId << " of " << blobs.size() << " blobs, tier '"
         << tierName << "' at tablet " << TabletID());
 
     Y_VERIFY(exportNo);

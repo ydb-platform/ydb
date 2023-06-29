@@ -1,6 +1,7 @@
 #include "size_calcer.h"
 #include "switch_type.h"
 #include "arrow_helpers.h"
+#include "dictionary/conversion.h"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/system/yassert.h>
 
@@ -153,6 +154,10 @@ ui64 GetArrayDataSizeImpl<arrow::Decimal128Type>(const std::shared_ptr<arrow::Ar
 
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
     auto type = column->type();
+    if (type->id() == arrow::Type::DICTIONARY) {
+        auto dictArray = static_pointer_cast<arrow::DictionaryArray>(column);
+        return GetDictionarySize(dictArray);
+    }
     ui64 bytes = 0;
     bool success = SwitchTypeWithNull(type->id(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);

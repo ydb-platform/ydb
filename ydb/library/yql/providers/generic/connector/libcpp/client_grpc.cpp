@@ -24,9 +24,20 @@
     })
 
 namespace NYql::Connector {
-    ClientGRPC::ClientGRPC(const TString& endpoint)
-        : Stub_(API::Connector::NewStub(grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials())))
-              {};
+    ClientGRPC::ClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
+        std::shared_ptr<grpc::ChannelCredentials> credentials;
+        auto networkEndpoint = cfg.GetEndpoint().host() + ":" + std::to_string(cfg.GetEndpoint().port());
+
+        if (cfg.GetUseTLS()) {
+            // Hopefully GRPC will find appropriate CA cert in system folders
+            credentials = grpc::SslCredentials(grpc::SslCredentialsOptions());
+        } else {
+            credentials = grpc::InsecureChannelCredentials();
+        }
+
+        auto channel = grpc::CreateChannel(networkEndpoint, credentials);
+        Stub_ = API::Connector::NewStub(channel);
+    };
 
     std::shared_ptr<DescribeTableResult> ClientGRPC::DescribeTable(const API::DescribeTableRequest& request) {
         grpc::ClientContext ctx;
@@ -92,8 +103,8 @@ namespace NYql::Connector {
         return out;
     };
 
-    IClient::TPtr MakeClientGRPC(const TString& endpoint) {
-        std::shared_ptr<IClient> out = std::make_shared<ClientGRPC>(endpoint);
+    IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
+        std::shared_ptr<IClient> out = std::make_shared<ClientGRPC>(cfg);
         return out;
     }
 }

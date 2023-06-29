@@ -37,7 +37,7 @@ public:
     TResponseProcessor(
         const TActorId sender,
         TCache& cache,
-        const THashMap<std::pair<TString, NYql::DatabaseType>, TEndpoint>& ready,
+        const TDbResolverResponse::TDatabaseEndpointsMap& ready,
         const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::DatabaseType, NYql::TDatabaseAuth>>& requests,
         const TString& traceId,
         bool mdbTransformHost,
@@ -99,6 +99,7 @@ private:
         if (errorMsg) {
             issues.AddIssue(errorMsg);
         }
+
         Send(Sender,
             new TEvents::TEvEndpointResponse(
                 NYql::TDbResolverResponse(std::move(DatabaseId2Endpoint), Success, issues)));
@@ -173,11 +174,11 @@ private:
             }
         }
 
+        LOG_D(DatabaseId2Endpoint.size() << " of " << Requests.size() << " done");
+
         if (HandledIds == Requests.size()) {
             SendResolvedEndpointsAndDie(errorMessage);
         }
-
-        LOG_D(DatabaseId2Endpoint.size() << " of " << Requests.size() << " done");
     }
 
 private:
@@ -186,7 +187,7 @@ private:
     const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::DatabaseType, NYql::TDatabaseAuth>> Requests;
     const TString TraceId;
     const bool MdbTransformHost;
-    THashMap<std::pair<TString, NYql::DatabaseType>, TEndpoint> DatabaseId2Endpoint;
+    TDbResolverResponse::TDatabaseEndpointsMap DatabaseId2Endpoint;
     size_t HandledIds = 0;
     bool Success = true;
     const TParsers& Parsers;
@@ -255,6 +256,33 @@ public:
             endpoint = mdbTransformHost ? TransformMdbHostToCorrectFormat(endpoint) : endpoint;
             return TEndpoint{endpoint, "", true};
         };
+
+        // TODO: https://st.yandex-team.ru/YQ-2171: support other data sources than ClickHouse
+        Parsers[NYql::DatabaseType::Generic] = [](NJson::TJsonValue& databaseInfo, bool mdbTransformHost) {
+            TString endpoint;
+            TVector<TString> aliveHosts;
+
+            for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
+                if (host["health"].GetString() == "ALIVE" && host["type"].GetString() == "CLICKHOUSE") {
+                    aliveHosts.push_back(host["name"].GetString());
+                }
+            }
+
+            if (!aliveHosts.empty()) {
+                endpoint = aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())];
+            }
+
+            if (!endpoint) {
+                ythrow yexception() << "No ALIVE database host exists";
+            }
+
+            if (mdbTransformHost) {
+                // TODO: https://st.yandex-team.ru/YQ-2170: support secure connections on 9440
+                endpoint += ":9000";
+            }
+
+            return TEndpoint{endpoint, "", true};
+        };
     }
 
     static constexpr char ActorName[] = "YQ_DATABASE_RESOLVER";
@@ -267,7 +295,7 @@ private:
 
     void SendResponse(
         const NActors::TActorId& recipient,
-        THashMap<std::pair<TString, NYql::DatabaseType>, TEndpoint>&& ready,
+        TDbResolverResponse::TDatabaseEndpointsMap&& ready,
         bool success = true,
         const TString& errorMessage = "")
     {
@@ -284,7 +312,7 @@ private:
         TraceId = ev->Get()->TraceId;
         LOG_D("Start databaseId resolver for " << ev->Get()->DatabaseIds.size() << " ids");
         THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::DatabaseType, NYql::TDatabaseAuth>> requests; // request, (dbId, type, info)
-        THashMap<std::pair<TString, NYql::DatabaseType>, TEndpoint> ready;
+        TDbResolverResponse::TDatabaseEndpointsMap ready;
         for (const auto& [p, info] : ev->Get()->DatabaseIds) {
             const auto& [databaseId, type] = p;
             TMaybe<std::variant<TEndpoint, TString>> cacheVal;

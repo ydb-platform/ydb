@@ -564,15 +564,26 @@ message TGenericClusterConfig {
     optional string ServiceAccountIdSignature = 7;
 }
 
-message TGenericGatewayConfig {
-    // TODO: replace with map<DataSourceKind, Endpoint>
-    required string Endpoint = 1;
+message TGenericConnectorConfig {
+    // Connector instance network endpoint
+    required NYql.Connector.API.Endpoint Endpoint = 1;
+    // If true, GRPC Client will use TLS encryption.
+    // Server cert will be verified with system CA cert pool.
+    required bool UseTLS = 2;
+}
 
-    reserved 2;
+message TGenericGatewayConfig {
+    // Connector service network endpoint 
+    // TODO: replace with map<DataSourceKind, TGenericConnectorConfig>
+    required TGenericConnectorConfig Connector = 5;
+
+    // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;
 
     // MDB API endpoint (do not fill in case of on-prem deployment)
     optional string MdbGateway = 4;
+
+    reserved 1, 2;
 }
 
 /////////////////////////////// Root ///////////////////////////////

@@ -68,7 +68,7 @@ namespace NYql {
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
 
         // key - database id, value - credentials to access MDB API
-        NYql::IDatabaseAsyncResolver::DatabaseIds DatabaseIds;
+        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseIds;
         std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     };
 

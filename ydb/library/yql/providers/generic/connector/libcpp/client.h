@@ -2,6 +2,7 @@
 
 #include <arrow/api.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
@@ -43,7 +44,8 @@ namespace NYql::Connector {
     // ClientGRPC - client interacting with Connector server via network
     class ClientGRPC: public IClient {
     public:
-        ClientGRPC(const TString& endpoint);
+        ClientGRPC() = delete;
+        ClientGRPC(const TGenericConnectorConfig& config);
         virtual DescribeTableResult::TPtr DescribeTable(const API::DescribeTableRequest& request) override;
         virtual ListSplitsResult::TPtr ListSplits(const API::ListSplitsRequest& request) override;
         virtual ReadSplitsResult::TPtr ReadSplits(const API::ReadSplitsRequest& request) override;
@@ -54,7 +56,7 @@ namespace NYql::Connector {
         std::unique_ptr<API::Connector::Stub> Stub_;
     };
 
-    IClient::TPtr MakeClientGRPC(const TString& endpoint);
+    IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& config);
 
     // ClientMock is a stub client that returns predefined data.
     class ClientMock: public IClient {

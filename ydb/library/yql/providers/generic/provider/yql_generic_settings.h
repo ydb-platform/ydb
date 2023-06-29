@@ -23,14 +23,14 @@ namespace NYql {
         template <typename TProtoConfig>
         void Init(const TProtoConfig& config,
                   const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-                  NYql::IDatabaseAsyncResolver::DatabaseIds& databaseIds,
+                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseIds,
                   const TCredentials::TPtr& credentials)
         {
             TVector<TString> clusterNames(Reserve(config.ClusterMappingSize()));
 
             for (auto& cluster : config.GetClusterMapping()) {
                 clusterNames.push_back(cluster.GetName());
-                ClusterConfigs[cluster.GetName()] = cluster;
+                ClusterNamesToClusterConfigs[cluster.GetName()] = cluster;
             }
             this->SetValidClusters(clusterNames);
 
@@ -44,7 +44,7 @@ namespace NYql {
     private:
         void InitCluster(const TGenericClusterConfig& cluster,
                          const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-                         NYql::IDatabaseAsyncResolver::DatabaseIds& databaseIds,
+                         NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseIds,
                          const TCredentials::TPtr& credentials) {
             const auto& clusterName = cluster.GetName();
             const auto& databaseId = cluster.GetDatabaseId();
@@ -72,7 +72,7 @@ namespace NYql {
             Tokens[cluster.GetName()] = " ";
         }
 
-        // Structured tokens are used to access MDB API. They can be constructed from two 
+        // Structured tokens are used to access MDB API. They can be constructed from two
         TString MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) {
             TStructuredTokenBuilder b;
 
@@ -99,7 +99,7 @@ namespace NYql {
         }
 
         THashMap<TString, TString> Tokens;
-        THashMap<TString, TGenericClusterConfig> ClusterConfigs;       // cluster name -> cluster config
-        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames; // database id -> cluster name
+        THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
+        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
     };
 }

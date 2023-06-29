@@ -5,3 +5,7 @@ RECURSE(
     provider
     proto
 )
+
+RECURSE_FOR_TESTS(
+    style
+)

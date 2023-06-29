@@ -104,8 +104,8 @@ namespace NYql {
                 Connector::API::DescribeTableRequest request;
 
                 const auto& clusterName = item.first;
-                const auto it = State_->Configuration->ClusterConfigs.find(clusterName);
-                YQL_ENSURE(State_->Configuration->ClusterConfigs.cend() != it, "Cluster not found:" << clusterName);
+                const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
+                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "Cluster not found:" << clusterName);
 
                 const auto& clusterConfig = it->second;
 

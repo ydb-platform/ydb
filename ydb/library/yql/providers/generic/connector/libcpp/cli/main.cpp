@@ -88,7 +88,13 @@ std::shared_ptr<NYql::Connector::ReadSplitsResult> ReadSplits(NYql::Connector::I
 
 int main() {
     NYql::NLog::InitLogger("console", false);
-    auto client = NYql::Connector::MakeClientGRPC("localhost:50051");
+
+    NYql::TGenericConnectorConfig cfg;
+    cfg.mutable_endpoint()->set_host("connector.yql-streaming.cloud.yandex.net");
+    cfg.mutable_endpoint()->set_port(50051);
+    cfg.SetUseTLS(true);
+
+    auto client = NYql::Connector::MakeClientGRPC(cfg);
 
     try {
         auto columns = DescribeTable(client)->Schema.columns();

@@ -1,0 +1,75 @@
+LIBRARY()
+
+INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
+
+SRCS(
+    abortable_registry.cpp
+    batch_request_impl.cpp
+    client_reader.cpp
+    client_writer.cpp
+    client.cpp
+    file_reader.cpp
+    file_writer.cpp
+    format_hints.cpp
+    init.cpp
+    lock.cpp
+    operation_helpers.cpp
+    operation_preparer.cpp
+    operation_tracker.cpp
+    operation.cpp
+    prepare_operation.cpp
+    py_helpers.cpp
+    retry_heavy_write_request.cpp
+    retryful_writer.cpp
+    retryless_writer.cpp
+    skiff.cpp
+    structured_table_formats.cpp
+    transaction.cpp
+    transaction_pinger.cpp
+    yt_poller.cpp
+)
+
+PEERDIR(
+    library/cpp/digest/md5
+    library/cpp/sighandler
+    library/cpp/threading/blocking_queue
+    library/cpp/threading/future
+    library/cpp/type_info
+    library/cpp/yson
+    yt/cpp/mapreduce/common
+    yt/cpp/mapreduce/http
+    yt/cpp/mapreduce/interface
+    yt/cpp/mapreduce/io
+    yt/cpp/mapreduce/library/table_schema
+    yt/cpp/mapreduce/raw_client
+)
+
+IF (ARCH_X86_64 OR OS_DARWIN)
+    PEERDIR(
+        yt/yt/core
+        yt/yt/core/http
+    )
+ELSE()
+    # Suppress yamaker's WBadIncl error on exotic platforms
+    PEERDIR(
+        yt/yt_proto/yt/core
+    )
+ENDIF()
+
+IF (BUILD_TYPE == "PROFILE")
+    PEERDIR(
+        yt/yt/library/ytprof
+    )
+
+    SRCS(
+        job_profiler.cpp
+    )
+ELSE()
+    SRCS(
+        dummy_job_profiler.cpp
+    )
+ENDIF()
+
+GENERATE_ENUM_SERIALIZATION(structured_table_formats.h)
+
+END()

@@ -1,0 +1,17 @@
+RECURSE(
+    codec
+    codec/codegen/ut
+    codec/ut
+    common
+    comp_nodes
+    comp_nodes/ut
+    comp_nodes/dq
+    expr_nodes
+    gateway
+    job
+    lib
+    mkql_dq
+    opt
+    provider
+    provider/ut
+)

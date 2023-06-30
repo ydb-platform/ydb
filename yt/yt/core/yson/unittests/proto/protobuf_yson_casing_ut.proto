@@ -1,0 +1,12 @@
+package NYT.NYson.NProto;
+
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+
+option (NYT.NYson.NProto.derive_underscore_case_names) = true;
+
+message TCamelCaseStyleMessage
+{
+    optional int32 SomeField = 1;
+    optional int32 AnotherField123 = 2;
+    optional int32 Crazy_Field = 3;
+}

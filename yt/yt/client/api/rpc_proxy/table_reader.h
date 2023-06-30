@@ -1,0 +1,14 @@
+#pragma once
+
+#include "api_service_proxy.h"
+
+namespace NYT::NApi::NRpcProxy {
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<ITableReaderPtr> CreateTableReader(
+    TApiServiceProxy::TReqReadTablePtr request);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NApi::NRpcProxy

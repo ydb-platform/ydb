@@ -1,0 +1,14 @@
+package NYT.NProto;
+
+message TPlainMessage
+{
+    required int32 a = 1;
+}
+
+message TRefCountedMessage
+{
+    required string a = 1;
+    optional int64 b = 2;
+    required TPlainMessage c = 3;
+    repeated TPlainMessage d = 4;
+}

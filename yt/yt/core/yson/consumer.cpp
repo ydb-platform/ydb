@@ -1,0 +1,16 @@
+#include "consumer.h"
+#include "string.h"
+#include "parser.h"
+
+namespace NYT::NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TYsonConsumerBase::OnRaw(TStringBuf str, EYsonType type)
+{
+    ParseYsonStringBuffer(str, type, this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYson

@@ -1,0 +1,478 @@
+#
+# The format of this file is described in README.txt
+#
+# Each test case contains 2 fields:
+#   - Yson reporesentation of the type.
+#   - String representation of the type.
+#
+# Suggested approach to writing test:
+#  1. Try to deserialize type from yson (1st field).
+#  2. Check that text representation of parsed type matches 2nd field.
+#  3. Serialize type to yson and deserialize it from it.
+#  4. Check that typef from 1. and 3. are equal.
+
+# Integer
+int8 :: Int8 ;;
+int16 :: Int16 ;;
+int32 :: Int32 ;;
+int64 :: Int64 ;;
+{type_name=int8} :: Int8 ;;
+{type_name=int16} :: Int16 ;;
+{type_name=int32} :: Int32 ;;
+{type_name=int64} :: Int64 ;;
+
+# Unsigned integer
+uint8 :: Uint8 ;;
+uint16 :: Uint16 ;;
+uint32 :: Uint32 ;;
+uint64 :: Uint64 ;;
+{type_name=uint8} :: Uint8 ;;
+{type_name=uint16} :: Uint16 ;;
+{type_name=uint32} :: Uint32 ;;
+{type_name=uint64} :: Uint64 ;;
+
+# Floating
+float :: Float ;;
+double :: Double ;;
+{type_name=float} :: Float ;;
+{type_name=double} :: Double ;;
+
+# Strings
+string :: String ;;
+utf8 :: Utf8 ;;
+{type_name=string} :: String ;;
+{type_name=utf8} :: Utf8 ;;
+
+# Time
+date :: Date ;;
+datetime :: Datetime ;;
+timestamp :: Timestamp ;;
+tz_date :: TzDate ;;
+tz_datetime :: TzDatetime ;;
+tz_timestamp :: TzTimestamp ;;
+interval :: Interval ;;
+{type_name=date} :: Date ;;
+{type_name=datetime} :: Datetime ;;
+{type_name=timestamp} :: Timestamp ;;
+{type_name=tz_date} :: TzDate ;;
+{type_name=tz_datetime} :: TzDatetime ;;
+{type_name=tz_timestamp} :: TzTimestamp ;;
+{type_name=interval} :: Interval ;;
+
+# Singular
+void :: Void ;;
+null :: Null ;;
+{type_name=void} :: Void ;;
+{type_name=null} :: Null ;;
+
+# UUID
+uuid :: Uuid ;;
+{type_name=uuid} :: Uuid ;;
+
+# Json / Yson
+yson :: Yson ;;
+json :: Json ;;
+{type_name=yson} :: Yson ;;
+{type_name=json} :: Json ;;
+
+{
+    type_name=string;
+    unknown_key=bar;
+} :: String ;;
+
+# Decimal
+{
+    type_name=decimal;
+    precision=3;
+    scale=2;
+} :: Decimal(3, 2) ;;
+
+{
+    type_name=decimal;
+    precision=3;
+    scale=2;
+    unknown_column=ha;
+} :: Decimal(3, 2) ;;
+
+#
+# Optional
+#
+{
+   type_name=optional;
+   item=string;
+} :: Optional<String> ;;
+
+{
+    type_name=optional;
+    item={
+        type_name=string;
+    }
+} :: Optional<String> ;;
+
+{
+    type_name=optional;
+    item={
+        type_name=optional;
+        item={
+            type_name=list;
+            item={
+                type_name=decimal;
+                precision=10;
+                scale=5;
+            }
+
+        }
+    }
+} :: Optional<Optional<List<Decimal(10, 5)>>> ;;
+
+{
+    type_name=optional;
+    item={
+        type_name=tagged;
+        item=int32;
+        tag="foo";
+    };
+} :: Optional<Tagged<Int32, 'foo'>> ;;
+
+{
+    type_name=optional;
+    item={
+        type_name=string;
+    };
+    unknown_column=ha;
+} :: Optional<String> ;;
+
+#
+# List
+#
+{
+    type_name=list;
+    item=string;
+} :: List<String> ;;
+
+{
+    type_name=list;
+    item={
+        type_name=string;
+    }
+} :: List<String> ;;
+
+{
+    type_name=list;
+    item={
+        type_name=list;
+        item={
+            type_name=optional;
+            item=string;
+        }
+    };
+} :: List<List<Optional<String>>> ;;
+
+{
+    type_name=list;
+    item={
+        type_name=tagged;
+        item=int32;
+        tag="foo";
+    };
+} :: List<Tagged<Int32, 'foo'>> ;;
+
+{
+    type_name=list;
+    item={
+        type_name=string;
+    };
+    unknown_column=ha;
+} :: List<String> ;;
+
+#
+# Dict
+#
+
+{
+    type_name=dict;
+    key=int32;
+    value=string;
+} :: Dict<Int32, String> ;;
+
+{
+    type_name=dict;
+    key={
+        type_name=optional;
+        item=string;
+    };
+    value={
+        type_name=list;
+        item={
+            type_name=int32;
+        }
+    };
+} :: Dict<Optional<String>, List<Int32>> ;;
+
+{
+    type_name=dict;
+    key={
+        type_name=tagged;
+        item=int32;
+        tag="foo";
+    };
+    value={
+        type_name=tagged;
+        item=string;
+        tag="bar";
+    };
+} :: Dict<Tagged<Int32, 'foo'>, Tagged<String, 'bar'>> ;;
+
+{
+    type_name=dict;
+    key=int32;
+    value=string;
+    unknown_column=ha;
+} :: Dict<Int32, String> ;;
+
+#
+# Struct
+#
+
+{
+    type_name=struct;
+    members=[];
+} :: Struct<> ;;
+
+{
+    type_name=struct;
+    members=[
+        {
+            name=foo;
+            type=int32;
+        };
+        {
+            name=bar;
+            type={
+                type_name=optional;
+                item=string;
+            };
+        };
+    ];
+} :: Struct<'foo': Int32, 'bar': Optional<String>> ;;
+
+{
+    type_name=struct;
+    members=[
+        {
+            name=foo;
+            type={
+                type_name=tagged;
+                item=string;
+                tag=foo;
+            };
+        };
+    ];
+} :: Struct<'foo': Tagged<String, 'foo'>> ;;
+
+{
+    type_name=struct;
+    unknown_column=ha;
+    members=[
+        {
+            unknown_column=ha;
+            name=foo;
+            type=int32;
+        };
+        {
+            name=bar;
+            type={
+                type_name=optional;
+                item=string;
+            };
+        };
+    ];
+} :: Struct<'foo': Int32, 'bar': Optional<String>> ;;
+
+#
+# Tuple
+#
+
+{
+    type_name=tuple;
+    elements=[];
+} :: Tuple<> ;;
+
+{
+    type_name=tuple;
+    elements=[
+        {
+            type=int32;
+        };
+        {
+            type={
+                type_name=optional;
+                item=string;
+            };
+        };
+    ];
+} :: Tuple<Int32, Optional<String>> ;;
+
+{
+    type_name=tuple;
+    elements=[
+        {
+            type={
+                type_name=tagged;
+                item=string;
+                tag=foo;
+            };
+        };
+    ];
+} :: Tuple<Tagged<String, 'foo'>> ;;
+
+{
+    type_name=tuple;
+    unknown_column=ha;
+    elements=[
+        {
+            type=int32;
+            unknown_column=ha;
+        };
+        {
+            type={
+                type_name=optional;
+                item=string;
+            };
+        };
+    ];
+} :: Tuple<Int32, Optional<String>> ;;
+
+#
+# Variant
+#
+
+{
+    type_name=variant;
+    elements=[
+        {
+            type=int32;
+        };
+        {
+            type={type_name=string};
+        };
+    ];
+} :: Variant<Int32, String> ;;
+
+{
+    type_name=variant;
+    members=[
+        {
+            name=foo;
+            type=int32;
+        };
+        {
+            name=bar;
+            type={
+                type_name=optional;
+                item=string;
+            };
+        };
+    ];
+} :: Variant<'foo': Int32, 'bar': Optional<String>> ;;
+
+{
+    type_name=variant;
+    elements=[
+        {
+            type={
+                type_name=tagged;
+                item=string;
+                tag=foo;
+            }
+        };
+    ];
+} :: Variant<Tagged<String, 'foo'>> ;;
+
+{
+    type_name=variant;
+    members=[
+        {
+            name=bar;
+            type={
+                type_name=tagged;
+                item=string;
+                tag=foo;
+            };
+        };
+    ];
+} :: Variant<'bar': Tagged<String, 'foo'>> ;;
+
+{
+    type_name=variant;
+    unknown_column=ha;
+    elements=[
+        {
+            type=int32;
+            unknown_column=ha;
+        };
+        {
+            type={
+                type_name=string;
+                unknown_column=ha;
+            };
+            unknown_column=ha;
+        };
+    ];
+} :: Variant<Int32, String> ;;
+
+{
+    type_name=variant;
+    unknown_column=ha;
+    members=[
+        {
+            unknown_column=ha;
+            name=foo;
+            type=int32;
+        };
+        {
+            name=bar;
+            type={
+                type_name=optional;
+                unknown_column=ha;
+                item=string;
+            };
+        };
+    ];
+} :: Variant<'foo': Int32, 'bar': Optional<String>> ;;
+
+#
+# Tagged
+#
+
+{
+    type_name=tagged;
+    item=string;
+    tag="image/png"
+} :: Tagged<String, 'image/png'> ;;
+
+{
+    type_name=tagged;
+    item={
+        type_name=optional;
+        item=string;
+    };
+    tag="image/png"
+} :: Tagged<Optional<String>, 'image/png'> ;;
+
+{
+    type_name=tagged;
+    item={
+        type_name=tagged;
+        item=string;
+        tag=foo;
+    };
+    tag=bar;
+} :: Tagged<Tagged<String, 'foo'>, 'bar'> ;;
+
+{
+    type_name=tagged;
+    item=string;
+    unknown_column=ha;
+    tag="image/png"
+} :: Tagged<String, 'image/png'> ;;

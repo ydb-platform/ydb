@@ -1,0 +1,13 @@
+#include "public.h"
+
+namespace NYT::NNodeTrackerClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TString DefaultNetworkName("default");
+const TNetworkPreferenceList DefaultNetworkPreferences{DefaultNetworkName};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NNodeTrackerClient
+

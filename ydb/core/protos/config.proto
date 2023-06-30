@@ -1467,10 +1467,39 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTCMallocControls {
+        optional uint64 ProfileSamplingRate = 1 [(ControlOptions) = {
+            Description: "Sets the sampling rate for heap profiles. TCMalloc samples approximately every rate bytes allocated.",
+            MinValue: 65536,
+            MaxValue: 4294967296,
+            DefaultValue: 2097152 }];
+        optional uint64 GuardedSamplingRate = 2 [(ControlOptions) = {
+            Description: "Sets the guarded sampling rate for sampled allocations. TCMalloc samples approximately every rate bytes allocated, subject to implementation limitations in GWP-ASan.",
+            MinValue: 65536,
+            MaxValue: 4294967296,
+            DefaultValue: 4294967296 }];
+        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
+            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
+            MinValue: 0,
+            MaxValue: 9223372036854775807,
+            DefaultValue: 0 }];
+        optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
+            Description: "Page Cache Target Size.",
+            MinValue: 0,
+            MaxValue: 137438953472,
+            DefaultValue: 536870912 }];
+        optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
+            Description: "Page Cache Release Rate.",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 8388608 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
+    optional TTCMallocControls TCMallocControls = 5;
 };
 
 message TMeteringConfig {

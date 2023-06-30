@@ -211,9 +211,8 @@ void WriteActualChunkSize(TBuffer& output, ui32 sizeOffset)
     Y_VERIFY(currSize >= sizeOffset + sizeof(ui32));
     ui32 size = currSize - sizeOffset - sizeof(ui32);
 
-    ui32* sizePlacement = (ui32*)(output.data() + sizeOffset);
-    Y_VERIFY_DEBUG(*sizePlacement == CHUNK_SIZE_PLACEMENT);
-    *sizePlacement = size;
+    Y_VERIFY_DEBUG(ReadUnaligned<ui32>(output.data() + sizeOffset) == CHUNK_SIZE_PLACEMENT);
+    WriteUnaligned<ui32>(output.data() + sizeOffset, size);
 }
 
 void TBatch::Pack() {
@@ -466,12 +465,12 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            pos.push_back(*((ui32*)iter->Next().Data()));
+            pos.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
         }
-        sourceIdCount = *((ui32*)iter->Next().Data());
+        sourceIdCount = ReadUnaligned<ui32>(iter->Next().Data());
         end.reserve(sourceIdCount);
         for (ui32 i = 0; i < sourceIdCount; ++i) {
-            end.push_back(*((ui32*)iter->Next().Data()));
+            end.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
         }
     }
 
@@ -493,7 +492,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            seqNo.push_back(*(ui64*)iter->Next().Data());
+            seqNo.push_back(ReadUnaligned<ui64>(iter->Next().Data()));
         }
     }
     TVector<TString> dt;
@@ -514,13 +513,13 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
-        partsSize = *(ui32*)iter->Next().Data();
+        partsSize = ReadUnaligned<ui32>(iter->Next().Data());
         partData.reserve(partsSize);
         for (ui32 i = 0; i < partsSize; ++i) {
-            ui32 ps = *(ui32*)iter->Next().Data();
-            ui16 partNo = *(ui32*)iter->Next().Data();
-            ui16 totalParts = *(ui32*)iter->Next().Data();
-            ui32 totalSize = *(ui32*)iter->Next().Data();
+            ui32 ps = ReadUnaligned<ui32>(iter->Next().Data());
+            ui16 partNo = ReadUnaligned<ui32>(iter->Next().Data());
+            ui16 totalParts = ReadUnaligned<ui32>(iter->Next().Data());
+            ui32 totalSize = ReadUnaligned<ui32>(iter->Next().Data());
             partData.insert(std::make_pair(ps, TPartData(partNo, totalParts, totalSize)));
         }
     }
@@ -530,7 +529,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            ui64 timestampMs = *(ui64*)iter->Next().Data();
+            ui64 timestampMs = ReadUnaligned<ui64>(iter->Next().Data());
             wtime.push_back(TInstant::MilliSeconds(timestampMs));
         }
     }
@@ -569,7 +568,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
             auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
             auto iter = chunk->MakeIterator();
             for (ui32 i = 0; i < totalBlobs; ++i) {
-                ui64 timestampMs = *(ui64*)iter->Next().Data();
+                ui64 timestampMs = ReadUnaligned<ui64>(iter->Next().Data());
                 ctime.push_back(TInstant::MilliSeconds(timestampMs));
             }
         }
@@ -584,7 +583,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
             auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
             auto iter = chunk->MakeIterator();
             for (ui32 i = 0; i < totalBlobs; ++i) {
-                uncompressedSize.push_back(*(ui64*)iter->Next().Data());
+                uncompressedSize.push_back(ReadUnaligned<ui64>(iter->Next().Data()));
             }
         }
     } else {
@@ -615,7 +614,7 @@ void TBatch::UnpackToType0(TVector<TClientBlob> *blobs) {
     for (ui32 i = 0; i < GetCount() + GetInternalPartsCount(); ++i) {
         Y_VERIFY(shift < PackedData.size());
         blobs->push_back(TClientBlob::Deserialize(PackedData.data() + shift, PackedData.size() - shift));
-        shift += *(ui32*)(PackedData.data() + shift);
+        shift += ReadUnaligned<ui32>(PackedData.data() + shift);
     }
     Y_VERIFY(shift == PackedData.size());
 }

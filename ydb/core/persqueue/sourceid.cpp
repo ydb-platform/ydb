@@ -15,7 +15,7 @@ static constexpr ui64 MAX_DELETE_COMMAND_COUNT = 1000;
 
 template <typename T>
 T ReadAs(const TString& data, ui32& pos) {
-    auto result = *((T*)(data.c_str() + pos));
+    auto result = ReadUnaligned<T>(data.c_str() + pos);
     pos += sizeof(T);
     return result;
 }

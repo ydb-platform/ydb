@@ -5,6 +5,7 @@
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <ydb/core/protos/services.pb.h>
+#include <util/string/ascii.h>
 #include "grpc_service_settings.h"
 
 #define BLOG_GRPC_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::GRPC_CLIENT, stream)
@@ -83,8 +84,11 @@ public:
         const TRequestType& request = ev->Get()->Request;
         NGrpc::TCallMeta meta;
         meta.Timeout = Config.Timeout;
-        if (const auto& token = ev->Get()->Token) {
-            meta.Aux.push_back({"authorization", "Bearer " + token});
+        if (auto token = ev->Get()->Token) {
+            if (!AsciiHasPrefixIgnoreCase(token, "Bearer "sv)) {
+                token = "Bearer " + token;
+            }
+            meta.Aux.push_back({"authorization", token});
         }
         if (requestId) {
             meta.Aux.push_back({"x-request-id", requestId});

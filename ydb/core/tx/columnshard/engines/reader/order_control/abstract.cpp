@@ -25,12 +25,6 @@ void IOrderPolicy::OnBatchFilterInitialized(TBatch& batchOriginal, TGranulesFill
             context.GetCounters().TwoPhasesFilterUsefulBytes->Add(batchOriginal.GetUsefulFetchedBytes());
 
             batchOriginal.ResetWithFilter(context.GetPostFilterColumns());
-            if (batchOriginal.IsFetchingReady()) {
-                auto processor = context.GetTasksProcessor();
-                if (auto assembleBatchTask = batchOriginal.AssembleTask(processor.GetObject(), context.GetReadMetadata())) {
-                    processor.Add(context, assembleBatchTask);
-                }
-            }
 
             context.GetCounters().TwoPhasesCount->Add(1);
             context.GetCounters().TwoPhasesPostFilterFetchedBytes->Add(batchOriginal.GetWaitingBytes());

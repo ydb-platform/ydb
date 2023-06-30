@@ -88,6 +88,10 @@ public:
         return *Owner;
     }
 
+    TGranulesFillingContext& GetOwner() {
+        return *Owner;
+    }
+
     class TBatchForMerge {
     private:
         TBatch* Batch = nullptr;

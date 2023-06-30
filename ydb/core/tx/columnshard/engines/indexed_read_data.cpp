@@ -171,11 +171,6 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& da
     if (!portionBatch->AddIndexedReady(blobRange, data)) {
         return;
     }
-    if (portionBatch->IsFetchingReady()) {
-        if (auto batch = portionBatch->AssembleTask(TasksProcessor.GetObject(), ReadMetadata)) {
-            TasksProcessor.Add(*GranulesContext, batch);
-        }
-    }
 }
 
 std::shared_ptr<arrow::RecordBatch>

@@ -93,6 +93,10 @@ private:
     std::set<ui32> AskedColumnIds;
     void ResetCommon(const std::set<ui32>& columnIds);
     ui64 GetUsefulBytes(const ui64 bytes) const;
+    bool CheckReadyForAssemble();
+    bool IsFetchingReady() const {
+        return WaitIndexed.empty();
+    }
 
 public:
     std::shared_ptr<TSortableBatchPosition> GetFirstPK(const bool reverse, const TIndexInfo& indexInfo) const;
@@ -134,10 +138,6 @@ public:
 
     const TGranule& GetOwner() const {
         return *Owner;
-    }
-
-    bool IsFetchingReady() const {
-        return WaitIndexed.empty();
     }
 
     const TPortionInfo& GetPortionInfo() const {

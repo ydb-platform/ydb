@@ -50,6 +50,7 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
 void TTypeAnnotationContext::Reset() {
     UdfImports.clear();
     UdfModules.clear();
+    UdfTypeCache.clear();
     NodeToOperationId.clear();
     EvaluationInProgress = 0;
     ExpectedTypes.clear();

@@ -98,7 +98,7 @@ namespace {
         }
 
         resultBuffer.resize(size);
-        char* resultBufferData = const_cast<char*>(resultBuffer.data());
+        char* resultBufferData = resultBuffer.Detach();
 
         ui16 cellsSize = cells.size();
         WriteUnaligned<ui16>(resultBufferData, cellsSize);
@@ -114,7 +114,9 @@ namespace {
             resultBufferData += sizeof(header);
 
             const auto & cell = cells[i];
-            memcpy(resultBufferData, cell.Data(), cell.Size());
+            if (cell.Size() > 0) {
+                memcpy(resultBufferData, cell.Data(), cell.Size());
+            }
 
             if (resultCells && !cell.IsNull()) {
                 (*resultCells)[i] = TCell(resultBufferData, cell.Size());

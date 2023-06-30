@@ -274,10 +274,11 @@ typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
 
 class TLiteralStringAtom: public INode {
 public:
-    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info)
+    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info, const TString& prefix = {})
         : INode(pos)
         , Node(node)
         , Info(info)
+        , Prefix(prefix)
     {
     }
 
@@ -292,7 +293,7 @@ public:
             return false;
         }
 
-        Atom = MakeAtomFromExpression(ctx, Node).Build();
+        Atom = MakeAtomFromExpression(ctx, Node, Prefix).Build();
         return true;
     }
 
@@ -326,6 +327,7 @@ private:
     TNodePtr Node;
     TNodePtr Atom;
     TString Info;
+    TString Prefix;
 };
 
 class TYqlAsAtom: public TLiteralStringAtom {
@@ -1000,25 +1002,26 @@ public:
     }
 };
 
-TNodePtr BuildFileNameArgument(TPosition pos, const TNodePtr& argument) {
-    return new TLiteralStringAtom(pos, argument, "FilePath requires string literal as parameter");
+TNodePtr BuildFileNameArgument(TPosition pos, const TNodePtr& argument, const TString& prefix) {
+    return new TLiteralStringAtom(pos, argument, "FilePath requires string literal as parameter", prefix);
 }
 
-class TYqlAtom final: public TCallNode {
+template <typename TDerived, bool IsFile>
+class TYqlAtomBase: public TCallNode {
 public:
-    TYqlAtom(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+    TYqlAtomBase(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
         : TCallNode(pos, opName, 1, 1, args)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!Args.empty()) {
-            Args[0] = BuildFileNameArgument(ctx.Pos(), Args[0]);
+            Args[0] = BuildFileNameArgument(ctx.Pos(), Args[0], IsFile ? ctx.Settings.FileAliasPrefix : TString());
         }
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlAtom(Pos, OpName, Args);
+        return new TDerived(Pos, OpName, Args);
     }
 
     bool IsLiteral() const override {
@@ -1032,6 +1035,18 @@ public:
     TString GetLiteralValue() const override {
         return !Args.empty() ? Args[0]->GetLiteralValue() : "";
     }
+};
+
+class TYqlAtom final : public TYqlAtomBase<TYqlAtom, false>
+{
+    using TBase = TYqlAtomBase<TYqlAtom, false>;
+    using TBase::TBase;
+};
+
+class TFileYqlAtom final : public TYqlAtomBase<TFileYqlAtom, true>
+{
+    using TBase = TYqlAtomBase<TFileYqlAtom, true>;
+    using TBase::TBase;
 };
 
 class TTryMember final: public TCallNode {
@@ -1225,7 +1240,7 @@ public:
         if (!dataTypeStringNode) {
             return false;
         }
-        auto aliasNode = BuildFileNameArgument(Args[1]->GetPos(), Args[1]);
+        auto aliasNode = BuildFileNameArgument(Args[1]->GetPos(), Args[1], ctx.Settings.FileAliasPrefix);
         OpName = "Apply";
         Args[0] = Y("Udf", Q("File.ByLines"), Y("Void"),
             Y("TupleType",
@@ -2999,10 +3014,10 @@ struct TBuiltinFuncData {
             {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
 
             // File builtins
-            {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")},
-            {"filecontent", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FileContent")},
-            {"folderpath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FolderPath") },
-            {"files", BuildNamedBuiltinFactoryCallback<TYqlAtom>("Files")},
+            {"filepath", BuildNamedBuiltinFactoryCallback<TFileYqlAtom>("FilePath")},
+            {"filecontent", BuildNamedBuiltinFactoryCallback<TFileYqlAtom>("FileContent")},
+            {"folderpath", BuildNamedBuiltinFactoryCallback<TFileYqlAtom>("FolderPath") },
+            {"files", BuildNamedBuiltinFactoryCallback<TFileYqlAtom>("Files")},
             {"parsefile", BuildSimpleBuiltinFactoryCallback<TYqlParseFileOp>()},
 
             // Misc builtins

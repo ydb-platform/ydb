@@ -1052,11 +1052,26 @@ TExprNode::TPtr ExtractMember(const TExprNode& node) {
 }
 
 template <bool RightOrLeft>
-TExprNode::TPtr OptimizeDirection(const TExprNode::TPtr& node) {
+TExprNode::TPtr OptimizeDirection(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable(ConsName)) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return RightOrLeft ? node->Head().TailPtr() : node->Head().HeadPtr();
+        if (!RightOrLeft || node->Head().Head().Type() == TExprNode::World) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return RightOrLeft ? node->Head().TailPtr() : node->Head().HeadPtr();
+        }
+
+        if (RightOrLeft && node->Head().Tail().IsCallable(RightName)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            const auto& right = node->Head().Tail();
+            const auto& read = right.Head();
+            auto sync = ctx.NewCallable(node->Pos(), "Sync!", {
+                node->Head().HeadPtr(),
+                read.HeadPtr(),
+            });
+
+            return ctx.ChangeChild(*node, 0, ctx.ChangeChild(read, 0, std::move(sync)));
+        }
     }
+
     return node;
 }
 
@@ -4777,8 +4792,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map[LeftName] = std::bind(&OptimizeDirection<false>, _1);
-    map[RightName] = std::bind(&OptimizeDirection<true>, _1);
+    map[LeftName] = std::bind(&OptimizeDirection<false>, _1, _2);
+    map[RightName] = std::bind(&OptimizeDirection<true>, _1, _2);
 
     map["Apply"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
         auto ret = FoldYsonParseAfterSerialize(node);

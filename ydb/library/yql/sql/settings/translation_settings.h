@@ -103,6 +103,7 @@ namespace NSQLTranslation {
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
         bool AssumeYdbOnClusterWithSlash;
         TString DynamicClusterProvider;
+        TString FileAliasPrefix;
 
         TVector<ui32> PgParameterTypeOids;
     };

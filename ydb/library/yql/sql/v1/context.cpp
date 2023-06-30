@@ -350,7 +350,11 @@ bool TContext::AddExport(TPosition pos, const TString& name) {
 
 TString TContext::AddImport(const TVector<TString>& modulePath) {
     YQL_ENSURE(!modulePath.empty());
-    const TString path = JoinRange("/", modulePath.cbegin(), modulePath.cend());
+    TString path = JoinRange("/", modulePath.cbegin(), modulePath.cend());
+    if (!path.StartsWith('/')) {
+        path = Settings.FileAliasPrefix + path;
+    }
+    
     auto iter = ImportModuleAliases.find(path);
     if (iter == ImportModuleAliases.end()) {
         const TString alias = MakeName(TStringBuilder() << modulePath.back() << "_module");

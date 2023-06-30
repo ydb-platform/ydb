@@ -731,12 +731,18 @@ namespace {
                             data = unordered.Cast().Input();
                         }
 
-                        if (IsPureIsolatedLambda(writeInput.Ref())) {
+                        TSyncMap syncList;
+                        if (IsPureIsolatedLambda(writeInput.Ref(), &syncList)) {
+                            auto cleanup = DefaultCleanupWorld(data.Ptr(), ctx);
+                            if (!cleanup) {
+                                return nullptr;
+                            }
+
                             ret = Build<TResFill>(ctx, resWrite.Pos())
-                                .World(resWrite.World())
+                                .World(ApplySyncListToWorld(resWrite.World().Ptr(), syncList, ctx))
                                 .DataSink(resWrite.DataSink())
                                 .Key(resWrite.Key())
-                                .Data(data)
+                                .Data(cleanup)
                                 .Settings(resWrite.Settings())
                                 .DelegatedSource()
                                     .Value(Config->Types.GetDefaultDataSource())
@@ -1042,25 +1048,27 @@ namespace {
 
                         if (auto right = res.Data().Maybe<TCoRight>()) {
                             auto source = right.Cast().Input();
-                            const TIntrusivePtr<IDataProvider>* provider = nullptr;
+                            if (!source.Maybe<TCoCons>()) {
+                                const TIntrusivePtr<IDataProvider>* provider = nullptr;
 
-                            if (source.Ref().Type() == TExprNode::Callable || source.Ref().ChildrenSize() >= 2) {
-                                if (source.Ref().Child(1)->IsCallable("DataSource")) {
-                                    auto name = source.Ref().Child(1)->Child(0)->Content();
-                                    provider = Config->Types.DataSourceMap.FindPtr(name);
-                                    Y_ENSURE(provider, "DataSource doesn't exist: " << name);
+                                if (source.Ref().Type() == TExprNode::Callable || source.Ref().ChildrenSize() >= 2) {
+                                    if (source.Ref().Child(1)->IsCallable("DataSource")) {
+                                        auto name = source.Ref().Child(1)->Child(0)->Content();
+                                        provider = Config->Types.DataSourceMap.FindPtr(name);
+                                        Y_ENSURE(provider, "DataSource doesn't exist: " << name);
+                                    }
+
+                                    if (source.Ref().Child(1)->IsCallable("DataSink")) {
+                                        auto name = source.Ref().Child(1)->Child(0)->Content();
+                                        provider = Config->Types.DataSinkMap.FindPtr(name);
+                                        Y_ENSURE(provider, "DataSink doesn't exist: " << name);
+                                    }
                                 }
 
-                                if (source.Ref().Child(1)->IsCallable("DataSink")) {
-                                    auto name = source.Ref().Child(1)->Child(0)->Content();
-                                    provider = Config->Types.DataSinkMap.FindPtr(name);
-                                    Y_ENSURE(provider, "DataSink doesn't exist: " << name);
+                                if (!provider) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(res.Data().Pos()), "Expected Right! over Datasource or Datasink"));
+                                    return IGraphTransformer::TStatus::Error;
                                 }
-                            }
-
-                            if (!provider) {
-                                ctx.AddError(TIssue(ctx.GetPosition(res.Data().Pos()), "Expected Right! over Datasource or Datasink"));
-                                return IGraphTransformer::TStatus::Error;
                             }
                         }
 

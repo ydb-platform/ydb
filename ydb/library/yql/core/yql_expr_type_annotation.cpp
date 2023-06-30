@@ -4496,7 +4496,7 @@ EDataSlot GetDateTypeByLevel(ui32 level) {
     }
 }
 
-bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited) {
+bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TSyncMap* syncList) {
     if (!visited.emplace(&lambdaBody).second) {
         return true;
     }
@@ -4505,12 +4505,24 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited) {
         return true;
     }
 
+    if (syncList) {
+        if (auto right = TMaybeNode<TCoRight>(&lambdaBody)) {
+            auto cons = right.Cast().Input().Maybe<TCoCons>();
+            if (!cons) {
+                return false;
+            }
+
+            syncList->emplace(cons.Cast().World().Ptr(), syncList->size());
+            return IsPureIsolatedLambdaImpl(cons.Cast().Input().Ref(), visited, syncList);
+        }
+    }
+
     if (!lambdaBody.GetTypeAnn()->IsComposable()) {
         return false;
     }
 
     for (auto& child : lambdaBody.Children()) {
-        if (!IsPureIsolatedLambdaImpl(*child, visited)) {
+        if (!IsPureIsolatedLambdaImpl(*child, visited, syncList)) {
             return false;
         }
     }
@@ -4518,9 +4530,9 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited) {
     return true;
 }
 
-bool IsPureIsolatedLambda(const TExprNode& lambdaBody) {
+bool IsPureIsolatedLambda(const TExprNode& lambdaBody, TSyncMap* syncList) {
     TNodeSet visited;
-    return IsPureIsolatedLambdaImpl(lambdaBody, visited);
+    return IsPureIsolatedLambdaImpl(lambdaBody, visited, syncList);
 }
 
 TString GetIntegralAtomValue(ui64 value, bool hasSign) {

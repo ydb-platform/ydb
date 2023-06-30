@@ -415,8 +415,8 @@ public:
 
     bool SaveRetrievedResults(const NS3Lister::TListResult& listingResult) {
         LOG_T("TS3FileQueueActor", "SaveRetrievedResults");
-        if (std::holds_alternative<TIssues>(listingResult)) {
-            MaybeIssues = std::get<TIssues>(listingResult);
+        if (std::holds_alternative<NS3Lister::TListError>(listingResult)) {
+            MaybeIssues = std::get<NS3Lister::TListError>(listingResult).Issues;
             return false;
         }
 

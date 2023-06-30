@@ -137,7 +137,15 @@ public:
     std::vector<TDirectoryListEntry> Directories;
 };
 
-using TListResult = std::variant<TListEntries, TIssues>;
+enum class EListError {
+    GENERAL,
+    LIMIT_EXCEEDED
+};
+struct TListError {
+    EListError Type;
+    TIssues Issues;
+};
+using TListResult = std::variant<TListEntries, TListError>;
 
 struct TListingRequest {
     TString Url;

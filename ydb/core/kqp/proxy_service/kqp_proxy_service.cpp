@@ -1,4 +1,5 @@
 #include "kqp_proxy_service.h"
+#include "kqp_proxy_service_impl.h"
 #include "kqp_script_executions.h"
 
 #include <ydb/core/base/appdata.h>

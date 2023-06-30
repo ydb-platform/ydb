@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

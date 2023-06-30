@@ -2,9 +2,6 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>

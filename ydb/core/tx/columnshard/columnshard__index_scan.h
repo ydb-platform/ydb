@@ -29,16 +29,15 @@ using NOlap::TBlobRange;
 
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
+    NOlap::TReadContext Context;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TIndexedReadData IndexedData;
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     TDeque<NOlap::TPartialReadResult> ReadyResults;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
-    NColumnShard::TDataTasksProcessorContainer DataTasksProcessor;
-    NColumnShard::TConcreteScanCounters ScanCounters;
 public:
-    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TConcreteScanCounters& scanCounters);
+    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context);
     ~TColumnShardScanIterator();
 
     virtual std::optional<ui32> GetAvailableResultsCount() const override {

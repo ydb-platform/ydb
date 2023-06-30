@@ -13,6 +13,7 @@ SRCS(
     queue.cpp
     read_filter_merger.cpp
     read_metadata.cpp
+    read_context.cpp
 )
 
 PEERDIR(

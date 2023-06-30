@@ -19,10 +19,9 @@ namespace NKikimr::NOlap {
 
 class TIndexedReadData {
 private:
+    TReadContext Context;
     std::unique_ptr<NIndexedReader::TGranulesFillingContext> GranulesContext;
 
-    NColumnShard::TConcreteScanCounters Counters;
-    NColumnShard::TDataTasksProcessorContainer TasksProcessor;
     TFetchBlobsQueue FetchBlobsQueue;
     TFetchBlobsQueue PriorityBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
@@ -36,15 +35,14 @@ private:
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
 
 public:
-    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
-        const bool internalRead, const NColumnShard::TConcreteScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
+    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, const bool internalRead, const TReadContext& context);
 
     const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
-        return Counters;
+        return Context.GetCounters();
     }
 
     const NColumnShard::TDataTasksProcessorContainer& GetTasksProcessor() const noexcept {
-        return TasksProcessor;
+        return Context.GetProcessor();
     }
 
     NIndexedReader::TGranulesFillingContext& GetGranulesContext() {

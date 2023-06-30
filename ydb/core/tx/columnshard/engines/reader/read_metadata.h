@@ -1,6 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 #include "description.h"
+#include "read_context.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/counters.h>
@@ -117,7 +118,7 @@ public:
 
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetResultYqlSchema() const = 0;
     virtual std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const = 0;
-    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TConcreteScanCounters& scanCounters) const = 0;
+    virtual std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const = 0;
 
     // TODO:  can this only be done for base class?
     friend IOutputStream& operator << (IOutputStream& out, const TReadMetadataBase& meta) {
@@ -145,6 +146,9 @@ private:
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
+    const std::vector<ui32>& GetAllColumns() const {
+        return AllColumns;
+    }
     std::shared_ptr<TSelectInfo> SelectInfo;
     std::vector<TCommittedBlob> CommittedBlobs;
     THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CommittedBatches;
@@ -261,7 +265,7 @@ public:
         return SelectInfo->Stats().Blobs;
     }
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TConcreteScanCounters& scanCounters) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
 
     void Dump(IOutputStream& out) const override {
         out << "columns: " << GetSchemaColumnsCount()
@@ -302,7 +306,7 @@ public:
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> GetKeyYqlSchema() const override;
 
-    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(NColumnShard::TDataTasksProcessorContainer tasksProcessor, const NColumnShard::TConcreteScanCounters& scanCounters) const override;
+    std::unique_ptr<NColumnShard::TScanIteratorBase> StartScan(const NOlap::TReadContext& readContext) const override;
 };
 
 }

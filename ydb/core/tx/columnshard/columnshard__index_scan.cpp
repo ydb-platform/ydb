@@ -4,12 +4,10 @@
 
 namespace NKikimr::NColumnShard {
 
-TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata,
-    NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TConcreteScanCounters& scanCounters)
-    : ReadMetadata(readMetadata)
-    , IndexedData(ReadMetadata, false, scanCounters, processor)
-    , DataTasksProcessor(processor)
-    , ScanCounters(scanCounters)
+TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context)
+    : Context(context)
+    , ReadMetadata(readMetadata)
+    , IndexedData(ReadMetadata, false, context)
 {
     ui32 batchNo = 0;
     for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++batchNo) {
@@ -89,26 +87,26 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
-        DataTasksProcessor.Stop();
         WaitCommitted.clear();
         IndexedData.Abort();
     }
 
     if (WaitCommitted.empty() && IndexedData.IsFinished()) {
-        DataTasksProcessor.Stop();
+        Context.MutableProcessor().Stop();
     }
 }
 
 bool TColumnShardScanIterator::HasWaitingTasks() const {
-    return DataTasksProcessor.InWaiting();
+    return Context.GetProcessor().InWaiting();
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {
+    IndexedData.Abort();
     ReadMetadata->ReadStats->PrintToLog();
 }
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
-    if (!task->IsDataProcessed() || DataTasksProcessor.IsStopped() || !task->IsSameProcessor(DataTasksProcessor)) {
+    if (!task->IsDataProcessed() || Context.GetProcessor().IsStopped() || !task->IsSameProcessor(Context.GetProcessor())) {
         return;
     }
     Y_VERIFY(task->Apply(IndexedData.GetGranulesContext()));

@@ -1,3 +1,5 @@
+#include "engines/reader/read_context.h"
+
 #include <ydb/core/tx/columnshard/columnshard__scan.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
@@ -99,7 +101,8 @@ public:
         Schedule(Deadline, new TEvents::TEvWakeup);
 
         Y_VERIFY(!ScanIterator);
-        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(MakeTasksProcessor(), ScanCountersPool);
+        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool);
+        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen), IEventHandle::FlagTrackDelivery);
@@ -416,7 +419,8 @@ private:
             return Finish();
         }
 
-        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(MakeTasksProcessor(), ScanCountersPool);
+        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool);
+        ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();
     }

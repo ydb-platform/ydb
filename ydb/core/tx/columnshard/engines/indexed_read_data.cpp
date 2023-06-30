@@ -107,11 +107,11 @@ void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::
     Y_VERIFY(IndexedBlobs.emplace(range).second);
     Y_VERIFY(IndexedBlobSubscriber.emplace(range, &batch).second);
     if (batch.GetFetchedInfo().GetFilter()) {
-        Counters.PostFilterBytes->Add(range.Size);
+        Context.GetCounters().PostFilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataAdditionalBytes += range.Size;
         PriorityBlobsQueue.emplace_back(batch.GetGranule(), range);
     } else {
-        Counters.FilterBytes->Add(range.Size);
+        Context.GetCounters().FilterBytes->Add(range.Size);
         ReadMetadata->ReadStats->DataFilterBytes += range.Size;
         FetchBlobsQueue.emplace_back(batch.GetGranule(), range);
     }
@@ -144,7 +144,7 @@ void TIndexedReadData::InitRead(ui32 inputBatch) {
     }
     GranulesContext->PrepareForStart();
 
-    Counters.PortionBytes->Add(portionsBytes);
+    Context.GetCounters().PortionBytes->Add(portionsBytes);
     auto& stats = ReadMetadata->ReadStats;
     stats->IndexGranules = ReadMetadata->SelectInfo->Granules.size();
     stats->IndexPortions = ReadMetadata->SelectInfo->Portions.size();
@@ -411,7 +411,7 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
 
             // Extract the last row's PK
             auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
-            auto lastKey = keyBatch->Slice(keyBatch->num_rows()-1, 1);
+            auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
             // Leave only requested columns
             auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->GetResultSchema());
@@ -435,9 +435,8 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
 }
 
 TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
-    const bool internalRead, const NColumnShard::TConcreteScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor)
-    : Counters(counters)
-    , TasksProcessor(tasksProcessor)
+    const bool internalRead, const TReadContext& context)
+    : Context(context)
     , ReadMetadata(readMetadata)
     , OnePhaseReadMode(internalRead)
 {
@@ -451,6 +450,7 @@ bool TIndexedReadData::IsFinished() const {
 
 void TIndexedReadData::Abort() {
     Y_VERIFY(GranulesContext);
+    Context.MutableProcessor().Stop();
     FetchBlobsQueue.Stop();
     PriorityBlobsQueue.Stop();
     GranulesContext->Abort();
@@ -462,7 +462,7 @@ NKikimr::NOlap::TBlobRange TIndexedReadData::ExtractNextBlob() {
         auto* f = PriorityBlobsQueue.front();
         if (f) {
             GranulesContext->ForceStartProcessGranule(f->GetGranuleId(), f->GetRange());
-            Counters.OnPriorityFetch(f->GetRange().Size);
+            Context.GetCounters().OnPriorityFetch(f->GetRange().Size);
             return PriorityBlobsQueue.pop_front();
         }
     }
@@ -472,10 +472,10 @@ NKikimr::NOlap::TBlobRange TIndexedReadData::ExtractNextBlob() {
         return TBlobRange();
     }
     if (GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange())) {
-        Counters.OnGeneralFetch(f->GetRange().Size);
+        Context.GetCounters().OnGeneralFetch(f->GetRange().Size);
         return FetchBlobsQueue.pop_front();
     } else {
-        Counters.OnProcessingOverloaded();
+        Context.GetCounters().OnProcessingOverloaded();
         return TBlobRange();
     }
 }

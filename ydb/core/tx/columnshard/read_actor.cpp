@@ -35,7 +35,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata, true, counters, TDataTasksProcessorContainer())
+        , IndexedData(ReadMetadata, true, NOlap::TReadContext(counters))
         , Deadline(deadline)
         , ColumnShardActorId(columnShardActorId)
         , RequestCookie(requestCookie)

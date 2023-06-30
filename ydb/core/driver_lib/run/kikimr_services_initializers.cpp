@@ -1387,7 +1387,7 @@ TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConf
 void TSharedCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    auto config = MakeIntrusive<TSharedPageCacheConfig>();
+    auto config = MakeHolder<TSharedPageCacheConfig>();
 
     NKikimrSharedCache::TSharedCacheConfig cfg;
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
@@ -1410,7 +1410,7 @@ void TSharedCacheInitializer::InitializeServices(
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(config.Get()), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(CreateSharedPageCache(std::move(config)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),

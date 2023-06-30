@@ -178,13 +178,13 @@ namespace NFake {
             }
 
             { /*_ Shared page collection cache service, used by executor */
-                auto egg = MakeIntrusive<TSharedPageCacheConfig>();
+                auto config = MakeHolder<TSharedPageCacheConfig>();
 
-                egg->CacheConfig = new TCacheCacheConfig(conf.Shared, nullptr, nullptr, nullptr);
-                egg->TotalAsyncQueueInFlyLimit = conf.AsyncQueue;
-                egg->TotalScanQueueInFlyLimit = conf.ScanQueue;
+                config->CacheConfig = new TCacheCacheConfig(conf.Shared, nullptr, nullptr, nullptr);
+                config->TotalAsyncQueueInFlyLimit = conf.AsyncQueue;
+                config->TotalScanQueueInFlyLimit = conf.ScanQueue;
 
-                auto *actor =  CreateSharedPageCache(egg.Get());
+                auto *actor =  CreateSharedPageCache(std::move(config));
 
                 RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
             }

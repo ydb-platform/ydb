@@ -40,7 +40,7 @@ static bool Satisfies(NLog::EPriority priority = NLog::PRI_DEBUG) {
 }
 
 class TSharedPageCache : public TActor<TSharedPageCache> {
-    TIntrusiveConstPtr<TSharedPageCacheConfig> Config;
+    THolder<TSharedPageCacheConfig> Config;
 
     using ELnLev = NUtil::ELnLev;
     using TBlocks = TVector<NSharedCache::TEvResult::TLoaded>;
@@ -176,8 +176,24 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     ui64 StatHitBytes = 0;
     ui64 StatMissPages = 0;
     ui64 StatMissBytes = 0;
+    ui64 StatPassiveBytes = 0;
 
     bool GCScheduled = false;
+
+    void ActualizeCacheSizeLimit() {
+        if ((ui64)SizeOverride != Config->CacheConfig->Limit) {
+            Config->CacheConfig->SetLimit(SizeOverride);
+        }
+
+        ui64 limit = Config->CacheConfig->Limit;
+        limit = Max<ui64>(1, 
+            limit * Config->ActivePagesReservationPercent / 100, 
+            limit > StatPassiveBytes ? limit - StatPassiveBytes : 0);
+
+        Cache.UpdateCacheSize(limit);
+
+        Evict(Cache.EnsureLimits());
+    }
 
     void Registered(TActorSystem *sys, const TActorId &owner)
     {
@@ -231,10 +247,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     }
 
     void Handle(NSharedCache::TEvRequest::TPtr &ev) {
-        if ((ui64)SizeOverride != Config->CacheConfig->Limit) {
-            Config->CacheConfig->SetLimit(SizeOverride);
-            Cache.UpdateCacheSize(Config->CacheConfig->Limit);
-        }
+        ActualizeCacheSizeLimit();
 
         NSharedCache::TEvRequest *msg = ev->Get();
         const auto &pageCollection = *msg->Fetch->PageCollection;
@@ -530,6 +543,8 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     }
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev) {
+        ActualizeCacheSizeLimit();
+
         NSharedCache::TEvTouch *msg = ev->Get();
         THashMap<TLogoBlobID, NSharedCache::TEvUpdated::TActions> actions;
         for (auto &xpair : msg->Touched) {
@@ -611,7 +626,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         if (ownerIt != CollectionsOwners.end()) {
             for (auto* collection : ownerIt->second.Collections) {
                 collection->Owners.erase(ev->Sender);
-                DropExpiredCollection(collection);
+                TryDropExpiredCollection(collection);
             }
             CollectionsOwners.erase(ownerIt);
         }
@@ -654,6 +669,8 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     }
 
     void Handle(NBlockIO::TEvData::TPtr &ev) {
+        ActualizeCacheSizeLimit();
+
         auto *msg = ev->Get();
 
         if (TRequestQueue *queue = (TRequestQueue *)ev->Cookie) {
@@ -694,7 +711,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         ProcessGCList();
     }
 
-    void DropExpiredCollection(TCollection* collection) {
+    void TryDropExpiredCollection(TCollection* collection) {
         if (!collection->Owners &&
             !collection->Expectants &&
             collection->PageMap.used() == 0)
@@ -720,9 +737,10 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
                 // We have successfully dropped the page
                 // We are guaranteed no new uses for this page are possible
                 Y_VERIFY(page->State == PageStateEvicted);
-                // It may be the case that collection has been dropped
+                RemovePassivePage(page);
+
+                Y_VERIFY_DEBUG_S(page->Collection, "Evicted pages are expected to have collection");
                 if (auto* collection = page->Collection) {
-                    RemovePassivePage(page);
                     Y_VERIFY_DEBUG(collection->PageMap[page->PageId].Get() == page);
                     Y_VERIFY(collection->PageMap.erase(page->PageId));
                     if (collection->Owners) {
@@ -758,7 +776,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
                 collection->DroppedPages.clear();
             }
 
-            DropExpiredCollection(collection);
+            TryDropExpiredCollection(collection);
         }
 
         for (auto& kv : toSend) {
@@ -962,8 +980,12 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
         if (msg->Record.GetMemoryLimit() != 0) {
             Config->CacheConfig->SetLimit(msg->Record.GetMemoryLimit());
-            Cache.UpdateCacheSize(Config->CacheConfig->Limit);
             SizeOverride = Config->CacheConfig->Limit;
+            // limit will be updated with ActualizeCacheSizeLimit call
+        }
+
+        if (msg->Record.HasActivePagesReservationPercent()) {
+            Config->ActivePagesReservationPercent = msg->Record.GetActivePagesReservationPercent();
         }
 
         if (msg->Record.GetAsyncQueueInFlyLimit() != 0) {
@@ -985,6 +1007,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     }
 
     inline void AddPassivePage(const TPage* page) {
+        StatPassiveBytes += sizeof(TPage) + page->Size;
         if (Config->Counters) {
             ++*Config->Counters->PassivePages;
             *Config->Counters->PassiveBytes += sizeof(TPage) + page->Size;
@@ -999,6 +1022,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     }
 
     inline void RemovePassivePage(const TPage* page) {
+        StatPassiveBytes -= sizeof(TPage) + page->Size;
         if (Config->Counters) {
             --*Config->Counters->PassivePages;
             *Config->Counters->PassiveBytes -= sizeof(TPage) + page->Size;
@@ -1006,11 +1030,11 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
     }
 
 public:
-    TSharedPageCache(TSharedPageCacheConfig *config)
+    TSharedPageCache(THolder<TSharedPageCacheConfig> config)
         : TActor(&TThis::StateFunc)
-        , Config(config)
-        , Cache(*config->CacheConfig)
-        , SizeOverride(config->CacheConfig->Limit, 1, Max<i64>())
+        , Config(std::move(config))
+        , Cache(*Config->CacheConfig)
+        , SizeOverride(Config->CacheConfig->Limit, 1, Max<i64>())
     {
         AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
         ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;
@@ -1037,8 +1061,8 @@ public:
 
 } // NTabletFlatExecutor
 
-IActor* CreateSharedPageCache(TSharedPageCacheConfig *config) {
-    return new NTabletFlatExecutor::TSharedPageCache(config);
+IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config) {
+    return new NTabletFlatExecutor::TSharedPageCache(std::move(config));
 }
 
 }

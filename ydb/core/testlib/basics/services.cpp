@@ -129,14 +129,14 @@ namespace NPDisk {
 
     void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches)
     {
-        auto pageCollectionCacheConfig = MakeIntrusive<TSharedPageCacheConfig>();
+        auto pageCollectionCacheConfig = MakeHolder<TSharedPageCacheConfig>();
         pageCollectionCacheConfig->CacheConfig = new TCacheCacheConfig(caches.Shared, nullptr, nullptr, nullptr);
         pageCollectionCacheConfig->TotalAsyncQueueInFlyLimit = caches.AsyncQueue;
         pageCollectionCacheConfig->TotalScanQueueInFlyLimit = caches.ScanQueue;
 
         runtime.AddLocalService(MakeSharedPageCacheId(0),
             TActorSetupCmd(
-                CreateSharedPageCache(pageCollectionCacheConfig.Get()),
+                CreateSharedPageCache(std::move(pageCollectionCacheConfig)),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);

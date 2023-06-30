@@ -15,6 +15,7 @@ default:
   feature_user_and_group: true
   feature_olap_tables: true
 #  feature_logbroker: true
+  feature_topic_control_plane: true
   ydb-full-name: YDB
   ydb-short-name: YDB
   yandex-cloud: Yandex.Cloud

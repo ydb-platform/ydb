@@ -418,5 +418,20 @@ IComputationPattern::TPtr MakeComputationPattern(
 
 std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams);
 
+using TCallableComputationNodeBuilder = std::function<IComputationNode* (TCallable&, const TComputationNodeFactoryContext& ctx)>;
+
+template<typename... Ts>
+TCallableComputationNodeBuilder WrapComputationBuilder(IComputationNode* (*f)(const TComputationNodeFactoryContext&, Ts...)){
+    return [f](TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        MKQL_ENSURE(callable.GetInputsCount() == sizeof...(Ts), "Incorrect number of inputs");
+        return CallComputationBuilderWithArgs(f, callable, ctx, std::make_index_sequence<sizeof...(Ts)>());
+    };
+}
+template<typename F, size_t... Is>
+auto CallComputationBuilderWithArgs(F* f, TCallable& callable, const TComputationNodeFactoryContext& ctx,
+                                           const std::integer_sequence<size_t, Is...> &)  {
+    return f(ctx, callable.GetInput(Is)...);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

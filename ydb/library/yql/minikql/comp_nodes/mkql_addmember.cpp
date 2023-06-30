@@ -146,13 +146,9 @@ private:
 
 }
 
-IComputationNode* WrapAddMember(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
-
-    const auto structType = AS_TYPE(TStructType, callable.GetInput(0));
-    const auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(2));
-
-    const ui32 index = indexData->AsValue().Get<ui32>();
+IComputationNode* AddMember(const TComputationNodeFactoryContext& ctx, TRuntimeNode structData, TRuntimeNode memberData, TRuntimeNode indexData) {
+    const auto structType = AS_TYPE(TStructType, structData);
+    const ui32 index = AS_VALUE(TDataLiteral, indexData)->AsValue().Get<ui32>();
     MKQL_ENSURE(index <= structType->GetMembersCount(), "Bad member index");
 
     std::vector<EValueRepresentation> representations;
@@ -161,8 +157,8 @@ IComputationNode* WrapAddMember(TCallable& callable, const TComputationNodeFacto
         representations.emplace_back(GetValueRepresentation(structType->GetMemberType(i)));
     }
 
-    const auto structObj = LocateNode(ctx.NodeLocator, callable, 0);
-    const auto member = LocateNode(ctx.NodeLocator, callable, 1);
+    const auto structObj = LocateNode(ctx.NodeLocator, *structData.GetNode());
+    const auto member = LocateNode(ctx.NodeLocator, *memberData.GetNode());
     return new TAddMemberWrapper(ctx.Mutables, structObj, member, index, std::move(representations));
 }
 

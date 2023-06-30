@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IComputationNode* WrapAddMember(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* AddMember(const TComputationNodeFactoryContext& ctx, TRuntimeNode structData, TRuntimeNode memberData, TRuntimeNode indexData);
 
 }
 }

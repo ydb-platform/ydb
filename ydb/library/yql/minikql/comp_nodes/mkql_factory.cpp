@@ -131,19 +131,15 @@ IComputationNode* WrapWideFlowArg(TCallable& callable, const TComputationNodeFac
     return new TWideFlowProxyCodegeneratorNode;
 }
 
-using TCallableComputationNodeBuilderPtr = IComputationNode* (*const)(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, TCallableComputationNodeBuilderPtr>;
+using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, TCallableComputationNodeBuilder>;
 
 namespace {
 
 struct TCallableComputationNodeBuilderFuncMapFiller {
-    const TCallableComputationNodeBuilderMap Map;
-
     TCallableComputationNodeBuilderFuncMapFiller()
-        : Map(InitList)
     {}
 
-    static constexpr std::initializer_list<TCallableComputationNodeBuilderMap::value_type> InitList = {
+    const TCallableComputationNodeBuilderMap Map = {
         {"Append", &WrapAppend},
         {"Prepend", &WrapPrepend},
         {"Extend", &WrapExtend},
@@ -170,7 +166,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"SkipWhile", &WrapSkipWhile},
         {"TakeWhileInclusive", &WrapTakeWhileInclusive},
         {"SkipWhileInclusive", &WrapSkipWhileInclusive},
-        {"AddMember", &WrapAddMember},
+        {"AddMember", WrapComputationBuilder(&AddMember)},
         {"Member", &WrapMember},
         {"RemoveMember", &WrapRemoveMember},
         {"Exists", &WrapExists},

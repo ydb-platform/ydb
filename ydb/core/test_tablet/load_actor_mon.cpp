@@ -68,6 +68,14 @@ namespace NKikimr::NTestShard {
                                     }
 
                                     TABLER() {
+                                        size_t numPoints = 0;
+                                        TDuration timeSpan;
+                                        const ui64 speed = self->ReadSpeed.GetSpeedInBytesPerSecond(now, &numPoints, &timeSpan);
+                                        TABLED() { str << "Read speed"; }
+                                        TABLED() { str << Sprintf("%.2lf", speed * 1e-6) << " MB/s @" << numPoints << ":" << timeSpan; }
+                                    }
+
+                                    TABLER() {
                                         TABLED() { str << "Bytes of data stored"; }
                                         TABLED() { str << self->BytesOfData; }
                                     }
@@ -88,6 +96,11 @@ namespace NKikimr::NTestShard {
                                     }
 
                                     TABLER() {
+                                        TABLED() { str << "Bytes read"; }
+                                        TABLED() { str << self->ReadSpeed.GetBytesAccum(); }
+                                    }
+
+                                    TABLER() {
                                         TABLED() { str << "Keys written"; }
                                         TABLED() { str << self->KeysWritten; }
                                     }
@@ -100,6 +113,11 @@ namespace NKikimr::NTestShard {
                                     TABLER() {
                                         TABLED() { str << "Writes in flight"; }
                                         TABLED() { str << self->WritesInFlight.size(); }
+                                    }
+
+                                    TABLER() {
+                                        TABLED() { str << "Reads in flight"; }
+                                        TABLED() { str << self->ReadsInFlight.size() << '/' << self->KeysBeingRead.size(); }
                                     }
 
                                     TABLER() {
@@ -135,6 +153,7 @@ namespace NKikimr::NTestShard {
 
                                     output(self->StateServerWriteLatency, "StateServerWriteLatency");
                                     output(self->WriteLatency, "WriteLatency");
+                                    output(self->ReadLatency, "ReadLatency");
                                 }
                             }
                         }

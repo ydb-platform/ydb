@@ -17,7 +17,7 @@ namespace NKikimr::NTestShard {
         std::unordered_map<TString, TKeyInfo> KeysBefore;
         std::unordered_map<TString, TKeyInfo> Keys;
         std::deque<TKey*> TransitionInFlight;
-        std::unordered_map<ui64, std::tuple<TString, ui32, ui32>> QueriesInFlight;
+        std::unordered_map<ui64, TString> QueriesInFlight;
         ui64 LastCookie = 0;
         std::deque<TString> KeysPending;
 
@@ -114,7 +114,7 @@ namespace NKikimr::NTestShard {
             Send(TabletActorId, ev.release());
         }
 
-        std::tuple<TString, ui32, ui32> PopQueryByCookie(ui64 cookie) {
+        TString PopQueryByCookie(ui64 cookie) {
             auto node = QueriesInFlight.extract(cookie);
             Y_VERIFY(node);
             return node.mapped();
@@ -198,7 +198,7 @@ namespace NKikimr::NTestShard {
         };
 
         void ProcessReadResult(ui64 cookie, const TString& message, EReadOutcome outcome, const TString& value) {
-            const auto [key, offset, size] = PopQueryByCookie(cookie);
+            const TString& key = PopQueryByCookie(cookie);
 
             if (outcome == EReadOutcome::IMMEDIATE_RETRY) {
                 STLOG(PRI_ERROR, TEST_SHARD, TS23, "read immediate retry", (TabletId, TabletId), (Message, message));
@@ -222,9 +222,8 @@ namespace NKikimr::NTestShard {
                 StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
                 TString data = FastGenDataForLZ4(len, seed);
 
-                Y_VERIFY_S(offset < len && size <= len - offset && value.size() == size && data.substr(offset, size) == value,
-                    "TabletId# " << TabletId << " Key# " << key << " value mismatch"
-                    << " value.size# " << value.size() << " offset# " << offset << " size# " << size);
+                Y_VERIFY_S(value == data, "TabletId# " << TabletId << " Key# " << key << " value mismatch"
+                    << " value.size# " << value.size());
 
                 STLOG(PRI_DEBUG, TEST_SHARD, TS25, "read key", (TabletId, TabletId), (Key, key));
             }
@@ -270,17 +269,8 @@ namespace NKikimr::NTestShard {
         }
 
         void IssueRead(const TString& key) {
-            ui64 len, seed, id;
-            StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
-
-            std::optional<ui32> offset, size;
-            if (RandomNumber(2u)) {
-                offset = RandomNumber(len);
-                size = 1 + RandomNumber(len - *offset);
-            }
-
             const ui64 cookie = ++LastCookie;
-            const bool inserted = QueriesInFlight.try_emplace(cookie, key, offset.value_or(0), size.value_or(len)).second;
+            const bool inserted = QueriesInFlight.try_emplace(cookie, key).second;
             Y_VERIFY(inserted);
 
             std::unique_ptr<IEventBase> ev;
@@ -292,12 +282,6 @@ namespace NKikimr::NTestShard {
                 request->Record.SetCookie(cookie);
                 auto *cmdRead = request->Record.AddCmdRead();
                 cmdRead->SetKey(key);
-                if (offset) {
-                    cmdRead->SetOffset(*offset);
-                }
-                if (size) {
-                    cmdRead->SetSize(*size);
-                }
                 ++WaitedReadsViaEvResponse;
                 ev = std::move(request);
             } else {
@@ -305,12 +289,6 @@ namespace NKikimr::NTestShard {
                 request->Record.set_tablet_id(TabletId);
                 request->Record.set_cookie(cookie);
                 request->Record.set_key(key);
-                if (offset) {
-                    request->Record.set_offset(*offset);
-                }
-                if (size) {
-                    request->Record.set_size(*size);
-                }
                 ++WaitedReadsViaEvReadResponse;
                 ev = std::move(request);
             }
@@ -646,6 +624,73 @@ namespace NKikimr::NTestShard {
         if (Settings.RestartPeriodsSize() && ev->Get()->InitialCheck) {
             TActivationContext::Schedule(GenerateRandomInterval(Settings.GetRestartPeriods()), new IEventHandle(
                 TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
+        }
+    }
+
+    bool TLoadActor::IssueRead() {
+        std::vector<TString> options;
+        for (const auto& [key, info] : Keys) {
+            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
+                options.push_back(key);
+            }
+        }
+        if (options.empty()) {
+            return false;
+        }
+        const size_t index = RandomNumber(options.size());
+        const TString& key = options[index];
+        ui64 len, seed, id;
+        StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
+        const ui32 offset = RandomNumber(len);
+        const ui32 size = 1 + RandomNumber(len - offset);
+
+        auto request = CreateRequest();
+        auto *cmdRead = request->Record.AddCmdRead();
+        cmdRead->SetKey(key);
+        cmdRead->SetOffset(offset);
+        cmdRead->SetSize(size);
+
+        STLOG(PRI_INFO, TEST_SHARD, TS16, "reading key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size));
+
+        ReadsInFlight.try_emplace(request->Record.GetCookie(), key, offset, size, TActivationContext::Monotonic());
+        ++KeysBeingRead[key];
+        Send(TabletActorId, request.release());
+
+        return true;
+    }
+
+    void TLoadActor::ProcessReadResult(ui64 cookie, const NProtoBuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TReadResult>& results) {
+        for (const auto& result : results) {
+            auto node = ReadsInFlight.extract(cookie);
+            Y_VERIFY(node);
+            auto& [key, offset, size, timestamp] = node.mapped();
+            const TMonotonic now = TActivationContext::Monotonic();
+
+            auto it = KeysBeingRead.find(key);
+            Y_VERIFY(it != KeysBeingRead.end() && it->second);
+            if (!--it->second) {
+                KeysBeingRead.erase(key);
+            }
+
+            ui64 len, seed, id;
+            StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
+            TString data = FastGenDataForLZ4(len, seed);
+
+            STLOG(PRI_INFO, TEST_SHARD, TS18, "read key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size),
+                (Status, NKikimrProto::EReplyStatus_Name(result.GetStatus())));
+
+            Y_VERIFY(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR);
+
+            if (result.GetStatus() == NKikimrProto::OK) {
+                const TString value = result.GetValue();
+
+                Y_VERIFY_S(offset < len && size <= len - offset && value.size() == size && data.substr(offset, size) == value,
+                    "TabletId# " << TabletId << " Key# " << key << " value mismatch"
+                    << " value.size# " << value.size() << " offset# " << offset << " size# " << size);
+
+                ReadLatency.Add(now - timestamp);
+                ReadSpeed.Add(TActivationContext::Now(), size);
+            }
         }
     }
 

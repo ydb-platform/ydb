@@ -7,7 +7,8 @@ namespace NKikimr::NTestShard {
         options.reserve(Keys.size());
         ui64 accumLen = 0;
         for (const auto& [key, info] : Keys) {
-            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
+            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED &&
+                    !KeysBeingRead.contains(key)) {
                 accumLen += info.Len;
                 options.emplace_back(accumLen, key);
             }

@@ -32,6 +32,23 @@ using namespace NThreading;
 using namespace NYql;
 using namespace NYql::NDq;
 
+namespace {
+NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
+    switch (mode) {
+    case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
+        return NSQLTranslation::EBindingsMode::ENABLED;
+    case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
+        return NSQLTranslation::EBindingsMode::DISABLED;
+    case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
+        return NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
+    case NKikimrConfig::TTableServiceConfig::BM_DROP:
+        return NSQLTranslation::EBindingsMode::DROP;
+    default:
+        return NSQLTranslation::EBindingsMode::ENABLED;
+    }
+}
+}
+
 class TKqpCompileActor : public TActorBootstrapped<TKqpCompileActor> {
 public:
     using TBase = TActorBootstrapped<TKqpCompileActor>;
@@ -388,6 +405,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePredicateExtractForScanQuery = serviceConfig.GetEnablePredicateExtractForScanQueries();
     kqpConfig.EnableSequentialReads = serviceConfig.GetEnableSequentialReads();
     kqpConfig.EnableKqpImmediateEffects = serviceConfig.GetEnableKqpImmediateEffects();
+    kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

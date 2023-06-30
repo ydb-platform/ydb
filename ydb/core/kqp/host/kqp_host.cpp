@@ -1079,7 +1079,11 @@ private:
                 settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
             }
 
-            settings.DynamicClusterProvider = SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources() ? NYql::KikimrProviderName : TString{};
+            if (SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
+                settings.DynamicClusterProvider = NYql::KikimrProviderName;
+                settings.BindingsMode = SessionCtx->Config().BindingsMode;
+            }
+
             settings.InferSyntaxVersion = true;
             settings.V0ForceDisable = false;
             settings.WarnOnV0 = false;

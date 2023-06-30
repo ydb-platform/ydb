@@ -1296,6 +1296,15 @@ message TTableServiceConfig {
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     optional bool EnableSequentialReads = 38 [default = false];
     optional bool EnableKqpImmediateEffects = 39 [default = true];
+
+    enum EBindingsMode {
+        BM_ENABLED = 0;
+        BM_DISABLED = 1;
+        BM_DROP_WITH_WARNING = 2;
+        BM_DROP = 3;
+    }
+
+    optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
 };
 
 // Config describes immediate controls and allows

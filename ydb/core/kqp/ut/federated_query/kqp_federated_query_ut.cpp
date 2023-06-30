@@ -537,6 +537,122 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
     }
+
+    std::pair<NYdb::NQuery::TScriptExecutionOperation, TFetchScriptResultsResult> ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket1";
+        const TString object = "test_object";
+
+        CreateBucketWithObject(bucket, object, TEST_CONTENT);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetBindingsMode(mode);
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableScriptExecutionOperations(true);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetFeatureFlags(featureFlags);
+
+        TKikimrRunner kikimr(settings);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="{object}",
+                FORMAT="json_each_row"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+            "object"_a = object
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM bindings.`{external_table}`
+            )", "external_table"_a=externalTableName);
+
+        auto db = kikimr.GetQueryClient();
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        TFetchScriptResultsResult results(TStatus(EStatus::SUCCESS, {}));
+        if (readyOp.Metadata().ExecStatus == EExecStatus::Completed) {
+            results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        }
+        return {readyOp, results};
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithDifferentBindingsMode) {
+        {
+            auto [readyOp, results] = ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::BM_DROP);
+            UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+            UNIT_ASSERT_VALUES_EQUAL(readyOp.Status().GetIssues().ToString(), "");
+
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
+
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
+
+        }
+
+        {
+            auto [readyOp, results] = ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING);
+            UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+            UNIT_ASSERT_VALUES_EQUAL(readyOp.Status().GetIssues().ToString(), "<main>:2:31: Warning: Please remove 'bindings.' from your query, the support for this syntax will be dropped soon, code: 4538\n");
+
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "trololo");
+
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
+        }
+
+        {
+            auto [readyOp, results] = ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::BM_ENABLED);
+            UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Failed);
+            UNIT_ASSERT_VALUES_EQUAL(readyOp.Status().GetIssues().ToString(), "<main>:2:40: Error: Table binding `/Root/test_binding_resolve` is not defined\n");
+        }
+
+        {
+            auto [readyOp, results] = ExecuteScriptOverBinding(NKikimrConfig::TTableServiceConfig::BM_DISABLED);
+            UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Failed);
+            UNIT_ASSERT_VALUES_EQUAL(readyOp.Status().GetIssues().ToString(), "<main>:2:31: Error: Please remove 'bindings.' from your query, the support for this syntax has ended, code: 4601\n");
+        }
+    }
+
 }
 
 } // namespace NKqp

@@ -475,13 +475,13 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
     if (!result->empty()) {
         auto& first = result->front();
         if (first.FirstRowId < beginRowId) {
-            first.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(beginKey));
+            first.FirstKey = TSerializedCellVec(beginKey);
             first.FirstRowId = beginRowId;
             first.FirstInclusive = true;
         }
         auto& last = result->back();
         if (last.LastRowId > endRowId) {
-            last.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(endKey));
+            last.LastKey = TSerializedCellVec(endKey);
             last.LastRowId = endRowId;
             last.LastInclusive = false;
         } else if (last.LastRowId == endRowId && last.LastInclusive) {

@@ -78,7 +78,7 @@ TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
         if (range.Point) {
             TPartitionWithRange ret(it);
             if (!it->Range->IsPoint) {
-                ret.PointOrRange = TSerializedCellVec(TSerializedCellVec::Serialize(range.From));
+                ret.PointOrRange = TSerializedCellVec(range.From);
             } else {
                 ret.FullRange.emplace(TSerializedTableRange(range));
             }
@@ -147,7 +147,7 @@ TVector<TPartitionWithRange> GetKeyRangePartitions(const TTableRange& range,
                 rangePartitions.back().FullRange.emplace(TSerializedTableRange(fromValues, true, fromValues, true));
                 rangePartitions.back().FullRange->Point = true;
             } else {
-                rangePartitions.back().PointOrRange = TSerializedCellVec(TSerializedCellVec::Serialize(fromValues));
+                rangePartitions.back().PointOrRange = TSerializedCellVec(fromValues);
             }
         } else {
             auto r = TTableRange(fromValues, inclusiveFrom, toValues, inclusiveTo);

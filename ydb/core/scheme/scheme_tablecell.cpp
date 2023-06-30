@@ -63,6 +63,128 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
     };
 }
 
+namespace {
+
+    struct TCellHeader {
+        TCellHeader() = default;
+
+        TCellHeader(ui32 rawValue) : RawValue(rawValue) {}
+
+        TCellHeader(ui32 cellSize, bool isNull)
+            : RawValue(cellSize | (static_cast<ui32>(isNull) << 31))
+        {}
+
+        ui32 CellSize() const { return RawValue & ~(1ULL << 31); }
+
+        bool IsNull() const { return RawValue & (1ULL << 31); };
+
+        ui32 RawValue = 0;
+    };
+
+    static_assert(sizeof(TCellHeader) == sizeof(ui32));
+
+    Y_FORCE_INLINE void SerializeCellVec(TConstArrayRef<TCell> cells, TString &resultBuffer, TVector<TCell> *resultCells) {
+        resultBuffer.clear();
+        if (resultCells)
+            resultCells->clear();
+
+        if (cells.empty()) {
+            return;
+        }
+
+        size_t size = sizeof(ui16);
+        for (auto& cell : cells) {
+            size += sizeof(TCellHeader) + cell.Size();
+        }
+
+        resultBuffer.resize(size);
+        char* resultBufferData = const_cast<char*>(resultBuffer.data());
+
+        ui16 cellsSize = cells.size();
+        WriteUnaligned<ui16>(resultBufferData, cellsSize);
+        resultBufferData += sizeof(cellsSize);
+
+        if (resultCells) {
+            resultCells->resize(cellsSize);
+        }
+
+        for (size_t i = 0; i < cellsSize; ++i) {
+            TCellHeader header(cells[i].Size(), cells[i].IsNull());
+            WriteUnaligned<ui32>(resultBufferData, header.RawValue);
+            resultBufferData += sizeof(header);
+
+            const auto & cell = cells[i];
+            memcpy(resultBufferData, cell.Data(), cell.Size());
+
+            if (resultCells && !cell.IsNull()) {
+                (*resultCells)[i] = TCell(resultBufferData, cell.Size());
+            }
+
+            resultBufferData += cell.Size();
+        }
+    }
+
+    Y_FORCE_INLINE bool TryDeserializeCellVec(const TString & data, TString & resultBuffer, TVector<TCell> & resultCells) {
+        resultBuffer.clear();
+        resultCells.clear();
+
+        if (data.empty())
+            return true;
+
+        const char* buf = data.data();
+        const char* bufEnd = data.data() + data.size();
+        if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16)))
+            return false;
+
+        ui16 cellsSize = ReadUnaligned<ui16>(buf);
+        buf += sizeof(cellsSize);
+
+        resultCells.resize(cellsSize);
+
+        for (ui32 i = 0; i < cellsSize; ++i) {
+            if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(TCellHeader))) {
+                resultCells.clear();
+                return false;
+            }
+
+            TCellHeader cellHeader = ReadUnaligned<TCellHeader>(buf);
+            buf += sizeof(cellHeader);
+
+            if (bufEnd - buf < static_cast<ptrdiff_t>(cellHeader.CellSize())) {
+                resultCells.clear();
+                return false;
+            }
+
+            resultCells[i] = cellHeader.IsNull() ? TCell() : TCell(buf, cellHeader.CellSize());
+            buf += cellHeader.CellSize();
+        }
+
+        resultBuffer = data;
+        return true;
+    }
+
+}
+
+TSerializedCellVec::TSerializedCellVec(TConstArrayRef<TCell> cells)
+{
+    SerializeCellVec(cells, Buf, &Cells);
+}
+
+void TSerializedCellVec::Serialize(TString& res, TConstArrayRef<TCell> cells) {
+    SerializeCellVec(cells, res, nullptr /*resultCells*/);
+}
+
+TString TSerializedCellVec::Serialize(TConstArrayRef<TCell> cells) {
+    TString result;
+    SerializeCellVec(cells, result, nullptr /*resultCells*/);
+
+    return result;
+}
+
+bool TSerializedCellVec::DoTryParse(const TString& data) {
+    return TryDeserializeCellVec(data, Buf, Cells);
+}
+
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
     auto typeId = typeInfo.GetTypeId();
     TString res;

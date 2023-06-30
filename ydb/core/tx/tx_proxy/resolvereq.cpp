@@ -49,7 +49,7 @@ namespace {
                 break;
         }
 
-        buf.Parse(TSerializedCellVec::Serialize(key));
+        buf = TSerializedCellVec(key);
         return true;
     }
 

@@ -75,7 +75,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(
 
             shardId = key.GetPartitions()[partitionIndex].ShardId;
 
-            auto point = TSerializedCellVec(TSerializedCellVec::Serialize(keyValue));
+            auto point = TSerializedCellVec(keyValue);
             auto& shardData = ret[shardId];
             if (key.GetPartitions()[partitionIndex].Range->IsPoint) {
                 // singular case when partition is just a point
@@ -326,7 +326,7 @@ TSerializedPointOrRange FillOneRange(NUdf::TUnboxedValue& begin, NUdf::TUnboxedV
         YQL_CLOG(DEBUG, ProviderKqp) << "Formed point [extract predicate]: "
             << DebugPrintPoint(keyColumnTypes, fromKeyValues, *AppData()->TypeRegistry);
 
-        return TSerializedCellVec(TSerializedCellVec::Serialize(fromKeyValues));
+        return TSerializedCellVec(fromKeyValues);
     }
 
     auto range = TSerializedTableRange(fromKeyValues, fromInclusive, toKeyValues, toInclusive);
@@ -577,7 +577,7 @@ TVector<TSerializedPointOrRange> ExtractRanges(const TKqpTableKeys& tableKeys,
         const auto& range = source.GetKeyRange();
         if (range.GetRangeIsPoint() && range.GetFrom().ValuesSize() == keyColumnTypes.size()) {
             auto cells = FillKeyValues(keyColumnTypes, range.GetFrom(), stageInfo, holderFactory, typeEnv);
-            ranges.push_back(TSerializedCellVec(TSerializedCellVec::Serialize(cells)));
+            ranges.push_back(TSerializedCellVec(cells));
         } else {
             ranges.push_back(MakeKeyRange(keyColumnTypes, range, stageInfo, holderFactory, typeEnv));
         }

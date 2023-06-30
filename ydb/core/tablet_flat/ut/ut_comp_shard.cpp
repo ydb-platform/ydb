@@ -251,8 +251,8 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
                     }
                     slice.FirstRowId = beginRow - !slice.FirstInclusive;
                     slice.LastRowId = endRow - slice.LastInclusive;
-                    slice.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[slice.FirstRowId])));
-                    slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[slice.LastRowId])));
+                    slice.FirstKey = TSerializedCellVec(tool.KeyCells(rows[slice.FirstRowId]));
+                    slice.LastKey = TSerializedCellVec(tool.KeyCells(rows[slice.LastRowId]));
 
                     for (ui64 splitRow = slice.FirstRowId; splitRow <= slice.LastRowId; ++splitRow) {
                         for (ui64 splitFlags = 0; splitFlags < 2; ++splitFlags) {
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
                             TTableInfo table;
                             table.RowScheme = lay.RowScheme();
-                            table.SplitKeys[1] = TSerializedCellVec(TSerializedCellVec::Serialize(splitCells));
+                            table.SplitKeys[1] = TSerializedCellVec(splitCells);
                             TTableShard left;
                             TTableShard right;
                             left.RightKey = 1;
@@ -337,8 +337,8 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         slice.FirstInclusive = true;
         slice.LastRowId = rows.Size() - 1;
         slice.LastInclusive = true;
-        slice.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[slice.FirstRowId])));
-        slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[slice.LastRowId])));
+        slice.FirstKey = TSerializedCellVec(tool.KeyCells(rows[slice.FirstRowId]));
+        slice.LastKey = TSerializedCellVec(tool.KeyCells(rows[slice.LastRowId]));
 
         TRowId splitRow = rows.Size() / 2;
 
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         for (ui32 k = 1; k <= 5; ++k) {
             auto cells = tool.KeyCells(rows[splitRow]);
             cells[1] = Cimple(k);
-            table.SplitKeys[k] = TSerializedCellVec(TSerializedCellVec::Serialize(cells));
+            table.SplitKeys[k] = TSerializedCellVec(cells);
             auto* left = shards.Back();
             shards.PushBack(new TTableShard);
             auto* right = shards.Back();
@@ -400,14 +400,14 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         slice.FirstInclusive = false;
         slice.LastRowId = rows.Size() - 3; // the last 3 rows are not included
         slice.LastInclusive = false;
-        slice.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[slice.FirstRowId])));
-        slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[slice.LastRowId])));
+        slice.FirstKey = TSerializedCellVec(tool.KeyCells(rows[slice.FirstRowId]));
+        slice.LastKey = TSerializedCellVec(tool.KeyCells(rows[slice.LastRowId]));
 
         TRowId splitRow = rows.Size() / 2;
         TVector<TSerializedCellVec> splitKeys;
-        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(*TSchemedCookRow(*lay).Col(500_u64, 42_u32))));
-        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(rows[splitRow])));
-        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(*TSchemedCookRow(*lay).Col(5000_u64, 42_u32))));
+        splitKeys.emplace_back(tool.KeyCells(*TSchemedCookRow(*lay).Col(500_u64, 42_u32)));
+        splitKeys.emplace_back(tool.KeyCells(rows[splitRow]));
+        splitKeys.emplace_back(tool.KeyCells(*TSchemedCookRow(*lay).Col(5000_u64, 42_u32)));
 
         TTableInfo table;
         table.RowScheme = lay.RowScheme();
@@ -736,8 +736,8 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
             TSlice slice = partView1.Slices->at(0);
             slice.FirstRowId += 2;
             slice.LastRowId -= 2;
-            slice.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows1[slice.FirstRowId])));
-            slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows1[slice.LastRowId])));
+            slice.FirstKey = TSerializedCellVec(tool.KeyCells(rows1[slice.FirstRowId]));
+            slice.LastKey = TSerializedCellVec(tool.KeyCells(rows1[slice.LastRowId]));
             builder.AddSlice(partView1.Part.Get(), slice, true);
         }
 
@@ -791,16 +791,16 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         {
             auto& bounds = underlayMaskValues.emplace_back();
-            bounds.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[3])));
-            bounds.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[7])));
+            bounds.FirstKey = TSerializedCellVec(tool.KeyCells(rows[3]));
+            bounds.LastKey = TSerializedCellVec(tool.KeyCells(rows[7]));
             bounds.FirstInclusive = false;
             bounds.LastInclusive = true;
         }
 
         {
             auto& bounds = underlayMaskValues.emplace_back();
-            bounds.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[11])));
-            bounds.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(tool.KeyCells(rows[14])));
+            bounds.FirstKey = TSerializedCellVec(tool.KeyCells(rows[11]));
+            bounds.LastKey = TSerializedCellVec(tool.KeyCells(rows[14]));
             bounds.FirstInclusive = true;
             bounds.LastInclusive = false;
         }
@@ -852,8 +852,8 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         }
 
         TVector<TSerializedCellVec> splitKeyValues;
-        splitKeyValues.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(rows[6])));
-        splitKeyValues.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(rows[14])));
+        splitKeyValues.emplace_back(tool.KeyCells(rows[6]));
+        splitKeyValues.emplace_back(tool.KeyCells(rows[14]));
         TSplitKeys splitKeys(lay.RowScheme(), std::move(splitKeyValues));
 
         auto born = TCompaction(nullptr, CreateConf(4, &splitKeys))

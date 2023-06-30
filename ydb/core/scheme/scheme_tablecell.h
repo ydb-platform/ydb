@@ -415,12 +415,14 @@ static_assert(std::is_nothrow_default_constructible_v<TOwnedCellVec>, "Expected 
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {
 public:
+    explicit TSerializedCellVec(TConstArrayRef<TCell> cells);
+
     explicit TSerializedCellVec(const TString& buf)
     {
         Parse(buf);
     }
 
-    TSerializedCellVec() {}
+    TSerializedCellVec() = default;
 
     TSerializedCellVec(const TSerializedCellVec &other)
         : Buf(other.Buf)
@@ -457,50 +459,20 @@ public:
     }
 
     static bool TryParse(const TString& data, TSerializedCellVec& vec) {
-        bool ok = DoTryParse(data, vec);
-        if (!ok) {
-            vec.Cells.clear();
-            vec.Buf.clear();
-        }
-        return ok;
+        return vec.DoTryParse(data);
     }
 
     void Parse(const TString &buf) {
-        Y_VERIFY(TryParse(buf, *this));
+        Y_VERIFY(DoTryParse(buf));
     }
 
     TConstArrayRef<TCell> GetCells() const {
         return Cells;
     }
 
-    static void Serialize(TString& res, const TConstArrayRef<TCell>& cells) {
-        size_t sz = sizeof(ui16);
-        for (auto& c : cells) {
-            sz += sizeof(TValue) + c.Size();
-        }
+    static void Serialize(TString& res, TConstArrayRef<TCell> cells);
 
-        if (res.capacity() < sz) {
-            res.reserve(FastClp2(sz + 1) - 1);
-        }
-
-        DoSerialize(res, cells);
-    }
-
-    static TString Serialize(const TConstArrayRef<TCell>& cells) {
-        if (cells.empty())
-            return TString();
-
-        size_t sz = sizeof(ui16);
-        for (auto& c : cells) {
-            sz += sizeof(TValue) + c.Size();
-        }
-
-        TString res;
-        res.reserve(sz);
-
-        DoSerialize(res, cells);
-        return res;
-    }
+    static TString Serialize(TConstArrayRef<TCell> cells);
 
     const TString &GetBuffer() const { return Buf; }
 
@@ -510,58 +482,7 @@ public:
     }
 
 private:
-
-#pragma pack(push,4)
-    struct TValue {
-        ui32 Size : 31;
-        ui32 IsNull : 1;
-    };
-#pragma pack(pop)
-
-    static bool DoTryParse(const TString& data, TSerializedCellVec& vec) {
-        vec.Cells.clear();
-        if (data.empty())
-            return true;
-
-        if (data.size() < sizeof(ui16))
-            return false;
-
-        ui16 count = ReadUnaligned<ui16>(data.data());
-        vec.Cells.resize(count);
-        const char* buf = data.data() + sizeof(count);
-        const char* bufEnd = data.data() + data.size();
-        for (ui32 ki = 0; ki < count; ++ki) {
-            if (bufEnd - buf < (long)sizeof(TValue))
-                return false;
-
-            const TValue v = ReadUnaligned<TValue>((const TValue*)buf);
-            if (bufEnd - buf < (long)sizeof(TValue) + v.Size)
-                return false;
-            vec.Cells[ki] = v.IsNull ? TCell() : TCell((const char*)((const TValue*)buf + 1), v.Size);
-            buf += sizeof(TValue) + v.Size;
-        }
-
-        vec.Buf = data;
-        return true;
-    }
-
-    // note, that res space should be reserved before this call
-    static void DoSerialize(TString& res, const TConstArrayRef<TCell>& cells) {
-        res.clear();
-
-        if (cells.empty())
-            return;
-
-        ui16 cnt = cells.size();
-        res.append((const char*)&cnt, sizeof(ui16));
-        for (auto& c : cells) {
-            TValue header;
-            header.Size = c.Size();
-            header.IsNull = c.IsNull();
-            res.append((const char*)&header, sizeof(header));
-            res.append(c.Data(), c.Size());
-        }
-    }
+    bool DoTryParse(const TString& data);
 
 private:
     TString Buf;

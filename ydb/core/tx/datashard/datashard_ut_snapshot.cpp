@@ -2217,7 +2217,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
             TVector<TCell> key{ TCell::Make(ui32(2)) };
             TVector<TCell> values{ TCell::Make(ui32(22)) };
-            TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+            TSerializedCellVec serializedKey(key);
             TString serializedValues(TSerializedCellVec::Serialize(values));
             rows->emplace_back(serializedKey, serializedValues);
 

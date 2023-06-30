@@ -358,8 +358,8 @@ class TCdcStreamScan: public IActorCallback, public IScan {
     public:
         void AddRow(TArrayRef<const TCell> key, TArrayRef<const TCell> value) {
             const auto& [k, v] = Data.emplace_back(
-                TSerializedCellVec(TSerializedCellVec::Serialize(key)),
-                TSerializedCellVec(TSerializedCellVec::Serialize(value))
+                TSerializedCellVec(key),
+                TSerializedCellVec(value)
             );
             ByteSize += k.GetBuffer().size() + v.GetBuffer().size();
         }

@@ -284,8 +284,7 @@ void AddKeyQuery(
 {
     // convertion is ugly, but for tests is OK
     auto cells = ToCells(keys);
-    auto buf = TSerializedCellVec::Serialize(cells);
-    request.Keys.emplace_back(buf);
+    request.Keys.emplace_back(cells);
 }
 
 template <typename TCellType>

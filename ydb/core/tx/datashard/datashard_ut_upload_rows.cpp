@@ -38,7 +38,7 @@ static void DoStartUploadTestRows(
     for (ui32 i = 0; i < 32; i++) {
         auto key = TVector<TCell>{TCell::Make(1 << i)};
         auto value = TVector<TCell>{TCell::Make(i)};
-        TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+        TSerializedCellVec serializedKey(key);
         TString serializedValue = TSerializedCellVec::Serialize(value);
         rows->emplace_back(serializedKey, serializedValue);
     }
@@ -84,7 +84,7 @@ static TActorId DoStartUploadRows(
     for (const auto& kv : data) {
         auto key = TVector<TCell>{TCell::Make(kv.first)};
         auto value = TVector<TCell>{TCell::Make(kv.second)};
-        TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+        TSerializedCellVec serializedKey(key);
         TString serializedValue = TSerializedCellVec::Serialize(value);
         rows->emplace_back(serializedKey, serializedValue);
     }
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
-                TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+                TSerializedCellVec serializedKey(key);
                 TString serializedValue = TSerializedCellVec::Serialize(value);
                 rows->emplace_back(serializedKey, serializedValue);
             }
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
-                TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+                TSerializedCellVec serializedKey(key);
                 TString serializedValue = TSerializedCellVec::Serialize(value);
                 rows->emplace_back(serializedKey, serializedValue);
             }
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
-                TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+                TSerializedCellVec serializedKey(key);
                 TString serializedValue = TSerializedCellVec::Serialize(value);
                 rows->emplace_back(serializedKey, serializedValue);
             }
@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
-                TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+                TSerializedCellVec serializedKey(key);
                 TString serializedValue = TSerializedCellVec::Serialize(value);
                 rows->emplace_back(serializedKey, serializedValue);
             }
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto value = TVector<TCell>{TCell::Make(ui32(i * 10))};
-                TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+                TSerializedCellVec serializedKey(key);
                 TString serializedValue = TSerializedCellVec::Serialize(value);
                 rows->emplace_back(serializedKey, serializedValue);
             }
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             for (ui32 i = 1; i <= 9; i++) {
                 auto key = TVector<TCell>{TCell::Make(ui32(i))};
                 auto extra = TVector<TCell>{TCell::Make(ui32(i * 10))};
-                TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(key));
+                TSerializedCellVec serializedKey(key);
                 TString serializedExtra = TSerializedCellVec::Serialize(extra);
                 rows->emplace_back(serializedKey, serializedExtra);
             }

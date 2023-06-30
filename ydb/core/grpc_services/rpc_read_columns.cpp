@@ -534,7 +534,7 @@ private:
             MinKeyInclusive = proto->from_key_inclusive();
         } else {
             TVector<TCell> allNulls(KeyColumnTypes.size());
-            MinKey.Parse(TSerializedCellVec::Serialize(allNulls));
+            MinKey = TSerializedCellVec(allNulls);
             MinKeyInclusive = true;
         }
 
@@ -548,7 +548,7 @@ private:
             MaxKeyInclusive = proto->to_key_inclusive();
         } else {
             TVector<TCell> infinity;
-            MaxKey.Parse(TSerializedCellVec::Serialize(infinity));
+            MaxKey = TSerializedCellVec(infinity);
             MaxKeyInclusive = false;
         }
 

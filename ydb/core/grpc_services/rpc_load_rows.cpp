@@ -246,9 +246,9 @@ private:
             cost += TUpsertCost::OneRowCost(sz);
 
             // Save serialized key and value
-            TSerializedCellVec serializedKey(TSerializedCellVec::Serialize(keyCells));
+            TSerializedCellVec serializedKey(keyCells);
             TString serializedValue = TSerializedCellVec::Serialize(valueCells);
-            AllRows.emplace_back(serializedKey, serializedValue);
+            AllRows.emplace_back(std::move(serializedKey), std::move(serializedValue));
         }
 
         RuCost = TUpsertCost::CostToRu(cost);

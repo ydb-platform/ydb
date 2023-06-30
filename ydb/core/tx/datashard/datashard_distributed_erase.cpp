@@ -652,7 +652,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     indexCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
                 }
 
-                indexColumnValues.push_back(std::move(TSerializedCellVec::Serialize(indexCells)));
+                indexColumnValues.push_back(TSerializedCellVec::Serialize(indexCells));
             }
         }
 

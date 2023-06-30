@@ -413,7 +413,7 @@ using NFmt::TPrintableTypedCells;
 
 TString ToSerialized(ui64 key) {
     const auto cell = TCell::Make(key);
-    const TSerializedCellVec saved(TSerializedCellVec::Serialize(TArrayRef<const TCell>(&cell, 1)));
+    const TSerializedCellVec saved(TArrayRef<const TCell>(&cell, 1));
     return TString(saved.GetBuffer());
 }
 

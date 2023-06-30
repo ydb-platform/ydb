@@ -16,6 +16,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/pgproxy
+    ydb/core/local_pgwire
     ydb/core/protos
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/ydb_driver

@@ -37,12 +37,16 @@ struct TEvPGEvents {
         uint32_t TableId = 0;
         uint16_t ColumnId = 0;
         uint32_t DataType;
-        uint16_t DataTypeSize;
-        //uint32_t DataTypeModifier;
+        int16_t DataTypeSize;
+        int32_t DataTypeModifier;
         //uint16_t Format;
     };
 
-    using TDataRow = std::vector<TString>;
+    struct TRowValueField {
+        std::optional<TString> Value;
+    };
+
+    using TDataRow = std::vector<TRowValueField>;
 
     struct TEvConnectionOpened : NActors::TEventLocal<TEvConnectionOpened, EvConnectionOpened> {
         std::shared_ptr<TPGInitial> Message;

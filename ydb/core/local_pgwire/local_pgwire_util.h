@@ -2,6 +2,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/pgproxy/pg_proxy_types.h>
+#include <ydb/core/pgproxy/pg_proxy_events.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -156,11 +157,60 @@ inline TString ColumnValueToString(NYdb::TValueParser& valueParser) {
     }
 }
 
+inline NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& valueParser) {
+    switch (valueParser.GetKind()) {
+    case NYdb::TTypeParser::ETypeKind::Primitive:
+        return {.Value = ColumnPrimitiveValueToString(valueParser)};
+    case NYdb::TTypeParser::ETypeKind::Optional: {
+        NPG::TEvPGEvents::TRowValueField value;
+        valueParser.OpenOptional();
+        if (!valueParser.IsNull()) {
+            value = ColumnValueToRowValueField(valueParser);
+        }
+        valueParser.CloseOptional();
+        return value;
+    }
+    case NYdb::TTypeParser::ETypeKind::Tuple: {
+        TString value;
+        valueParser.OpenTuple();
+        while (valueParser.TryNextElement()) {
+            if (!value.empty()) {
+                value += ',';
+            }
+            value += ColumnValueToString(valueParser);
+        }
+        valueParser.CloseTuple();
+        return {.Value = value};
+    }
+    case NYdb::TTypeParser::ETypeKind::Pg: {
+        auto pg = valueParser.GetPg();
+        if (!pg.IsNull()) {
+            return {.Value = valueParser.GetPg().Content_};
+        } else {
+            return {};
+        }
+    }
+    default:
+        return {};
+    }
+}
+
 inline uint32_t GetPgOidFromYdbType(NYdb::TType type) {
     NYdb::TTypeParser parser(type);
     switch (parser.GetKind()) {
         case NYdb::TTypeParser::ETypeKind::Pg: {
             return parser.GetPg().Oid;
+        default:
+            return {};
+        }
+    }
+}
+
+inline std::optional<NYdb::TPgType> GetPgTypeFromYdbType(NYdb::TType type) {
+    NYdb::TTypeParser parser(type);
+    switch (parser.GetKind()) {
+        case NYdb::TTypeParser::ETypeKind::Pg: {
+            return parser.GetPg();
         default:
             return {};
         }

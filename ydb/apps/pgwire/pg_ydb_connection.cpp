@@ -2,6 +2,7 @@
 #include "pg_ydb_connection.h"
 #include "log_impl.h"
 #include <ydb/core/pgproxy/pg_proxy_events.h>
+#include <ydb/core/local_pgwire/local_pgwire_util.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
@@ -70,97 +71,6 @@ public:
         Become(&TPgYdbConnection::StateWork);
     }
 
-    static TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {
-        switch (valueParser.GetPrimitiveType()) {
-            case NYdb::EPrimitiveType::Bool:
-                return TStringBuilder() << valueParser.GetBool();
-            case NYdb::EPrimitiveType::Int8:
-                return TStringBuilder() << valueParser.GetInt8();
-            case NYdb::EPrimitiveType::Uint8:
-                return TStringBuilder() << valueParser.GetUint8();
-            case NYdb::EPrimitiveType::Int16:
-                return TStringBuilder() << valueParser.GetInt16();
-            case NYdb::EPrimitiveType::Uint16:
-                return TStringBuilder() << valueParser.GetUint16();
-            case NYdb::EPrimitiveType::Int32:
-                return TStringBuilder() << valueParser.GetInt32();
-            case NYdb::EPrimitiveType::Uint32:
-                return TStringBuilder() << valueParser.GetUint32();
-            case NYdb::EPrimitiveType::Int64:
-                return TStringBuilder() << valueParser.GetInt64();
-            case NYdb::EPrimitiveType::Uint64:
-                return TStringBuilder() << valueParser.GetUint64();
-            case NYdb::EPrimitiveType::Float:
-                return TStringBuilder() << valueParser.GetFloat();
-            case NYdb::EPrimitiveType::Double:
-                return TStringBuilder() << valueParser.GetDouble();
-            case NYdb::EPrimitiveType::Utf8:
-                return TStringBuilder() << valueParser.GetUtf8();
-            case NYdb::EPrimitiveType::Date:
-                return valueParser.GetDate().ToString();
-            case NYdb::EPrimitiveType::Datetime:
-                return valueParser.GetDatetime().ToString();
-            case NYdb::EPrimitiveType::Timestamp:
-                return valueParser.GetTimestamp().ToString();
-            case NYdb::EPrimitiveType::Interval:
-                return TStringBuilder() << valueParser.GetInterval();
-            case NYdb::EPrimitiveType::TzDate:
-                return valueParser.GetTzDate();
-            case NYdb::EPrimitiveType::TzDatetime:
-                return valueParser.GetTzDatetime();
-            case NYdb::EPrimitiveType::TzTimestamp:
-                return valueParser.GetTzTimestamp();
-            case NYdb::EPrimitiveType::String:
-                return Base64Encode(valueParser.GetString());
-            case NYdb::EPrimitiveType::Yson:
-                return valueParser.GetYson();
-            case NYdb::EPrimitiveType::Json:
-                return valueParser.GetJson();
-            case NYdb::EPrimitiveType::JsonDocument:
-                return valueParser.GetJsonDocument();
-            case NYdb::EPrimitiveType::DyNumber:
-                return valueParser.GetDyNumber();
-            case NYdb::EPrimitiveType::Uuid:
-                return {};
-        }
-        return {};
-    }
-
-    static TString ColumnValueToString(NYdb::TValueParser& valueParser) {
-        switch (valueParser.GetKind()) {
-        case NYdb::TTypeParser::ETypeKind::Primitive:
-            return ColumnPrimitiveValueToString(valueParser);
-        case NYdb::TTypeParser::ETypeKind::Optional: {
-            TString value;
-            valueParser.OpenOptional();
-            if (valueParser.IsNull()) {
-                value = "NULL";
-            } else {
-                value = ColumnValueToString(valueParser);
-            }
-            valueParser.CloseOptional();
-            return value;
-        }
-        case NYdb::TTypeParser::ETypeKind::Tuple: {
-            TString value;
-            valueParser.OpenTuple();
-            while (valueParser.TryNextElement()) {
-                if (!value.empty()) {
-                    value += ',';
-                }
-                value += ColumnValueToString(valueParser);
-            }
-            valueParser.CloseTuple();
-            return value;
-        }
-        case NYdb::TTypeParser::ETypeKind::Pg: {
-            return valueParser.GetPg().Content_;
-        }
-        default:
-            return {};
-        }
-    }
-
     static TString ToPgSyntax(TStringBuf query) {
         return TStringBuilder() << "--!syntax_pg\n" << query;
     }
@@ -200,10 +110,19 @@ public:
 
                         {
                             for (const NYdb::TColumn& column : resultSet.GetColumnsMeta()) {
-                                // TODO: fill data types and sizes
-                                response->DataFields.push_back({
-                                    .Name = column.Name,
-                                });
+                                std::optional<NYdb::TPgType> pgType = NLocalPgWire::GetPgTypeFromYdbType(column.Type);
+                                if (pgType.has_value()) {
+                                    response->DataFields.push_back({
+                                        .Name = column.Name,
+                                        .DataType = pgType->Oid,
+                                        .DataTypeSize = pgType->Typlen,
+                                        .DataTypeModifier = pgType->Typmod,
+                                    });
+                                } else {
+                                    response->DataFields.push_back({
+                                        .Name = column.Name
+                                    });
+                                }
                             }
                         }
 
@@ -214,7 +133,7 @@ public:
                                 auto& row = response->DataRows.back();
                                 row.resize(parser.ColumnsCount());
                                 for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                                    row[index] = ColumnValueToString(parser.ColumnParser(index));
+                                    row[index] = NLocalPgWire::ColumnValueToRowValueField(parser.ColumnParser(index));
                                 }
                             }
                         }
@@ -369,10 +288,19 @@ public:
 
                         {
                             for (const NYdb::TColumn& column : resultSet.GetColumnsMeta()) {
-                                // TODO: fill data types and sizes
-                                response->DataFields.push_back({
-                                    .Name = column.Name,
-                                });
+                                std::optional<NYdb::TPgType> pgType = NLocalPgWire::GetPgTypeFromYdbType(column.Type);
+                                if (pgType.has_value()) {
+                                    response->DataFields.push_back({
+                                        .Name = column.Name,
+                                        .DataType = pgType->Oid,
+                                        .DataTypeSize = pgType->Typlen,
+                                        .DataTypeModifier = pgType->Typmod,
+                                    });
+                                } else {
+                                    response->DataFields.push_back({
+                                        .Name = column.Name
+                                    });
+                                }
                             }
                         }
                     }
@@ -465,7 +393,7 @@ public:
                                 auto& row = response->DataRows.back();
                                 row.resize(parser.ColumnsCount());
                                 for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                                    row[index] = ColumnValueToString(parser.ColumnParser(index));
+                                    row[index] = NLocalPgWire::ColumnValueToRowValueField(parser.ColumnParser(index));
                                 }
                                 if (maxRows != 0) {
                                     if (--maxRows == 0) {

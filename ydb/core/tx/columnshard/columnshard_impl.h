@@ -416,6 +416,7 @@ private:
     ui64 WritesInFlight = 0;
     ui64 WritesSizeInFlight = 0;
     ui64 OwnerPathId = 0;
+    ui64 TabletTxCounter = 0;
     ui64 StatsReportRound = 0;
     ui32 SkippedIndexations = TSettings::MAX_INDEXATIONS_TO_SKIP; // Force indexation on tablet init
     TString OwnerPath;

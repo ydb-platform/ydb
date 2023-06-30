@@ -10,6 +10,7 @@ public:
     TTxForget(TColumnShard* self, TEvPrivate::TEvForget::TPtr& ev)
         : TBase(self)
         , Ev(ev)
+        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -18,12 +19,21 @@ public:
 
 private:
     TEvPrivate::TEvForget::TPtr Ev;
+    const ui32 TabletTxNo;
+
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxForget[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
 };
 
 
 bool TTxForget::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxForget.Execute at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
     //NIceDb::TNiceDb db(txc.DB);
@@ -40,10 +50,10 @@ bool TTxForget::Execute(TTransactionContext& txc, const TActorContext&) {
             if (erased) {
                 strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
             } else {
-                LOG_S_ERROR("Forget unknown blob " << evict.Blob << " at tablet " << Self->TabletID());
+                LOG_S_WARN(TxPrefix() << "forget unknown blob " << evict.Blob << TxSuffix());
             }
         }
-        LOG_S_NOTICE("Forget evicted blobs " << strBlobs << "at tablet " << Self->TabletID());
+        LOG_S_INFO(TxPrefix() << "forget evicted blobs " << strBlobs << TxSuffix());
 
         Self->IncCounter(COUNTER_FORGET_SUCCESS);
     } else {
@@ -54,7 +64,7 @@ bool TTxForget::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxForget::Complete(const TActorContext&) {
-    LOG_S_DEBUG("TTxForget.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 }
 
 

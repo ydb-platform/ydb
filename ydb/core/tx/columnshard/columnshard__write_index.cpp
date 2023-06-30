@@ -16,6 +16,7 @@ public:
     TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr& ev)
         : TBase(self)
         , Ev(ev)
+        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -26,10 +27,19 @@ private:
     using TPathIdBlobs = THashMap<ui64, THashSet<TUnifiedBlobId>>;
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
+    const ui32 TabletTxNo;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
     ui64 ExportNo = 0;
     TBackgroundActivity TriggerActivity = TBackgroundActivity::All();
+
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxWriteIndex[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
 };
 
 
@@ -47,8 +57,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     auto changes = Ev->Get()->IndexChanges;
     Y_VERIFY(changes);
 
-    LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString()
-        << ") changes: " << *changes << " at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "execute(" << changes->TypeString() << ") changes: " << *changes << TxSuffix());
 
     bool ok = false;
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
@@ -59,7 +68,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         ok = Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot); // update changes + apply
         if (ok) {
-            LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString() << ") apply at tablet " << Self->TabletID());
+            LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
 
             TBlobManagerDb blobManagerDb(txc.DB);
             for (const auto& cmtd : changes->DataToIndex) {
@@ -145,8 +154,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                                 blobsToExport.emplace(blobId, evictionFeatures);
                             } else {
                                 // TODO: support S3 -> S3 eviction
-                                LOG_S_ERROR("Prevent evict evicted blob '" << blobId.ToStringNew()
-                                    << "' at tablet " << Self->TabletID());
+                                LOG_S_ERROR(TxPrefix() << "Prevent evict evicted blob '" << blobId.ToStringNew()
+                                    << "'" << TxSuffix());
                                 protectedBlobs.insert(blobId);
                             }
                         }
@@ -163,7 +172,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 } else if (!protectedBlobs.contains(blobId)) {
                     // We could drop the blob immediately
                     if (blobsToDrop.emplace(blobId).second) {
-                        LOG_S_TRACE("Delete evicted blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        LOG_S_TRACE(TxPrefix() << "Delete evicted blob '" << blobId.ToStringNew()
+                            << "'" << TxSuffix());
                     }
 
                 }
@@ -174,7 +184,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 for (const auto& rec : portionInfo.Records) {
                     const auto& blobId = rec.BlobRange.BlobId;
                     if (blobsToDrop.emplace(blobId).second) {
-                        LOG_S_TRACE("Delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        LOG_S_TRACE(TxPrefix() << "Delete blob '" << blobId.ToStringNew() << "'" << TxSuffix());
                     }
                 }
                 Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
@@ -189,7 +199,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
 
                     if (NOlap::IsDeleted(evict.State)) {
-                        LOG_S_DEBUG("Skip delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        LOG_S_DEBUG(TxPrefix() << "Skip delete blob '" << blobId.ToStringNew() << "'" << TxSuffix());
                         continue;
                     }
                 }
@@ -206,14 +216,11 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
             Self->UpdateIndexCounters();
         } else {
-            LOG_S_NOTICE("TTxWriteIndex (" << changes->TypeString()
-                << ") cannot apply changes: " << *changes << " at tablet " << Self->TabletID());
-
-            // TODO: delayed insert
+            LOG_S_NOTICE(TxPrefix() << "(" << changes->TypeString() << ") cannot apply changes: "
+                << *changes << TxSuffix());
         }
     } else {
-        LOG_S_ERROR("TTxWriteIndex (" << changes->TypeString()
-            << ") cannot write index blobs at tablet " << Self->TabletID());
+        LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
     }
 
     if (blobsToExport.size()) {
@@ -252,7 +259,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxWriteIndex.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
     if (Ev->Get()->GetPutStatus() == NKikimrProto::TRYLATER) {
         ctx.Schedule(Self->FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));

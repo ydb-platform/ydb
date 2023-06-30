@@ -25,6 +25,7 @@ public:
     TTxRead(TColumnShard* self, TEvColumnShard::TEvRead::TPtr& ev)
         : TTxReadBase(self)
         , Ev(ev)
+        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -33,8 +34,17 @@ public:
 
 private:
     TEvColumnShard::TEvRead::TPtr Ev;
+    const ui32 TabletTxNo;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
+
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxRead[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
 };
 
 
@@ -42,7 +52,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
     Y_UNUSED(txc);
-    LOG_S_DEBUG("TTxRead.Execute at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
 
@@ -113,13 +123,13 @@ void TTxRead::Complete(const TActorContext& ctx) {
     bool success = (Proto(Result.get()).GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS);
 
     if (!success) {
-        LOG_S_DEBUG("TTxRead.Complete. Error " << ErrorDescription << " while reading at tablet " << Self->TabletID());
+        LOG_S_DEBUG(TxPrefix() << "complete. Error " << ErrorDescription << " while reading" << TxSuffix());
         ctx.Send(Ev->Get()->GetSource(), Result.release());
     } else if (noData) {
-        LOG_S_DEBUG("TTxRead.Complete. Empty result at tablet " << Self->TabletID());
+        LOG_S_DEBUG(TxPrefix() << "complete. Empty result" << TxSuffix());
         ctx.Send(Ev->Get()->GetSource(), Result.release());
     } else {
-        LOG_S_DEBUG("TTxRead.Complete at tablet " << Self->TabletID() << " Metadata: " << *ReadMetadata);
+        LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix() << " Metadata: " << *ReadMetadata);
 
         const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(
             std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata), *Self->BlobManager);

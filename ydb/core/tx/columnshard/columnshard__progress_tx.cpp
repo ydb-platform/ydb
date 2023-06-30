@@ -41,15 +41,24 @@ private:
         POST_SCHEMA
     };
 
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxProgressTx[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
+
 public:
     TTxProgressTx(TColumnShard* self)
         : TTransactionBase(self)
-    { }
+        , TabletTxNo(++Self->TabletTxCounter)
+    {}
 
     TTxType GetTxType() const override { return TXTYPE_PROGRESS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_S_DEBUG("TTxProgressTx.Execute at tablet " << Self->TabletID());
+        LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
         Y_VERIFY(Self->ProgressTxInFlight);
 
         NIceDb::TNiceDb db(txc.DB);
@@ -65,8 +74,8 @@ public:
                     break;
                 }
                 ui64 txId = it->TxId;
-                LOG_S_DEBUG("Removing outdated txId " << txId << " max step " << it->MaxStep << " outdated step "
-                    << outdatedStep << " at tablet " << Self->TabletID());
+                LOG_S_DEBUG(TxPrefix() << "Removing outdated txId " << txId << " max step " << it->MaxStep
+                    << " outdated step " << outdatedStep << TxSuffix());
                 Self->DeadlineQueue.erase(it);
                 Self->RemoveTx(txc.DB, txId);
                 ++removedCount;
@@ -184,7 +193,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_S_DEBUG("TTxProgressTx.Complete at tablet " << Self->TabletID());
+        LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
         for (auto& rec : TxEvents) {
             ctx.Send(rec.Target, rec.Event.Release(), 0, rec.Cookie);
@@ -217,6 +226,7 @@ private:
     std::vector<TResultEvent> TxResults;
     std::vector<TEvent> TxEvents;
     ETriggerActivities Trigger{ETriggerActivities::NONE};
+    const ui32 TabletTxNo;
 };
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx) {

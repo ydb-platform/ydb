@@ -12,6 +12,7 @@ public:
     TTxWrite(TColumnShard* self, TEvColumnShard::TEvWrite::TPtr& ev)
         : TBase(self)
         , Ev(ev)
+        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -20,13 +21,22 @@ public:
 
 private:
     TEvColumnShard::TEvWrite::TPtr Ev;
+    const ui32 TabletTxNo;
     std::unique_ptr<TEvColumnShard::TEvWriteResult> Result;
+
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
 };
 
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxWrite.Execute at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
     NIceDb::TNiceDb db(txc.DB);
@@ -100,7 +110,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
             Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
         } else {
-            LOG_S_DEBUG("TTxWrite duplicate writeId " << writeId << " at tablet " << Self->TabletID());
+            LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << writeId << TxSuffix());
 
             // Return EResultStatus::SUCCESS for dups
             Self->IncCounter(COUNTER_WRITE_DUPLICATE);
@@ -119,7 +129,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 void TTxWrite::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Result);
-    LOG_S_DEBUG("TTxWrite.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
     ctx.Send(Ev->Get()->GetSource(), Result.release());
 }

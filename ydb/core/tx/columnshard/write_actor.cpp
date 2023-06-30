@@ -14,11 +14,10 @@ namespace {
 class TWriteActor : public TActorBootstrapped<TWriteActor> {
     ui64 TabletId;
     TActorId DstActor;
-    TUsage ResourceUsage;
 
     TBlobBatch BlobBatch;
     NOlap::IBlobConstructor::TPtr BlobsConstructor;
-    
+
     THashSet<ui32> YellowMoveChannels;
     THashSet<ui32> YellowStopChannels;
     TInstant Deadline;
@@ -37,7 +36,7 @@ public:
         , Deadline(deadline)
         , MaxSmallBlobSize(maxSmallBlobSize)
     {}
-    
+
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
         TEvBlobStorage::TEvPutResult* msg = ev->Get();
         auto status = msg->Status;
@@ -76,10 +75,9 @@ public:
                 putStatus = NKikimrProto::TIMEOUT;
             }
         }
-        auto ev = BlobsConstructor->BuildResult(putStatus, std::move(BlobBatch), 
+        auto ev = BlobsConstructor->BuildResult(putStatus, std::move(BlobBatch),
                 std::move(YellowMoveChannels),
-                std::move(YellowStopChannels),
-                ResourceUsage);
+                std::move(YellowStopChannels));
         ctx.Send(DstActor, ev.Release());
         Die(ctx);
     }
@@ -94,20 +92,16 @@ public:
             const TDuration timeout = Deadline - now;
             ctx.Schedule(timeout, new TEvents::TEvWakeup());
         }
-       
+
         auto status = NOlap::IBlobConstructor::EStatus::Finished;
-        while (true) {
-            status = BlobsConstructor->BuildNext(ResourceUsage, *AppData(ctx));
-            if (status != NOlap::IBlobConstructor::EStatus::Ok) {
-                break;
-            }
+        while (BlobsConstructor->BuildNext() == NOlap::IBlobConstructor::EStatus::Ok) {
             auto blobId = SendWriteBlobRequest(BlobsConstructor->GetBlob(), ctx);
             BlobsConstructor->RegisterBlobId(blobId);
-            
         }
         if (status != NOlap::IBlobConstructor::EStatus::Finished) {
             return SendResultAndDie(ctx, NKikimrProto::ERROR);
         }
+
         if (BlobBatch.AllBlobWritesCompleted()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
@@ -122,10 +116,10 @@ public:
                 break;
         }
     }
-    
+
 private:
     TUnifiedBlobId SendWriteBlobRequest(const TString& data, const TActorContext& ctx) {
-        ResourceUsage.Network += data.size();
+        BlobsConstructor->GetResourceUsage().Network += data.size();
         if (MaxSmallBlobSize && data.size() <= *MaxSmallBlobSize) {
             TUnifiedBlobId smallBlobId = BlobBatch.AddSmallBlob(data);
             Y_VERIFY(smallBlobId.IsSmallBlob());

@@ -15,7 +15,7 @@ const TString& TIndexedBlobConstructor::GetBlob() const {
     return DataPrepared;
 }
 
-IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext(NColumnShard::TUsage& resourceUsage, const TAppData& appData) {
+IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext() {
     if (!!DataPrepared) {
         return EStatus::Finished;
     }
@@ -37,7 +37,7 @@ IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext(NColumnShard::TUsag
     // Heavy operations inside. We cannot run them in tablet event handler.
     TString strError;
     {
-        NColumnShard::TCpuGuard guard(resourceUsage);
+        NColumnShard::TCpuGuard guard(ResourceUsage);
         Batch = SnapshotSchema->PrepareForInsert(data, serializedScheme, strError);
     }
     if (!Batch) {
@@ -46,7 +46,7 @@ IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext(NColumnShard::TUsag
     }
 
     {
-        NColumnShard::TCpuGuard guard(resourceUsage);
+        NColumnShard::TCpuGuard guard(ResourceUsage);
         DataPrepared = NArrow::SerializeBatchNoCompression(Batch);
     }
 
@@ -54,8 +54,8 @@ IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext(NColumnShard::TUsag
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_data_too_big")("write_id", writeId)("path_id", pathId);
         return EStatus::Error;
     }
-    
-    ui64 dirtyTime = appData.TimeProvider->Now().Seconds();
+
+    ui64 dirtyTime = TAppData::TimeProvider->Now().Seconds();
     Y_VERIFY(dirtyTime);
     NKikimrTxColumnShard::TLogicalMetadata outMeta;
     outMeta.SetNumRows(Batch->num_rows());
@@ -78,14 +78,18 @@ bool TIndexedBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
     return true;
 }
 
-TAutoPtr<IEventBase> TIndexedBlobConstructor::BuildResult(NKikimrProto::EReplyStatus status, NColumnShard::TBlobBatch&& blobBatch, THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels, const NColumnShard::TUsage& resourceUsage) {
+TAutoPtr<IEventBase> TIndexedBlobConstructor::BuildResult(NKikimrProto::EReplyStatus status,
+                                                        NColumnShard::TBlobBatch&& blobBatch,
+                                                        THashSet<ui32>&& yellowMoveChannels,
+                                                        THashSet<ui32>&& yellowStopChannels)
+{
     WriteEv->WrittenBatch = Batch;
 
     auto& record = Proto(WriteEv.Get());
     record.SetData(DataPrepared); // modify for TxWrite
     record.MutableMeta()->SetLogicalMeta(MetaString);
 
-    WriteEv->ResourceUsage.Add(resourceUsage);
+    WriteEv->ResourceUsage.Add(ResourceUsage);
     WriteEv->SetPutStatus(status, std::move(yellowMoveChannels), std::move(yellowStopChannels));
     WriteEv->BlobBatch = std::move(blobBatch);
     return WriteEv.Release();

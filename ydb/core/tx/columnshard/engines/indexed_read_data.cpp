@@ -253,9 +253,7 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
     auto out = MakeResult(ReadyToOut(), maxRowsInBatch);
     const bool requireResult = GranulesContext->IsFinished(); // not indexed or the last indexed read (even if it's empty)
     if (requireResult && out.empty()) {
-        out.push_back(TPartialReadResult{
-            .ResultBatch = NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())
-        });
+        out.push_back(TPartialReadResult(NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())));
     }
     return out;
 }
@@ -338,7 +336,7 @@ static void MergeTooSmallBatches(std::vector<TPartialReadResult>& out) {
 
     i64 sumRows = 0;
     for (auto& result : out) {
-        sumRows += result.ResultBatch->num_rows();
+        sumRows += result.GetResultBatch()->num_rows();
     }
     if (sumRows / out.size() > 100) {
         return;
@@ -347,7 +345,7 @@ static void MergeTooSmallBatches(std::vector<TPartialReadResult>& out) {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(out.size());
     for (auto& batch : out) {
-        batches.push_back(batch.ResultBatch);
+        batches.push_back(batch.GetResultBatch());
     }
 
     auto res = arrow::Table::FromRecordBatches(batches);
@@ -364,15 +362,11 @@ static void MergeTooSmallBatches(std::vector<TPartialReadResult>& out) {
     auto batch = NArrow::ToBatch(*res);
 
     std::vector<TPartialReadResult> merged;
-    merged.emplace_back(TPartialReadResult{
-        .ResultBatch = std::move(batch),
-        .LastReadKey = std::move(out.back().LastReadKey)
-    });
+    merged.emplace_back(TPartialReadResult(batch, out.back().GetLastReadKey()));
     out.swap(merged);
 }
 
-std::vector<TPartialReadResult>
-TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules,
+std::vector<TPartialReadResult> TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules,
                              int64_t maxRowsInBatch) const {
     Y_VERIFY(ReadMetadata->IsSorted());
     Y_VERIFY(SortReplaceDescription);
@@ -423,20 +417,14 @@ TIndexedReadData::MakeResult(std::vector<std::vector<std::shared_ptr<arrow::Reco
 
             // Leave only requested columns
             auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->GetResultSchema());
-            out.emplace_back(TPartialReadResult{
-                .ResultBatch = std::move(resultBatch),
-                .LastReadKey = std::move(lastKey)
-            });
+            out.emplace_back(TPartialReadResult(resultBatch, lastKey));
         }
     }
     
     if (ReadMetadata->GetProgram().HasProgram()) {
         MergeTooSmallBatches(out);
         for (auto& result : out) {
-            auto status = ReadMetadata->GetProgram().ApplyProgram(result.ResultBatch);
-            if (!status.ok()) {
-                result.ErrorString = status.message();
-            }
+            result.ApplyProgram(ReadMetadata->GetProgram());
         }
     }
     return out;

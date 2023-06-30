@@ -268,12 +268,12 @@ private:
             ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
         }
 
-        auto& batch = result.ResultBatch;
-        if (!batch) {
+        if (!result.GetResultBatch()) {
             ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
             return false;
         }
 
+        auto& batch = result.GetResultBatch();
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
         if (!numRows) {
@@ -302,8 +302,8 @@ private:
                 break;
             }
         } // switch DataFormat
-        if (result.LastReadKey) {
-            Result->LastKey = ConvertLastKey(result.LastReadKey);
+        if (result.GetLastReadKey()) {
+            Result->LastKey = ConvertLastKey(result.GetLastReadKey());
         } else {
             Y_VERIFY(numRows == 0, "Got non-empty result batch without last key");
         }

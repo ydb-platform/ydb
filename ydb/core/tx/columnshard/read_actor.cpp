@@ -15,7 +15,7 @@ private:
         size_t next = 1;
         for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
             const bool lastOne = IndexedData.IsFinished() && (next == ready.size());
-            SendResult(ctx, it->ResultBatch, lastOne);
+            SendResult(ctx, it->GetResultBatch(), lastOne);
         }
     }
 public:

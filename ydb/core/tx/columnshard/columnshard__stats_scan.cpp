@@ -15,16 +15,10 @@ NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
     // Leave only requested columns
     auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
 
-    NOlap::TPartialReadResult out{
-        .ResultBatch = std::move(resultBatch),
-        .LastReadKey = std::move(lastKey)
-    };
+    NOlap::TPartialReadResult out(resultBatch, lastKey);
 
-    auto status = ReadMetadata->GetProgram().ApplyProgram(out.ResultBatch);
-    if (!status.ok()) {
-        out.ErrorString = status.message();
-    }
-    return out;
+    out.ApplyProgram(ReadMetadata->GetProgram());
+    return std::move(out);
 }
 
 std::shared_ptr<arrow::RecordBatch> TStatsIterator::FillStatsBatch() {

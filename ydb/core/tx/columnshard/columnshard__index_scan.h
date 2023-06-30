@@ -27,13 +27,61 @@ public:
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
 
+class TReadyResults {
+private:
+    const NColumnShard::TConcreteScanCounters Counters;
+    std::deque<NOlap::TPartialReadResult> Data;
+    i64 SumSize = 0;
+    i64 RecordsCount = 0;
+public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb
+            << "count:" << Data.size() << ";"
+            << "records_count:" << RecordsCount << ";"
+            << "sum_size:" << SumSize << ";"
+            ;
+        if (Data.size()) {
+            sb << "schema=" << Data.front().GetResultBatch()->schema()->ToString() << ";";
+        }
+        return sb;
+    }
+    TReadyResults(const NColumnShard::TConcreteScanCounters& counters)
+        : Counters(counters)
+    {
+
+    }
+    NOlap::TPartialReadResult& emplace_back(NOlap::TPartialReadResult&& v) {
+        SumSize += v.GetSize();
+        RecordsCount += v.GetResultBatch()->num_rows();
+        Data.emplace_back(std::move(v));
+        return Data.back();
+    }
+    NOlap::TPartialReadResult pop_front() {
+        if (Data.empty()) {
+            return NOlap::TPartialReadResult();
+        }
+        auto result = std::move(Data.front());
+        SumSize -= result.GetSize();
+        RecordsCount -= result.GetResultBatch()->num_rows();
+        Data.pop_front();
+        return result;
+    }
+    bool empty() const {
+        return Data.empty();
+    }
+    size_t size() const {
+        return Data.size();
+    }
+};
+
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
     NOlap::TReadContext Context;
+    TReadyResults ReadyResults;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TIndexedReadData IndexedData;
     std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
-    TDeque<NOlap::TPartialReadResult> ReadyResults;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
 public:
@@ -63,10 +111,6 @@ public:
     NOlap::TPartialReadResult GetBatch() override;
 
     TBlobRange GetNextBlobToRead() override;
-
-    size_t ReadyResultsCount() const override {
-        return ReadyResults.size();
-    }
 
 private:
     void FillReadyResults();

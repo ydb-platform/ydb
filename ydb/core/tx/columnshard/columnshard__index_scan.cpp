@@ -6,6 +6,7 @@ namespace NKikimr::NColumnShard {
 
 TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context)
     : Context(context)
+    , ReadyResults(context.GetCounters())
     , ReadMetadata(readMetadata)
     , IndexedData(ReadMetadata, false, context)
 {
@@ -23,15 +24,7 @@ void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data
 
 NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
-
-    if (ReadyResults.empty()) {
-        return {};
-    }
-
-    auto result(std::move(ReadyResults.front()));
-    ReadyResults.pop_front();
-
-    return result;
+    return ReadyResults.pop_front();
 }
 
 NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
@@ -42,19 +35,17 @@ void TColumnShardScanIterator::FillReadyResults() {
     auto ready = IndexedData.GetReadyResults(MaxRowsInBatch);
     i64 limitLeft = ReadMetadata->Limit == 0 ? INT64_MAX : ReadMetadata->Limit - ItemsRead;
     for (size_t i = 0; i < ready.size() && limitLeft; ++i) {
-        if (ready[i].ResultBatch->num_rows() == 0 && !ready[i].LastReadKey) {
+        if (ready[i].GetResultBatch()->num_rows() == 0 && !ready[i].GetLastReadKey()) {
             Y_VERIFY(i + 1 == ready.size(), "Only last batch can be empty!");
             break;
         }
 
-        ReadyResults.emplace_back(std::move(ready[i]));
-        auto& batch = ReadyResults.back();
-        if (batch.ResultBatch->num_rows() > limitLeft) {
-            // Trim the last batch if total row count exceeds the requested limit
-            batch.ResultBatch = batch.ResultBatch->Slice(0, limitLeft);
+        auto& batch = ReadyResults.emplace_back(std::move(ready[i]));
+        if (batch.GetResultBatch()->num_rows() > limitLeft) {
+            batch.Slice(0, limitLeft);
         }
-        limitLeft -= batch.ResultBatch->num_rows();
-        ItemsRead += batch.ResultBatch->num_rows();
+        limitLeft -= batch.GetResultBatch()->num_rows();
+        ItemsRead += batch.GetResultBatch()->num_rows();
     }
 
     if (limitLeft == 0) {

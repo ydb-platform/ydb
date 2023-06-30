@@ -9,27 +9,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
     , ReadMetadata(readMetadata)
     , IndexedData(ReadMetadata, false, context)
 {
-    ui32 batchNo = 0;
-    for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++batchNo) {
-        const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
-        WaitCommitted.emplace(cmtBlob, batchNo);
-    }
-    IndexedData.InitRead(batchNo);
-    // Add cached batches without read
-    for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
-        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob::BuildKeyBlob(blobId));
-        Y_VERIFY(!cmt.empty());
-
-        const NOlap::TCommittedBlob& cmtBlob = cmt.key();
-        ui32 batchNo = cmt.mapped();
-        IndexedData.AddNotIndexed(batchNo, batch, cmtBlob);
-    }
-    // Read all remained committed blobs
-    for (const auto& [cmtBlob, _] : WaitCommitted) {
-        auto& blobId = cmtBlob.GetBlobId();
-        IndexedData.AddBlobToFetchInFront(0, TBlobRange(blobId, 0, blobId.BlobSize()));
-    }
-
+    IndexedData.InitRead();
     Y_VERIFY(ReadMetadata->IsSorted());
 
     if (ReadMetadata->Empty()) {
@@ -38,16 +18,7 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
 }
 
 void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data) {
-    const auto& blobId = blobRange.BlobId;
-    if (IndexedData.IsIndexedBlob(blobRange)) {
-        IndexedData.AddIndexed(blobRange, data);
-    } else {
-        auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob::BuildKeyBlob(blobId));
-        Y_VERIFY(!cmt.empty());
-        const NOlap::TCommittedBlob& cmtBlob = cmt.key();
-        ui32 batchNo = cmt.mapped();
-        IndexedData.AddNotIndexed(batchNo, data, cmtBlob);
-    }
+    IndexedData.AddData(blobRange, data);
 }
 
 NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
@@ -87,11 +58,10 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
-        WaitCommitted.clear();
         IndexedData.Abort();
     }
 
-    if (WaitCommitted.empty() && IndexedData.IsFinished()) {
+    if (IndexedData.IsFinished()) {
         Context.MutableProcessor().Stop();
     }
 }

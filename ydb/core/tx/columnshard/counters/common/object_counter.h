@@ -44,7 +44,7 @@ public:
         }
         Counter.Inc();
         if (UseLogs) {
-            AFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "create")("object_type", TypeName<TObject>())("count", Counter.Val());
+            ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "create")("object_type", TypeName<TObject>())("count", Counter.Val());
         }
     }
     ~TMonitoringObjectsCounter() {
@@ -53,7 +53,7 @@ public:
         }
         Counter.Dec();
         if (UseLogs) {
-            AFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "destroy")("object_type", TypeName<TObject>())("count", Counter.Val());
+            ACFL_TRACE(NKikimrServices::OBJECTS_MONITORING)("event", "destroy")("object_type", TypeName<TObject>())("count", Counter.Val());
         }
     }
 };

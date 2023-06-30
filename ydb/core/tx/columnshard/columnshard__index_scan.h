@@ -44,6 +44,12 @@ public:
         return ReadyResults.size();
     }
 
+    virtual TString DebugString() const override {
+        return TStringBuilder()
+            << "indexed_data:(" << IndexedData.DebugString() << ")"
+            ;
+    }
+
     virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
 
     virtual bool HasWaitingTasks() const override;

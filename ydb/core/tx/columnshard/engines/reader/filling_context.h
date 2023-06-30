@@ -37,6 +37,12 @@ public:
     bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange & range);
     TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData & owner, const bool internalReading);
 
+    TString DebugString() const {
+        return TStringBuilder()
+            << "sorting_policy:(" << SortingPolicy->DebugString() << ");"
+            ;
+    }
+
     void OnBlobReady(const ui64 /*granuleId*/, const TBlobRange& /*range*/) noexcept {
     }
 

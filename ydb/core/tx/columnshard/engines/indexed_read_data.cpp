@@ -104,7 +104,6 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 }
 
 void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch) {
-    Y_VERIFY(IndexedBlobs.emplace(range).second);
     Y_VERIFY(IndexedBlobSubscriber.emplace(range, &batch).second);
     if (batch.GetFetchedInfo().GetFilter()) {
         Context.GetCounters().PostFilterBytes->Add(range.Size);
@@ -117,14 +116,27 @@ void TIndexedReadData::AddBlobForFetch(const TBlobRange& range, NIndexedReader::
     }
 }
 
-void TIndexedReadData::InitRead(ui32 inputBatch) {
+void TIndexedReadData::RegisterZeroGranula() {
+    for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i) {
+        const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
+        WaitCommitted.emplace(cmtBlob.GetBlobId(), cmtBlob);
+    }
+    for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
+        AddNotIndexed(blobId, batch);
+    }
+    for (const auto& [blobId, _] : WaitCommitted) {
+        AddBlobToFetchInFront(0, TBlobRange(blobId, 0, blobId.BlobSize()));
+    }
+}
+
+void TIndexedReadData::InitRead() {
+    RegisterZeroGranula();
+
     auto& indexInfo = ReadMetadata->GetIndexInfo();
     Y_VERIFY(indexInfo.GetSortingKey());
     Y_VERIFY(indexInfo.GetIndexKey() && indexInfo.GetIndexKey()->num_fields());
 
     SortReplaceDescription = indexInfo.SortReplaceDescription();
-
-    NotIndexed.resize(inputBatch);
 
     Y_VERIFY(!GranulesContext);
     GranulesContext = std::make_unique<NIndexedReader::TGranulesFillingContext>(ReadMetadata, *this, OnePhaseReadMode);
@@ -161,10 +173,7 @@ void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& da
     NIndexedReader::TBatch* portionBatch = nullptr;
     {
         auto it = IndexedBlobSubscriber.find(blobRange);
-        Y_VERIFY_DEBUG(it != IndexedBlobSubscriber.end());
-        if (it == IndexedBlobSubscriber.end()) {
-            return;
-        }
+        Y_VERIFY(it != IndexedBlobSubscriber.end());
         portionBatch = it->second;
         IndexedBlobSubscriber.erase(it);
     }
@@ -203,7 +212,7 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
     Y_VERIFY(SortReplaceDescription);
     auto& indexInfo = ReadMetadata->GetIndexInfo();
 
-    if (NotIndexed.size() != ReadyNotIndexed) {
+    if (WaitCommitted.size()) {
         // Wait till we have all not indexed data so we could replace keys in granules
         return {};
     }
@@ -235,7 +244,6 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
             GranulesContext->DrainNotIndexedBatches(nullptr);
         }
         NotIndexed.clear();
-        ReadyNotIndexed = 0;
     } else {
         GranulesContext->DrainNotIndexedBatches(nullptr);
     }
@@ -478,6 +486,21 @@ NKikimr::NOlap::TBlobRange TIndexedReadData::ExtractNextBlob() {
         Context.GetCounters().OnProcessingOverloaded();
         return TBlobRange();
     }
+}
+
+void TIndexedReadData::AddNotIndexed(const TBlobRange& blobRange, const TString& column) {
+    auto it = WaitCommitted.find(blobRange.BlobId);
+    Y_VERIFY(it != WaitCommitted.end());
+    auto batch = NArrow::DeserializeBatch(column, ReadMetadata->GetBlobSchema(it->second.GetSchemaSnapshot()));
+    NotIndexed.emplace_back(MakeNotIndexedBatch(batch, it->second.GetSchemaSnapshot()));
+    WaitCommitted.erase(it);
+}
+
+void TIndexedReadData::AddNotIndexed(const TUnifiedBlobId& blobId, const std::shared_ptr<arrow::RecordBatch>& batch) {
+    auto it = WaitCommitted.find(blobId);
+    Y_VERIFY(it != WaitCommitted.end());
+    NotIndexed.emplace_back(MakeNotIndexedBatch(batch, it->second.GetSchemaSnapshot()));
+    WaitCommitted.erase(it);
 }
 
 }

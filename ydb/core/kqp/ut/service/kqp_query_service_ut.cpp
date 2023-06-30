@@ -121,6 +121,33 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    //KIKIMR-18492
+    Y_UNIT_TEST(ExecuteQueryPgTableSelect) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto settings = TExecuteQuerySettings()
+            .Syntax(ESyntax::Pg);
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_pg
+                CREATE TABLE test (id int8,PRIMARY KEY (id)))"
+            ).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto db = kikimr.GetQueryClient();
+            auto result = db.ExecuteQuery(
+                "SELECT * FROM test",
+                TTxControl::BeginTx().CommitTx(), settings
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(ExecuteQueryScalar) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

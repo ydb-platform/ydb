@@ -98,6 +98,10 @@ bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusi
         return true;
     }
 
+    if (kqpCtx->IsGenericQuery()) {
+        return true;
+    }
+
     return false;
 }
 

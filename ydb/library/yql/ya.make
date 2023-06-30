@@ -26,18 +26,3 @@ RECURSE(
     udfs
     utils
 )
-
-# TODO(max42): Recurse unconditionally as a final step of YT-19210.
-IF (NOT EXPORT_CMAKE)
-    RECURSE(
-        core/url_preprocessing
-    )
-ENDIF()
-
-#TODO(max42): Recurse unconditionally as a final step of YT-19210.
-IF (NOT EXPORT_CMAKE)
-    RECURSE_FOR_TESTS(
-        core/extract_predicate/ut
-        core/ut
-    )
-ENDIF()

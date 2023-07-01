@@ -97,6 +97,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr PriorityFetchCount;
     NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchBytes;
     NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchCount;
+
+    NMonitoring::TDynamicCounters::TCounterPtr NoResultsAckRequest;
 public:
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -129,6 +131,10 @@ public:
     NMonitoring::THistogramPtr HistogramMissCacheBlobBytesDuration;
 
     TScanCounters(const TString& module = "Scan");
+
+    void OnEmptyAck() const {
+        NoResultsAckRequest->Add(1);
+    }
 
     void OnPriorityFetch(const ui64 size) const {
         PriorityFetchBytes->Add(size);

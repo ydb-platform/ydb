@@ -200,7 +200,9 @@ private:
 
         ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
         ACFL_DEBUG("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
-
+        if (ScanIterator && !!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
+            ScanCountersPool.OnEmptyAck();
+        }
         ContinueProcessing();
     }
 
@@ -347,11 +349,11 @@ private:
             }
         }
         ScanCountersPool.Hanging->Add(1);
-        Y_VERIFY_DEBUG(false);
         // The loop has finished without any progress!
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+        Y_VERIFY_DEBUG(false);
     }
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) noexcept {

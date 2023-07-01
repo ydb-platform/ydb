@@ -5,7 +5,7 @@
 
 namespace NKikimr::NColumnShard {
 
-template <class TObject, bool UseSignals, bool UseLogs>
+template <class TObject>
 class TMonitoringObjectsCounterImpl: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -33,14 +33,18 @@ public:
     }
 };
 
-template <class TObject, bool UseSignals, bool UseLogs>
+template <class TObject, bool UseSignals = true, bool UseLogs = false>
 class TMonitoringObjectsCounter {
 private:
     static inline TAtomicCounter Counter = 0;
 public:
+    static inline TAtomicCounter GetCounter() {
+        return Counter.Val();
+    }
+
     TMonitoringObjectsCounter() {
         if (UseSignals) {
-            Singleton<TMonitoringObjectsCounterImpl<TObject, UseSignals, UseLogs>>()->Inc();
+            Singleton<TMonitoringObjectsCounterImpl<TObject>>()->Inc();
         }
         Counter.Inc();
         if (UseLogs) {
@@ -49,7 +53,7 @@ public:
     }
     ~TMonitoringObjectsCounter() {
         if (UseSignals) {
-            Singleton<TMonitoringObjectsCounterImpl<TObject, UseSignals, UseLogs>>()->Dec();
+            Singleton<TMonitoringObjectsCounterImpl<TObject>>()->Dec();
         }
         Counter.Dec();
         if (UseLogs) {

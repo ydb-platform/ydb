@@ -248,8 +248,9 @@ struct TPortionInfo {
                 sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
             } else {
                 auto it = Meta.ColumnMeta.find(i);
-                Y_VERIFY(it != Meta.ColumnMeta.end());
-                sum += it->second.RawBytes;
+                if (it != Meta.ColumnMeta.end()) {
+                    sum += it->second.RawBytes;
+                }
             }
         }
         return sum;

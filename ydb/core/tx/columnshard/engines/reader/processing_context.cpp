@@ -47,13 +47,13 @@ TGranule::TPtr TProcessingController::ExtractReadyVerified(const ui64 granuleId)
     return result;
 }
 
-TGranule::TPtr TProcessingController::GetGranuleVerified(const ui64 granuleId) {
+TGranule::TPtr TProcessingController::GetGranuleVerified(const ui64 granuleId) const {
     auto it = GranulesWaiting.find(granuleId);
     Y_VERIFY(it != GranulesWaiting.end());
     return it->second;
 }
 
-TGranule::TPtr TProcessingController::GetGranule(const ui64 granuleId) {
+TGranule::TPtr TProcessingController::GetGranule(const ui64 granuleId) const {
     auto itGranule = GranulesWaiting.find(granuleId);
     if (itGranule == GranulesWaiting.end()) {
         return nullptr;
@@ -63,6 +63,7 @@ TGranule::TPtr TProcessingController::GetGranule(const ui64 granuleId) {
 
 TGranule::TPtr TProcessingController::InsertGranule(TGranule::TPtr g) {
     Y_VERIFY(GranulesWaiting.emplace(g->GetGranuleId(), g).second);
+    ++OriginalGranulesCount;
     return g;
 }
 
@@ -70,6 +71,7 @@ void TProcessingController::StartBlobProcessing(const ui64 granuleId, const TBlo
     Counters.Aggregations->AddGranuleProcessingBytes(range.Size);
     if (GranulesInProcessing.emplace(granuleId).second) {
         if (granuleId) {
+            GetGranuleVerified(granuleId)->StartConstruction();
             Y_VERIFY(GranulesWaiting.contains(granuleId));
             Counters.Aggregations->AddGranuleProcessing();
         }
@@ -81,10 +83,21 @@ void TProcessingController::StartBlobProcessing(const ui64 granuleId, const TBlo
 }
 
 void TProcessingController::Abort() {
+    NotIndexedBatchesInitialized = true;
     GranulesWaiting.clear();
     GranulesInProcessing.clear();
     Counters.Aggregations->RemoveGranuleProcessingInfo(BlobsSize);
     BlobsSize = 0;
+}
+
+TString TProcessingController::DebugString() const {
+    return TStringBuilder()
+        << "waiting:" << GranulesWaiting.size() << ";"
+        << "in_progress:" << GranulesInProcessing.size() << ";"
+        << "original_waiting:" << OriginalGranulesCount << ";"
+        << "common_granules_data:" << CommonGranuleData << ";"
+        << "common_initialized:" << NotIndexedBatchesInitialized << ";"
+        ;
 }
 
 NKikimr::NOlap::NIndexedReader::TBatch& TProcessingController::GetBatchInfoVerified(const TBatchAddress& address) {

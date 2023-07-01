@@ -29,7 +29,7 @@ private:
     bool OnePhaseReadMode = false;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
 
-    THashMap<TBlobRange, NIndexedReader::TBatch*> IndexedBlobSubscriber;
+    THashMap<TBlobRange, NIndexedReader::TBatchAddress> IndexedBlobSubscriber;
     std::shared_ptr<arrow::RecordBatch> NotIndexedOutscopeBatch;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
 
@@ -72,13 +72,7 @@ public:
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddData(const TBlobRange& blobRange, const TString& data) {
-        if (IsIndexedBlob(blobRange)) {
-            AddIndexed(blobRange, data);
-        } else {
-            AddNotIndexed(blobRange, data);
-        }
-    }
+    void AddData(const TBlobRange& blobRange, const TString& data);
 
     NOlap::TReadMetadata::TConstPtr GetReadMetadata() const {
         return ReadMetadata;
@@ -99,7 +93,7 @@ public:
         return FetchBlobsQueue.size() || PriorityBlobsQueue.size();
     }
 
-    TBlobRange ExtractNextBlob();
+    TBlobRange ExtractNextBlob(const bool hasReadyResults);
 
 private:
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(

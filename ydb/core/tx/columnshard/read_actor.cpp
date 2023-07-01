@@ -160,7 +160,7 @@ public:
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
             while (IndexedData.HasMoreBlobs()) {
-                const auto blobRange = IndexedData.ExtractNextBlob();
+                const auto blobRange = IndexedData.ExtractNextBlob(false);
                 SendReadRequest(ctx, blobRange);
             }
             BuildResult(ctx);

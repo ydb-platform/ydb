@@ -69,7 +69,7 @@ public:
     }
 };
 
-class TBatch {
+class TBatch: TNonCopyable {
 private:
     const TBatchAddress BatchAddress;
     YDB_READONLY(ui64, Portion, 0);

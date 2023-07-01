@@ -3,6 +3,7 @@
 #include "granule.h"
 #include "processing_context.h"
 #include "order_control/abstract.h"
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
@@ -11,7 +12,7 @@ class TIndexedReadData;
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-class TGranulesFillingContext: TNonCopyable {
+class TGranulesFillingContext: TNonCopyable, public NColumnShard::TMonitoringObjectsCounter<TGranulesFillingContext, true, false> {
 private:
     YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
     TReadMetadata::TConstPtr ReadMetadata;
@@ -19,6 +20,7 @@ private:
     const bool InternalReading = false;
     TProcessingController Processing;
     TResultController Result;
+    std::shared_ptr<TGranulesLiveControl> GranulesLiveContext;
     TIndexedReadData& Owner;
     std::set<ui32> EarlyFilterColumns;
     std::set<ui32> PostFilterColumns;
@@ -33,12 +35,20 @@ private:
     static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
     bool CheckBufferAvailable() const;
 public:
+    std::shared_ptr<TGranulesLiveControl> GetGranulesLiveContext() const {
+        return GranulesLiveContext;
+    }
+    bool IsGranuleActualForProcessing(const ui64 granuleId) const {
+        return Processing.IsGranuleActualForProcessing(granuleId);
+    }
     bool ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
-    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange & range);
+    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange & range, const bool hasReadyResults);
     TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData & owner, const bool internalReading);
 
     TString DebugString() const {
         return TStringBuilder()
+            << "processing:(" << Processing.DebugString() << ");"
+            << "result:(" << Result.DebugString() << ");"
             << "sorting_policy:(" << SortingPolicy->DebugString() << ");"
             ;
     }

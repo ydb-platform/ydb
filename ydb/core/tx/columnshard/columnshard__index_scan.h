@@ -81,7 +81,6 @@ private:
     TReadyResults ReadyResults;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TIndexedReadData IndexedData;
-    std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
 public:
@@ -94,6 +93,7 @@ public:
 
     virtual TString DebugString() const override {
         return TStringBuilder()
+            << "ready_results:(" << ReadyResults.DebugString() << ");"
             << "indexed_data:(" << IndexedData.DebugString() << ")"
             ;
     }

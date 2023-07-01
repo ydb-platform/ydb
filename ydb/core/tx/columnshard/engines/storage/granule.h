@@ -222,6 +222,7 @@ public:
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
         if (InCompaction() || Empty()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("granule_id", GetGranuleId())("granule_size", Size());
             return false;
         }
         return NeedSplitCompaction(limits) || NeedInternalCompaction(limits);

@@ -10,6 +10,7 @@ TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMe
     , InternalReading(internalReading)
     , Processing(owner.GetCounters())
     , Result(owner.GetCounters())
+    , GranulesLiveContext(std::make_shared<TGranulesLiveControl>())
     , Owner(owner)
     , Counters(owner.GetCounters())
 {
@@ -64,9 +65,9 @@ void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_
     Processing.DrainNotIndexedBatches(batches);
 }
 
-bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range) {
+bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range, const bool hasReadyResults) {
     Y_VERIFY_DEBUG(!Result.IsReady(granuleId));
-    if (InternalReading || Processing.IsInProgress(granuleId)) {
+    if (InternalReading || Processing.IsInProgress(granuleId) || (!hasReadyResults && !GranulesLiveContext->GetCount())) {
         Processing.StartBlobProcessing(granuleId, range);
         return true;
     } else if (CheckBufferAvailable()) {

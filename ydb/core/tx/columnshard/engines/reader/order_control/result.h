@@ -11,6 +11,13 @@ protected:
     i64 BlobsSize = 0;
     const NColumnShard::TConcreteScanCounters Counters;
 public:
+    TString DebugString() const {
+        return TStringBuilder()
+            << "to_out:" << GranulesToOut.size() << ";"
+            << "ready:" << ReadyGranulesAccumulator.size() << ";"
+            ;
+    }
+
     TResultController(const NColumnShard::TConcreteScanCounters& counters)
         : Counters(counters)
     {

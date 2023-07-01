@@ -28,7 +28,7 @@ NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
 }
 
 NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
-    return IndexedData.ExtractNextBlob();
+    return IndexedData.ExtractNextBlob(ReadyResults.size());
 }
 
 void TColumnShardScanIterator::FillReadyResults() {

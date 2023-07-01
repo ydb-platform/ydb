@@ -10,6 +10,21 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 class TGranulesFillingContext;
+class TGranulesLiveControl {
+private:
+    TAtomicCounter GranulesCounter = 0;
+public:
+    i64 GetCount() const {
+        return GranulesCounter.Val();
+    }
+
+    void Inc() {
+        GranulesCounter.Inc();
+    }
+    void Dec() {
+        Y_VERIFY(GranulesCounter.Dec() >= 0);
+    }
+};
 
 class TGranule {
 public:
@@ -18,6 +33,7 @@ private:
     ui64 GranuleId = 0;
 
     bool NotIndexedBatchReadyFlag = false;
+    bool InConstruction = false;
     std::shared_ptr<arrow::RecordBatch> NotIndexedBatch;
     std::shared_ptr<NArrow::TColumnFilter> NotIndexedBatchFutureFilter;
 
@@ -27,15 +43,14 @@ private:
     std::deque<TBatch> Batches;
     std::set<ui32> WaitBatches;
     std::set<ui32> GranuleBatchNumbers;
+    std::shared_ptr<TGranulesLiveControl> LiveController;
     TGranulesFillingContext* Owner = nullptr;
     THashSet<const void*> BatchesToDedup;
     ui64 BlobsDataSize = 0;
     void CheckReady();
 public:
-    TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
-        : GranuleId(granuleId)
-        , Owner(&owner) {
-    }
+    TGranule(const ui64 granuleId, TGranulesFillingContext& owner);
+    ~TGranule();
 
     ui64 GetBlobsDataSize() const noexcept {
         return BlobsDataSize;
@@ -131,6 +146,7 @@ public:
     std::deque<TBatchForMerge> SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata);
 
     const std::set<ui32>& GetEarlyFilterColumns() const;
+    void StartConstruction();
     void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
     void OnBlobReady(const TBlobRange& range) noexcept;
     bool OnFilterReady(TBatch& batchInfo);

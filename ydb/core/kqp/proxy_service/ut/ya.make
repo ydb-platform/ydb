@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/run_script_actor
     ydb/core/kqp/proxy_service
     ydb/core/kqp/ut/common
     ydb/library/yql/sql/pg_dummy

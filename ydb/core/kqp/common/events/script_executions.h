@@ -89,12 +89,14 @@ struct TEvListScriptExecutionOperationsResponse : public NActors::TEventLocal<TE
 };
 
 struct TEvScriptLeaseUpdateResponse : public NActors::TEventLocal<TEvScriptLeaseUpdateResponse, TKqpScriptExecutionEvents::EvScriptLeaseUpdateResponse> {
-    TEvScriptLeaseUpdateResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
-        : Status(status)
+    TEvScriptLeaseUpdateResponse(bool executionEntryExists, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : ExecutionEntryExists(executionEntryExists)
+        , Status(status)
         , Issues(std::move(issues))
     {
     }
 
+    bool ExecutionEntryExists;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
 };

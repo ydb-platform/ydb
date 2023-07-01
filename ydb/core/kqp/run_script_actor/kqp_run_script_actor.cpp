@@ -42,6 +42,12 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         Finishing,
         Finished,
     };
+
+    enum EWakeUp {
+        RunEvent,
+        UpdateLeaseEvent,
+    };
+
 public:
     TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration)
         : ExecutionId(executionId)
@@ -54,7 +60,6 @@ public:
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
-        Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(1));
         Become(&TRunScriptActor::StateFunc);
     }
 
@@ -130,27 +135,56 @@ private:
 
     // TODO: remove this after there will be a normal way to store results and generate execution id
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        if (ev->Get()->Tag == 1) {
-            if (!IsLeaseUpdateRunning) {
-                RegisterWithSameMailbox(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, TInstant::Now() + LeaseDuration));
-                IsLeaseUpdateRunning = true;
-            }
-
-            Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(1));
-            return;
-        }
-
-        if (RunState == ERunState::Created) {
+        switch (ev->Get()->Tag) {
+        case EWakeUp::RunEvent:
+            Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
             RunState = ERunState::Running;
             CreateSession();
+            break;
+
+        case EWakeUp::UpdateLeaseEvent:
+            if (RunState == ERunState::Cancelled || RunState == ERunState::Cancelling || RunState == ERunState::Finished || RunState == ERunState::Finishing) {
+                break;
+            }
+
+            if (!LeaseUpdateQueryRunning && !FinalStatusIsSaved) {
+                Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration));
+                LeaseUpdateQueryRunning = true;
+            }
+            Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
+            break;
         }
     }
 
+    void RunScriptExecutionFinisher() {
+        if (!FinalStatusIsSaved) {
+            Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
+                                                    Issues, std::move(QueryPlan)));
+            return;
+        }
+        
+        RunState = ERunState::Finished;
+
+        for (auto& req : CancelRequests) {
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
+        }
+        CancelRequests.clear();
+    }
+
     void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        LeaseUpdateQueryRunning = false;
+
+        if (!ev->Get()->ExecutionEntryExists) {
+            FinalStatusIsSaved = true;
+            if (RunState == ERunState::Running) {
+                CancelRunningQuery();
+            }
+        }
+
+        if (FinishAfterLeaseUpdate) {
+            RunScriptExecutionFinisher();
+        } else if (IsExecuting() && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             Finish(ev->Get()->Status);
-        } else {
-            IsLeaseUpdateRunning = false;
         }
     }
 
@@ -372,7 +406,7 @@ private:
             Status = ev->Get()->Status;
             Issues.AddIssues(ev->Get()->Issues);
         }
-        CheckSaveInflight();
+        CheckInflight();
     }
 
     void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
@@ -381,7 +415,7 @@ private:
             Status = ev->Get()->Status;
             Issues.AddIssues(ev->Get()->Issues);
         }
-        CheckSaveInflight();
+        CheckInflight();
     }
 
     static Ydb::Query::ExecStatus GetExecStatusFromStatusCode(Ydb::StatusIds::StatusCode status) {
@@ -395,14 +429,18 @@ private:
     }
 
 
-    void CheckSaveInflight() {
+    void CheckInflight() {
         if (Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight))) {
             // waiting for script completion
             return;
         }
 
-        Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
-                                                     Issues, std::move(QueryPlan)));
+        if (!LeaseUpdateQueryRunning) {
+            RunScriptExecutionFinisher();
+        } else {
+            FinishAfterLeaseUpdate = true;
+        }
+
         if (RunState == ERunState::Cancelling) {
             Issues.AddIssue("Script execution is cancelled");
         }
@@ -419,7 +457,7 @@ private:
             SaveResultMeta();
             SaveResultMetaInflight++;
         } else {
-            CheckSaveInflight();
+            CheckInflight();
         }
     }
 
@@ -442,7 +480,9 @@ private:
     const ui64 LeaseGeneration;
     const TDuration LeaseDuration;
     TString SessionId;
-    bool IsLeaseUpdateRunning = false;
+    bool LeaseUpdateQueryRunning = false;
+    bool FinalStatusIsSaved = false;
+    bool FinishAfterLeaseUpdate = false;
     ERunState RunState = ERunState::Created;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
 

@@ -25,6 +25,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/retry/retry_policy.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/utility.h>
@@ -558,17 +559,50 @@ private:
 
 class TScriptLeaseUpdater : public TQueryBase {
 public:
-    TScriptLeaseUpdater(const TString& database, const TString& executionId, const TInstant& leaseDeadline) 
+    TScriptLeaseUpdater(const TString& database, const TString& executionId, TDuration leaseDuration) 
         : Database(database)
         , ExecutionId(executionId)
-        , LeaseDeadline(leaseDeadline)
+        , LeaseDuration(leaseDuration)
     {}
 
     void OnRunQuery() override {
         TString sql = R"(
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
-            DECLARE $lease_deadline AS Datetime;
+            
+            SELECT lease_deadline FROM `.metadata/script_execution_leases`
+                WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(ExecutionId)
+                .Build();
+
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+        SetQueryResultHandler(&TScriptLeaseUpdater::OnGetLeaseInfo);
+    }
+
+    void OnGetLeaseInfo() {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (result.RowsCount() == 0) {
+            LeaseExists = false;
+            Finish(Ydb::StatusIds::BAD_REQUEST, "No such execution");
+            return;
+        }
+
+        TString sql = R"(
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+            DECLARE $lease_deadline AS Timestamp;
             
             UPDATE `.metadata/script_execution_leases`
             SET lease_deadline=$lease_deadline
@@ -584,10 +618,11 @@ public:
                 .Utf8(ExecutionId)
                 .Build()
             .AddParam("$lease_deadline")
-                .Datetime(LeaseDeadline)
+                .Timestamp(TInstant::Now() + LeaseDuration)
                 .Build();
 
-        RunDataQuery(sql, &params);
+        RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
+        SetQueryResultHandler(&TScriptLeaseUpdater::OnQueryResult);
     }
 
     void OnQueryResult() override {
@@ -595,28 +630,29 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvScriptLeaseUpdateResponse(status, std::move(issues)));
+        Send(Owner, new TEvScriptLeaseUpdateResponse(LeaseExists, status, std::move(issues)));
     }
 
 private:
     const TString Database;
     const TString ExecutionId;
-    const TInstant LeaseDeadline;
+    const TDuration LeaseDuration;
+    bool LeaseExists = true;
 };
 
 class TScriptLeaseUpdateActor : public TActorBootstrapped<TScriptLeaseUpdateActor> {
-    static constexpr ui32 MAX_NUMBER_OF_ATTEMPTS = 5;
-
 public:
-    TScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, const TInstant& leaseDeadline)
+    using IRetryPolicy = IRetryPolicy<const Ydb::StatusIds::StatusCode&>;
+
+    TScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration)
         : RunScriptActorId(runScriptActorId)
         , Database(database)
         , ExecutionId(executionId)
-        , LeaseDeadline(leaseDeadline)
+        , LeaseDuration(leaseDuration)
     {}
 
     void CreateScriptLeaseUpdater() {
-        Register(new TScriptLeaseUpdater(Database, ExecutionId, LeaseDeadline));
+        Register(new TScriptLeaseUpdater(Database, ExecutionId, LeaseDuration));
     }
 
     void Bootstrap() {
@@ -626,32 +662,69 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvScriptLeaseUpdateResponse, Handle);
+        hFunc(NActors::TEvents::TEvWakeup, Wakeup);
     )
 
-    void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
-        NumberOfAttempts += 1;
-        Response = std::move(ev);
-        
-        if (Response->Get()->Status == Ydb::StatusIds::SUCCESS || NumberOfAttempts == MAX_NUMBER_OF_ATTEMPTS) {
-            Reply();
-            return;
-        }
-
+    void Wakeup(NActors::TEvents::TEvWakeup::TPtr&) {
         CreateScriptLeaseUpdater();
     }
 
-    void Reply() {
-        Send(RunScriptActorId, Response->Release().Release());
+    void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
+        auto queryStatus = ev->Get()->Status;
+        if (!ev->Get()->ExecutionEntryExists && queryStatus == Ydb::StatusIds::BAD_REQUEST || queryStatus == Ydb::StatusIds::SUCCESS) {
+            Reply(std::move(ev));
+            return;
+        }
+
+        if (RetryState == nullptr) {
+            CreateRetryState();
+        }
+
+        const TMaybe<TDuration> delay = RetryState->GetNextRetryDelay(queryStatus);
+        if (delay) {
+            Schedule(*delay, new NActors::TEvents::TEvWakeup());
+        } else {
+            Reply(std::move(ev));
+        }
+    }
+
+    void Reply(TEvScriptLeaseUpdateResponse::TPtr&& ev) {
+        Send(RunScriptActorId, ev->Release().Release());
         PassAway();
+    }
+
+    static ERetryErrorClass Retryable(const Ydb::StatusIds::StatusCode& status) {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            return ERetryErrorClass::NoRetry;
+        }
+
+        if (status == Ydb::StatusIds::INTERNAL_ERROR
+            || status == Ydb::StatusIds::UNAVAILABLE
+            || status == Ydb::StatusIds::TIMEOUT
+            || status == Ydb::StatusIds::BAD_SESSION
+            || status == Ydb::StatusIds::SESSION_EXPIRED
+            || status == Ydb::StatusIds::SESSION_BUSY) {
+            return ERetryErrorClass::ShortRetry;
+        }
+
+        if (status == Ydb::StatusIds::OVERLOADED) {
+            return ERetryErrorClass::LongRetry;
+        }
+
+        return ERetryErrorClass::NoRetry;
+    }
+
+    void CreateRetryState() {
+        IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy(Retryable, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), LeaseDuration / 2);
+        RetryState = policy->CreateRetryState();
     }
 
 private:
     TActorId RunScriptActorId;
     TString Database;
     TString ExecutionId;
-    TInstant LeaseDeadline;
-    TEvScriptLeaseUpdateResponse::TPtr Response;
-    ui32 NumberOfAttempts = 0;
+    TDuration LeaseDuration;
+    IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
 };
 
 class TScriptExecutionFinisherBase : public TQueryBase {
@@ -1985,8 +2058,8 @@ NActors::IActor* CreateGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorReques
     return new TGetRunScriptActorActor(std::move(ev));
 }
 
-NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, const TInstant& leaseDeadline) {
-    return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDeadline);
+NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration) {
+    return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDuration);
 }
 
 NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMeta) {

@@ -108,6 +108,51 @@ struct TScriptExecutionsYdbSetup {
         return reply;
     }
 
+    void CheckLeaseExistance(const TString& executionId, bool expectedExistance, TMaybe<i32> expectedStatus) {
+        TStringBuilder sql;
+            sql <<
+                R"(
+                    SELECT COUNT(*)
+                    FROM `.metadata/script_execution_leases`
+                    WHERE database = $database AND execution_id = $execution_id;
+
+                    SELECT operation_status
+                    FROM `.metadata/script_executions`
+                    WHERE database = $database AND execution_id = $execution_id;
+                )";
+
+            NYdb::TParamsBuilder params;
+            params
+                .AddParam("$database")
+                    .Utf8(TestDatabase)
+                    .Build()
+                .AddParam("$execution_id")
+                    .Utf8(executionId)
+                    .Build();
+
+            auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NYdb::TResultSetParser rs1 = result.GetResultSetParser(0);
+            UNIT_ASSERT(rs1.TryNextRow());
+
+            auto count = rs1.ColumnParser(0).GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(count, expectedExistance ? 1 : 0);
+
+            NYdb::TResultSetParser rs2 = result.GetResultSetParser(1);
+            UNIT_ASSERT(rs2.TryNextRow());
+
+            UNIT_ASSERT_VALUES_EQUAL(rs2.ColumnParser("operation_status").GetOptionalInt32(), expectedStatus);
+    }
+
+    THolder<TEvScriptLeaseUpdateResponse> UpdateLease(const TString& executionId, TDuration leaseDuration) {
+        GetRuntime()->Register(CreateScriptLeaseUpdateActor(GetRuntime()->AllocateEdgeActor(), TestDatabase, executionId, leaseDuration));
+        auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>();
+        
+        UNIT_ASSERT(reply != nullptr);
+        return reply;
+    }
+
 public:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
@@ -129,49 +174,60 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         const TString executionId = ydb.CreateQueryInDb();
         UNIT_ASSERT(executionId);
         const TInstant startLeaseTime = TInstant::Now();
-        auto checkLeaseExistance = [&](bool expectedExistance, TMaybe<i32> expectedStatus) {
-            TStringBuilder sql;
-            sql <<
-                R"(
-                    SELECT COUNT(*)
-                    FROM `.metadata/script_execution_leases`
-                    WHERE database = $database AND execution_id = $execution_id;
-
-                    SELECT operation_status
-                    FROM `.metadata/script_executions`
-                    WHERE database = $database AND execution_id = $execution_id;
-                )";
-            NYdb::TParamsBuilder params;
-            params
-                .AddParam("$database")
-                    .Utf8(TestDatabase)
-                    .Build()
-                .AddParam("$execution_id")
-                    .Utf8(executionId)
-                    .Build();
-            auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NYdb::TResultSetParser rs1 = result.GetResultSetParser(0);
-            UNIT_ASSERT(rs1.TryNextRow());
-            auto count = rs1.ColumnParser(0).GetUint64();
-            UNIT_ASSERT_VALUES_EQUAL(count, expectedExistance ? 1 : 0);
-
-            NYdb::TResultSetParser rs2 = result.GetResultSetParser(1);
-            UNIT_ASSERT(rs2.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(rs2.ColumnParser("operation_status").GetOptionalInt32(), expectedStatus);
-        };
-        checkLeaseExistance(true, Nothing());
+        ydb.CheckLeaseExistance(executionId, true, Nothing());
         auto checkResult1 = ydb.CheckLeaseStatus(executionId);
         const TDuration checkTime = TInstant::Now() - startLeaseTime;
         if (checkTime < TestLeaseDuration) {
             UNIT_ASSERT_VALUES_EQUAL(checkResult1->Get()->OperationStatus, Nothing());
-            checkLeaseExistance(true, Nothing());
+            ydb.CheckLeaseExistance(executionId, true, Nothing());
             SleepUntil(startLeaseTime + TestLeaseDuration);
         }
 
         auto checkResult2 = ydb.CheckLeaseStatus(executionId);
         UNIT_ASSERT_VALUES_EQUAL(checkResult2->Get()->OperationStatus, Ydb::StatusIds::ABORTED);
-        checkLeaseExistance(false, Ydb::StatusIds::ABORTED);
+        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::ABORTED);
+    }
+    
+    Y_UNIT_TEST(UpdatesLeaseAfterExpiring) {
+        TScriptExecutionsYdbSetup ydb;
+
+        const TString executionId = ydb.CreateQueryInDb();
+        UNIT_ASSERT(executionId);
+
+        TInstant startLeaseTime = TInstant::Now();
+
+        ydb.CheckLeaseExistance(executionId, true, Nothing());
+        SleepUntil(startLeaseTime + TestLeaseDuration);
+
+        startLeaseTime = TInstant::Now();
+        TDuration leaseDuration = TDuration::Seconds(10);
+        auto updateResponse = ydb.UpdateLease(executionId, leaseDuration);
+        UNIT_ASSERT_C(updateResponse->Status == Ydb::StatusIds::SUCCESS, updateResponse->Issues.ToString());
+        UNIT_ASSERT(updateResponse->ExecutionEntryExists);
+        
+        ydb.CheckLeaseExistance(executionId, true, Nothing());
+        auto checkResult = ydb.CheckLeaseStatus(executionId);
+
+        if (TInstant::Now() - startLeaseTime < leaseDuration) {
+            UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Nothing());
+        }
+    }
+
+    Y_UNIT_TEST(AttemptToUpdateDeletedLease) {
+        TScriptExecutionsYdbSetup ydb;
+
+        const TString executionId = ydb.CreateQueryInDb();
+        UNIT_ASSERT(executionId);
+        ydb.CheckLeaseExistance(executionId, true, Nothing());
+
+        Sleep(TestLeaseDuration);
+
+        auto checkResult = ydb.CheckLeaseStatus(executionId);
+        UNIT_ASSERT_VALUES_EQUAL(checkResult->Get()->OperationStatus, Ydb::StatusIds::ABORTED);
+        ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::ABORTED);
+
+        auto updateResponse = ydb.UpdateLease(executionId, TestLeaseDuration);
+        UNIT_ASSERT(!updateResponse->ExecutionEntryExists);
     }
 }
 } // namespace NKikimr::NKqp

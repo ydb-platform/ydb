@@ -331,9 +331,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         TTableBucket * bucket1 = &JoinTable1->TableBuckets[bucket];
         TTableBucket * bucket2 = &JoinTable2->TableBuckets[bucket];
 
-        KeysHashTable& kh1 = bucket1->AnyHashTable;
-        KeysHashTable& kh2 = bucket2->AnyHashTable;
-
         ui64 headerSize1 = JoinTable1->HeaderSize;
         ui64 headerSize2 = JoinTable2->HeaderSize;
         ui64 nullsSize1 = JoinTable1->NullsBitmapSize_;
@@ -366,13 +363,6 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         slotToIdx.clear();
         joinSlots.resize(nSlots*slotSize, 0);
         slotToIdx.resize(nSlots, 0);
-
-        kh1.NSlots = nSlots;
-        kh1.SlotSize = slotSize;
-
-
-        kh2.NSlots = nSlots;
-        kh2.SlotSize = slotSize;
 
         ui32 tuple2Idx = 0;
         auto it2 = bucket2->KeyIntVals.begin();

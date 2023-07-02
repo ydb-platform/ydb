@@ -28,7 +28,8 @@ def run_cli(argv):
 
 
 def get_queries(filename):
-    path = os.path.join(yatest.common.source_path("ydb/tests/functional/clickbench"), filename)
+    arcadia_root = yatest.common.source_path('')
+    path = os.path.join(arcadia_root, yatest.common.test_source_path(''), filename)
     with open(path, "r") as r:
         data = r.read()
     for query in data.split('\n'):

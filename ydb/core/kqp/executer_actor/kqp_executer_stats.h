@@ -25,8 +25,8 @@ public:
     // basic stats
     std::unordered_set<ui64> AffectedShards;
     ui32 TotalTasks = 0;
-    ui64 ResultBytes = 0;
-    ui64 ResultRows = 0;
+    std::atomic<ui64> ResultBytes = 0;
+    std::atomic<ui64> ResultRows = 0;    
     TDuration ExecuterCpuTime;
 
     TInstant StartTs;

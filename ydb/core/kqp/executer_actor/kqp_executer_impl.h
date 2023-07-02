@@ -991,9 +991,9 @@ protected:
         IActor* proxy;
         if (txResult.IsStream) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats.get(), this->SelfId());
+                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats, this->SelfId());
         } else {
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), this->SelfId(),
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
         }
 
@@ -1070,7 +1070,7 @@ protected:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
-    std::unique_ptr<TQueryExecutionStats> Stats;
+    std::shared_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;

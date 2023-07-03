@@ -105,7 +105,7 @@ namespace {
         resultBufferData += sizeof(cellsSize);
 
         if (resultCells) {
-            resultCells->resize(cellsSize);
+            resultCells->resize_uninitialized(cellsSize);
         }
 
         for (size_t i = 0; i < cellsSize; ++i) {
@@ -118,8 +118,12 @@ namespace {
                 memcpy(resultBufferData, cell.Data(), cell.Size());
             }
 
-            if (resultCells && !cell.IsNull()) {
-                (*resultCells)[i] = TCell(resultBufferData, cell.Size());
+            if (resultCells) {
+                if (cell.IsNull()) {
+                    new (resultCells->data() + i) TCell();
+                } else {
+                    new (resultCells->data() + i) TCell(resultBufferData, cell.Size());
+                }
             }
 
             resultBufferData += cell.Size();
@@ -135,16 +139,17 @@ namespace {
 
         const char* buf = data.data();
         const char* bufEnd = data.data() + data.size();
-        if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16)))
+        if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(ui16))))
             return false;
 
         ui16 cellsSize = ReadUnaligned<ui16>(buf);
         buf += sizeof(cellsSize);
 
-        resultCells.resize(cellsSize);
+        resultCells.resize_uninitialized(cellsSize);
+        TCell* resultCellsData = resultCells.data();
 
         for (ui32 i = 0; i < cellsSize; ++i) {
-            if (bufEnd - buf < static_cast<ptrdiff_t>(sizeof(TCellHeader))) {
+            if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(sizeof(TCellHeader)))) {
                 resultCells.clear();
                 return false;
             }
@@ -152,12 +157,17 @@ namespace {
             TCellHeader cellHeader = ReadUnaligned<TCellHeader>(buf);
             buf += sizeof(cellHeader);
 
-            if (bufEnd - buf < static_cast<ptrdiff_t>(cellHeader.CellSize())) {
+            if (Y_UNLIKELY(bufEnd - buf < static_cast<ptrdiff_t>(cellHeader.CellSize()))) {
                 resultCells.clear();
                 return false;
             }
 
-            resultCells[i] = cellHeader.IsNull() ? TCell() : TCell(buf, cellHeader.CellSize());
+            if (cellHeader.IsNull()) {
+                new (resultCellsData + i) TCell();
+            } else {
+                new (resultCellsData + i) TCell(buf, cellHeader.CellSize());
+            }
+
             buf += cellHeader.CellSize();
         }
 

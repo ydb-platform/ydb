@@ -6013,13 +6013,23 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
                 "Message:\n" << ev->Get()->Record.ShortDebugString());
 
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
-
+    bool executed = false; 
+   
     if (TxIdToExport.contains(txId) || TxIdToDependentExport.contains(txId)) {
-        return Execute(CreateTxProgressExport(ev), ctx);
-    } else if (TxIdToImport.contains(txId)) {
-        return Execute(CreateTxProgressImport(ev), ctx);
-    } else if (TxIdToIndexBuilds.contains(txId)) {
-        return Execute(CreateTxReply(ev), ctx);
+        Execute(CreateTxProgressExport(txId), ctx);
+        executed = true;
+    }
+    if (TxIdToImport.contains(txId)) {
+        Execute(CreateTxProgressImport(txId), ctx);
+        executed = true;
+    }
+    if (TxIdToIndexBuilds.contains(txId)) {
+        Execute(CreateTxReply(txId), ctx);
+        executed = true;
+    }
+
+    if (executed) {
+        return;
     }
 
     LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

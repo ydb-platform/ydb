@@ -3,10 +3,12 @@
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/engines/index_info.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
+    RawDataSizeReal += NArrow::GetBatchDataSize(batch);
     if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
         return;
     }
@@ -31,7 +33,13 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
     CheckReady();
 }
 
-NKikimr::NOlap::NIndexedReader::TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
+TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
+    const ui64 batchSize = portionInfo.GetRawBytes(Owner->GetReadMetadata()->GetAllColumns());
+    RawDataSize += batchSize;
+    const ui64 filtersSize = portionInfo.NumRows() * (8 + 8);
+    RawDataSize += filtersSize;
+    ACFL_DEBUG("event", "RegisterBatchForFetching")("columns_count", Owner->GetReadMetadata()->GetAllColumns().size())("batch_raw_size", batchSize)("granule_size", RawDataSize);
+
     Y_VERIFY(!ReadyFlag);
     ui32 batchGranuleIdx = Batches.size();
     WaitBatches.emplace(batchGranuleIdx);
@@ -104,6 +112,7 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
     }
     NotIndexedBatchReadyFlag = true;
     if (batch && batch->num_rows()) {
+        GranuleDataSize.Take(NArrow::GetBatchDataSize(batch));
         Y_VERIFY(!NotIndexedBatch);
         NotIndexedBatch = batch;
         if (NotIndexedBatch) {
@@ -119,6 +128,7 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
 void TGranule::CheckReady() {
     if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
         ReadyFlag = true;
+        ACFL_DEBUG("event", "granule_ready")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
         Owner->OnGranuleReady(GranuleId);
     }
 }
@@ -129,7 +139,6 @@ void TGranule::OnBlobReady(const TBlobRange& range) noexcept {
         return;
     }
     Y_VERIFY(!ReadyFlag);
-    BlobsDataSize += range.Size;
     Owner->OnBlobReady(GranuleId, range);
 }
 
@@ -143,6 +152,7 @@ TGranule::TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
     : GranuleId(granuleId)
     , LiveController(owner.GetGranulesLiveContext())
     , Owner(&owner)
+    , GranuleDataSize(Owner->GetMemoryAccessor(), Owner->GetCounters().Aggregations.GetGranulesProcessing())
 {
 
 }
@@ -150,6 +160,7 @@ TGranule::TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
 void TGranule::StartConstruction() {
     InConstruction = true;
     LiveController->Inc();
+    GranuleDataSize.Take(RawDataSize);
 }
 
 }

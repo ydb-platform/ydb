@@ -67,6 +67,8 @@ public:
 };
 
 class TColumnShardScan : public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
+private:
+    std::shared_ptr<NOlap::TActorBasedMemoryAccesor> MemoryAccessor;
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_OLAP_SCAN;
@@ -101,7 +103,8 @@ public:
         Schedule(Deadline, new TEvents::TEvWakeup);
 
         Y_VERIFY(!ScanIterator);
-        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool);
+        MemoryAccessor = std::make_shared<NOlap::TActorBasedMemoryAccesor>(SelfId(), "CSScan/Result");
+        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool, MemoryAccessor);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
@@ -143,7 +146,6 @@ private:
             if (!blobRange.BlobId.IsValid()) {
                 break;
             }
-            ScanCountersPool.Aggregations->AddFlightReadInfo(blobRange.Size);
             ++InFlightReads;
             InFlightReadBytes += blobRange.Size;
             ranges[blobRange.BlobId].emplace_back(blobRange);
@@ -344,7 +346,8 @@ private:
             // * we have finished scanning ALL the ranges
             // * or there is an in-flight blob read or ScanData message for which
             //   we will get a reply and will be able to proceed further
-            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads != 0 || ScanIterator->HasWaitingTasks()) {
+            if  (!ScanIterator || !ChunksLimiter.HasMore() || InFlightReads != 0 || ScanIterator->HasWaitingTasks()
+                || MemoryAccessor->InWaiting()) {
                 return;
             }
         }
@@ -392,12 +395,16 @@ private:
         Finish();
     }
 
-    void HandleScan(TEvents::TEvWakeup::TPtr&) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-            "Scan " << ScanActorId << " guard execution timeout"
-            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+    void HandleScan(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag) {
+            ContinueProcessing();
+        } else {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " guard execution timeout"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
-        Finish();
+            Finish();
+        }
     }
 
 private:
@@ -421,7 +428,7 @@ private:
             return Finish();
         }
 
-        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool);
+        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool, MemoryAccessor);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();

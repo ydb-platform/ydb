@@ -31,6 +31,8 @@ public:
     using TPtr = std::shared_ptr<TGranule>;
 private:
     ui64 GranuleId = 0;
+    ui64 RawDataSize = 0;
+    ui64 RawDataSizeReal = 0;
 
     bool NotIndexedBatchReadyFlag = false;
     bool InConstruction = false;
@@ -46,15 +48,12 @@ private:
     std::shared_ptr<TGranulesLiveControl> LiveController;
     TGranulesFillingContext* Owner = nullptr;
     THashSet<const void*> BatchesToDedup;
-    ui64 BlobsDataSize = 0;
+
+    TScanMemoryLimiter::TGuard GranuleDataSize;
     void CheckReady();
 public:
     TGranule(const ui64 granuleId, TGranulesFillingContext& owner);
     ~TGranule();
-
-    ui64 GetBlobsDataSize() const noexcept {
-        return BlobsDataSize;
-    }
 
     ui64 GetGranuleId() const noexcept {
         return GranuleId;

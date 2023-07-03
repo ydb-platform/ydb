@@ -2,6 +2,7 @@
 
 #include "blob_cache.h"
 #include "engines/reader/conveyor_task.h"
+#include "resources/memory.h"
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/program/program.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -10,6 +11,7 @@ namespace NKikimr::NOlap {
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult {
 private:
+    std::shared_ptr<TScanMemoryLimiter::TGuard> MemoryGuard;
     std::shared_ptr<arrow::RecordBatch> ResultBatch;
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
@@ -18,18 +20,29 @@ private:
 
 public:
     void Slice(const ui32 offset, const ui32 length) {
+        const ui64 baseSize = NArrow::GetBatchDataSize(ResultBatch);
         ResultBatch = ResultBatch->Slice(offset, length);
+        MemoryGuard->Take(NArrow::GetBatchDataSize(ResultBatch));
+        MemoryGuard->Free(baseSize);
     }
 
     void ApplyProgram(const NOlap::TProgramContainer& program) {
+        const ui64 baseSize = NArrow::GetBatchDataSize(ResultBatch);
         auto status = program.ApplyProgram(ResultBatch);
         if (!status.ok()) {
             ErrorString = status.message();
+        } else {
+            MemoryGuard->Take(NArrow::GetBatchDataSize(ResultBatch));
+            MemoryGuard->Free(baseSize);
         }
     }
 
     ui64 GetSize() const {
-        return NArrow::GetBatchDataSize(ResultBatch);
+        if (MemoryGuard) {
+            return MemoryGuard->GetValue();
+        } else {
+            return 0;
+        }
     }
 
     const std::shared_ptr<arrow::RecordBatch>& GetResultBatch() const {
@@ -44,16 +57,27 @@ public:
 
     TPartialReadResult() = default;
 
-    explicit TPartialReadResult(std::shared_ptr<arrow::RecordBatch> batch)
-        : ResultBatch(batch)
+    explicit TPartialReadResult(
+        TScanMemoryLimiter::IMemoryAccessor::TPtr memoryAccessor,
+        const std::shared_ptr<NOlap::TMemoryAggregation>& memoryAggregation,
+        std::shared_ptr<arrow::RecordBatch> batch)
+        : MemoryGuard(std::make_shared<TScanMemoryLimiter::TGuard>(memoryAccessor, memoryAggregation))
+        , ResultBatch(batch)
     {
+        MemoryGuard->Take(NArrow::GetBatchDataSize(ResultBatch));
+        MemoryGuard->Take(NArrow::GetBatchDataSize(LastReadKey));
     }
 
     explicit TPartialReadResult(
+        TScanMemoryLimiter::IMemoryAccessor::TPtr memoryAccessor,
+        const std::shared_ptr<NOlap::TMemoryAggregation>& memoryAggregation,
         std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<arrow::RecordBatch> lastKey)
-        : ResultBatch(batch)
+        : MemoryGuard(std::make_shared<TScanMemoryLimiter::TGuard>(memoryAccessor, memoryAggregation))
+        , ResultBatch(batch)
         , LastReadKey(lastKey)
     {
+        MemoryGuard->Take(NArrow::GetBatchDataSize(ResultBatch));
+        MemoryGuard->Take(NArrow::GetBatchDataSize(LastReadKey));
     }
 };
 }

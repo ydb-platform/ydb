@@ -52,6 +52,10 @@ public:
             ;
     }
 
+    const std::shared_ptr<TActorBasedMemoryAccesor>& GetMemoryAccessor() const {
+        return Context.GetMemoryAccessor();
+    }
+
     const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
         return Context.GetCounters();
     }
@@ -101,7 +105,8 @@ private:
 
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
-    std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
+    std::vector<TPartialReadResult> ReadyToOut(const i64 maxRowsInBatch);
+    void MergeTooSmallBatches(const std::shared_ptr<TMemoryAggregation>& memAggregation, std::vector<TPartialReadResult>& out) const;
     std::vector<TPartialReadResult> MakeResult(
         std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules, int64_t maxRowsInBatch) const;
 };

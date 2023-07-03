@@ -27,6 +27,7 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   core-formats-arrow
   columnshard-engines-predicate
   columnshard-hooks-abstract
+  tx-columnshard-resources
   core-tx-program
   engines-reader-order_control
   columnshard-engines-scheme

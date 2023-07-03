@@ -255,16 +255,16 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
 
     // Extract ready to out granules: ready granules that are not blocked by other (not ready) granules
     Y_VERIFY(GranulesContext);
-    auto out = MakeResult(ReadyToOut(), maxRowsInBatch);
+    auto out = ReadyToOut(maxRowsInBatch);
     const bool requireResult = GranulesContext->IsFinished(); // not indexed or the last indexed read (even if it's empty)
     if (requireResult && out.empty()) {
-        out.push_back(TPartialReadResult(NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())));
+        out.push_back(TPartialReadResult(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady(), NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())));
     }
     return out;
 }
 
 /// @return batches that are not blocked by others
-std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::ReadyToOut() {
+std::vector<TPartialReadResult> TIndexedReadData::ReadyToOut(const i64 maxRowsInBatch) {
     Y_VERIFY(SortReplaceDescription);
     Y_VERIFY(GranulesContext);
 
@@ -306,7 +306,7 @@ std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::
         NotIndexedOutscopeBatch = nullptr;
     }
 
-    return out;
+    return MakeResult(std::move(out), maxRowsInBatch);
 }
 
 std::shared_ptr<arrow::RecordBatch>
@@ -333,8 +333,7 @@ TIndexedReadData::MergeNotIndexed(std::vector<std::shared_ptr<arrow::RecordBatch
     return merged;
 }
 
-// TODO: better implementation
-static void MergeTooSmallBatches(std::vector<TPartialReadResult>& out) {
+void TIndexedReadData::MergeTooSmallBatches(const std::shared_ptr<TMemoryAggregation>& memAggregation, std::vector<TPartialReadResult>& out) const {
     if (out.size() < 10) {
         return;
     }
@@ -367,7 +366,7 @@ static void MergeTooSmallBatches(std::vector<TPartialReadResult>& out) {
     auto batch = NArrow::ToBatch(*res);
 
     std::vector<TPartialReadResult> merged;
-    merged.emplace_back(TPartialReadResult(batch, out.back().GetLastReadKey()));
+    merged.emplace_back(TPartialReadResult(GetMemoryAccessor(), memAggregation, batch, out.back().GetLastReadKey()));
     out.swap(merged);
 }
 
@@ -422,12 +421,12 @@ std::vector<TPartialReadResult> TIndexedReadData::MakeResult(std::vector<std::ve
 
             // Leave only requested columns
             auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->GetResultSchema());
-            out.emplace_back(TPartialReadResult(resultBatch, lastKey));
+            out.emplace_back(TPartialReadResult(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady(), resultBatch, lastKey));
         }
     }
     
     if (ReadMetadata->GetProgram().HasProgram()) {
-        MergeTooSmallBatches(out);
+        MergeTooSmallBatches(Context.GetCounters().Aggregations.GetResultsReady(), out);
         for (auto& result : out) {
             result.ApplyProgram(ReadMetadata->GetProgram());
         }

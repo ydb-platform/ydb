@@ -1,6 +1,7 @@
 #include "filling_context.h"
 #include "order_control/not_sorted.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/tx/columnshard/resources/memory.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
@@ -8,7 +9,7 @@ namespace NKikimr::NOlap::NIndexedReader {
 TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading)
     : ReadMetadata(readMetadata)
     , InternalReading(internalReading)
-    , Processing(owner.GetCounters())
+    , Processing(owner.GetMemoryAccessor(), owner.GetCounters())
     , Result(owner.GetCounters())
     , GranulesLiveContext(std::make_shared<TGranulesLiveControl>())
     , Owner(owner)
@@ -67,20 +68,16 @@ void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_
 
 bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range, const bool hasReadyResults) {
     Y_VERIFY_DEBUG(!Result.IsReady(granuleId));
-    if (InternalReading || Processing.IsInProgress(granuleId) || (!hasReadyResults && !GranulesLiveContext->GetCount())) {
-        Processing.StartBlobProcessing(granuleId, range);
-        return true;
-    } else if (CheckBufferAvailable()) {
+    if (InternalReading || Processing.IsInProgress(granuleId)
+        || (!GranulesLiveContext->GetCount() && !hasReadyResults)
+        || GetMemoryAccessor()->GetLimiter().HasBufferOrSubscribe(GetMemoryAccessor())
+        )
+    {
         Processing.StartBlobProcessing(granuleId, range);
         return true;
     } else {
         return false;
     }
-}
-
-bool TGranulesFillingContext::CheckBufferAvailable() const {
-    return Result.GetCount() + Processing.GetCount() < GranulesCountProcessingLimit ||
-        Result.GetBlobsSize() + Processing.GetBlobsSize() < ProcessingBytesLimit;
 }
 
 bool TGranulesFillingContext::ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range) {
@@ -96,6 +93,10 @@ void TGranulesFillingContext::OnGranuleReady(const ui64 granuleId) {
 std::vector<NKikimr::NOlap::NIndexedReader::TGranule::TPtr> TGranulesFillingContext::DetachReadyInOrder() {
     Y_VERIFY(SortingPolicy);
     return SortingPolicy->DetachReadyGranules(Result);
+}
+
+const std::shared_ptr<NKikimr::NOlap::TActorBasedMemoryAccesor>& TGranulesFillingContext::GetMemoryAccessor() const {
+    return Owner.GetMemoryAccessor();
 }
 
 }

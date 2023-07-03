@@ -30,9 +30,6 @@ private:
     NColumnShard::TConcreteScanCounters Counters;
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
-    static constexpr ui32 GranulesCountProcessingLimit = 16;
-    static constexpr ui64 ExpectedBytesForGranule = 50 * 1024 * 1024;
-    static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
     bool CheckBufferAvailable() const;
 public:
     std::shared_ptr<TGranulesLiveControl> GetGranulesLiveContext() const {
@@ -43,7 +40,9 @@ public:
     }
     bool ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
     bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange & range, const bool hasReadyResults);
-    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData & owner, const bool internalReading);
+    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading);
+
+    const std::shared_ptr<TActorBasedMemoryAccesor>& GetMemoryAccessor() const;
 
     TString DebugString() const {
         return TStringBuilder()

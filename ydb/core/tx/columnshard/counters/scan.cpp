@@ -45,8 +45,8 @@ TScanCounters::TScanCounters(const TString& module)
 {
 }
 
-std::shared_ptr<NKikimr::NColumnShard::TScanAggregations> TScanCounters::BuildAggregations() {
-    return std::make_shared<TScanAggregations>(GetModuleId());
+NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {
+    return TScanAggregations(GetModuleId());
 }
 
 }

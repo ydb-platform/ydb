@@ -94,6 +94,7 @@ public:
     virtual TString DebugString() const override {
         return TStringBuilder()
             << "ready_results:(" << ReadyResults.DebugString() << ");"
+            << "has_buffer:" << IndexedData.GetMemoryAccessor()->HasBuffer() << ";"
             << "indexed_data:(" << IndexedData.DebugString() << ")"
             ;
     }

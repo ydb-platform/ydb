@@ -1,6 +1,7 @@
 #pragma once
 #include "granule.h"
 #include <ydb/core/tx/columnshard/counters/scan.h>
+#include <ydb/core/tx/columnshard/resources/memory.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -10,17 +11,18 @@ private:
     ui32 OriginalGranulesCount = 0;
     ui64 CommonGranuleData = 0;
     std::set<ui64> GranulesInProcessing;
-    i64 BlobsSize = 0;
     bool NotIndexedBatchesInitialized = false;
     const NColumnShard::TConcreteScanCounters Counters;
+    TScanMemoryLimiter::TGuard GuardZeroGranuleData;
 public:
     TString DebugString() const;
     bool IsGranuleActualForProcessing(const ui64 granuleId) const {
         return GranulesWaiting.contains(granuleId) || (granuleId == 0 && !NotIndexedBatchesInitialized);
     }
 
-    TProcessingController(const NColumnShard::TConcreteScanCounters& counters)
+    TProcessingController(TScanMemoryLimiter::IMemoryAccessor::TPtr memoryAccessor, const NColumnShard::TConcreteScanCounters& counters)
         : Counters(counters)
+        , GuardZeroGranuleData(memoryAccessor, Counters.Aggregations.GetGranulesProcessing())
     {
     }
 
@@ -46,10 +48,6 @@ public:
     }
 
     void Abort();
-
-    ui64 GetBlobsSize() const {
-        return BlobsSize;
-    }
 
     ui32 GetCount() const {
         return GranulesInProcessing.size();

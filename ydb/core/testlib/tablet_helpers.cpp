@@ -604,7 +604,8 @@ namespace NKikimr {
         runtime.DispatchEvents(rebootOptions);
 
         InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
-        WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
+        // FIXME: there's at least one nbs test that weirdly depends on this sleeping for at least ~50ms, unclear why
+        WaitScheduledEvents(runtime, TDuration::MilliSeconds(50), sender, nodeIndex);
     }
 
     void GracefulRestartTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId &sender, ui32 nodeIndex) {
@@ -614,7 +615,7 @@ namespace NKikimr {
         runtime.DispatchEvents(rebootOptions);
 
         InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
-        WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
+        WaitScheduledEvents(runtime, TDuration::MilliSeconds(50), sender, nodeIndex);
     }
 
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,

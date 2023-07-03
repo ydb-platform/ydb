@@ -6,7 +6,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NYql::NConnector {
-    bool ErrorIsUnitialized(const NApi::TError& error) noexcept {
+    bool ErrorIsUninitialized(const NApi::TError& error) noexcept {
         return error.status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS && error.message().empty();
     }
 

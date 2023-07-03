@@ -9,18 +9,16 @@
 
 #define REQUEST_START() ({ YQL_LOG(INFO) << __func__ << ": request handling started"; })
 
-#define REQUEST_END(status, err)                                                                           \
-    ({                                                                                                     \
-        if (!status.ok()) {                                                                                \
-            YQL_LOG(ERROR) << __func__ << ": request handling failed: " << int(status.error_code()) << " " \
-                           << status.error_message();                                                      \
-            /* do not overwrite logical error with transport error */                                      \
-            if (ErrorIsSuccess(err)) {                                                                     \
-                err = ErrorFromGRPCStatus(status);                                                         \
-            }                                                                                              \
-        } else {                                                                                           \
-            YQL_LOG(INFO) << __func__ << ": request handling finished";                                    \
-        }                                                                                                  \
+#define REQUEST_END(status, err)                                        \
+    ({                                                                  \
+        if (!status.ok()) {                                             \
+            YQL_LOG(ERROR) << __func__ << ": request handling failed: " \
+                           << "code=" << int(status.error_code())       \
+                           << ", msg=" << status.error_message();       \
+            err = ErrorFromGRPCStatus(status);                          \
+        } else {                                                        \
+            YQL_LOG(INFO) << __func__ << ": request handling finished"; \
+        }                                                               \
     })
 
 namespace NYql::NConnector {
@@ -46,10 +44,10 @@ namespace NYql::NConnector {
 
         REQUEST_START();
         grpc::Status status = Stub_->DescribeTable(&ctx, request, &response);
+        out->Error = response.error();
         REQUEST_END(status, out->Error);
 
         out->Schema = response.schema();
-        out->Error = response.error();
 
         return out;
     };

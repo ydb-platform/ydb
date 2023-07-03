@@ -35,7 +35,6 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/transform
-    ydb/library/yql/providers/clickhouse/actors
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/dq/actors
@@ -44,6 +43,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/task_runner
     ydb/library/yql/providers/dq/worker_manager
     ydb/library/yql/providers/dq/worker_manager/interface
+    ydb/library/yql/providers/generic/actors
     ydb/library/yql/providers/pq/async_io
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/gateway/native

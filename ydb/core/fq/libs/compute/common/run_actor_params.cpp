@@ -8,6 +8,7 @@ TRunActorParams::TRunActorParams(
     TYqSharedResources::TPtr yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
+    NYql::NConnector::IClient::TPtr connectorClient,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NYql::IModuleResolver::TPtr& moduleResolver,
@@ -57,6 +58,7 @@ TRunActorParams::TRunActorParams(
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , S3Gateway(s3Gateway)
+    , ConnectorClient(connectorClient)
     , FunctionRegistry(functionRegistry)
     , RandomProvider(randomProvider)
     , ModuleResolver(moduleResolver)

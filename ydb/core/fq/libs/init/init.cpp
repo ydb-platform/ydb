@@ -37,10 +37,10 @@
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
-#include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
@@ -158,9 +158,12 @@ void Init(
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
+
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
+
+    const auto connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetConnector());
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
@@ -207,7 +210,7 @@ void Init(
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"));
         RegisterS3WriteActorFactory(*asyncIoFactory, credentialsFactory,
             httpGateway, s3HttpRetryPolicy);
-        RegisterClickHouseReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway);
+        RegisterGenericReadActorFactory(*asyncIoFactory, credentialsFactory, connectorClient);
 
         RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
@@ -313,6 +316,7 @@ void Init(
             serviceCounters,
             credentialsFactory,
             httpGateway,
+            connectorClient,
             std::move(pqCmConnections),
             clientCounters,
             tenant,

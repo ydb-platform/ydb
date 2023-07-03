@@ -44,7 +44,6 @@ target_link_libraries(fq-libs-init PUBLIC
   dq-actors-compute
   yql-dq-comp_nodes
   yql-dq-transform
-  providers-clickhouse-actors
   providers-common-comp_nodes
   providers-common-metrics
   providers-dq-actors
@@ -53,6 +52,7 @@ target_link_libraries(fq-libs-init PUBLIC
   providers-dq-task_runner
   providers-dq-worker_manager
   dq-worker_manager-interface
+  providers-generic-actors
   providers-pq-async_io
   providers-pq-cm_client
   pq-gateway-native

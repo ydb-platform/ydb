@@ -9,6 +9,7 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
@@ -27,6 +28,7 @@ struct TRunActorParams { // TODO2 : Change name
         TYqSharedResources::TPtr yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYql::IHTTPGateway::TPtr s3Gateway,
+        NYql::NConnector::IClient::TPtr connectorClient,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<IRandomProvider> randomProvider,
         NYql::IModuleResolver::TPtr& moduleResolver,
@@ -82,6 +84,7 @@ struct TRunActorParams { // TODO2 : Change name
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NYql::IHTTPGateway::TPtr S3Gateway;
+    NYql::NConnector::IClient::TPtr ConnectorClient;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     NYql::IModuleResolver::TPtr ModuleResolver;

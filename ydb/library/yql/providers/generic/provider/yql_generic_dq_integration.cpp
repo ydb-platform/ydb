@@ -98,10 +98,6 @@ namespace NYql {
                     const auto& token = settings.Token().Name().StringValue();
                     const auto& endpoint = State_->Configuration->ClusterNamesToClusterConfigs[cluster].endpoint();
 
-                    YQL_CLOG(INFO, ProviderGeneric)
-                        << "Filling source settings"
-                        << ": cluster: " << cluster << ", table: " << table << ", endpoint: " << endpoint.DebugString();
-
                     Generic::TSource srcDesc;
                     srcDesc.set_token(token);
 
@@ -110,6 +106,13 @@ namespace NYql {
                         db = "default";
                         dbTable = table;
                     }
+
+                    YQL_CLOG(INFO, ProviderGeneric)
+                        << "Filling source settings"
+                        << ": cluster: " << cluster
+                        << ", database: " << db
+                        << ", table: " << table
+                        << ", endpoint: " << endpoint.ShortDebugString();
 
                     const auto& columns = settings.Columns();
 

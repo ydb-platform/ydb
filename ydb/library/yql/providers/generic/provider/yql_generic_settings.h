@@ -37,7 +37,6 @@ namespace NYql {
             for (const auto& cluster : config.GetClusterMapping()) {
                 InitCluster(cluster, dbResolver, databaseIds, credentials);
             }
-
             this->FreezeDefaults();
         }
 
@@ -76,7 +75,7 @@ namespace NYql {
         TString MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) {
             TStructuredTokenBuilder b;
 
-            const auto iamToken = credentials->FindCredentialContent("default_" + cluster.name(), "default_generic", "");
+            const auto iamToken = credentials->FindCredentialContent("default_" + cluster.name(), "default_generic", cluster.GetToken());
             if (iamToken) {
                 return b.SetIAMToken(iamToken).ToJson();
             }
@@ -85,7 +84,7 @@ namespace NYql {
                 return b.SetServiceAccountIdAuth(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature()).ToJson();
             }
 
-            ythrow yexception() << "you should either provide IAM Token via credential system, "
+            ythrow yexception() << "you should either provide IAM Token via credential system or cluster config, "
                                    "or set (ServiceAccountId && ServiceAccountIdSignature) in cluster config";
         }
 

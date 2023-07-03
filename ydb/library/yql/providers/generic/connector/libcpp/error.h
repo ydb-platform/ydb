@@ -6,7 +6,7 @@
 
 namespace NYql::NConnector {
 
-    bool ErrorIsUnitialized(const NApi::TError& error) noexcept;
+    bool ErrorIsUninitialized(const NApi::TError& error) noexcept;
     bool ErrorIsSuccess(const NApi::TError& error);
     TIssues ErrorToIssues(const NApi::TError& error);
     void ErrorToExprCtx(const NApi::TError& error, TExprContext& ctx, const TPosition& position, const TString& summary);

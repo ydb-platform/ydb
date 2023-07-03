@@ -25,8 +25,7 @@ namespace NYql {
     using namespace NKikimr::NMiniKQL;
 
     struct TGenericTableDescription {
-        NConnector::NApi::TDataSourceInstance DataSourceInstance;
-        NConnector::TDescribeTableResult::TPtr Result;
+        TGenericTableDescription() = delete;
 
         TGenericTableDescription(const NConnector::NApi::TDataSourceInstance& dsi,
                                  NConnector::TDescribeTableResult::TPtr&& result)
@@ -34,6 +33,9 @@ namespace NYql {
             , Result(std::move(result))
         {
         }
+
+        NConnector::NApi::TDataSourceInstance DataSourceInstance;
+        NConnector::TDescribeTableResult::TPtr Result;
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
@@ -105,16 +107,9 @@ namespace NYql {
 
                 const auto& clusterName = item.first;
                 const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
-                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "Cluster not found:" << clusterName);
+                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found:" << clusterName);
 
                 const auto& clusterConfig = it->second;
-
-                TString token;
-                if (const auto cred = State_->Types->Credentials->FindCredential("default_" + clusterName)) {
-                    token = cred->Content;
-                } else {
-                    token = State_->Configuration->Tokens[clusterName];
-                }
 
                 auto dsi = request.mutable_data_source_instance();
                 dsi->mutable_endpoint()->CopyFrom(clusterConfig.GetEndpoint());
@@ -131,10 +126,8 @@ namespace NYql {
                 dsi->set_database(TString(db));
                 request.set_table(TString(dbTable));
 
-                auto response = Client_->DescribeTable(request);
-
-                Results_.emplace(
-                    item, TGenericTableDescription(request.data_source_instance(), Client_->DescribeTable(request)));
+                // NOTE: errors will be checked further in DoApplyAsyncChanges
+                Results_.emplace(item, TGenericTableDescription(request.data_source_instance(), Client_->DescribeTable(request)));
 
                 // FIXME: for the sake of simplicity, asynchronous workflow is broken now. Fix it some day.
                 auto promise = NThreading::NewPromise();

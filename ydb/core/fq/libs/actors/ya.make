@@ -56,7 +56,6 @@ PEERDIR(
     ydb/library/yql/core/services/mounts
     ydb/library/yql/dq/integration/transform
     ydb/library/yql/minikql/comp_nodes/llvm
-    ydb/library/yql/providers/clickhouse/provider
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
@@ -71,6 +70,9 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/provider/exec
     ydb/library/yql/providers/dq/worker_manager/interface
+    ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/pq/task_meta

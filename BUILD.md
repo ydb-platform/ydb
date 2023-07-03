@@ -89,7 +89,7 @@ Run cmake to generate build configuration:
 
 ```bash
 cd build
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG" -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
 
 ```
 
@@ -134,6 +134,8 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
     -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+    -DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG" \
+    -DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG" \
     ../ydb
    
     ```

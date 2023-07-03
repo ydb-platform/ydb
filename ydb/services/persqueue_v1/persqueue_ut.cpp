@@ -1151,13 +1151,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse,
                               resp);
                 UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
-                UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
-                int got = resp.read_response().partition_data(0).batches(0).message_data_size();
-                Cerr << "TAGX got response with size " << resp.read_response().bytes_size() << " with " << got << ", awaited for " << count << " more\n";
+
+                for (int i = 0; i < resp.read_response().partition_data(0).batches_size(); ++i) {
+                    int got = resp.read_response().partition_data(0).batches(i).message_data_size();
+                    Cerr << "TAGX got response batch " << i << " with " << got << " messages, awaited for " << count << " more\n";
+                    UNIT_ASSERT(got >= 1 && got <= count);
+                    count -= got;
+                }
                 budget -= resp.read_response().bytes_size();
                 Cerr << "TAGX Budget deced, now " << budget << "\n";
-                UNIT_ASSERT(got >= 1 && got <= count);
-                count -= got;
             }
         };
 

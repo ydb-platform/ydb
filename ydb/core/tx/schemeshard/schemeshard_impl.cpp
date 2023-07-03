@@ -6014,7 +6014,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
 
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
 
-    if (TxIdToExport.contains(txId)) {
+    if (TxIdToExport.contains(txId) || TxIdToDependentExport.contains(txId)) {
         return Execute(CreateTxProgressExport(ev), ctx);
     } else if (TxIdToImport.contains(txId)) {
         return Execute(CreateTxProgressImport(ev), ctx);

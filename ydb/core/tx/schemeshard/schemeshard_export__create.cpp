@@ -427,6 +427,10 @@ private:
             return InvalidTxId;
         }
 
+        if (!ItemPathId(Self, exportInfo, 0)) {
+            return InvalidTxId;
+        }
+
         return path->LastTxId;
     }
 
@@ -782,7 +786,7 @@ private:
                                 SubscribeTx(path->LastTxId);
 
                                 Y_VERIFY_DEBUG(itemIdx == Max<ui32>());
-                                Self->TxIdToExport[path->LastTxId] = {exportInfo->Id, itemIdx};
+                                Self->TxIdToDependentExport[path->LastTxId].insert(exportInfo->Id);
                             }
                         }
 
@@ -861,22 +865,41 @@ private:
             << ": txId# " << record.GetTxId());
 
         const auto txId = TTxId(record.GetTxId());
-        if (!Self->TxIdToExport.contains(txId)) {
+        if (!Self->TxIdToExport.contains(txId) && !Self->TxIdToDependentExport.contains(txId)) {
             LOG_E("TExport::TTxProgress: OnNotifyResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
 
-        ui64 id;
-        ui32 itemIdx;
-        std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
+        if (Self->TxIdToExport.contains(txId)) {
+            ui64 id;
+            ui32 itemIdx;
+            std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
+
+            OnNotifyResult(txId, id, itemIdx, txc);
+            Self->TxIdToExport.erase(txId);
+        }
+        
+        if (Self->TxIdToDependentExport.contains(txId)) {
+            for (const auto id : Self->TxIdToDependentExport.at(txId)) {
+                OnNotifyResult(txId, id, Max<ui32>(), txc);
+            }
+
+            Self->TxIdToDependentExport.erase(txId);
+        }
+    }
+
+    void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc) {
+        LOG_D("TExport::TTxProgress: OnNotifyResult"
+            << ": txId# " << txId
+            << ", id# " << id
+            << ", itemIdx# " << itemIdx);
+
         if (!Self->Exports.contains(id)) {
             LOG_E("TExport::TTxProgress: OnNotifyResult received unknown id"
                 << ": id# " << id);
             return;
         }
-
-        Self->TxIdToExport.erase(txId);
 
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         NIceDb::TNiceDb db(txc.DB);

@@ -58,7 +58,7 @@ struct TEvYdbCompute {
 
     struct TEvExecuteScriptResponse : public NActors::TEventLocal<TEvExecuteScriptResponse, EvExecuteScriptResponse> {
         TEvExecuteScriptResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -84,13 +84,13 @@ struct TEvYdbCompute {
 
     struct TEvGetOperationResponse : public NActors::TEventLocal<TEvGetOperationResponse, EvGetOperationResponse> {
         TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
         TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, NYql::TIssues issues)
             : ExecStatus(execStatus)
-            , Issues(issues)
+            , Issues(std::move(issues))
             , Status(NYdb::EStatus::SUCCESS)
         {}
 
@@ -113,7 +113,7 @@ struct TEvYdbCompute {
 
     struct TEvFetchScriptResultResponse : public NActors::TEventLocal<TEvFetchScriptResultResponse, EvFetchScriptResultResponse> {
         TEvFetchScriptResultResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -137,7 +137,7 @@ struct TEvYdbCompute {
 
     struct TEvCancelOperationResponse : public NActors::TEventLocal<TEvCancelOperationResponse, EvCancelOperationResponse> {
         TEvCancelOperationResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -155,7 +155,7 @@ struct TEvYdbCompute {
 
     struct TEvForgetOperationResponse : public NActors::TEventLocal<TEvForgetOperationResponse, EvForgetOperationResponse> {
         TEvForgetOperationResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -190,7 +190,7 @@ struct TEvYdbCompute {
         {}
 
         explicit TEvCreateDatabaseResponse(NYql::TIssues issues)
-            : Issues(issues)
+            : Issues(std::move(issues))
         {}
 
         TEvCreateDatabaseResponse(const FederatedQuery::Internal::ComputeDatabaseInternal& result)
@@ -208,9 +208,9 @@ struct TEvYdbCompute {
             , Success(true)
         {}
 
-        explicit TEvExecuterResponse(const NYql::TIssues& issues)
+        explicit TEvExecuterResponse(NYql::TIssues issues)
             : Success(false)
-            , Issues(issues)
+            , Issues(std::move(issues))
         {}
 
         NYdb::TOperation::TOperationId OperationId;
@@ -221,7 +221,7 @@ struct TEvYdbCompute {
 
     struct TEvStatusTrackerResponse : public NActors::TEventLocal<TEvStatusTrackerResponse, EvStatusTrackerResponse> {
         TEvStatusTrackerResponse(NYql::TIssues issues, NYdb::EStatus status, NYdb::NQuery::EExecStatus execStatus)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
             , ExecStatus(execStatus)
         {}
@@ -233,7 +233,7 @@ struct TEvYdbCompute {
 
     struct TEvResultWriterResponse : public NActors::TEventLocal<TEvResultWriterResponse, EvResultWriterResponse> {
         TEvResultWriterResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -243,7 +243,7 @@ struct TEvYdbCompute {
 
     struct TEvResourcesCleanerResponse : public NActors::TEventLocal<TEvResourcesCleanerResponse, EvResourcesCleanerResponse> {
         TEvResourcesCleanerResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -253,7 +253,7 @@ struct TEvYdbCompute {
 
     struct TEvFinalizerResponse : public NActors::TEventLocal<TEvFinalizerResponse, EvFinalizerResponse> {
         TEvFinalizerResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 
@@ -263,7 +263,7 @@ struct TEvYdbCompute {
 
     struct TEvStopperResponse : public NActors::TEventLocal<TEvStopperResponse, EvStopperResponse> {
         TEvStopperResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(issues)
+            : Issues(std::move(issues))
             , Status(status)
         {}
 

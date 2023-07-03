@@ -51,8 +51,8 @@ public:
     )
 
     void Handle(TEvControlPlaneStorage::TEvDescribeDatabaseResponse::TPtr& ev) {
-        const auto issues = ev->Get()->Issues;
-        const auto result = ev->Get()->Record;
+        const auto& issues = ev->Get()->Issues;
+        const auto& result = ev->Get()->Record;
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
             Send(DatabaseClientActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Request->Get()->Scope, Request->Get()->BasePath, Request->Get()->Path});

@@ -14,6 +14,9 @@ PEERDIR(
     ydb/core/base
     ydb/core/mind
     ydb/core/mon
+    ydb/library/yql/sql/pg_dummy
+    ydb/services/ydb
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
 SRCS(

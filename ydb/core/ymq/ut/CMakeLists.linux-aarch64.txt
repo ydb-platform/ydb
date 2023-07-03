@@ -16,6 +16,8 @@ target_link_libraries(ydb-core-ymq-ut PUBLIC
   core-ymq-base
   core-ymq-http
   library-http_proxy-error
+  yql-sql-pg_dummy
+  udf-service-exception_policy
 )
 target_link_options(ydb-core-ymq-ut PRIVATE
   -ldl

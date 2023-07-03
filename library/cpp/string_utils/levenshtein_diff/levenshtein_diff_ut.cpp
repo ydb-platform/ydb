@@ -26,8 +26,19 @@ namespace {
 
 Y_UNIT_TEST_SUITE(Levenstein) {
     Y_UNIT_TEST(Distance) {
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("knight"), TStringBuf("king")), 4);
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("life flies"), TStringBuf("fly lives")), 6);
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("spot trail"), TStringBuf("stop trial")), 4);
         UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("hello"), TStringBuf("hulloah")), 3);
         UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::Distance(TStringBuf("yeoman"), TStringBuf("yo man")), 2);
+    }
+
+    Y_UNIT_TEST(DamerauDistance) {
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::DamerauDistance(TStringBuf("knight"), TStringBuf("king")), 3);
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::DamerauDistance(TStringBuf("life flies"), TStringBuf("fly lives")), 6);
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::DamerauDistance(TStringBuf("spot trail"), TStringBuf("stop trial")), 3);
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::DamerauDistance(TStringBuf("status"), TStringBuf("tsatus")), 1);
+        UNIT_ASSERT_VALUES_EQUAL(NLevenshtein::DamerauDistance(TStringBuf("hello"), TStringBuf("heh lol")), 3);
     }
 }
 

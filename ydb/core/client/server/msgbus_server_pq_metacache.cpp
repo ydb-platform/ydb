@@ -163,10 +163,11 @@ private:
             NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev,
             const TActorContext& ctx
     ) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleClustersUpdate");
         if (!LocalCluster.empty()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleClustersUpdate LocalCluster !LocalCluster.empty()");
             return;
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got clusters update");
         for (const auto& cluster : ev->Get()->ClustersList->Clusters) {
             if (cluster.IsLocal) {
                 LocalCluster = cluster.Name;
@@ -457,8 +458,9 @@ private:
     }
 
     void HandleDescribeAllTopics(TEvPqNewMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle describe all topics");
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleDescribeAllTopics");
         if (!EverGotTopics) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleDescribeAllTopics return due to !EverGotTopics");
             ListTopicsWaiters.push(ev->Sender);
             return;
         }

@@ -12,16 +12,6 @@ namespace NKikimr::NGRpcService {
 
 namespace {
 
-//TODO move to common
-bool CheckSession(const TString& sessionId, IRequestCtxBase* ctx) {
-    if (sessionId.empty()) {
-        ctx->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty session id"));
-        return false;
-    }
-
-    return true;
-}
-
 using TEvAttachSessionRequest = TGrpcRequestNoOperationCall<Ydb::Query::AttachSessionRequest,
     Ydb::Query::SessionState>;
 

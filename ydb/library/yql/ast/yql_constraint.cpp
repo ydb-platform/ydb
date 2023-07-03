@@ -894,7 +894,7 @@ TUniqueConstraintNodeBase<Distinct>::RenameFields(TExprContext& ctx, const TPath
             }
 
             // TODO: Fix it by use sets of duplicated columns.
-            if (newSets.size() > 42U)
+            if (newSets.size() > 101U)
                 return nullptr;
         }
         if (set.size() == newSets.front().size())

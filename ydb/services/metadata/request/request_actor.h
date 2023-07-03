@@ -61,7 +61,7 @@ public:
         auto f = ev->Get()->GetFuture();
         TResponse response = f.ExtractValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "incorrect reply: " << response.DebugString();
+            AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("error_message", response.DebugString())("request", ProtoRequest.DebugString());
             NYql::TIssues issue;
             NYql::IssuesFromMessage(response.operation().issues(), issue);
             OnInternalResultError(issue.ToString());

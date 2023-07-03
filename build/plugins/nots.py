@@ -458,6 +458,9 @@ def on_ts_test_for_configure(unit, test_runner, default_config):
     if not _is_tests_enabled(unit):
         return
 
+    if unit.enabled('TS_COVERAGE'):
+        unit.on_peerdir_ts_resource("nyc")
+
     for_mod_path = unit.get("TS_TEST_FOR_PATH")
     unit.onpeerdir([for_mod_path])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])

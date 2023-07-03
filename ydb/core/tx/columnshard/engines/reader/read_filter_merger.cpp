@@ -87,16 +87,16 @@ bool TMergePartialStream::DrainCurrent() {
     }
     while (SortHeap.size()) {
         auto currentPosition = DrainCurrentPosition();
-        if (CurrentKeyColumns) {
-            Y_VERIFY(CurrentKeyColumns->Compare(currentPosition.GetKeyColumns()) != std::partial_ordering::greater);
-        }
-        CurrentKeyColumns = currentPosition.GetKeyColumns();
         if (currentPosition.IsControlPoint()) {
             return false;
         }
         if (currentPosition.IsDeleted()) {
             continue;
         }
+        if (CurrentKeyColumns) {
+            Y_VERIFY(CurrentKeyColumns->Compare(currentPosition.GetKeyColumns()) != std::partial_ordering::greater);
+        }
+        CurrentKeyColumns = currentPosition.GetKeyColumns();
         return true;
     }
     return false;

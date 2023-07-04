@@ -31,10 +31,8 @@ enum EApiKey {
 class TRequestHeaderData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 2;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 2};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     
     TRequestHeaderData();
@@ -42,58 +40,46 @@ public:
     
     struct RequestApiKeyMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "requestApiKey";
         static constexpr const char* About = "The API key of this request.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     RequestApiKeyMeta::Type RequestApiKey;
     
     struct RequestApiVersionMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "requestApiVersion";
         static constexpr const char* About = "The API version of this request.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     RequestApiVersionMeta::Type RequestApiVersion;
     
     struct CorrelationIdMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "correlationId";
         static constexpr const char* About = "The correlation ID of this request.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     CorrelationIdMeta::Type CorrelationId;
     
@@ -105,14 +91,10 @@ public:
         static constexpr const char* About = "The client ID string.";
         static const Type Default; // = {""};
         
-        static constexpr TKafkaVersion PresentVersionMin = 1;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = -1;
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
     };
     ClientIdMeta::Type ClientId;
     
@@ -128,10 +110,8 @@ public:
 class TResponseHeaderData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 1;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 1};
+        static constexpr TKafkaVersions FlexibleVersions = {1, Max<TKafkaVersion>()};
     };
     
     TResponseHeaderData();
@@ -139,20 +119,16 @@ public:
     
     struct CorrelationIdMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "correlationId";
         static constexpr const char* About = "The correlation ID of this response.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 1;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {1, Max<TKafkaVersion>()};
     };
     CorrelationIdMeta::Type CorrelationId;
     
@@ -168,10 +144,8 @@ public:
 class TProduceRequestData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 9;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 9};
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     
     TProduceRequestData();
@@ -180,10 +154,8 @@ public:
     class TTopicProduceData : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 9;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 9};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         
         TTopicProduceData();
@@ -192,10 +164,8 @@ public:
         class TPartitionProduceData : public TMessage {
         public:
             struct MessageMeta {
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = 9;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {0, 9};
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             
             TPartitionProduceData();
@@ -203,20 +173,16 @@ public:
             
             struct IndexMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "index";
                 static constexpr const char* About = "The partition index.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             IndexMeta::Type Index;
             
@@ -227,14 +193,10 @@ public:
                 static constexpr const char* Name = "records";
                 static constexpr const char* About = "The record data to be produced.";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             RecordsMeta::Type Records;
             
@@ -253,14 +215,10 @@ public:
             static constexpr const char* About = "The topic name.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         NameMeta::Type Name;
         
@@ -273,14 +231,10 @@ public:
             static constexpr const char* Name = "partitionData";
             static constexpr const char* About = "Each partition to produce to.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         PartitionDataMeta::Type PartitionData;
         
@@ -299,52 +253,40 @@ public:
         static constexpr const char* About = "The transactional ID, or null if the producer is not transactional.";
         static const Type Default; // = std::nullopt;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     TransactionalIdMeta::Type TransactionalId;
     
     struct AcksMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "acks";
         static constexpr const char* About = "The number of acknowledgments the producer requires the leader to have received before considering a request complete. Allowed values: 0 for no acknowledgments, 1 for only the leader and -1 for the full ISR.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     AcksMeta::Type Acks;
     
     struct TimeoutMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "timeoutMs";
         static constexpr const char* About = "The timeout to await a response in milliseconds.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     TimeoutMsMeta::Type TimeoutMs;
     
@@ -357,14 +299,10 @@ public:
         static constexpr const char* Name = "topicData";
         static constexpr const char* About = "Each topic to produce to.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     TopicDataMeta::Type TopicData;
     
@@ -380,10 +318,8 @@ public:
 class TProduceResponseData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 9;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 9};
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     
     TProduceResponseData();
@@ -392,10 +328,8 @@ public:
     class TTopicProduceResponse : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 9;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 9};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         
         TTopicProduceResponse();
@@ -404,10 +338,8 @@ public:
         class TPartitionProduceResponse : public TMessage {
         public:
             struct MessageMeta {
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = 9;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {0, 9};
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             
             TPartitionProduceResponse();
@@ -416,10 +348,8 @@ public:
             class TBatchIndexAndErrorMessage : public TMessage {
             public:
                 struct MessageMeta {
-                    static constexpr TKafkaVersion PresentVersionMin = 8;
-                    static constexpr TKafkaVersion PresentVersionMax = 9;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = {8, 9};
+                    static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
                 };
                 
                 TBatchIndexAndErrorMessage();
@@ -427,20 +357,16 @@ public:
                 
                 struct BatchIndexMeta {
                     using Type = TKafkaInt32;
-                    using TypeDesc = NPrivate::TKafkaInt32Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "batchIndex";
                     static constexpr const char* About = "The batch index of the record that cause the batch to be dropped";
                     static const Type Default; // = 0;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
                 };
                 BatchIndexMeta::Type BatchIndex;
                 
@@ -452,14 +378,10 @@ public:
                     static constexpr const char* About = "The error message of the record that caused the batch to be dropped";
                     static const Type Default; // = std::nullopt;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+                    static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
                 };
                 BatchIndexErrorMessageMeta::Type BatchIndexErrorMessage;
                 
@@ -472,96 +394,76 @@ public:
             
             struct IndexMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "index";
                 static constexpr const char* About = "The partition index.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             IndexMeta::Type Index;
             
             struct ErrorCodeMeta {
                 using Type = TKafkaInt16;
-                using TypeDesc = NPrivate::TKafkaInt16Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "errorCode";
                 static constexpr const char* About = "The error code, or 0 if there was no error.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             ErrorCodeMeta::Type ErrorCode;
             
             struct BaseOffsetMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "baseOffset";
                 static constexpr const char* About = "The base offset.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             BaseOffsetMeta::Type BaseOffset;
             
             struct LogAppendTimeMsMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "logAppendTimeMs";
                 static constexpr const char* About = "The timestamp returned by broker after appending the messages. If CreateTime is used for the topic, the timestamp will be -1.  If LogAppendTime is used for the topic, the timestamp will be the broker local time when the messages are appended.";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 2;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {2, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             LogAppendTimeMsMeta::Type LogAppendTimeMs;
             
             struct LogStartOffsetMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "logStartOffset";
                 static constexpr const char* About = "The log start offset.";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 5;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {5, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             LogStartOffsetMeta::Type LogStartOffset;
             
@@ -574,14 +476,10 @@ public:
                 static constexpr const char* Name = "recordErrors";
                 static constexpr const char* About = "The batch indices of records that caused the batch to be dropped";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 8;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {8, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             RecordErrorsMeta::Type RecordErrors;
             
@@ -593,14 +491,10 @@ public:
                 static constexpr const char* About = "The global error message summarizing the common root cause of the records that caused the batch to be dropped";
                 static const Type Default; // = std::nullopt;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 8;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {8, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             ErrorMessageMeta::Type ErrorMessage;
             
@@ -619,14 +513,10 @@ public:
             static constexpr const char* About = "The topic name";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         NameMeta::Type Name;
         
@@ -639,14 +529,10 @@ public:
             static constexpr const char* Name = "partitionResponses";
             static constexpr const char* About = "Each partition that we produced to within the topic.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         PartitionResponsesMeta::Type PartitionResponses;
         
@@ -666,33 +552,25 @@ public:
         static constexpr const char* Name = "responses";
         static constexpr const char* About = "Each produce response";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     ResponsesMeta::Type Responses;
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "throttleTimeMs";
         static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 1;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
@@ -708,10 +586,8 @@ public:
 class TFetchRequestData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 13;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 13};
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     
     TFetchRequestData();
@@ -720,10 +596,8 @@ public:
     class TFetchTopic : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 13;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 13};
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         
         TFetchTopic();
@@ -732,10 +606,8 @@ public:
         class TFetchPartition : public TMessage {
         public:
             struct MessageMeta {
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = 13;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {0, 13};
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             
             TFetchPartition();
@@ -743,115 +615,91 @@ public:
             
             struct PartitionMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "partition";
                 static constexpr const char* About = "The partition index.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             PartitionMeta::Type Partition;
             
             struct CurrentLeaderEpochMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "currentLeaderEpoch";
                 static constexpr const char* About = "The current leader epoch of the partition.";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 9;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {9, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             CurrentLeaderEpochMeta::Type CurrentLeaderEpoch;
             
             struct FetchOffsetMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "fetchOffset";
                 static constexpr const char* About = "The message offset.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             FetchOffsetMeta::Type FetchOffset;
             
             struct LastFetchedEpochMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "lastFetchedEpoch";
                 static constexpr const char* About = "The epoch of the last fetched record or -1 if there is none";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 12;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {12, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
             };
             LastFetchedEpochMeta::Type LastFetchedEpoch;
             
             struct LogStartOffsetMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "logStartOffset";
                 static constexpr const char* About = "The earliest available offset of the follower replica.  The field is only used when the request is sent by the follower.";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 5;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {5, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             LogStartOffsetMeta::Type LogStartOffset;
             
             struct PartitionMaxBytesMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "partitionMaxBytes";
                 static constexpr const char* About = "The maximum bytes to fetch from this partition.  See KIP-74 for cases where this limit may not be honored.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             PartitionMaxBytesMeta::Type PartitionMaxBytes;
             
@@ -870,14 +718,10 @@ public:
             static constexpr const char* About = "The name of the topic to fetch.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 12;
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 12};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         TopicMeta::Type Topic;
         
@@ -889,14 +733,10 @@ public:
             static constexpr const char* About = "The unique topic ID";
             static const Type Default; // = TKafkaUuid(0, 0);
             
-            static constexpr TKafkaVersion PresentVersionMin = 13;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {13, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         TopicIdMeta::Type TopicId;
         
@@ -909,14 +749,10 @@ public:
             static constexpr const char* Name = "partitions";
             static constexpr const char* About = "The partitions to fetch.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         PartitionsMeta::Type Partitions;
         
@@ -930,10 +766,8 @@ public:
     class TForgottenTopic : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 7;
-            static constexpr TKafkaVersion PresentVersionMax = 13;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {7, 13};
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         
         TForgottenTopic();
@@ -947,14 +781,10 @@ public:
             static constexpr const char* About = "The topic name.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 12;
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 12};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         TopicMeta::Type Topic;
         
@@ -966,34 +796,26 @@ public:
             static constexpr const char* About = "The unique topic ID";
             static const Type Default; // = TKafkaUuid(0, 0);
             
-            static constexpr TKafkaVersion PresentVersionMin = 13;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {13, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         TopicIdMeta::Type TopicId;
         
         struct PartitionsMeta {
             using ItemType = TKafkaInt32;
-            using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
+            using ItemTypeDesc = NPrivate::TKafkaIntDesc;
             using Type = std::vector<TKafkaInt32>;
             using TypeDesc = NPrivate::TKafkaArrayDesc;
             
             static constexpr const char* Name = "partitions";
             static constexpr const char* About = "The partitions indexes to forget.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         PartitionsMeta::Type Partitions;
         
@@ -1013,147 +835,115 @@ public:
         static constexpr const TKafkaInt32 Tag = 0;
         static const Type Default; // = std::nullopt;
         
-        static constexpr TKafkaVersion PresentVersionMin = 12;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {12, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ClusterIdMeta::Type ClusterId;
     
     struct ReplicaIdMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "replicaId";
         static constexpr const char* About = "The broker ID of the follower, of -1 if this request is from a consumer.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     ReplicaIdMeta::Type ReplicaId;
     
     struct MaxWaitMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "maxWaitMs";
         static constexpr const char* About = "The maximum time in milliseconds to wait for the response.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     MaxWaitMsMeta::Type MaxWaitMs;
     
     struct MinBytesMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "minBytes";
         static constexpr const char* About = "The minimum bytes to accumulate in the response.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     MinBytesMeta::Type MinBytes;
     
     struct MaxBytesMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "maxBytes";
         static constexpr const char* About = "The maximum bytes to fetch.  See KIP-74 for cases where this limit may not be honored.";
         static const Type Default; // = 0x7fffffff;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     MaxBytesMeta::Type MaxBytes;
     
     struct IsolationLevelMeta {
         using Type = TKafkaInt8;
-        using TypeDesc = NPrivate::TKafkaInt8Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "isolationLevel";
         static constexpr const char* About = "This setting controls the visibility of transactional records. Using READ_UNCOMMITTED (isolation_level = 0) makes all records visible. With READ_COMMITTED (isolation_level = 1), non-transactional and COMMITTED transactional records are visible. To be more concrete, READ_COMMITTED returns all data from offsets smaller than the current LSO (last stable offset), and enables the inclusion of the list of aborted transactions in the result, which allows consumers to discard ABORTED transactional records";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 4;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {4, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     IsolationLevelMeta::Type IsolationLevel;
     
     struct SessionIdMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "sessionId";
         static constexpr const char* About = "The fetch session ID.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 7;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {7, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     SessionIdMeta::Type SessionId;
     
     struct SessionEpochMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "sessionEpoch";
         static constexpr const char* About = "The fetch session epoch, which is used for ordering requests in a session.";
         static const Type Default; // = -1;
         
-        static constexpr TKafkaVersion PresentVersionMin = 7;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {7, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     SessionEpochMeta::Type SessionEpoch;
     
@@ -1166,14 +956,10 @@ public:
         static constexpr const char* Name = "topics";
         static constexpr const char* About = "The topics to fetch.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     TopicsMeta::Type Topics;
     
@@ -1186,14 +972,10 @@ public:
         static constexpr const char* Name = "forgottenTopicsData";
         static constexpr const char* About = "In an incremental fetch request, the partitions to remove.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 7;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {7, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     ForgottenTopicsDataMeta::Type ForgottenTopicsData;
     
@@ -1205,14 +987,10 @@ public:
         static constexpr const char* About = "Rack ID of the consumer making this request";
         static const Type Default; // = {""};
         
-        static constexpr TKafkaVersion PresentVersionMin = 11;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {11, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     RackIdMeta::Type RackId;
     
@@ -1228,10 +1006,8 @@ public:
 class TFetchResponseData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 13;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 13};
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     
     TFetchResponseData();
@@ -1240,10 +1016,8 @@ public:
     class TFetchableTopicResponse : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 13;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 13};
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         
         TFetchableTopicResponse();
@@ -1252,10 +1026,8 @@ public:
         class TPartitionData : public TMessage {
         public:
             struct MessageMeta {
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = 13;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {0, 13};
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             
             TPartitionData();
@@ -1264,10 +1036,8 @@ public:
             class TEpochEndOffset : public TMessage {
             public:
                 struct MessageMeta {
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
-                    static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = {12, 13};
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 
                 TEpochEndOffset();
@@ -1275,39 +1045,31 @@ public:
                 
                 struct EpochMeta {
                     using Type = TKafkaInt32;
-                    using TypeDesc = NPrivate::TKafkaInt32Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "epoch";
                     static constexpr const char* About = "";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 EpochMeta::Type Epoch;
                 
                 struct EndOffsetMeta {
                     using Type = TKafkaInt64;
-                    using TypeDesc = NPrivate::TKafkaInt64Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "endOffset";
                     static constexpr const char* About = "";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 EndOffsetMeta::Type EndOffset;
                 
@@ -1321,10 +1083,8 @@ public:
             class TLeaderIdAndEpoch : public TMessage {
             public:
                 struct MessageMeta {
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
-                    static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = {12, 13};
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 
                 TLeaderIdAndEpoch();
@@ -1332,39 +1092,31 @@ public:
                 
                 struct LeaderIdMeta {
                     using Type = TKafkaInt32;
-                    using TypeDesc = NPrivate::TKafkaInt32Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "leaderId";
                     static constexpr const char* About = "The ID of the current leader or -1 if the leader is unknown.";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 LeaderIdMeta::Type LeaderId;
                 
                 struct LeaderEpochMeta {
                     using Type = TKafkaInt32;
-                    using TypeDesc = NPrivate::TKafkaInt32Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "leaderEpoch";
                     static constexpr const char* About = "The latest known leader epoch";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 LeaderEpochMeta::Type LeaderEpoch;
                 
@@ -1378,10 +1130,8 @@ public:
             class TSnapshotId : public TMessage {
             public:
                 struct MessageMeta {
-                    static constexpr TKafkaVersion PresentVersionMin = 12;
-                    static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = {12, 13};
+                    static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
                 };
                 
                 TSnapshotId();
@@ -1389,39 +1139,31 @@ public:
                 
                 struct EndOffsetMeta {
                     using Type = TKafkaInt64;
-                    using TypeDesc = NPrivate::TKafkaInt64Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "endOffset";
                     static constexpr const char* About = "";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
                 };
                 EndOffsetMeta::Type EndOffset;
                 
                 struct EpochMeta {
                     using Type = TKafkaInt32;
-                    using TypeDesc = NPrivate::TKafkaInt32Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "epoch";
                     static constexpr const char* About = "";
                     static const Type Default; // = -1;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
                 };
                 EpochMeta::Type Epoch;
                 
@@ -1435,10 +1177,8 @@ public:
             class TAbortedTransaction : public TMessage {
             public:
                 struct MessageMeta {
-                    static constexpr TKafkaVersion PresentVersionMin = 4;
-                    static constexpr TKafkaVersion PresentVersionMax = 13;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = {4, 13};
+                    static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
                 };
                 
                 TAbortedTransaction();
@@ -1446,39 +1186,31 @@ public:
                 
                 struct ProducerIdMeta {
                     using Type = TKafkaInt64;
-                    using TypeDesc = NPrivate::TKafkaInt64Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "producerId";
                     static constexpr const char* About = "The producer id associated with the aborted transaction.";
                     static const Type Default; // = 0;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
                 };
                 ProducerIdMeta::Type ProducerId;
                 
                 struct FirstOffsetMeta {
                     using Type = TKafkaInt64;
-                    using TypeDesc = NPrivate::TKafkaInt64Desc;
+                    using TypeDesc = NPrivate::TKafkaIntDesc;
                     
                     static constexpr const char* Name = "firstOffset";
                     static constexpr const char* About = "The first offset in the aborted transaction.";
                     static const Type Default; // = 0;
                     
-                    static constexpr TKafkaVersion PresentVersionMin = 0;
-                    static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                    static constexpr TKafkaVersion TaggedVersionMin = 0;
-                    static constexpr TKafkaVersion TaggedVersionMax = -1;
-                    static constexpr TKafkaVersion NullableVersionMin = 0;
-                    static constexpr TKafkaVersion NullableVersionMax = -1;
-                    static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                    static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                    static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                    static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                    static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                    static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
                 };
                 FirstOffsetMeta::Type FirstOffset;
                 
@@ -1491,96 +1223,76 @@ public:
             
             struct PartitionIndexMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "partitionIndex";
                 static constexpr const char* About = "The partition index.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             PartitionIndexMeta::Type PartitionIndex;
             
             struct ErrorCodeMeta {
                 using Type = TKafkaInt16;
-                using TypeDesc = NPrivate::TKafkaInt16Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "errorCode";
                 static constexpr const char* About = "The error code, or 0 if there was no fetch error.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             ErrorCodeMeta::Type ErrorCode;
             
             struct HighWatermarkMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "highWatermark";
                 static constexpr const char* About = "The current high water mark.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             HighWatermarkMeta::Type HighWatermark;
             
             struct LastStableOffsetMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "lastStableOffset";
                 static constexpr const char* About = "The last stable offset (or LSO) of the partition. This is the last offset such that the state of all transactional records prior to this offset have been decided (ABORTED or COMMITTED)";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 4;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {4, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             LastStableOffsetMeta::Type LastStableOffset;
             
             struct LogStartOffsetMeta {
                 using Type = TKafkaInt64;
-                using TypeDesc = NPrivate::TKafkaInt64Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "logStartOffset";
                 static constexpr const char* About = "The current log start offset.";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 5;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {5, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             LogStartOffsetMeta::Type LogStartOffset;
             
@@ -1592,14 +1304,10 @@ public:
                 static constexpr const char* About = "In case divergence is detected based on the `LastFetchedEpoch` and `FetchOffset` in the request, this field indicates the largest epoch and its end offset such that subsequent records are known to diverge";
                 static constexpr const TKafkaInt32 Tag = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 12;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {12, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
             };
             DivergingEpochMeta::Type DivergingEpoch;
             
@@ -1611,14 +1319,10 @@ public:
                 static constexpr const char* About = "";
                 static constexpr const TKafkaInt32 Tag = 1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 12;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {12, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
             };
             CurrentLeaderMeta::Type CurrentLeader;
             
@@ -1630,14 +1334,10 @@ public:
                 static constexpr const char* About = "In the case of fetching an offset less than the LogStartOffset, this is the end offset and epoch that should be used in the FetchSnapshot request.";
                 static constexpr const TKafkaInt32 Tag = 2;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 12;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 0;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {12, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
             };
             SnapshotIdMeta::Type SnapshotId;
             
@@ -1650,33 +1350,25 @@ public:
                 static constexpr const char* Name = "abortedTransactions";
                 static constexpr const char* About = "The aborted transactions.";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 4;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {4, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             AbortedTransactionsMeta::Type AbortedTransactions;
             
             struct PreferredReadReplicaMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "preferredReadReplica";
                 static constexpr const char* About = "The preferred read replica for the consumer to use on its next fetch request";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 11;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {11, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             PreferredReadReplicaMeta::Type PreferredReadReplica;
             
@@ -1687,14 +1379,10 @@ public:
                 static constexpr const char* Name = "records";
                 static constexpr const char* About = "The record data.";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion FlexibleVersionMin = 12;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+                static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
             };
             RecordsMeta::Type Records;
             
@@ -1713,14 +1401,10 @@ public:
             static constexpr const char* About = "The topic name.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 12;
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 12};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         TopicMeta::Type Topic;
         
@@ -1732,14 +1416,10 @@ public:
             static constexpr const char* About = "The unique topic ID";
             static const Type Default; // = TKafkaUuid(0, 0);
             
-            static constexpr TKafkaVersion PresentVersionMin = 13;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {13, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         TopicIdMeta::Type TopicId;
         
@@ -1752,14 +1432,10 @@ public:
             static constexpr const char* Name = "partitions";
             static constexpr const char* About = "The topic partitions.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 12;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
         };
         PartitionsMeta::Type Partitions;
         
@@ -1772,58 +1448,46 @@ public:
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "throttleTimeMs";
         static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 1;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
     struct ErrorCodeMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "errorCode";
         static constexpr const char* About = "The top level response error code.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 7;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {7, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     ErrorCodeMeta::Type ErrorCode;
     
     struct SessionIdMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "sessionId";
         static constexpr const char* About = "The fetch session ID, or 0 if this is not part of a fetch session.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 7;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {7, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     SessionIdMeta::Type SessionId;
     
@@ -1836,14 +1500,10 @@ public:
         static constexpr const char* Name = "responses";
         static constexpr const char* About = "The response topics.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 12;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
     };
     ResponsesMeta::Type Responses;
     
@@ -1859,10 +1519,8 @@ public:
 class TMetadataRequestData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 12;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 12};
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     
     TMetadataRequestData();
@@ -1871,10 +1529,8 @@ public:
     class TMetadataRequestTopic : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 12;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 12};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         
         TMetadataRequestTopic();
@@ -1888,14 +1544,10 @@ public:
             static constexpr const char* About = "The topic id.";
             static const Type Default; // = TKafkaUuid(0, 0);
             
-            static constexpr TKafkaVersion PresentVersionMin = 10;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {10, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         TopicIdMeta::Type TopicId;
         
@@ -1907,14 +1559,10 @@ public:
             static constexpr const char* About = "The topic name.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 10;
-            static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = {10, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         NameMeta::Type Name;
         
@@ -1934,14 +1582,10 @@ public:
         static constexpr const char* Name = "topics";
         static constexpr const char* About = "The topics to fetch metadata for.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 1;
-        static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     TopicsMeta::Type Topics;
     
@@ -1953,14 +1597,10 @@ public:
         static constexpr const char* About = "If this is true, the broker may auto-create topics that we requested which do not already exist, if it is configured to do so.";
         static const Type Default; // = true;
         
-        static constexpr TKafkaVersion PresentVersionMin = 4;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {4, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     AllowAutoTopicCreationMeta::Type AllowAutoTopicCreation;
     
@@ -1972,14 +1612,10 @@ public:
         static constexpr const char* About = "Whether to include cluster authorized operations.";
         static const Type Default; // = false;
         
-        static constexpr TKafkaVersion PresentVersionMin = 8;
-        static constexpr TKafkaVersion PresentVersionMax = 10;
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {8, 10};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     IncludeClusterAuthorizedOperationsMeta::Type IncludeClusterAuthorizedOperations;
     
@@ -1991,14 +1627,10 @@ public:
         static constexpr const char* About = "Whether to include topic authorized operations.";
         static const Type Default; // = false;
         
-        static constexpr TKafkaVersion PresentVersionMin = 8;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {8, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     IncludeTopicAuthorizedOperationsMeta::Type IncludeTopicAuthorizedOperations;
     
@@ -2014,10 +1646,8 @@ public:
 class TMetadataResponseData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 12;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 12};
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     
     TMetadataResponseData();
@@ -2026,10 +1656,8 @@ public:
     class TMetadataResponseBroker : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 12;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 12};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         
         TMetadataResponseBroker();
@@ -2037,20 +1665,16 @@ public:
         
         struct NodeIdMeta {
             using Type = TKafkaInt32;
-            using TypeDesc = NPrivate::TKafkaInt32Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "nodeId";
             static constexpr const char* About = "The broker ID.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         NodeIdMeta::Type NodeId;
         
@@ -2062,33 +1686,25 @@ public:
             static constexpr const char* About = "The broker hostname.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         HostMeta::Type Host;
         
         struct PortMeta {
             using Type = TKafkaInt32;
-            using TypeDesc = NPrivate::TKafkaInt32Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "port";
             static constexpr const char* About = "The broker port.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         PortMeta::Type Port;
         
@@ -2100,14 +1716,10 @@ public:
             static constexpr const char* About = "The rack of the broker, or null if it has not been assigned to a rack.";
             static const Type Default; // = std::nullopt;
             
-            static constexpr TKafkaVersion PresentVersionMin = 1;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         RackMeta::Type Rack;
         
@@ -2121,10 +1733,8 @@ public:
     class TMetadataResponseTopic : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 12;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 12};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         
         TMetadataResponseTopic();
@@ -2133,10 +1743,8 @@ public:
         class TMetadataResponsePartition : public TMessage {
         public:
             struct MessageMeta {
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = 12;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {0, 12};
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             
             TMetadataResponsePartition();
@@ -2144,137 +1752,109 @@ public:
             
             struct ErrorCodeMeta {
                 using Type = TKafkaInt16;
-                using TypeDesc = NPrivate::TKafkaInt16Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "errorCode";
                 static constexpr const char* About = "The partition error, or 0 if there was no error.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             ErrorCodeMeta::Type ErrorCode;
             
             struct PartitionIndexMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "partitionIndex";
                 static constexpr const char* About = "The partition index.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             PartitionIndexMeta::Type PartitionIndex;
             
             struct LeaderIdMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "leaderId";
                 static constexpr const char* About = "The ID of the leader broker.";
                 static const Type Default; // = 0;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             LeaderIdMeta::Type LeaderId;
             
             struct LeaderEpochMeta {
                 using Type = TKafkaInt32;
-                using TypeDesc = NPrivate::TKafkaInt32Desc;
+                using TypeDesc = NPrivate::TKafkaIntDesc;
                 
                 static constexpr const char* Name = "leaderEpoch";
                 static constexpr const char* About = "The leader epoch of this partition.";
                 static const Type Default; // = -1;
                 
-                static constexpr TKafkaVersion PresentVersionMin = 7;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {7, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             LeaderEpochMeta::Type LeaderEpoch;
             
             struct ReplicaNodesMeta {
                 using ItemType = TKafkaInt32;
-                using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
+                using ItemTypeDesc = NPrivate::TKafkaIntDesc;
                 using Type = std::vector<TKafkaInt32>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
                 static constexpr const char* Name = "replicaNodes";
                 static constexpr const char* About = "The set of all nodes that host this partition.";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             ReplicaNodesMeta::Type ReplicaNodes;
             
             struct IsrNodesMeta {
                 using ItemType = TKafkaInt32;
-                using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
+                using ItemTypeDesc = NPrivate::TKafkaIntDesc;
                 using Type = std::vector<TKafkaInt32>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
                 static constexpr const char* Name = "isrNodes";
                 static constexpr const char* About = "The set of nodes that are in sync with the leader for this partition.";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 0;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             IsrNodesMeta::Type IsrNodes;
             
             struct OfflineReplicasMeta {
                 using ItemType = TKafkaInt32;
-                using ItemTypeDesc = NPrivate::TKafkaInt32Desc;
+                using ItemTypeDesc = NPrivate::TKafkaIntDesc;
                 using Type = std::vector<TKafkaInt32>;
                 using TypeDesc = NPrivate::TKafkaArrayDesc;
                 
                 static constexpr const char* Name = "offlineReplicas";
                 static constexpr const char* About = "The set of offline replicas of this partition.";
                 
-                static constexpr TKafkaVersion PresentVersionMin = 5;
-                static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-                static constexpr TKafkaVersion TaggedVersionMin = 0;
-                static constexpr TKafkaVersion TaggedVersionMax = -1;
-                static constexpr TKafkaVersion NullableVersionMin = 0;
-                static constexpr TKafkaVersion NullableVersionMax = -1;
-                static constexpr TKafkaVersion FlexibleVersionMin = 9;
-                static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+                static constexpr TKafkaVersions PresentVersions = {5, Max<TKafkaVersion>()};
+                static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+                static constexpr TKafkaVersions NullableVersions = VersionsNever;
+                static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
             };
             OfflineReplicasMeta::Type OfflineReplicas;
             
@@ -2287,20 +1867,16 @@ public:
         
         struct ErrorCodeMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "errorCode";
             static constexpr const char* About = "The topic error, or 0 if there was no error.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         ErrorCodeMeta::Type ErrorCode;
         
@@ -2312,14 +1888,10 @@ public:
             static constexpr const char* About = "The topic name.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 12;
-            static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = {12, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         NameMeta::Type Name;
         
@@ -2331,14 +1903,10 @@ public:
             static constexpr const char* About = "The topic id.";
             static const Type Default; // = TKafkaUuid(0, 0);
             
-            static constexpr TKafkaVersion PresentVersionMin = 10;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {10, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         TopicIdMeta::Type TopicId;
         
@@ -2350,14 +1918,10 @@ public:
             static constexpr const char* About = "True if the topic is internal.";
             static const Type Default; // = false;
             
-            static constexpr TKafkaVersion PresentVersionMin = 1;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         IsInternalMeta::Type IsInternal;
         
@@ -2370,33 +1934,25 @@ public:
             static constexpr const char* Name = "partitions";
             static constexpr const char* About = "Each partition in the topic.";
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         PartitionsMeta::Type Partitions;
         
         struct TopicAuthorizedOperationsMeta {
             using Type = TKafkaInt32;
-            using TypeDesc = NPrivate::TKafkaInt32Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "topicAuthorizedOperations";
             static constexpr const char* About = "32-bit bitfield to represent authorized operations for this topic.";
             static const Type Default; // = -2147483648;
             
-            static constexpr TKafkaVersion PresentVersionMin = 8;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 9;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {8, Max<TKafkaVersion>()};
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
         };
         TopicAuthorizedOperationsMeta::Type TopicAuthorizedOperations;
         
@@ -2409,20 +1965,16 @@ public:
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "throttleTimeMs";
         static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
@@ -2435,14 +1987,10 @@ public:
         static constexpr const char* Name = "brokers";
         static constexpr const char* About = "Each broker in the response.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     BrokersMeta::Type Brokers;
     
@@ -2454,33 +2002,25 @@ public:
         static constexpr const char* About = "The cluster ID that responding broker belongs to.";
         static const Type Default; // = std::nullopt;
         
-        static constexpr TKafkaVersion PresentVersionMin = 2;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {2, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     ClusterIdMeta::Type ClusterId;
     
     struct ControllerIdMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "controllerId";
         static constexpr const char* About = "The ID of the controller broker.";
         static const Type Default; // = -1;
         
-        static constexpr TKafkaVersion PresentVersionMin = 1;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     ControllerIdMeta::Type ControllerId;
     
@@ -2493,33 +2033,25 @@ public:
         static constexpr const char* Name = "topics";
         static constexpr const char* About = "Each topic in the response.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     TopicsMeta::Type Topics;
     
     struct ClusterAuthorizedOperationsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "clusterAuthorizedOperations";
         static constexpr const char* About = "32-bit bitfield to represent authorized operations for this cluster.";
         static const Type Default; // = -2147483648;
         
-        static constexpr TKafkaVersion PresentVersionMin = 8;
-        static constexpr TKafkaVersion PresentVersionMax = 10;
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 9;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {8, 10};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
     };
     ClusterAuthorizedOperationsMeta::Type ClusterAuthorizedOperations;
     
@@ -2535,10 +2067,8 @@ public:
 class TApiVersionsRequestData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 3;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 3};
+        static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
     
     TApiVersionsRequestData();
@@ -2552,14 +2082,10 @@ public:
         static constexpr const char* About = "The name of the client.";
         static const Type Default; // = {""};
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ClientSoftwareNameMeta::Type ClientSoftwareName;
     
@@ -2571,14 +2097,10 @@ public:
         static constexpr const char* About = "The version of the client.";
         static const Type Default; // = {""};
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ClientSoftwareVersionMeta::Type ClientSoftwareVersion;
     
@@ -2594,10 +2116,8 @@ public:
 class TApiVersionsResponseData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 3;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 3};
+        static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
     
     TApiVersionsResponseData();
@@ -2606,10 +2126,8 @@ public:
     class TApiVersion : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = 3;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {0, 3};
+            static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
         };
         
         TApiVersion();
@@ -2617,58 +2135,46 @@ public:
         
         struct ApiKeyMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "apiKey";
             static constexpr const char* About = "The API index.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
         };
         ApiKeyMeta::Type ApiKey;
         
         struct MinVersionMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "minVersion";
             static constexpr const char* About = "The minimum supported version, inclusive.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
         };
         MinVersionMeta::Type MinVersion;
         
         struct MaxVersionMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "maxVersion";
             static constexpr const char* About = "The maximum supported version, inclusive.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 3;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
         };
         MaxVersionMeta::Type MaxVersion;
         
@@ -2682,10 +2188,8 @@ public:
     class TSupportedFeatureKey : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 3;
-            static constexpr TKafkaVersion PresentVersionMax = 3;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {3, 3};
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         
         TSupportedFeatureKey();
@@ -2699,52 +2203,40 @@ public:
             static constexpr const char* About = "The name of the feature.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         NameMeta::Type Name;
         
         struct MinVersionMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "minVersion";
             static constexpr const char* About = "The minimum supported version for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         MinVersionMeta::Type MinVersion;
         
         struct MaxVersionMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "maxVersion";
             static constexpr const char* About = "The maximum supported version for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         MaxVersionMeta::Type MaxVersion;
         
@@ -2758,10 +2250,8 @@ public:
     class TFinalizedFeatureKey : public TMessage {
     public:
         struct MessageMeta {
-            static constexpr TKafkaVersion PresentVersionMin = 3;
-            static constexpr TKafkaVersion PresentVersionMax = 3;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = {3, 3};
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         
         TFinalizedFeatureKey();
@@ -2775,52 +2265,40 @@ public:
             static constexpr const char* About = "The name of the feature.";
             static const Type Default; // = {""};
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         NameMeta::Type Name;
         
         struct MaxVersionLevelMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "maxVersionLevel";
             static constexpr const char* About = "The cluster-wide finalized max version level for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         MaxVersionLevelMeta::Type MaxVersionLevel;
         
         struct MinVersionLevelMeta {
             using Type = TKafkaInt16;
-            using TypeDesc = NPrivate::TKafkaInt16Desc;
+            using TypeDesc = NPrivate::TKafkaIntDesc;
             
             static constexpr const char* Name = "minVersionLevel";
             static constexpr const char* About = "The cluster-wide finalized min version level for the feature.";
             static const Type Default; // = 0;
             
-            static constexpr TKafkaVersion PresentVersionMin = 0;
-            static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-            static constexpr TKafkaVersion TaggedVersionMin = 0;
-            static constexpr TKafkaVersion TaggedVersionMax = -1;
-            static constexpr TKafkaVersion NullableVersionMin = 0;
-            static constexpr TKafkaVersion NullableVersionMax = -1;
-            static constexpr TKafkaVersion FlexibleVersionMin = 0;
-            static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+            static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+            static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+            static constexpr TKafkaVersions NullableVersions = VersionsNever;
+            static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
         };
         MinVersionLevelMeta::Type MinVersionLevel;
         
@@ -2833,20 +2311,16 @@ public:
     
     struct ErrorCodeMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "errorCode";
         static constexpr const char* About = "The top-level error code.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
     ErrorCodeMeta::Type ErrorCode;
     
@@ -2859,33 +2333,25 @@ public:
         static constexpr const char* Name = "apiKeys";
         static constexpr const char* About = "The APIs supported by the broker.";
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
     ApiKeysMeta::Type ApiKeys;
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "throttleTimeMs";
         static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 1;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 3;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
     };
     ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
@@ -2899,34 +2365,26 @@ public:
         static constexpr const char* About = "Features supported by the broker.";
         static constexpr const TKafkaInt32 Tag = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     SupportedFeaturesMeta::Type SupportedFeatures;
     
     struct FinalizedFeaturesEpochMeta {
         using Type = TKafkaInt64;
-        using TypeDesc = NPrivate::TKafkaInt64Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "finalizedFeaturesEpoch";
         static constexpr const char* About = "The monotonically increasing epoch for the finalized features information. Valid values are >= 0. A value of -1 is special and represents unknown epoch.";
         static constexpr const TKafkaInt32 Tag = 1;
         static const Type Default; // = -1;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     FinalizedFeaturesEpochMeta::Type FinalizedFeaturesEpoch;
     
@@ -2940,14 +2398,10 @@ public:
         static constexpr const char* About = "List of cluster-wide finalized features. The information is valid only if FinalizedFeaturesEpoch >= 0.";
         static constexpr const TKafkaInt32 Tag = 2;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     FinalizedFeaturesMeta::Type FinalizedFeatures;
     
@@ -2960,14 +2414,10 @@ public:
         static constexpr const TKafkaInt32 Tag = 3;
         static const Type Default; // = false;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsAlways;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ZkMigrationReadyMeta::Type ZkMigrationReady;
     
@@ -2983,10 +2433,8 @@ public:
 class TInitProducerIdRequestData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 4;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 4};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     
     TInitProducerIdRequestData();
@@ -3000,71 +2448,55 @@ public:
         static constexpr const char* About = "The transactional id, or null if the producer is not transactional.";
         static const Type Default; // = {""};
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     TransactionalIdMeta::Type TransactionalId;
     
     struct TransactionTimeoutMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "transactionTimeoutMs";
         static constexpr const char* About = "The time in ms to wait before aborting idle transactions sent by this producer. This is only relevant if a TransactionalId has been defined.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     TransactionTimeoutMsMeta::Type TransactionTimeoutMs;
     
     struct ProducerIdMeta {
         using Type = TKafkaInt64;
-        using TypeDesc = NPrivate::TKafkaInt64Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "producerId";
         static constexpr const char* About = "The producer id. This is used to disambiguate requests if a transactional id is reused following its expiration.";
         static const Type Default; // = -1;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ProducerIdMeta::Type ProducerId;
     
     struct ProducerEpochMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "producerEpoch";
         static constexpr const char* About = "The producer's current epoch. This will be checked against the producer epoch on the broker, and the request will return an error if they do not match.";
         static const Type Default; // = -1;
         
-        static constexpr TKafkaVersion PresentVersionMin = 3;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 0;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {3, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ProducerEpochMeta::Type ProducerEpoch;
     
@@ -3080,10 +2512,8 @@ public:
 class TInitProducerIdResponseData : public TApiMessage {
 public:
     struct MessageMeta {
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = 4;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = {0, 4};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     
     TInitProducerIdResponseData();
@@ -3091,77 +2521,61 @@ public:
     
     struct ThrottleTimeMsMeta {
         using Type = TKafkaInt32;
-        using TypeDesc = NPrivate::TKafkaInt32Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "throttleTimeMs";
         static constexpr const char* About = "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     ThrottleTimeMsMeta::Type ThrottleTimeMs;
     
     struct ErrorCodeMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "errorCode";
         static constexpr const char* About = "The error code, or 0 if there was no error.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     ErrorCodeMeta::Type ErrorCode;
     
     struct ProducerIdMeta {
         using Type = TKafkaInt64;
-        using TypeDesc = NPrivate::TKafkaInt64Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "producerId";
         static constexpr const char* About = "The current producer id.";
         static const Type Default; // = -1;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     ProducerIdMeta::Type ProducerId;
     
     struct ProducerEpochMeta {
         using Type = TKafkaInt16;
-        using TypeDesc = NPrivate::TKafkaInt16Desc;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
         
         static constexpr const char* Name = "producerEpoch";
         static constexpr const char* About = "The current epoch associated with the producer id.";
         static const Type Default; // = 0;
         
-        static constexpr TKafkaVersion PresentVersionMin = 0;
-        static constexpr TKafkaVersion PresentVersionMax = Max<TKafkaVersion>();
-        static constexpr TKafkaVersion TaggedVersionMin = 0;
-        static constexpr TKafkaVersion TaggedVersionMax = -1;
-        static constexpr TKafkaVersion NullableVersionMin = 0;
-        static constexpr TKafkaVersion NullableVersionMax = -1;
-        static constexpr TKafkaVersion FlexibleVersionMin = 2;
-        static constexpr TKafkaVersion FlexibleVersionMax = Max<TKafkaVersion>();
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
     };
     ProducerEpochMeta::Type ProducerEpoch;
     

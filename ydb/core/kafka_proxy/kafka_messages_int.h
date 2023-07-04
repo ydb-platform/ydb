@@ -9,107 +9,14 @@
 
 #include <contrib/libs/cxxsupp/libcxx/include/type_traits>
 
-#include "kafka.h"
+#include "kafka_records.h"
+#include "kafka_log_impl.h"
 
 namespace NKafka {
 namespace NPrivate {
 
+static constexpr bool DEBUG_ENABLED = false;
 static constexpr TKafkaInt32 MAX_RECORDS_SIZE = 1 << 28; // 256Mb
-
-struct TKafkaBoolDesc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaInt8Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaInt16Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaUint16Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaInt32Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaUint32Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaInt64Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaUuidDesc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaFloat64Desc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = true;
-};
-
-struct TKafkaStringDesc {
-    static constexpr bool Default = true;
-    static constexpr bool Nullable = true;
-    static constexpr bool FixedLength = false;
-
-    static bool IsNull(const TKafkaString& value) { return !value; };
-};
-
-struct TKafkaStructDesc {
-    static constexpr bool Default = false;
-    static constexpr bool Nullable = false;
-    static constexpr bool FixedLength = false;
-};
-
-struct TKafkaBytesDesc {
-    static constexpr bool Default = false;
-    static constexpr bool Nullable = true;
-    static constexpr bool FixedLength = false;
-
-    static bool IsNull(const TKafkaBytes& value) { return !value; };
-};
-
-struct TKafkaRecordsDesc {
-    static constexpr bool Default = false;
-    static constexpr bool Nullable = true;
-    static constexpr bool FixedLength = false;
-
-    static bool IsNull(const TKafkaRecords& value) { return !value; };
-};
-
-struct TKafkaArrayDesc {
-    static constexpr bool Default = false;
-    static constexpr bool Nullable = true;
-    static constexpr bool FixedLength = false;
-
-    template<typename T>
-    static bool IsNull(const std::vector<T>& value) { return value.empty(); };
-};
-
-
 
 struct TWriteCollector {
     ui32 NumTaggedFields = 0;
@@ -157,23 +64,6 @@ inline bool VersionCheck(const TKafkaVersion value) {
 }
 
 template<typename Meta>
-class ReadFieldRule {
-public:
-    static bool Apply(TKafkaVersion version) {
-        return VersionCheck<Meta::PresentVersionMin, Meta::PresentVersionMax>(version) 
-            && !VersionCheck<Meta::TaggedVersionMin, Meta::TaggedVersionMax>(version);
-    }
-};
-
-template<typename Meta>
-class ReadTaggedFieldRule {
-public:
-    static bool Apply(TKafkaVersion /*version*/) {
-        return true;
-    }
-};
-
-template<typename Meta>
 bool IsDefaultValue(const typename Meta::Type& value) {
     if constexpr (std::is_base_of_v<TMessage, typename Meta::Type>) {
         typename Meta::Type defValue;
@@ -188,21 +78,34 @@ bool IsDefaultValue(const typename Meta::Type& value) {
 }
 
 
+template <typename Meta, typename = ESizeFormat>
+struct HasSizeFormat: std::false_type {};
 
-template<TKafkaVersion FlexibleMin,
-         TKafkaVersion FlexibleMax>
+template <typename Meta>
+struct HasSizeFormat<Meta, decltype((void)Meta::SizeFormat, ESizeFormat::Default)>: std::true_type {};
+
+template<typename Meta>
+constexpr ESizeFormat SizeFormat() {
+    if constexpr (HasSizeFormat<Meta>::value) {
+        return Meta::SizeFormat;
+    } else {
+        return ESizeFormat::Default;
+    }
+}
+
+
+template<typename Meta>
 inline void WriteStringSize(TKafkaWritable& writable, TKafkaVersion version, TKafkaInt32 value) {
-    if (VersionCheck<FlexibleMin, FlexibleMax>(version)) {
+    if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
         writable.writeUnsignedVarint(value + 1);
     } else {
         writable << (TKafkaInt16)value;
     }
 }
 
-template<TKafkaVersion FlexibleMin,
-         TKafkaVersion FlexibleMax>
+template<typename Meta>
 inline TKafkaInt32 ReadStringSize(TKafkaReadable& readable, TKafkaVersion version) {
-    if (VersionCheck<FlexibleMin, FlexibleMax>(version)) {
+    if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
         return readable.readUnsignedVarint() - 1;
     } else {
         TKafkaInt16 v;
@@ -211,20 +114,22 @@ inline TKafkaInt32 ReadStringSize(TKafkaReadable& readable, TKafkaVersion versio
     }
 }
 
-template<TKafkaVersion FlexibleMin,
-         TKafkaVersion FlexibleMax>
+template<typename Meta>
 inline void WriteArraySize(TKafkaWritable& writable, TKafkaVersion version, TKafkaInt32 value) {
-    if (VersionCheck<FlexibleMin, FlexibleMax>(version)) {
+    if constexpr (SizeFormat<Meta>() == Varint) {
+        return writable.writeVarint(value);
+    } else if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
         writable.writeUnsignedVarint(value + 1);
     } else {
         writable << value;
     }
 }
 
-template<TKafkaVersion FlexibleMin,
-         TKafkaVersion FlexibleMax>
+template<typename Meta>
 inline TKafkaInt32 ReadArraySize(TKafkaReadable& readable, TKafkaVersion version) {
-    if (VersionCheck<FlexibleMin, FlexibleMax>(version)) {
+    if constexpr (SizeFormat<Meta>() == Varint) {
+        return readable.readVarint();
+    } else if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
         return readable.readUnsignedVarint() - 1;
     } else {
         TKafkaInt32 v;
@@ -234,55 +139,175 @@ inline TKafkaInt32 ReadArraySize(TKafkaReadable& readable, TKafkaVersion version
 }
 
 
+inline IOutputStream& operator <<(IOutputStream& out, const TKafkaUuid& /*value*/) {
+    return out << "---";
+}
+
 
 
 //
 // Common
 //
 template<typename Meta,
-         typename TValueType>
+         typename TValueType = typename Meta::Type,
+         typename TTypeDesc = typename Meta::TypeDesc>
 class TypeStrategy {
 public:
+    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion /*version*/, const TValueType& value) {
+        writable << value;
+    }
+
+    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion /*version*/, const TValueType& value) {
+        writable << value;
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion /*version*/, TValueType& value) {
+        readable >> value;
+    }
+
+    inline static i64 DoSize(TKafkaVersion /*version*/, const TValueType& /*value*/) {
+        static_assert(TTypeDesc::FixedLength, "Unsupported type: serialization length must be constant");
+        return sizeof(TValueType);
+    }
+
+    inline static void DoLog(const TValueType& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' value " << value << Endl;
+        }
+    }
+};
+
+
+//
+// TKafkaVarintDesc
+//
+template<typename Meta,
+         typename TValueType>
+class TypeStrategy<Meta, TValueType, TKafkaVarintDesc> {
+public:
     inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TValueType& value) {
-        if constexpr (std::is_base_of_v<TMessage, TValueType>) {
-            value.Write(writable, version);
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            writable.writeVarint(value);
         } else {
             writable << value;
         }
     }
 
     inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TValueType& value) {
-        if constexpr (std::is_base_of_v<TMessage, TValueType>) {
-            value.Write(writable, version);
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            writable.writeVarint(value);
         } else {
             writable << value;
         }
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValueType& value) {
-        if constexpr (std::is_base_of_v<TMessage, TValueType>) {
-            value.Read(readable, version);
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            value = readable.readVarint();
         } else {
             readable >> value;
         }
     }
 
     inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
-        if constexpr (std::is_base_of_v<TMessage, TValueType>) {
-            return value.Size(version);
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            return SizeOfUnsignedVarint(value);
         } else {
             return sizeof(TValueType);
         }
     }
+
+    inline static void DoLog(const TValueType& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' value " << value << Endl;
+        }
+    }
 };
 
+
+//
+// TKafkaUnsignedVarintDesc
+//
+template<typename Meta,
+         typename TValueType>
+class TypeStrategy<Meta, TValueType, TKafkaUnsignedVarintDesc> {
+public:
+    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TValueType& value) {
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            writable.writeUnsignedVarint(value + 1);
+        } else {
+            writable << value;
+        }
+    }
+
+    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TValueType& value) {
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            writable.writeUnsignedVarint(value + 1);
+        } else {
+            writable << value;
+        }
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValueType& value) {
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            value = readable.readUnsignedVarint() - 1;
+        } else {
+            readable >> value;
+        }
+    }
+
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+            return SizeOfUnsignedVarint(value);
+        } else {
+            return sizeof(TValueType);
+        }
+    }
+
+    inline static void DoLog(const TValueType& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' value " << value << Endl;
+        }
+    }
+};
+
+
+//
+// TKafkaStructDesc
+//
+template<typename Meta,
+         typename TValueType>
+class TypeStrategy<Meta, TValueType, TKafkaStructDesc> {
+public:
+    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TValueType& value) {
+        value.Write(writable, version);
+    }
+
+    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TValueType& value) {
+        value.Write(writable, version);
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValueType& value) {
+        value.Read(readable, version);
+    }
+
+    inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
+        return value.Size(version);
+    }
+
+    inline static void DoLog(const TValueType& /*value*/) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' type struct" << Endl;
+        }
+    }
+};
 
 
 //
 // TKafkaString
 //
 template<typename Meta>
-class TypeStrategy<Meta, TKafkaString> {
+class TypeStrategy<Meta, TKafkaString, TKafkaStringDesc> {
 public:
     inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TKafkaString& value) {
         if (value) {
@@ -290,11 +315,11 @@ public:
             if (v.length() > Max<i16>()) {
                 ythrow yexception() << "string field " << Meta::Name << " is too long to be serialized " << v.length();
             }
-            WriteStringSize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(writable, version, v.length());
+            WriteStringSize<Meta>(writable, version, v.length());
             writable << v;
         } else {
-            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
-                WriteStringSize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(writable, version, -1);
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
+                WriteStringSize<Meta>(writable, version, -1);
             } else {
                 ythrow yexception() << "non-nullable field " << Meta::Name << " serializing as null";
             }
@@ -303,14 +328,14 @@ public:
 
     inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaString& value) {
         const auto& v = *value;
-        WriteStringSize<0, Max<TKafkaVersion>()>(writable, version, v.length());
+        WriteStringSize<Meta>(writable, version, v.length());
         writable << v;
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaString& value) {
-        TKafkaInt32 length = ReadStringSize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(readable, version);
+        TKafkaInt32 length = ReadStringSize<Meta>(readable, version);
         if (length < 0) {
-            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
                 value = std::nullopt;
             } else {
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
@@ -330,17 +355,23 @@ public:
             if (v.length() > Max<i16>()) {
                 ythrow yexception() << "string field " << Meta::Name << " is too long to be serialized " << v.length();
             }
-            if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
                 return v.length() + SizeOfUnsignedVarint(v.length() + sizeof(TKafkaInt8));
             } else {
                 return v.length() + sizeof(TKafkaInt16);
             }
         } else {
-            if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
                 return sizeof(TKafkaInt8);
             } else {
                 return sizeof(TKafkaInt16);
             }
+        }
+    }
+
+    inline static void DoLog(const TKafkaString& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' type String. Size " << (value ? value->Size() : 0) << " Value: " << (value ? *value : "null") << Endl;
         }
     }
 };
@@ -350,16 +381,16 @@ public:
 // TKafkaBytes
 //
 template<typename Meta>
-class TypeStrategy<Meta, TKafkaBytes> {
+class TypeStrategy<Meta, TKafkaBytes, TKafkaBytesDesc> {
 public:
     inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytes& value) {
         if (value) {
             const auto& v = *value;
-            WriteArraySize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(writable, version, v.size());
+            WriteArraySize<Meta>(writable, version, v.size());
             writable << v;
         } else {
-            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
-                WriteArraySize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(writable, version, -1);
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
+                WriteArraySize<Meta>(writable, version, -1);
             } else {
                 ythrow yexception() << "non-nullable field " << Meta::Name << " serializing as null";
             }
@@ -368,14 +399,14 @@ public:
 
     inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytes& value) {
         const auto& v = *value;
-        WriteArraySize<0, Max<TKafkaVersion>()>(writable, version, v.size());
+        WriteArraySize<Meta>(writable, version, v.size());
         writable << v;
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaBytes& value) {
-        TKafkaInt32 length = ReadArraySize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(readable, version);
+        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
         if (length < 0) {
-            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
                 value = std::nullopt;
             } else {
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
@@ -388,17 +419,68 @@ public:
     inline static i64 DoSize(TKafkaVersion version, const TKafkaBytes& value) {
         if (value) {
             const auto& v = *value;
-            if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
                 return v.size() + SizeOfUnsignedVarint(v.size() + 1);
             } else {
                 return v.size() + sizeof(TKafkaInt32);
             }
         } else {
-            if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
                 return 1;
             } else {
                 return sizeof(TKafkaInt32);
             }
+        }
+    }
+
+    inline static void DoLog(const TKafkaBytes& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' type Bytes. Size " << (value ? value->size() : 0) << Endl;
+        }
+    }
+};
+
+
+//
+// TKafkaRecords
+//
+template<typename Meta>
+class TypeStrategy<Meta, TKafkaRecords, TKafkaRecordsDesc> {
+public:
+    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TKafkaRecords& value) {
+        if (value) {
+            WriteArraySize<Meta>(writable, version, DoSize(version, value));
+            (*value).Write(writable, version);
+        } else {
+            WriteArraySize<Meta>(writable, version, 0);
+        }
+    }
+
+    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaRecords& value) {
+        DoWrite(writable, version, value);
+    }
+
+    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value) {
+        int length = ReadArraySize<Meta>(readable, version);
+        if (length > 0) {
+            value.emplace();
+            (*value).Read(readable, version);
+        } else {
+            value = std::nullopt;
+        }
+    }
+
+    inline static i64 DoSize(TKafkaVersion version, const TKafkaRecords& value) {
+        if (value) {
+            return (*value).Size(version);
+        } else {
+            return 0;
+        }
+    }
+
+    inline static void DoLog(const TKafkaRecords& /*value*/) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' type Records." << Endl;
         }
     }
 };
@@ -409,28 +491,30 @@ public:
 //
 template<typename Meta,
          typename TValueType>
-class TypeStrategy<Meta, std::vector<TValueType>> {
+class TypeStrategy<Meta, std::vector<TValueType>, TKafkaArrayDesc> {
+    using ItemStrategy = TypeStrategy<Meta, typename Meta::ItemType, typename Meta::ItemTypeDesc>;
+
 public:
     inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const std::vector<TValueType>& value) {
-        WriteArraySize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(writable, version, value.size());
+        WriteArraySize<Meta>(writable, version, value.size());
 
         for(const auto& v : value) {
-            TypeStrategy<Meta, TValueType>::DoWrite(writable, version, v);
+            ItemStrategy::DoWrite(writable, version, v);
         }
     }
 
     inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const std::vector<TValueType>& value) {
-        WriteArraySize<0, Max<TKafkaVersion>()>(writable, version, value.size());
+        WriteArraySize<Meta>(writable, version, value.size());
 
         for(const auto& v : value) {
-            TypeStrategy<Meta, TValueType>::DoWrite(writable, version, v);
+            ItemStrategy::DoWrite(writable, version, v);
         }
     }
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, std::vector<TValueType>& value) {
-        TKafkaInt32 length = ReadArraySize<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(readable, version);
+        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
         if (length < 0) {
-            if (VersionCheck<Meta::NullableVersionMin, Meta::NullableVersionMax>(version)) {
+            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
                 return;
             } else {
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
@@ -439,7 +523,7 @@ public:
         value.resize(length);
 
         for (int i = 0; i < length; ++i) {
-            TypeStrategy<Meta, TValueType>::DoRead(readable, version, value[i]);
+            ItemStrategy::DoRead(readable, version, value[i]);
         }
     }
 
@@ -449,13 +533,19 @@ public:
             size = value.size() * sizeof(TValueType);
         } else {
             for(const auto& v : value) {
-                size += TypeStrategy<Meta, TValueType>::DoSize(version, v);
+                size += ItemStrategy::DoSize(version, v);
             }
         }
-        if (VersionCheck<Meta::FlexibleVersionMin, Meta::FlexibleVersionMax>(version)) {
+        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
             return size + SizeOfUnsignedVarint(value.size() + 1);
         } else {
             return size + sizeof(TKafkaInt32);
+        }
+    }
+
+    inline static void DoLog(const std::vector<TValueType>& value) {
+        if constexpr (DEBUG_ENABLED) {
+            Cerr << "Was read field '" << Meta::Name << "' type Array. Size " <<  value.size() << Endl;
         }
     }
 };
@@ -467,24 +557,25 @@ public:
 //
 template<typename Meta>
 inline void Write(TWriteCollector& collector, TKafkaWritable& writable, TKafkaInt16 version, const typename Meta::Type& value) {
-    if (VersionCheck<Meta::TaggedVersionMin, Meta::TaggedVersionMax>(version)) {
+    if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
         if (!IsDefaultValue<Meta>(value)) {
             ++collector.NumTaggedFields;
         }
-    } else if (VersionCheck<Meta::PresentVersionMin, Meta::PresentVersionMax>(version)) {
+    } else if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
         TypeStrategy<Meta, typename Meta::Type>::DoWrite(writable, version, value);
     }
 }
 
 template<typename Meta>
 inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::Type& value) {
-    if (!VersionNone<Meta::TaggedVersionMin, Meta::TaggedVersionMax>() 
-        && VersionCheck<Meta::TaggedVersionMin, Meta::TaggedVersionMax>(version)) {
+    if (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>() 
+        && VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
         return;
     } else {
-        if (VersionCheck<Meta::PresentVersionMin, Meta::PresentVersionMax>(version)) {
+        if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
             try {
                 TypeStrategy<Meta, typename Meta::Type>::DoRead(readable, version, value);
+                TypeStrategy<Meta, typename Meta::Type>::DoLog(value);
             } catch (const yexception& e) {
                 ythrow yexception() << "error on read field " << Meta::Name << ": " << e.what();
             }
@@ -496,19 +587,19 @@ inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::T
 
 template<typename Meta>
 inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename Meta::Type& value) {
-    if constexpr (!VersionNone<Meta::TaggedVersionMin, Meta::TaggedVersionMax>()) {
-        if (VersionCheck<Meta::TaggedVersionMin, Meta::TaggedVersionMax>(version)) {
+    if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
+        if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 ++collector.NumTaggedFields;
 
                 i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
                 collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size); 
             }
-        } else if (VersionCheck<Meta::PresentVersionMin, Meta::PresentVersionMax>(version)) {
+        } else if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
             collector.Size += TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
         }
     } else {
-        if (VersionCheck<Meta::PresentVersionMin, Meta::PresentVersionMax>(version)) {
+        if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
             collector.Size += TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
         }
     }
@@ -516,8 +607,8 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
 
 template<typename Meta>
 inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typename Meta::Type& value) {
-    if constexpr (!VersionNone<Meta::TaggedVersionMin, Meta::TaggedVersionMax>()) {
-        if (VersionCheck<Meta::TaggedVersionMin, Meta::TaggedVersionMax>(version)) {
+    if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
+        if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 writable.writeUnsignedVarint(Meta::Tag);
                 writable.writeUnsignedVarint(TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value));
@@ -529,7 +620,7 @@ inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typena
 
 template<typename Meta>
 inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::Type& value) {
-    if constexpr (!VersionNone<Meta::TaggedVersionMin, Meta::TaggedVersionMax>()) {
+    if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
         TypeStrategy<Meta, typename Meta::Type>::DoRead(readable, version, value);
     }
 }

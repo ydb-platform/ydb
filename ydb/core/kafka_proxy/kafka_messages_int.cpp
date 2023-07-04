@@ -29,6 +29,10 @@ void TKafkaWritable::writeUnsignedVarint(TKafkaUint32 value) {
     write((const char*)&b, sizeof(b));
 }
 
+void TKafkaWritable::writeVarint(TKafkaInt32 value) {
+    writeUnsignedVarint((value << 1) ^ (value >> 31));
+}
+
 void TKafkaWritable::write(const char* val, size_t length) {
     Buffer.write(val, length);
 }
@@ -78,6 +82,11 @@ ui32 TKafkaReadable::readUnsignedVarint() {
 
     value |= b << i;
     return value;
+}
+
+i32 TKafkaReadable::readVarint() {
+    ui32 v = readUnsignedVarint();
+    return (v >> 1) ^ -(v & 1);
 }
 
 void TKafkaReadable::skip(size_t length) {

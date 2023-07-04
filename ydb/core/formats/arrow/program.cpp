@@ -57,7 +57,7 @@ public:
         auto funcNames = GetRegistryFunctionNames(assign.GetOperation());
 
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
-        for (const auto& funcName : funcNames) {    
+        for (const auto& funcName : funcNames) {
             if (TBase::Ctx && TBase::Ctx->func_registry()->GetFunction(funcName).ok()) {
                 result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions(), TBase::Ctx);
             } else {
@@ -131,7 +131,7 @@ template <class TAssignObject>
 class TKernelFunction : public IStepFunction<TAssignObject> {
     using TBase = IStepFunction<TAssignObject>;
     const TFunctionPtr Function;
-    
+
 public:
     TKernelFunction(const TFunctionPtr kernelsFunction, arrow::compute::ExecContext* ctx)
         : TBase(ctx)

@@ -157,9 +157,18 @@ Y_UNIT_TEST_SUITE(Scheme) {
         }
 
         {
+            TInstant start = TInstant::Now();
+            for (int i = 0; i < ITERATIONS; ++i) {
+                TSerializedCellVec vec4(vec.GetCells());
+            }
+            TInstant finish = TInstant::Now();
+            Cerr << "Cells constructor: " << finish - start << Endl;
+        }
+
+        {
             TString buf = vec.GetBuffer();
             TInstant start = TInstant::Now();
-                for (int i = 0; i < ITERATIONS; ++i) {
+            for (int i = 0; i < ITERATIONS; ++i) {
                 vec3.Parse(buf);
             }
             TInstant finish = TInstant::Now();

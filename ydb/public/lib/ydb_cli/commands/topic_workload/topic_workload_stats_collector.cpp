@@ -62,18 +62,22 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
 }
 
 void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
-    auto StartTime = Now();
-    auto StopTime = StartTime + TDuration::Seconds(TotalSec + 1);
+    auto startTime = Now();
+    WarmupTime = startTime + TDuration::Seconds(WarmupSec);
+    auto stopTime = startTime + TDuration::Seconds(TotalSec + 1);
     int windowIt = 1;
     auto windowDuration = TDuration::Seconds(WindowSec);
-    while (Now() < StopTime && !*ErrorFlag) {
-        if (Now() > StartTime + windowIt * windowDuration && !*ErrorFlag) {
-            CollectThreadEvents(windowIt);
+    while (Now() < stopTime && !*ErrorFlag) {
+        auto windowTime = [startTime, windowDuration](int index) {
+            return startTime + index * windowDuration;
+        };
+        if (Now() > windowTime(windowIt) && !*ErrorFlag) {
+            CollectThreadEvents();
             PrintWindowStats(windowIt++);
         }
-        Sleep(std::max(TDuration::Zero(), Now() - StartTime - windowIt * windowDuration));
+        Sleep(std::max(TDuration::Zero(), Now() - windowTime(windowIt)));
     }
-    CollectThreadEvents(windowIt);
+    CollectThreadEvents();
 }
 
 void TTopicWorkloadStatsCollector::PrintWindowStats(ui32 windowIt) {
@@ -114,22 +118,19 @@ void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
     Cout << Endl;
 }
 
-void TTopicWorkloadStatsCollector::CollectThreadEvents(ui32 windowIt)
+void TTopicWorkloadStatsCollector::CollectThreadEvents()
 {
-    CollectThreadEvents(windowIt, WriterEventQueues);
-    CollectThreadEvents(windowIt, ReaderEventQueues);
-    CollectThreadEvents(windowIt, LagEventQueues);
+    CollectThreadEvents(WriterEventQueues);
+    CollectThreadEvents(ReaderEventQueues);
+    CollectThreadEvents(LagEventQueues);
 }
 
 template<class T>
-void TTopicWorkloadStatsCollector::CollectThreadEvents(ui32 windowIt, TEventQueues<T>& queues)
+void TTopicWorkloadStatsCollector::CollectThreadEvents(TEventQueues<T>& queues)
 {
     for (auto& queue : queues) {
         THolder<T> event;
         while (queue->Dequeue(&event)) {
-            if (windowIt <= WarmupSec) {
-                continue;
-            }
             WindowStats->AddEvent(*event);
             TotalStats.AddEvent(*event);
         }
@@ -162,5 +163,7 @@ void TTopicWorkloadStatsCollector::AddLagEvent(size_t readerIdx, const TTopicWor
 template<class T>
 void TTopicWorkloadStatsCollector::AddEvent(size_t index, TEventQueues<T>& queues, const T& event)
 {
-    queues[index]->Enqueue(MakeHolder<T>(event));
+    if ((WarmupTime != TInstant()) && (Now() >= WarmupTime)) {
+        queues[index]->Enqueue(MakeHolder<T>(event));
+    }
 }

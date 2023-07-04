@@ -257,6 +257,12 @@ private:
 
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
+                } else if (mode == "drop") {
+                    auto tableType = settings.TableType.IsValid()
+                        ? GetTableTypeFromString(settings.TableType.Cast())
+                        : ETableType::Table; // v0, pg support
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
+                    return TStatus::Ok;
                 }
 
                 ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
@@ -589,6 +595,21 @@ public:
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Actions(settings.AlterActions.Cast())
+                        .TableType(tableType)
+                        .Done()
+                        .Ptr();
+
+                 } else if (mode == "drop") {
+                    YQL_ENSURE(!settings.Columns);
+                    auto tableType = settings.TableType.IsValid()
+                        ? settings.TableType.Cast()
+                        : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0, pg support
+
+                    return Build<TKiDropTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Table().Build(key.GetTablePath())
+                        .Settings(settings.Other)
                         .TableType(tableType)
                         .Done()
                         .Ptr();

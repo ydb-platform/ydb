@@ -6,6 +6,11 @@ import ymake
 import ytest
 from _common import get_norm_unit_path, rootrel_arc_src, to_yesno
 
+# 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
+# 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
+# 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
+ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
+
 
 class PluginLogger(object):
     def __init__(self):
@@ -123,7 +128,9 @@ def on_from_npm_lockfiles(unit, *args):
 
     try:
         for pkg in pm.extract_packages_meta_from_lockfiles(lf_paths):
-            unit.on_from_npm([pkg.name, pkg.version, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path])
+            unit.on_from_npm(
+                [pkg.name, pkg.version, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path]
+            )
     except Exception as e:
         if unit.get("TS_RAISE") == "yes":
             raise e
@@ -160,7 +167,6 @@ def on_peerdir_ts_resource(unit, *resources):
             v = _select_matching_version(erm_json, tool, pj.get_dep_specifier(tool))
             dirs.append(os.path.join("build", "external_resources", tool, str(v)))
             _set_resource_vars(unit, erm_json, tool, v, nodejs_version.major)
-
 
     unit.onpeerdir(dirs)
 
@@ -208,9 +214,7 @@ def _get_ts_test_data_dirs(unit):
 
 
 def _resolve_config_path(unit, test_runner, rel_to):
-    config_path = (
-        unit.get("ESLINT_CONFIG_PATH") if test_runner == "eslint" else unit.get("TS_TEST_CONFIG_PATH")
-    )
+    config_path = unit.get("ESLINT_CONFIG_PATH") if test_runner == "eslint" else unit.get("TS_TEST_CONFIG_PATH")
     arc_config_path = unit.resolve_arc_path(config_path)
     abs_config_path = unit.resolve(arc_config_path)
     if not abs_config_path:
@@ -305,6 +309,7 @@ def _setup_eslint(unit):
     test_record = {
         "ESLINT-ROOT-VAR-NAME": unit.get("ESLINT-ROOT-VAR-NAME"),
         "ESLINT_CONFIG_PATH": _resolve_config_path(unit, "eslint", rel_to="MODDIR"),
+        "LINT-FILE-PROCESSING-TIME": str(ESLINT_FILE_PROCESSING_TIME_DEFAULT),
     }
 
     _add_test(unit, "eslint", lint_files, deps, test_record, mod_dir)
@@ -371,12 +376,12 @@ def _add_test(unit, test_type, test_files, deps=None, test_record=None, test_cwd
         "CUSTOM-DEPENDENCIES": " ".join(sort_uniq((deps or []) + ytest.get_values_list(unit, "TEST_DEPENDS_VALUE"))),
     }
 
-    for k, v in full_test_record.items():
-        if not isinstance(v, str):
-            logger.warn(k, type(v))
-
     if test_record:
         full_test_record.update(test_record)
+
+    for k, v in full_test_record.items():
+        if not isinstance(v, str):
+            logger.warn(k, "expected 'str', got:", type(v))
 
     data = ytest.dump_test(unit, full_test_record)
     if data:
@@ -473,11 +478,14 @@ def on_ts_test_for_configure(unit, test_runner, default_config):
         config_path = os.path.join(for_mod_path, default_config)
         unit.set(["TS_TEST_CONFIG_PATH", config_path])
 
-    test_record = _add_ts_resources_to_test_record(unit, {
-        "TS-TEST-FOR-PATH": for_mod_path,
-        "TS-TEST-DATA-DIRS": ytest.serialize_list(_get_ts_test_data_dirs(unit)),
-        "TS-TEST-DATA-DIRS-RENAME": unit.get("_TS_TEST_DATA_DIRS_RENAME_VALUE"),
-    })
+    test_record = _add_ts_resources_to_test_record(
+        unit,
+        {
+            "TS-TEST-FOR-PATH": for_mod_path,
+            "TS-TEST-DATA-DIRS": ytest.serialize_list(_get_ts_test_data_dirs(unit)),
+            "TS-TEST-DATA-DIRS-RENAME": unit.get("_TS_TEST_DATA_DIRS_RENAME_VALUE"),
+        },
+    )
 
     test_files = ytest.get_values_list(unit, "_TS_TEST_SRCS_VALUE")
     test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
@@ -489,11 +497,13 @@ def on_ts_test_for_configure(unit, test_runner, default_config):
     add_ts_test = _get_test_runner_handlers()[test_runner]
     add_ts_test(unit, test_runner, test_files, deps, test_record)
 
+
 @_with_report_configure_error
 def on_set_ts_test_for_vars(unit, for_mod):
     unit.set(["TS_TEST_FOR", "yes"])
     unit.set(["TS_TEST_FOR_DIR", unit.resolve_arc_path(for_mod)])
     unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
+
 
 def _add_ts_resources_to_test_record(unit, test_record):
     erm_json = _create_erm_json(unit)

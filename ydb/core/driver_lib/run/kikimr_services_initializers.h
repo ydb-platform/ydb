@@ -376,11 +376,13 @@ public:
 
 class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
-    TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
+    TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories,
+        IGlobalObjectStorage& globalObjects);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 private:
     std::shared_ptr<TModuleFactories> Factories;
+    IGlobalObjectStorage& GlobalObjects;
 };
 
 class TConveyorInitializer: public IKikimrServicesInitializer {

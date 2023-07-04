@@ -8,6 +8,17 @@
 
 namespace NKikimr {
 
+/**
+ * Storage for global objects that must survive as long as the actor system
+ */
+class IGlobalObjectStorage {
+protected:
+    ~IGlobalObjectStorage() = default;
+
+public:
+    virtual void AddGlobalObject(std::shared_ptr<void> object) = 0;
+};
+
 struct IAppDataInitializer : public virtual TThrRefBase {
     virtual void Initialize(NKikimr::TAppData* appData) = 0;
 

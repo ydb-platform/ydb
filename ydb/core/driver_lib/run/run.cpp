@@ -384,6 +384,9 @@ TKikimrRunner::~TKikimrRunner() {
     }
 }
 
+void TKikimrRunner::AddGlobalObject(std::shared_ptr<void> object) {
+    GlobalObjects.push_back(std::move(object));
+}
 
 void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool includeHostName)
 {
@@ -1502,7 +1505,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     if (serviceMask.EnableKqp) {
-        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
+        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
 
     if (serviceMask.EnableMetadataProvider) {

@@ -76,6 +76,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/driver_lib/run/cert_auth_props.h>
 
@@ -786,6 +787,12 @@ namespace Tests {
                 Settings->AppConfig.GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources);
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
+
+            if (!KqpLoggerScope) {
+                // We need to keep YqlLoggerScope alive longer than the actor system
+                KqpLoggerScope = std::make_shared<NYql::NLog::YqlLoggerScope>(
+                    new NYql::NLog::TTlsLogBackend(new TNullLogBackend()));
+            }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
                                                                   Settings->AppConfig.GetTableServiceConfig(),

@@ -291,6 +291,7 @@ namespace Tests {
         const TServerSettings::TConstPtr Settings;
         const bool UseStoragePools;
 
+        std::shared_ptr<void> KqpLoggerScope;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;

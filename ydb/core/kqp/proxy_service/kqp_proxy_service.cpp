@@ -161,8 +161,7 @@ public:
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
-        : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend()))
-        , LogConfig(logConfig)
+        : LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -1386,7 +1385,6 @@ private:
     }
 
 private:
-    NYql::NLog::YqlLoggerScope YqlLoggerScope;
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;

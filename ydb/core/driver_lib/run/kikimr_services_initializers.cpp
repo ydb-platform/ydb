@@ -158,6 +158,7 @@
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
@@ -2347,9 +2348,11 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
-        std::shared_ptr<TModuleFactories> factories)
+        std::shared_ptr<TModuleFactories> factories,
+        IGlobalObjectStorage& globalObjects)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
+    , GlobalObjects(globalObjects)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2380,6 +2383,10 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        // We need to keep YqlLoggerScope alive as long as something may be trying to log
+        GlobalObjects.AddGlobalObject(std::make_shared<NYql::NLog::YqlLoggerScope>(
+            new NYql::NLog::TTlsLogBackend(new TNullLogBackend())));
 
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources));

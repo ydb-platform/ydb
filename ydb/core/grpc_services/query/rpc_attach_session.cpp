@@ -28,7 +28,7 @@ public:
 
     void AttachingState(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleAttachin);
+            hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleAttaching);
             hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleAttachin);
         }
     }
@@ -77,7 +77,7 @@ private:
         ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR);
     }
 
-    void HandleAttachin(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
+    void HandleAttaching(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         // Do not try to attach to closing session
         const bool sessionExpired = record.GetWorkerIsClosing();

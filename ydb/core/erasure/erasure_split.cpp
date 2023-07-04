@@ -1,21 +1,27 @@
 #include "erasure.h"
 
+static const char ZeroData[4096] = {0};
+
 namespace NKikimr {
 
-    class TZeroBuffer {
-        TRcBuf Buffer;
-
+    class TZeroBuffer : public IContiguousChunk {
     public:
-        TZeroBuffer()
-            : Buffer(TRcBuf::Uninitialized(4096))
-        {
-            memset(Buffer.GetDataMut(), 0, Buffer.size());
+        TContiguousSpan GetData() const override {
+            return {ZeroData, sizeof(ZeroData)};
         }
 
-        TRcBuf GetBuffer() const {
-            return Buffer;
+        TMutableContiguousSpan GetDataMut() override {
+            return {const_cast<char*>(ZeroData), sizeof(ZeroData)};
         }
-    } ZeroBuffer;
+
+        TMutableContiguousSpan UnsafeGetDataMut() override {
+            return {const_cast<char*>(ZeroData), sizeof(ZeroData)};
+        }
+
+        size_t GetOccupiedMemorySize() const override {
+            return sizeof(ZeroData);
+        }
+    };
 
     void ErasureSplitBlock42Prepare(const TRope& whole, std::span<TRope> parts) {
         const ui32 blockSize = 32;
@@ -29,8 +35,9 @@ namespace NKikimr {
         for (ui32 part = 0; part < 4; ++part) {
             ui32 partLen = fullBlocks * blockSize;
             if (remains >= blockSize || part == 3) {
-                partLen += std::min(remains, blockSize);
-                remains -= blockSize;
+                const ui32 len = Min(remains, blockSize);
+                partLen += len;
+                remains -= len;
             }
 
             auto nextIter = iter + partLen;
@@ -38,7 +45,7 @@ namespace NKikimr {
                 r = {iter, nextIter};
                 Y_VERIFY_DEBUG(r.size() == partLen);
                 if (const ui32 padding = partSize - r.size()) {
-                    auto buffer = ZeroBuffer.GetBuffer();
+                    TRcBuf buffer(MakeIntrusive<TZeroBuffer>());
                     r.Insert(r.End(), TRcBuf(TRcBuf::Piece, buffer.data(), padding, buffer));
                 }
             }
@@ -46,13 +53,11 @@ namespace NKikimr {
         }
 
         if (!parts[4]) {
-            TRcBuf xorPart = TRcBuf::Uninitialized(partSize);
-            parts[4] = TRope(std::move(xorPart));
+            parts[4] = TRcBuf::Uninitialized(partSize);
         }
 
         if (!parts[5]) {
-            TRcBuf diagPart = TRcBuf::Uninitialized(partSize);
-            parts[5] = TRope(std::move(diagPart));
+            parts[5] = TRcBuf::Uninitialized(partSize);
         }
     }
 

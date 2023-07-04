@@ -206,10 +206,12 @@ TString TGetImpl::DumpFullState() const {
     str << Endl;
     str << " ReportDetailedPartMap# " << ReportDetailedPartMap;
     str << Endl;
-    str << " ForceBlockTabletId# " << ForceBlockTabletData->Id;
-    str << Endl;
-    str << " ForceBlockTabletGeneration# " << ForceBlockTabletData->Generation;
-    str << Endl;
+    if (ForceBlockTabletData) {
+        str << " ForceBlockTabletId# " << ForceBlockTabletData->Id;
+        str << Endl;
+        str << " ForceBlockTabletGeneration# " << ForceBlockTabletData->Generation;
+        str << Endl;
+    }
 
     str << " ReplyBytes# " << ReplyBytes;
     str << Endl;

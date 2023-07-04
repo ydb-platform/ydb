@@ -28,17 +28,13 @@ namespace NKikimr {
             switch (diskPart.Situation) {
                 case TBlobState::ESituation::Unknown: {
                     // get the request -- all the needed parts except already got and already requested
-                    TIntervalSet<i32> request(state.Whole.Needed);
-                    request.Subtract(state.Whole.Here);
-                    // remove parts that were already requested, but not yet answered
-                    request.Subtract(diskPart.Requested);
-                    if (!request.IsEmpty()) {
+                    if (const TIntervalSet<i32> request = state.Whole.NotHere() - diskPart.Requested) {
                         TLogoBlobID id(state.Id, partIdx + 1);
                         groupDiskRequests.AddGet(disk.OrderNumber, id, request);
                         diskPart.Requested.Add(request);
                     } else {
                         // ensure that we are waiting for some data to come
-                        Y_VERIFY(!diskPart.Requested.IsEmpty());
+                        Y_VERIFY(diskPart.Requested);
                     }
                     // return true indicating that we have a request that is not yet satisfied
                     return true;
@@ -64,34 +60,8 @@ namespace NKikimr {
                 return EStrategyOutcome::DONE;
             }
 
-            const ui32 totalPartCount = info.Type.TotalPartCount();
-
             // merge found data parts in our blob
-            for (ui32 partIdx = 0; partIdx < totalPartCount; ++partIdx) {
-                const TBlobState::TState& part = state.Parts[partIdx];
-
-                // check if we can obtain some _new_ data from the part
-                if (!part.Here.IsSubsetOf(state.Whole.Here)) {
-                    // scan through all the intervals
-                    for (const auto& range : part.Here) {
-                        ui64 begin = range.first;
-                        const ui64 end = range.second;
-                        TIntervalVec<i32> interval(begin, end);
-                        // check if this interval contains some data which is not in state.Whole.Here
-                        if (!interval.IsSubsetOf(state.Whole.Here)) {
-                            char buffer[4096];
-                            while (begin != end) {
-                                const ui64 len = Min<ui64>(sizeof(buffer), end - begin);
-                                part.Data.Read(begin, buffer, len);
-                                state.Whole.Data.Write(begin, buffer, len);
-                                begin += len;
-                            }
-                            state.Whole.Here.Add(interval);
-                        }
-                    }
-                }
-            }
-            if (state.Whole.Needed.IsSubsetOf(state.Whole.Here)) {
+            if (RestoreWholeFromMirror(state)) {
                 // we are not going to restore this blob and we have all required data read, so we can exit now
                 state.WholeSituation = TBlobState::ESituation::Present;
                 return EStrategyOutcome::DONE;
@@ -131,7 +101,7 @@ namespace NKikimr {
             }
 
             // create an array defining order in which we traverse the disks
-            TStackVec<ui32, 32> diskIdxList;
+            TStackVec<ui32, TypicalDisksInGroup> diskIdxList;
             for (ui32 i = 0; i < state.Disks.size(); ++i) {
                 diskIdxList.push_back(i);
             }
@@ -201,7 +171,7 @@ namespace NKikimr {
                 // we can't finish request now, because the VGet was just issued or still being executed, so we
                 // drop status to UNKNOWN
                 return EStrategyOutcome::IN_PROGRESS;
-            } else if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here)) {
+            } else if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here())) {
                 // we haven't requested anything, but there is no required data in buffer, so blob is lost
                 R_LOG_WARN_SX(logCtx, "BPG48", "missing blob# " << state.Id.ToString() << " state# " << state.ToString());
                 state.WholeSituation = TBlobState::ESituation::Absent;

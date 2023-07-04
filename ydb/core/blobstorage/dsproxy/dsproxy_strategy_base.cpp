@@ -281,7 +281,6 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         const ui32 partIdx = record.PartIdx;
         Y_VERIFY_DEBUG(partIdx < state.Parts.size());
         auto& part = state.Parts[partIdx];
-        Y_VERIFY_DEBUG(part.Data.GetIntervalSet() == part.Here);
         if (!part.Data.IsMonolith() || part.Data.GetMonolith().size() != info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1))) {
             isPartsAvailable = false;
             break;
@@ -291,10 +290,9 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
     if (!isPartsAvailable) {
         // Prepare new put request set
         TIntervalSet<i32> fullInterval(0, state.Id.BlobSize());
-        Y_VERIFY_DEBUG(state.Whole.Data.GetIntervalSet() == state.Whole.Here);
-        Y_VERIFY(fullInterval == state.Whole.Here, "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
+        Y_VERIFY(fullInterval == state.Whole.Here(), "Can't put unrestored blob! Unexpected blob state# %s", state.ToString().c_str());
 
-        TStackVec<TRope, 8> partData(info.Type.TotalPartCount());
+        TStackVec<TRope, TypicalPartsInBlob> partData(info.Type.TotalPartCount());
         ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
             state.Whole.Data.Read(0, state.Id.BlobSize()), partData);
 
@@ -305,7 +303,6 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                 state.AddPartToPut(partIdx, std::move(partData[partIdx]));
                 Y_VERIFY(part.Data.IsMonolith());
                 Y_VERIFY(part.Data.GetMonolith().size() == partSize);
-                Y_VERIFY(part.Here == TIntervalSet<i32>(0, partSize));
             }
         }
     }

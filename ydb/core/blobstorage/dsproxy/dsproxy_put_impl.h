@@ -171,7 +171,7 @@ public:
     }
 
     template <typename TVPutEvent>
-    void GenerateInitialRequests(TLogContext &logCtx, TBatchedVec<TStackVec<TRope, 8>>& partSets,
+    void GenerateInitialRequests(TLogContext &logCtx, TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>>& partSets,
             TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
         Y_UNUSED(logCtx);
         Y_VERIFY_S(partSets.size() == Blobs.size(), "partSets.size# " << partSets.size()

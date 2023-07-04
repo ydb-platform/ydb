@@ -38,7 +38,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     ui32 CurrentEncryptionOffset = 0;
     ui32 BlobsSplit = 0;
     TErasureSplitContext ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
-    TBatchedVec<TStackVec<TRope, 8>> PartSets;
+    TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;

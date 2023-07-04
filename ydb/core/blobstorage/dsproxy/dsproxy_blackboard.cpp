@@ -12,13 +12,10 @@ void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TRope&& data
     Y_VERIFY(size);
     Y_VERIFY(shift < fullSize && size <= fullSize - shift);
     Data.Write(shift, std::move(data));
-    // Mark the interval as present in the Data buffer
-    Here.Add(shift, shift + size);
 }
 
 void TBlobState::TState::AddPartToPut(TRope&& partData) {
     Y_VERIFY(partData);
-    Here.Assign(0, partData.size());
     Data.SetMonolith(std::move(partData));
 }
 
@@ -42,7 +39,6 @@ void TBlobState::Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &info) 
 void TBlobState::AddNeeded(ui64 begin, ui64 size) {
     Y_VERIFY(bool(Id));
     Whole.Needed.Add(begin, begin + size);
-    Whole.NotHere.Add(begin, begin + size);
     IsChanged = true;
 }
 
@@ -61,44 +57,35 @@ void TBlobState::MarkBlobReadyToPut(ui8 blobIdx) {
 }
 
 bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
-    TIntervalVec<i32> fullBlobInterval(0, Id.BlobSize());
-    if (fullBlobInterval.IsSubsetOf(Whole.Here)) {
+    const TIntervalVec<i32> fullBlobInterval(0, Id.BlobSize());
+    const TIntervalSet<i32> here = Whole.Here();
+    Y_VERIFY_DEBUG((here - fullBlobInterval).IsEmpty()); // ensure no excessive data outsize blob's boundaries
+    if (fullBlobInterval.IsSubsetOf(here)) { // we already have 'whole' part, no need for restoration
         return true;
     }
 
-    const ui32 parts = info.Type.TotalPartCount();
+    TStackVec<TRope, TypicalPartsInBlob> parts(info.Type.TotalPartCount());
     ui32 partsPresent = 0;
-    for (ui32 i = 0; i < parts; ++i) {
+    for (ui32 i = 0; i < parts.size(); ++i) {
         if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(Id, i + 1))) {
-            if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) {
-                ++partsPresent;
+            const TIntervalVec<i32> fullPartInterval(0, partSize);
+            const TIntervalSet<i32> partHere = Parts[i].Here();
+            Y_VERIFY_DEBUG((partHere - fullPartInterval).IsEmpty()); // ensure no excessive part data outside boundaries
+            if (fullPartInterval.IsSubsetOf(partHere)) {
+                parts[i] = Parts[i].Data.Read(0, partSize);
+                if (++partsPresent >= info.Type.MinimalRestorablePartCount()) {
+                    TRope whole;
+                    ErasureRestore((TErasureType::ECrcMode)Id.CrcMode(), info.Type, Id.BlobSize(), &whole, parts, 0, 0, false);
+                    Y_VERIFY(whole.size() == Id.BlobSize());
+                    Whole.Data.SetMonolith(std::move(whole));
+                    Y_VERIFY_DEBUG(Whole.Here() == fullBlobInterval);
+                    return true;
+                }
             }
         }
     }
-    if (partsPresent < info.Type.MinimalRestorablePartCount()) {
-        return false;
-    }
 
-    TDataPartSet partSet;
-    partSet.Parts.resize(parts);
-    for (ui32 i = 0; i < parts; ++i) {
-        if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(Id, i + 1))) {
-            if (TIntervalVec<i32>(0, partSize).IsSubsetOf(Parts[i].Here)) {
-                partSet.PartsMask |= (1 << i);
-                TRope data(MakeIntrusive<TRopeSharedDataBackend>(TSharedData::Uninitialized(partSize)));
-                Parts[i].Data.Read(0, data.UnsafeGetContiguousSpanMut().data(), partSize);
-                partSet.Parts[i].ReferenceTo(data);
-            }
-        }
-    }
-    partSet.FullDataSize = Id.BlobSize();
-
-    TRope whole;
-    info.Type.RestoreData((TErasureType::ECrcMode)Id.CrcMode(), partSet, whole, false, true, false);
-    Whole.Data.Write(0, whole.GetContiguousSpan().data(), Id.BlobSize());
-    Whole.Here.Add(fullBlobInterval);
-    Whole.NotHere.Subtract(fullBlobInterval);
-    return true;
+    return false;
 }
 
 void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoBlobID &id, ui32 orderNumber,
@@ -315,7 +302,7 @@ TString TBlobState::TDiskPart::ToString() const {
 TString TBlobState::TState::ToString() const {
     TStringStream str;
     str << "{Data# " << Data.Print();
-    str << " Here# " << Here.ToString();
+    str << " Here# " << Here().ToString();
     str << "}";
     return str.Str();
 }
@@ -323,9 +310,9 @@ TString TBlobState::TState::ToString() const {
 TString TBlobState::TWholeState::ToString() const {
     TStringStream str;
     str << "{Data# " << Data.Print();
-    str << " Here# " << Here.ToString();
+    str << " Here# " << Here().ToString();
     str << " Needed# " << Needed.ToString();
-    str << " NotHere# " << NotHere.ToString();
+    str << " NotHere# " << NotHere().ToString();
     str << "}";
     return str.Str();
 }

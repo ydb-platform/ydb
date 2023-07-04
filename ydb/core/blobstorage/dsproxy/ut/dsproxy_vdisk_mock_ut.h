@@ -144,7 +144,7 @@ public:
                 if (NotYetBlobs.find(it->first) != NotYetBlobs.end()) {
                     outVGetResult.AddResult(NKikimrProto::NOT_YET, it->first, shift, static_cast<ui32>(resultSize), cookie);
                 } else {
-                    auto buffer = TRcBuf::Copy((char*)it->second.data() + rShift, resultSize);
+                    auto buffer = TRcBuf::Copy(it->second.data() + rShift, resultSize);
                     outVGetResult.AddResult(NKikimrProto::OK, it->first, shift, TRope(std::move(buffer)), cookie);
                 }
             }
@@ -180,7 +180,7 @@ private:
 
     TString AlphaData(ui32 size) {
         TString data = TString::Uninitialized(size);
-        ui8 *p = (ui8*)(void*)data.Detach();
+        char *p = data.Detach();
         for (ui32 offset = 0; offset < size; ++offset) {
             p[offset] = (ui8)offset;
         }
@@ -257,9 +257,8 @@ public:
         shift = Min(shift, id.BlobSize());
         ui32 rSize = size ? size : id.BlobSize();
         rSize = Min(rSize, id.BlobSize() - shift);
-        TString result;
-        result.resize(rSize);
-        memcpy((void*)result.data(), (char*)(void*)data.data() + shift, rSize);
+        TString result = TString::Uninitialized(rSize);
+        memcpy(result.Detach(), data.data() + shift, rSize);
         return result;
     }
 
@@ -269,14 +268,15 @@ public:
         if (size != buffer.size()) {
             UNIT_ASSERT_VALUES_EQUAL(size, buffer.size());
         }
-        const ui8 *a = (const ui8*)(void*)blob.Data.data();
-        const ui8 *b = (const ui8*)(void*)buffer.data();
+        const char *a = blob.Data.data();
+        const char *b = buffer.data();
+        UNIT_ASSERT(shift < blob.Data.size());
+        UNIT_ASSERT(shift + size <= blob.Data.size());
+        UNIT_ASSERT(size <= buffer.size());
         if (memcmp(a + shift, b, size) != 0) {
             for (ui32 offset = 0; offset < size; ++offset) {
-                UNIT_ASSERT_VALUES_EQUAL_C((ui32)a[shift + offset], (ui32)b[offset],
-                        "Id# " << id.ToString() << " offset# " << offset
-                        << " shift# " << shift << " s+o# " << (shift + offset) << " size# " << size
-                        << " canonic a# " << (ui32)a[shift+offset] << " actual b# " << (ui32)b[offset]);
+                UNIT_ASSERT_VALUES_EQUAL_C((ui8)a[shift + offset], (ui8)b[offset],
+                        "Id# " << id.ToString() << " offset# " << offset << " shift# " << shift << " size# " << size);
             }
         }
     }

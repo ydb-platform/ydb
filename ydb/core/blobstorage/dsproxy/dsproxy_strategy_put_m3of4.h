@@ -46,7 +46,7 @@ protected:
             }
         }
         const TIntervalVec<i32> interval(0, state.Id.BlobSize());
-        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data());
+        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here()), "missing blob data State# %s", state.ToString().data());
         std::array<TRope, 3> parts;
         ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
             state.Whole.Data.Read(0, state.Id.BlobSize()), parts);

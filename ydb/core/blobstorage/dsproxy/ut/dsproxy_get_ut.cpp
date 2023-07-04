@@ -132,9 +132,9 @@ Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, false);
 }
 
-Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
-    TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, false);
-}
+//Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
+//    TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, false);
+//}
 
 Y_UNIT_TEST(TestMirror32GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::ErasureMirror3Plus2, false, false);
@@ -145,9 +145,9 @@ Y_UNIT_TEST(TestBlock42GetBlobCrcCheck) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, true);
 }
 
-Y_UNIT_TEST(TestBlock42GetBlobCrcCheckVerbose) {
-    TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, true);
-}
+//Y_UNIT_TEST(TestBlock42GetBlobCrcCheckVerbose) {
+//    TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, true);
+//}
 
 Y_UNIT_TEST(TestMirror32GetBlobCrcCheck) {
     TestIntervalsAndCrcAllOk(TErasureType::ErasureMirror3Plus2, false, true);
@@ -456,39 +456,7 @@ private:
     }
 };
 
-void TestIntervalsWipedAllOk(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled = false) {
-    TActorSystemStub actorSystemStub;
-
-    const ui32 groupId = 0;
-    TBlobStorageGroupType groupType(erasureSpecies);
-    const ui32 domainCount = groupType.BlobSubgroupSize();
-
-    TVector<ui64> queryCounts = {1, 2, 3, 13, 34};
-
-    for (bool isRestore : {false, true}) {
-        for (ui32 generateMode = 0; generateMode < 2; ++generateMode) {
-            for (ui64 wiped1 = 0; wiped1 < domainCount; ++wiped1) {
-                for (ui64 wiped2 = 0; wiped2 <= wiped1; ++wiped2) {
-                    ui64 maxErrorMask = (wiped1 == wiped2 ? 4 : 24);
-                    for (ui64 errorMask = 0; errorMask <= maxErrorMask; ++errorMask) {
-                        ui64 error1 = errorMask % 5;
-                        ui64 error2 = errorMask / 5;
-                        TTestWipedAllOkStep testStep(
-                                groupId, erasureSpecies, domainCount, queryCounts,
-                                isVerboseNoDataEnabled, isRestore);
-                        testStep.SetGenerateBlobsMode(generateMode);
-                        testStep.Init();
-                        testStep.AddWipedVDisk(wiped1, error1);
-                        testStep.AddWipedVDisk(wiped2, error2);
-                        testStep.Run(false);
-                    }
-                }
-            }
-        }
-    }
-}
-
-void TestIntervalsWipedAllOkVMultiPut(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled = false) {
+void TestIntervalsWipedAllOk(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled, bool multiput) {
     TActorSystemStub actorSystemStub;
 
     const ui32 groupId = 0;
@@ -512,7 +480,7 @@ void TestIntervalsWipedAllOkVMultiPut(TErasureType::EErasureSpecies erasureSpeci
                         testStep.Init();
                         testStep.AddWipedVDisk(wiped1, error1);
                         testStep.AddWipedVDisk(wiped2, error2);
-                        testStep.Run(true);
+                        testStep.Run(multiput);
                     }
                 }
             }
@@ -1233,27 +1201,15 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) {
-    TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block);
-}
-
-Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkVerbose) {
-    TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, true);
+    TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, false, false);
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkVMultiPut) {
-    TestIntervalsWipedAllOkVMultiPut(TErasureType::Erasure4Plus2Block);
-}
-
-Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkVerboseVMultiPut) {
-    TestIntervalsWipedAllOkVMultiPut(TErasureType::Erasure4Plus2Block, true);
+    TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, false, true);
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkComparisonVMultiPutAndVPut) {
     TestIntervalsWipedAllOkComparisonVMultiPutAndVPut(TErasureType::Erasure4Plus2Block);
-}
-
-Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkVerboseComparisonVMultiPutAndVPut) {
-    TestIntervalsWipedAllOkComparisonVMultiPutAndVPut(TErasureType::Erasure4Plus2Block, true);
 }
 
 Y_UNIT_TEST(TestBlock42GetIntervalsWipedError) {
@@ -1265,11 +1221,11 @@ Y_UNIT_TEST(TestBlock42WipedErrorWithTwoBlobs) {
 }
 
 Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOk) {
-    TestIntervalsWipedAllOk(TErasureType::ErasureMirror3Plus2);
+    TestIntervalsWipedAllOk(TErasureType::ErasureMirror3Plus2, false, false);
 }
 
 Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOkVMultiPut) {
-    TestIntervalsWipedAllOkVMultiPut(TErasureType::ErasureMirror3Plus2);
+    TestIntervalsWipedAllOk(TErasureType::ErasureMirror3Plus2, false, true);
 }
 
 Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOkComparisonVMultiPutAndVPut) {

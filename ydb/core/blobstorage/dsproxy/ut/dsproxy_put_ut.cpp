@@ -59,7 +59,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     char *dataBytes = encryptedData.Detach();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *group.GetInfo());
 
-    TBatchedVec<TStackVec<TRope, 8>> partSetSingleton(1);
+    TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> partSetSingleton(1);
     partSetSingleton[0].resize(totalParts);
     ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), group.GetInfo()->Type, TRope(encryptedData), partSetSingleton[0]);
 
@@ -165,7 +165,7 @@ struct TTestPutAllOk {
 
     TLogContext LogCtx;
 
-    TBatchedVec<TStackVec<TRope, 8>> PartSets;
+    TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
     TStackVec<ui32, 16> CheckStack;
 
@@ -418,7 +418,7 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     logCtx.LogAcc.IsLogEnabled = false;
 
     const ui32 totalParts = env.Info->Type.TotalPartCount();
-    TBatchedVec<TStackVec<TRope, 8>> partSetSingleton(1);
+    TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> partSetSingleton(1);
     partSetSingleton[0].resize(totalParts);
 
     TString encryptedData = data;

@@ -391,6 +391,6 @@ bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TR
     TErasureSplitContext *context = nullptr);
 
 void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
-    std::span<TRope> parts, ui32 restoreMask);
+    std::span<TRope> parts, ui32 restoreMask, ui32 offset = 0, bool isFragment = false);
 
 }

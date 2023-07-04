@@ -48,16 +48,17 @@ struct TBlobState {
     };
     struct TState {
         TFragmentedBuffer Data;
-        TIntervalSet<i32> Here;    // Present in the Data buffer
 
         void AddResponseData(ui32 fullSize, ui32 shift, TRope&& data);
         void AddPartToPut(TRope&& partData);
         TString ToString() const;
+        TIntervalSet<i32> Here() const { return Data.GetIntervalSet(); }
     };
     struct TWholeState : TState {
         TIntervalSet<i32> Needed;  // Requested by the external user
-        TIntervalSet<i32> NotHere; // Requested by the external user, but not present in the Data buffer yet
+
         TString ToString() const;
+        TIntervalSet<i32> NotHere() const { return Needed - Here(); }
     };
     struct TDiskPart {
         TIntervalSet<i32> Requested;
@@ -231,5 +232,12 @@ struct TBlackboard {
 
     TBlobState& operator [](const TLogoBlobID& id);
 };
+
+inline bool RestoreWholeFromMirror(TBlobState& state) {
+    for (const TBlobState::TState& part : state.Parts) {
+        state.Whole.Data.CopyFrom(part.Data, part.Here() & state.Whole.NotHere());
+    }
+    return !state.Whole.NotHere();
+}
 
 }//NKikimr

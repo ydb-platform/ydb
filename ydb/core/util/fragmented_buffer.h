@@ -21,7 +21,7 @@ public:
     TRope Read(ui32 begin, ui32 size) const;
     TString Print() const;
 
-    void CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range);
+    void CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range, i32 offset = 0);
     TIntervalSet<i32> GetIntervalSet() const;
 
     explicit operator bool() const {

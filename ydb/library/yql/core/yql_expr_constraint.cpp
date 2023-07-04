@@ -3076,6 +3076,9 @@ private:
     }
 
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        if (HasSetting(input->Tail(), "session"))
+            return TStatus::Ok;
+
         if (const auto size = input->Child(1)->ChildrenSize()) {
             std::vector<std::string_view> columns;
             columns.reserve(size);

@@ -2,14 +2,32 @@
 
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.5.0 {#2-5-0}
+
+Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+**Features:**
+
+* For the `ydb import file` command, a parameter [--timeout](reference/ydb-cli/export_import/import-file.md#optional) has been added that specifies the time within which the operation should be performed on the server.
+* Added a progress bar in commands [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) and [ydb import file](reference/ydb-cli/export_import/import-file.md).
+* Added the command `ydb workload kv run read-rows`, which loads the database with requests to read rows using a new experimental API call ReadRows (implemented only in the [main](https://github.com/ydb-platform/ydb) branch), which performs faster key reading than [select](reference/ydb-cli/workload-kv.md#select-kv).
+* New parameters `--warmup-time`, `--percentile`, `--topic` have been added to the `ydb workload topic`, setting the test warm-up time, the percentile in the statistics output and the topic name, respectively.
+* Added the `ydb workload tpch` command to run the TPC-H benchmark.
+* Added the `--ordered` flag in the command `ydb tools dump`, which preserves the order by primary key in tables.
+
+**Performance:**
+
+* The data loading speed in the `ydb import file` command has been increased by adding parallel loading. The number of threads is set by the new parameter [--threads](reference/ydb-cli/export_import/import-file.md#optional).
+* A performance of the [ydb import file json](reference/ydb-cli/export_import/import-file.md) command has been increased by reducing the number of data copies.
+
 ## Version 2.4.0 {#2-4-0}
 
 Released on May 24, 2023. To update to version **2.4.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
 
 **Features:**
 
-* Added the ability to upload multiple files in parallel with the command [ydb import file](reference/ydb-cli/export_import/_includes/import-file.md#multiple-files).
-* Added support for deleting column tables for the command [ydb scheme rmdir --recursive](reference/ydb-cli/commands/_includes/dir.md#rmdir).
+* Added the ability to upload multiple files in parallel with the command [ydb import file](reference/ydb-cli/export_import/import-file.md#multiple-files).
+* Added support for deleting column tables for the command [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir).
 * Improved stability of the command [ydb workload topic](reference/ydb-cli/workload-topic.md).
 
 ## Version 2.3.0 {#2-3-0}
@@ -19,13 +37,13 @@ Release date: May 1, 2023. To update to version **2.3.0**, select the [Downloads
 **Features:**
 
 * Added the interactive mode of query execution. To switch to the interactive mode, run [ydb yql](reference/ydb-cli/yql.md) without arguments. This mode is experimental: backward compatibility is not guaranteed yet.
-* Added the [ydb index rename](reference/ydb-cli/commands/_includes/secondary_index.md#rename) command for [atomic replacement](best_practices/secondary_indexes.md#atomic-index-replacement) or renaming of a secondary index.
+* Added the [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) command for [atomic replacement](best_practices/secondary_indexes.md#atomic-index-replacement) or renaming of a secondary index.
 * Added the `ydb workload topic` command for generating the load that reads messages from topics and writes messages to topics.
-* Added the [--recursive](reference/ydb-cli/commands/_includes/dir.md#rmdir-options) option for the `ydb scheme rmdir` command. Use it to delete a directory recursively, with all its content.
+* Added the [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options) option for the `ydb scheme rmdir` command. Use it to delete a directory recursively, with all its content.
 * Added support for the `topic` and `coordination node` types in the [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) command.
 * Added the [--commit](reference/ydb-cli/topic-read.md#osnovnye-opcionalnye-parametry) option for the `ydb topic consumer` command. Use it to commit messages you have read.
-* Added the [--columns](reference/ydb-cli/export_import/_includes/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it as an alternative to the file header when specifying a column list.
-* Added the [--newline-delimited](reference/ydb-cli/export_import/_includes/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it to make sure that your data is newline-free. This option streamlines import by reading data from several file sections in parallel.
+* Added the [--columns](reference/ydb-cli/export_import/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it as an alternative to the file header when specifying a column list.
+* Added the [--newline-delimited](reference/ydb-cli/export_import/import-file.md#optional) option for the `ydb import file csv|tsv` command. Use it to make sure that your data is newline-free. This option streamlines import by reading data from several file sections in parallel.
 
 **Bug fixes:**
 
@@ -42,7 +60,7 @@ Release date: March 3, 2023. To update to version **2.2.0**, select the [Downloa
 * You can now [use a file](reference/ydb-cli/parameterized-queries-cli.md) to provide YQL query options
 * Password input requests are now output to `stderr` instead of `stdout`.
 * You can now save the root CA certificate path in a [profile](reference/ydb-cli/profile/index.md).
-* Added a global option named [--profile-file](reference/ydb-cli/commands/_includes/global-options.md#service-options) to use the specified file as storage for profile settings.
+* Added a global option named [--profile-file](reference/ydb-cli/commands/global-options.md#service-options) to use the specified file as storage for profile settings.
 * Added a new type of load testing: [ydb workload clickbench](reference/ydb-cli/workload-click-bench).
 
 ## Version 2.1.1 {#2-1-1}

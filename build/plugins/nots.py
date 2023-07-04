@@ -303,6 +303,8 @@ def _setup_eslint(unit):
     if not lint_files:
         return
 
+    unit.on_peerdir_ts_resource("eslint")
+
     mod_dir = unit.get("MODDIR")
     lint_files = _resolve_module_files(unit, mod_dir, lint_files)
     deps = _create_pm(unit).get_peers_from_package_json()

@@ -94,7 +94,11 @@ public:
         }
 
         auto status = NOlap::IBlobConstructor::EStatus::Finished;
-        while (BlobsConstructor->BuildNext() == NOlap::IBlobConstructor::EStatus::Ok) {
+        while (true) {
+            status = BlobsConstructor->BuildNext();
+            if (status != NOlap::IBlobConstructor::EStatus::Ok) {
+                break;
+            }
             auto blobId = SendWriteBlobRequest(BlobsConstructor->GetBlob(), ctx);
             BlobsConstructor->RegisterBlobId(blobId);
         }

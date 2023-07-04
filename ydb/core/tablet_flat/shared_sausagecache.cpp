@@ -930,11 +930,9 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         }
     }
 
-    void Evict(TPage *pages) {
-        if (pages == nullptr)
-            return;
-        TPage *page = pages;
-        for (;;) {
+    void Evict(TIntrusiveList<TPage>&& pages) {
+        while (!pages.Empty()) {
+            TPage* page = pages.PopFront();
             Y_VERIFY(page->CacheGeneration == TCacheCacheConfig::CacheGenEvicted);
             page->CacheGeneration = TCacheCacheConfig::CacheGenNone;
 
@@ -962,16 +960,6 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
             default:
                 Y_FAIL("unknown load state");
             }
-
-            TPage *next = page->Next()->Node();
-            if (page != next) {
-                page->Unlink();
-            }
-
-            if (page == next)
-                break;
-
-            page = next;
         }
     }
 

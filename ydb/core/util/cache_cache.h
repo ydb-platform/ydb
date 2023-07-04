@@ -81,47 +81,50 @@ public:
     {}
 
     // returns evicted elements as list
-    TItem* EnsureLimits() {
-        TItem *ret = nullptr;
-        ret = LimitFresh(ret);
-        ret = LimitWarm(ret);
-        ret = LimitStaging(ret);
+    TIntrusiveList<TItem> EnsureLimits() {
+        TIntrusiveList<TItem> evictedList;
+        LimitFresh(evictedList);
+        LimitWarm(evictedList);
+        LimitStaging(evictedList);
 
-        if (ret) {
-            if (Config.ReportedFresh)
-                *Config.ReportedFresh = FreshWeight;
-            if (Config.ReportedWarm)
-                *Config.ReportedWarm = WarmWeight;
-            if (Config.ReportedStaging)
-                *Config.ReportedStaging = StagingWeight;
-        }
+        // Note: levels may be rearranged even if nothing was evicted
+        if (Config.ReportedFresh)
+            *Config.ReportedFresh = FreshWeight;
+        if (Config.ReportedWarm)
+            *Config.ReportedWarm = WarmWeight;
+        if (Config.ReportedStaging)
+            *Config.ReportedStaging = StagingWeight;
 
-        return ret;
+        return evictedList;
     }
 
     // returns evicted elements as list
-    TItem* Touch(TItem *item) {
+    TIntrusiveList<TItem> Touch(TItem *item) {
+        TIntrusiveList<TItem> evictedList;
         TIntrusiveListItem<TItem> *xitem = item;
 
         const TCacheCacheConfig::ECacheGeneration cacheGen = GenerationOp.Get(item);
         switch (cacheGen) {
         case TCacheCacheConfig::CacheGenNone: // place in fresh
         case TCacheCacheConfig::CacheGenEvicted: // corner case: was evicted from staging and touched in same update
-            return AddToFresh(item);
+            AddToFresh(item, evictedList);
         case TCacheCacheConfig::CacheGenFresh: // just update inside fresh
             xitem->Unlink();
             FreshList.PushFront(xitem);
-            return nullptr;
+            break;
         case TCacheCacheConfig::CacheGenStaging: // move to warm
-            return MoveToWarm(item);
+            MoveToWarm(item, evictedList);
+            break;
         case TCacheCacheConfig::CacheGenWarm: // just update inside warm
             xitem->Unlink();
             WarmList.PushFront(xitem);
-            return nullptr;
+            break;
         default:
             Y_VERIFY_DEBUG(false, "unknown/broken cache generation");
-            return nullptr;
+            break;
         }
+
+        return evictedList;
     }
 
     // evict and erase differs on Evicted handling
@@ -186,6 +189,7 @@ public:
 
         Config.SetLimit(cacheSize);
     }
+
 private:
     void Unlink(TItem *item, ui64 &weight) {
         item->Unlink();
@@ -195,8 +199,8 @@ private:
         weight -= elementWeight;
     }
 
-    TItem* AddToFresh(TItem *item) {
-        TItem *ret = LimitFresh(nullptr);
+    void AddToFresh(TItem *item, TIntrusiveList<TItem>& evictedList) {
+        LimitFresh(evictedList);
         item->Unlink();
         FreshWeight += WeightOp.Get(item);
         FreshList.PushFront(item);
@@ -206,13 +210,12 @@ private:
             *Config.ReportedStaging = StagingWeight;
         if (Config.ReportedFresh)
             *Config.ReportedFresh = FreshWeight;
-
-        return ret;
     }
 
-    TItem* MoveToWarm(TItem *item) {
-        TItem *ret = LimitWarm(nullptr);
+    void MoveToWarm(TItem *item, TIntrusiveList<TItem>& evictedList) {
+        // Note: unlink first, so item is not evicted by LimitWarm call below
         Unlink(item, StagingWeight);
+        LimitWarm(evictedList);
         WarmWeight += WeightOp.Get(item);
         WarmList.PushFront(item);
         GenerationOp.Set(item, TCacheCacheConfig::CacheGenWarm);
@@ -221,53 +224,44 @@ private:
             *Config.ReportedStaging = StagingWeight;
         if (Config.ReportedWarm)
             *Config.ReportedWarm = WarmWeight;
-
-        return ret;
     }
 
-    TItem* AddToStaging(TItem *item, TItem *ret) {
-        ret = LimitStaging(ret);
+    void AddToStaging(TItem *item, TIntrusiveList<TItem>& evictedList) {
+        LimitStaging(evictedList);
         StagingWeight += WeightOp.Get(item);
         StagingList.PushFront(item);
         GenerationOp.Set(item, TCacheCacheConfig::CacheGenStaging);
-        return ret;
     }
 
-    TItem* LimitFresh(TItem *ret) {
+    void LimitFresh(TIntrusiveList<TItem>& evictedList) {
         while (FreshWeight > Config.FreshLimit) {
             Y_VERIFY_DEBUG(!FreshList.Empty());
             TItem *x = FreshList.PopBack();
             Y_VERIFY(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenFresh, "malformed entry in fresh cache. %" PRIu32, (ui32)GenerationOp.Get(x));
             Unlink(x, FreshWeight);
-            ret = AddToStaging(x, ret);
+            AddToStaging(x, evictedList);
         }
-        return ret;
     }
 
-    TItem* LimitWarm(TItem *ret) {
+    void LimitWarm(TIntrusiveList<TItem>& evictedList) {
         while (WarmWeight > Config.WarmLimit) {
             Y_VERIFY_DEBUG(!WarmList.Empty());
             TItem *x = WarmList.PopBack();
             Y_VERIFY(GenerationOp.Get(x) == TCacheCacheConfig::CacheGenWarm, "malformed entry in warm cache. %" PRIu32, (ui32)GenerationOp.Get(x));
             Unlink(x, WarmWeight);
-            ret = AddToStaging(x, ret);
+            AddToStaging(x, evictedList);
         }
-        return ret;
     }
 
-    TItem* LimitStaging(TItem *ret) {
+    void LimitStaging(TIntrusiveList<TItem>& evictedList) {
         while (StagingWeight > Config.StagingLimit) {
             Y_VERIFY_DEBUG(!StagingList.Empty());
             TItem *evicted = StagingList.PopBack();
             Y_VERIFY(GenerationOp.Get(evicted) == TCacheCacheConfig::CacheGenStaging, "malformed entry in staging cache %" PRIu32, (ui32)GenerationOp.Get(evicted));
             Unlink(evicted, StagingWeight);
             GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenEvicted);
-            if (ret == nullptr)
-                ret = evicted;
-            else
-                evicted->LinkBefore(ret);
+            evictedList.PushBack(evicted);
         }
-        return ret;
     }
 
 private:

@@ -65,7 +65,6 @@ jobs:
             github.event.action == 'opened'
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -76,7 +75,6 @@ jobs:
       - name: cleanup-test-label
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;

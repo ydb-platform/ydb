@@ -51,11 +51,28 @@ public:
         , Ptr(ptr)
     {
         Y_VERIFY_DEBUG(ptr || sz == 0);
+
         if (CanInline(sz)) {
             IsInline_ = 1;
             IntVal = 0;
-            if (ptr)
+
+            if (sz == 8) {
                 memcpy(&IntVal, ptr, sz);
+            } else if (sz == 4) {
+                memcpy(&IntVal, ptr, sz);
+            } else if (sz == 2) {
+                memcpy(&IntVal, ptr, sz);
+            } else if (sz == 1) {
+                memcpy(&IntVal, ptr, sz);
+            } else if (sz == 7) {
+                memcpy(&IntVal, ptr, sz);
+            } else if (sz == 6) {
+                memcpy(&IntVal, ptr, sz);
+            } else if (sz == 5) {
+                memcpy(&IntVal, ptr, sz);
+            } else if (sz == 3) {
+                memcpy(&IntVal, ptr, sz);
+            }
         }
     }
 

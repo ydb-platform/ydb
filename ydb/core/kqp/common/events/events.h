@@ -36,31 +36,6 @@ struct TEvKqp {
     struct TEvCancelQueryRequest : public TEventPB<TEvCancelQueryRequest,
         NKikimrKqp::TEvCancelQueryRequest, TKqpEvents::EvCancelQueryRequest> {};
 
-    struct TEvGetRunScriptActorRequest : public TEventLocal<TEvGetRunScriptActorRequest, TKqpEvents::EvGetRunScriptActorRequest> {
-        TEvGetRunScriptActorRequest(const TString& database, const TString& executionId)
-            : Database(database)
-            , ExecutionId(executionId)
-        {}
-
-        const TString Database;
-        const TString ExecutionId;
-    };
-
-    struct TEvGetRunScriptActorResponse : public TEventLocal<TEvGetRunScriptActorResponse, TKqpEvents::EvGetRunScriptActorResponse> {
-        TEvGetRunScriptActorResponse(const NActors::TActorId& actorId)
-            : RunScriptActorId(actorId)
-        {}
-
-        TEvGetRunScriptActorResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
-            : Status(status)
-            , Issues(std::move(issues))
-        {}
-
-        const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
-        const NYql::TIssues Issues;
-        const NActors::TActorId RunScriptActorId;
-    };
-
 
     using TEvCompileRequest = NPrivateEvents::TEvCompileRequest;
     using TEvRecompileRequest = NPrivateEvents::TEvRecompileRequest;
@@ -145,9 +120,6 @@ struct TEvKqp {
     };
 
     using TEvAbortExecution = NYql::NDq::TEvDq::TEvAbortExecution;
-
-    struct TEvFetchScriptResultsRequest : public TEventPB<TEvFetchScriptResultsRequest, NKikimrKqp::TEvFetchScriptResultsRequest, TKqpEvents::EvFetchScriptResultsRequest> {
-    };
 
     struct TEvFetchScriptResultsResponse : public TEventPB<TEvFetchScriptResultsResponse, NKikimrKqp::TEvFetchScriptResultsResponse, TKqpEvents::EvFetchScriptResultsResponse> {
     };

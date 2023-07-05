@@ -69,7 +69,6 @@ private:
         hFunc(NActors::TEvents::TEvPoison, Handle);
         hFunc(TEvKqpExecuter::TEvStreamData, Handle);
         hFunc(TEvKqp::TEvQueryResponse, Handle);
-        hFunc(TEvKqp::TEvFetchScriptResultsRequest, Handle);
         hFunc(TEvKqp::TEvCreateSessionResponse, Handle);
         IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
         hFunc(TEvKqp::TEvCancelQueryResponse, Handle);
@@ -156,19 +155,25 @@ private:
         }
     }
 
+    void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
+        for (auto& req : CancelRequests) {
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues));
+        }
+        PassAway();
+    }
+
     void RunScriptExecutionFinisher() {
         if (!FinalStatusIsSaved) {
+            FinalStatusIsSaved = true;
             Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
                                                     Issues, std::move(QueryPlan)));
             return;
         }
         
-        RunState = ERunState::Finished;
-
-        for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
+        if (RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
+            RunState = ERunState::Finished;
+            TerminateActorExecution(Ydb::StatusIds::PRECONDITION_FAILED, { NYql::TIssue("Already finished") });
         }
-        CancelRequests.clear();
     }
 
     void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
@@ -306,31 +311,6 @@ private:
         Finish(record.GetYdbStatus());
     }
 
-    void Handle(TEvKqp::TEvFetchScriptResultsRequest::TPtr& ev) {
-        auto resp = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
-        if (IsExecuting()) {
-            if (RunState == ERunState::Created || RunState == ERunState::Running) {
-                resp->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-                resp->Record.AddIssues()->set_message("Results are not ready");
-            } else if (RunState == ERunState::Cancelled || RunState == ERunState::Cancelling) {
-                resp->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-                resp->Record.AddIssues()->set_message("Script execution is cancelled");
-            }
-        } else if (Status != Ydb::StatusIds::SUCCESS) {
-            resp->Record.SetStatus(Status);
-            for (const auto& issue : Issues) {
-                auto item = resp->Record.add_issues();
-                NYql::IssueToMessage(issue, item);
-            }
-        } else {
-            Register(
-                CreateGetScriptExecutionResultActor(ev->Sender, Database, ExecutionId, ev->Get()->Record.GetResultSetId(), ev->Get()->Record.GetRowsOffset(), ev->Get()->Record.GetRowsLimit())
-            );
-            return;
-        }
-        Send(ev->Sender, std::move(resp));
-    }
-
     void Handle(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
         switch (RunState) {
         case ERunState::Created:
@@ -388,10 +368,7 @@ private:
             issues.Clear();
             issues.AddIssue("Already finished");
         }
-        for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(status, issues));
-        }
-        CancelRequests.clear();
+        TerminateActorExecution(status, issues);
     }
 
     void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
@@ -444,7 +421,6 @@ private:
         if (RunState == ERunState::Cancelling) {
             Issues.AddIssue("Script execution is cancelled");
         }
-        CloseSession();
     }
 
     void Finish(Ydb::StatusIds::StatusCode status, ERunState runState = ERunState::Finishing) {

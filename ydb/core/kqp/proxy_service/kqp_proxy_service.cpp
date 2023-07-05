@@ -1166,7 +1166,6 @@ public:
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
-            hFunc(TEvKqp::TEvGetRunScriptActorRequest, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1378,10 +1377,6 @@ private:
 
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
         Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
-    }
-
-    void Handle(TEvKqp::TEvGetRunScriptActorRequest::TPtr& ev) {
-        Register(CreateGetRunScriptActorActor(std::move(ev)));
     }
 
 private:

@@ -1629,35 +1629,6 @@ private:
     bool CancelSent = false;
 };
 
-// TODO: remove when there will be fetch script result through database
-class TGetRunScriptActorActor : public NActors::TActorBootstrapped<TGetRunScriptActorActor> {
-public:
-    TGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorRequest::TPtr ev)
-        : Request(std::move(ev))
-    {}
-
-    void Bootstrap() {
-        Register(new TCheckLeaseStatusActor(Request->Get()->Database, Request->Get()->ExecutionId));
-        Become(&TGetRunScriptActorActor::StateFunc);
-    }
-
-private:
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvLeaseCheckResult, Handle);
-    )
-
-    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            Send(Request->Sender, new TEvKqp::TEvGetRunScriptActorResponse(ev->Get()->RunScriptActorId));
-        } else {
-            Send(Request->Sender, new TEvKqp::TEvGetRunScriptActorResponse(ev->Get()->Status, std::move(ev->Get()->Issues)));
-        }
-        PassAway();
-    }
-private:
-    TEvKqp::TEvGetRunScriptActorRequest::TPtr Request;
-};
-
 class TSaveScriptExecutionResultMetaQuery : public TQueryBase {
 public:
     TSaveScriptExecutionResultMetaQuery(const TString& database, const TString& executionId, const TString& serializedMetas)
@@ -1869,7 +1840,7 @@ public:
             DECLARE $offset AS Int64;
             DECLARE $limit AS Uint64;
 
-            SELECT result_set_metas
+            SELECT result_set_metas, operation_status, issues
             FROM `.metadata/script_executions`
             WHERE database = $database 
               AND execution_id = $execution_id;
@@ -1916,6 +1887,23 @@ public:
         
             if (!result.TryNextRow()) {
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Script execution not found");
+                return;
+            }
+
+            TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
+            if (!operationStatus) {
+                Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
+                return;
+            }
+
+            Ydb::StatusIds::StatusCode operationStatusCode = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
+            if (operationStatusCode != Ydb::StatusIds::SUCCESS) {
+                const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
+                if (issuesSerialized) {
+                    Finish(operationStatusCode, DeserializeIssues(*issuesSerialized));
+                } else {
+                    Finish(operationStatusCode, "Invalid operation");
+                }
                 return;
             }
 
@@ -2052,10 +2040,6 @@ NActors::IActor* CreateListScriptExecutionOperationsActor(TEvListScriptExecution
 
 NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev) {
     return new TCancelScriptExecutionOperationActor(std::move(ev));
-}
-
-NActors::IActor* CreateGetRunScriptActorActor(TEvKqp::TEvGetRunScriptActorRequest::TPtr ev) {
-    return new TGetRunScriptActorActor(std::move(ev));
 }
 
 NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration) {

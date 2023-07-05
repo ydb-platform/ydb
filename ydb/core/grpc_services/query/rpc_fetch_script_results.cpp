@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/public/api/protos/draft/ydb_query.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -74,40 +75,15 @@ public:
             return;
         }
 
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvKqp::TEvGetRunScriptActorRequest(DatabaseName, ExecutionId));
+        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_id(), RowsOffset, req->rows_limit() + 1));
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NKqp::TEvKqp::TEvGetRunScriptActorResponse, Handle);
         hFunc(NKqp::TEvKqp::TEvFetchScriptResultsResponse, Handle);
-        hFunc(NActors::TEvents::TEvUndelivered, Handle);
-        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
     )
-
-    void Handle(NKqp::TEvKqp::TEvGetRunScriptActorResponse::TPtr& ev) {
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Reply(ev->Get()->Status, ev->Get()->Issues);
-            return;
-        }
-
-        const auto* userReq = GetProtoRequest();
-
-        auto req = MakeHolder<NKqp::TEvKqp::TEvFetchScriptResultsRequest>();
-        req->Record.SetResultSetId(userReq->result_set_id());
-        req->Record.SetRowsOffset(RowsOffset);
-        req->Record.SetRowsLimit(userReq->rows_limit() + 1);
-
-        const NActors::TActorId runScriptActor = ev->Get()->RunScriptActorId;
-        ui64 flags = IEventHandle::FlagTrackDelivery;
-        if (runScriptActor.NodeId() != SelfId().NodeId()) {
-            flags |= IEventHandle::FlagSubscribeOnSession;
-            SubscribedOnSession = runScriptActor.NodeId();
-        }
-        Send(runScriptActor, std::move(req), flags);
-    }
 
     void Handle(NKqp::TEvKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
         Ydb::Query::FetchScriptResultsResponse resp;
@@ -124,25 +100,6 @@ private:
             }
         }
         Reply(resp.status(), std::move(resp));
-    }
-
-    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-            Reply(Ydb::StatusIds::NOT_FOUND, "No such execution");
-        } else {
-            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver fetch request to destination");
-        }
-    }
-
-    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
-        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver fetch request to destination");
-    }
-
-    void PassAway() override {
-        if (SubscribedOnSession) {
-            Send(TActivationContext::InterconnectProxy(*SubscribedOnSession), new TEvents::TEvUnsubscribe());
-        }
-        TActorBootstrapped<TFetchScriptResultsRPC>::PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, Ydb::Query::FetchScriptResultsResponse&& result, const NYql::TIssues& issues = {}) {
@@ -198,7 +155,6 @@ private:
     }
 
 private:
-    TMaybe<ui32> SubscribedOnSession;
     TString ExecutionId;
     ui64 RowsOffset = 0;
 };

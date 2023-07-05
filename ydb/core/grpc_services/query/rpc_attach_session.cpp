@@ -27,15 +27,27 @@ public:
     }
 
     void AttachingState(TAutoPtr<IEventHandle>& ev) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleAttaching);
-            hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleAttachin);
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleAttaching);
+                hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleAttachin);
+                default:
+                    UnexpectedEvent(__func__, ev);
+            }
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
         }
     }
 
     void ReadyState(TAutoPtr<IEventHandle>& ev) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvWakeup, HandleReady);
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvWakeup, HandleReady);
+                default:
+                    UnexpectedEvent(__func__, ev);
+            }
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
         }
     }
 
@@ -58,7 +70,9 @@ private:
     void DoAttach() {
         auto ev = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
         auto req = dynamic_cast<TEvAttachSessionRequest*>(Request.get());
-        Y_VERIFY(req, "unexpected request type");
+        if (!req) {
+            return InternalError("unexpected request type");
+        }
 
         const auto sessionId = req->GetProtoRequest()->session_id();
 
@@ -74,7 +88,8 @@ private:
 
     void HandleReady(TEvents::TEvWakeup::TPtr&) {
         DoAbortTx();
-        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR);
+        // Any status to finish stream
+        ReplyFinishStream(Ydb::StatusIds::SUCCESS);
     }
 
     void HandleAttaching(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
@@ -110,14 +125,22 @@ private:
         return ReplyFinishStream(kqpResponse.GetYdbStatus());
     }
 
+    void InternalError(const TString& message) {
+        Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
+        ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR);
+    }
+
+    void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
+        InternalError(TStringBuilder() << "TAttachSessionRPC in state " << state << " received unexpected event " <<
+            ev->GetTypeName() << Sprintf("(0x%08" PRIx32 ")", ev->GetTypeRewrite()));
+    }
+
     void HandleAttachin(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             // KQP should not send TEvProcessResponse with SUCCESS for CreateSession rpc.
             // We expect TEvKqp::TEvPingSessionResponse instead.
-            static const TString err = "Unexpected TEvProcessResponse with success status for PingSession request";
-            Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, err));
-            ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR);
+            InternalError("Unexpected TEvProcessResponse with success status for PingSession request");
         } else {
             return ReplyResponseError(record);
         }

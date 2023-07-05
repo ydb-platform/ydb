@@ -146,7 +146,17 @@ namespace NKikimr::NTestShard {
                 ReadsInFlight.erase(it);
             }
         } else {
-            STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, ev->Get()->ToString()));
+            auto makeResponse = [&] {
+                NKikimrClient::TResponse copy;
+                copy.CopyFrom(record);
+                for (auto& m : *copy.MutableReadResult()) {
+                    if (m.HasValue()) {
+                        m.SetValue(TStringBuilder() << m.GetValue().size() << " bytes of data");
+                    }
+                }
+                return SingleLineProto(copy);
+            };
+            STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());
             ProcessReadResult(record.GetCookie(), record.GetReadResult());

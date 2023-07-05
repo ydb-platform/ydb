@@ -2,6 +2,7 @@
 
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/util/pb.h>
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/protos/counters_testshard.pb.h>

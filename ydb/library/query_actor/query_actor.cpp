@@ -179,8 +179,8 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResult::TPtr& ev) {
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
     Y_VERIFY(RunningQuery);
     RunningQuery = false;
-    LOG_D("DataQueryResult: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
     TxId = ev->Get()->Result.tx_meta().id();
+    LOG_D("TQueryBase. TEvDataQueryResult " << ev->Get()->Status << ", Issues: \"" << ev->Get()->Issues.ToOneLineString() << "\", SessionId: " << SessionId << ", TxId: " << TxId);
     if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
         ResultSets.clear();
         ResultSets.reserve(ev->Get()->Result.result_sets_size());
@@ -228,6 +228,11 @@ void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, const TString& messag
 }
 
 void TQueryBase::Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError) {
+    if (status == Ydb::StatusIds::SUCCESS) {
+        LOG_D("TQueryBase. Finish with SUCCESS, SessionId: " << SessionId << ", TxId: " << TxId);
+    } else {
+        LOG_W("TQueryBase. Finish with " << status << ", Issues: " << issues.ToOneLineString() << ", SessionId: " << SessionId << ", TxId: " << TxId);
+    }
     Finished = true;
     OnFinish(status, std::move(issues));
     if (rollbackOnError && !CommitRequested && TxId && status != Ydb::StatusIds::SUCCESS) {

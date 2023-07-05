@@ -74,7 +74,10 @@ inline bool CheckQuery(const TString& query, NYql::TIssues& issues) {
     return true;
 }
 
+void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKqpProto::TKqpStatsQuery& kqpStats);
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse);
+
+Ydb::Table::QueryStatsCollection::Mode GetCollectStatsMode(Ydb::Query::StatsMode mode);
 
 template <typename TDerived, typename TRequest>
 class TRpcKqpRequestActor : public TRpcOperationRequestActor<TDerived, TRequest> {

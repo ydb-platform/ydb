@@ -30,7 +30,9 @@ NActors::IActor* CreateScriptExecutionFinisher(
     Ydb::StatusIds::StatusCode operationStatus,
     Ydb::Query::ExecStatus execStatus,
     NYql::TIssues issues,
-    TString queryPlan = "{}"
+    TMaybe<NKqpProto::TKqpStatsQuery> queryStats = Nothing(),
+    TMaybe<TString> queryPlan = Nothing(),
+    TMaybe<TString> queryAst = Nothing()
 );
 
 // Updates lease deadline in database.

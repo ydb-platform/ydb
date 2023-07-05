@@ -38,6 +38,8 @@ public:
         using namespace Ydb::Query;
         auto request = MakeOperationRequest<ExecuteScriptRequest>(settings);
         request.set_exec_mode(settings.ExecMode_);
+        request.set_stats_mode(settings.StatsMode_);
+        request.mutable_script_content()->set_syntax(settings.Syntax_);
         request.mutable_script_content()->set_text(script);
 
         auto promise = NThreading::NewPromise<TScriptExecutionOperation>();

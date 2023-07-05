@@ -3,9 +3,9 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) {
-    const auto& kqpStats = kqpResponse.GetQueryStats();
 
+
+void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKqpProto::TKqpStatsQuery& kqpStats) {
     uint64_t totalCpuTimeUs = 0;
 
     for (auto& exec : kqpStats.GetExecutions()) {
@@ -65,8 +65,26 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
     queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());
     queryStats.set_total_cpu_time_us(totalCpuTimeUs);
     queryStats.set_total_duration_us(kqpStats.GetDurationUs());
+}
 
+void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) {
+    FillQueryStats(queryStats, kqpResponse.GetQueryStats());
     queryStats.set_query_plan(kqpResponse.GetQueryPlan());
+}
+
+Ydb::Table::QueryStatsCollection::Mode GetCollectStatsMode(Ydb::Query::StatsMode mode) {
+    switch (mode) {
+        case Ydb::Query::StatsMode::STATS_MODE_NONE:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+        case Ydb::Query::StatsMode::STATS_MODE_FULL:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+        default:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED;
+    }
 }
 
 } // namespace NGRpcService

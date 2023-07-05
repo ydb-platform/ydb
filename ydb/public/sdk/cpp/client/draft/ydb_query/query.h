@@ -127,7 +127,9 @@ private:
 using TAsyncExecuteQueryResult = NThreading::TFuture<TExecuteQueryResult>;
 
 struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptSettings> {
+    FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
     FLUENT_SETTING_DEFAULT(Ydb::Query::ExecMode, ExecMode, Ydb::Query::EXEC_MODE_EXECUTE);
+    FLUENT_SETTING_DEFAULT(Ydb::Query::StatsMode, StatsMode, Ydb::Query::STATS_MODE_NONE);
 };
 
 class TVersionedScriptId {

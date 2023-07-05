@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
@@ -356,6 +357,7 @@ private:
                     Col("meta", NScheme::NTypeIds::JsonDocument),
                     Col("parameters", NScheme::NTypeIds::String), // TODO: store aparameters separately to support bigger storage.
                     Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
+                    Col("stats", NScheme::NTypeIds::JsonDocument),
                 },
                 { "database", "execution_id" }
             )
@@ -490,7 +492,7 @@ public:
                 .Utf8(Request.GetRequest().GetQuery())
                 .Build()
             .AddParam("$syntax")
-                .Int32(Ydb::Query::SYNTAX_YQL_V1)
+                .Int32(Request.GetRequest().GetSyntax())
                 .Build()
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
@@ -727,12 +729,14 @@ private:
     IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
 };
 
+
 class TScriptExecutionFinisherBase : public TQueryBase {
 public:
     using TQueryBase::TQueryBase;
 
     void FinishScriptExecution(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus,
-                               const NYql::TIssues& issues = LeaseExpiredIssues(), TTxControl txControl = TTxControl::ContinueAndCommitTx(), TString queryPlan = "{}") {
+                               const NYql::TIssues& issues = LeaseExpiredIssues(), TTxControl txControl = TTxControl::ContinueAndCommitTx(),
+                               TMaybe<NKqpProto::TKqpStatsQuery> kqpStats = Nothing(), TMaybe<TString> queryPlan = Nothing(), TMaybe<TString> queryAst = Nothing()) {
         TString sql = R"(
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
@@ -740,6 +744,8 @@ public:
             DECLARE $execution_status AS Int32;
             DECLARE $issues AS JsonDocument;
             DECLARE $plan AS JsonDocument;
+            DECLARE $stats AS JsonDocument;
+            DECLARE $ast AS Text;
 
             UPDATE `.metadata/script_executions`
             SET
@@ -747,12 +753,23 @@ public:
                 execution_status = $execution_status,
                 issues = $issues,
                 plan = $plan,
-                end_ts = CurrentUtcTimestamp()
+                end_ts = CurrentUtcTimestamp(),
+                stats = $stats,
+                ast = $ast
             WHERE database = $database AND execution_id = $execution_id;
 
             DELETE FROM `.metadata/script_execution_leases`
             WHERE database = $database AND execution_id = $execution_id;
         )";
+
+        TString serializedStats = "{}";
+        if (kqpStats) { 
+            NJson::TJsonValue statsJson;
+            Ydb::TableStats::QueryStats queryStats;
+            NGRpcService::FillQueryStats(queryStats, *kqpStats);
+            NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
+            serializedStats = NJson::WriteJson(statsJson);
+        }
 
         NYdb::TParamsBuilder params;
         params
@@ -772,9 +789,15 @@ public:
                 .JsonDocument(SerializeIssues(issues))
                 .Build()
             .AddParam("$plan")
-                .JsonDocument(queryPlan)
+                .JsonDocument(queryPlan.GetOrElse("{}"))
+                .Build()
+            .AddParam("$stats")
+                .JsonDocument(serializedStats)
+                .Build()
+            .AddParam("$ast")
+                .Utf8(queryAst.GetOrElse(""))
                 .Build();
-
+        
         RunDataQuery(sql, &params, txControl);
     }
 
@@ -802,7 +825,9 @@ public:
         Ydb::StatusIds::StatusCode operationStatus,
         Ydb::Query::ExecStatus execStatus,
         NYql::TIssues issues,
-        TString queryPlan = "{}"
+        TMaybe<NKqpProto::TKqpStatsQuery> queryStats = Nothing(),
+        TMaybe<TString> queryPlan = Nothing(), 
+        TMaybe<TString> queryAst = Nothing()
     )
         : Database(database)
         , ExecutionId(executionId)
@@ -810,7 +835,9 @@ public:
         , OperationStatus(operationStatus)
         , ExecStatus(execStatus)
         , Issues(std::move(issues))
+        , QueryStats(std::move(queryStats))
         , QueryPlan(std::move(queryPlan))
+        , QueryAst(std::move(queryAst))
     {
     }
 
@@ -860,7 +887,7 @@ public:
                 return;
             }
 
-            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, Issues, TTxControl::ContinueAndCommitTx(), QueryPlan);
+            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, Issues, TTxControl::ContinueAndCommitTx(), std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst));
             FinishWasRun = true;
         } else {
             Finish();
@@ -880,7 +907,9 @@ private:
     const Ydb::StatusIds::StatusCode OperationStatus;
     const Ydb::Query::ExecStatus ExecStatus;
     const NYql::TIssues Issues;
-    const TString QueryPlan;
+    const TMaybe<NKqpProto::TKqpStatsQuery> QueryStats;
+    const TMaybe<TString> QueryPlan;
+    const TMaybe<TString> QueryAst;
     bool FinishWasRun = false;
 };
 
@@ -1140,7 +1169,9 @@ public:
                 execution_mode,
                 result_set_metas,
                 plan,
-                issues
+                issues,
+                stats,
+                ast
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id;
 
@@ -1209,9 +1240,21 @@ public:
             metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
         }
 
+        const TMaybe<TString> serializedStats = result.ColumnParser("stats").GetOptionalJsonDocument();
+        if (serializedStats) {
+            NJson::TJsonValue statsJson;
+            NJson::ReadJsonTree(*serializedStats, &statsJson);
+            NProtobufJson::Json2Proto(statsJson, *metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
+        }
+
         const TMaybe<TString> plan = result.ColumnParser("plan").GetOptionalJsonDocument();
         if (plan) {
             metadata.mutable_exec_stats()->set_query_plan(*plan);
+        }
+
+        const TMaybe<TString> ast = result.ColumnParser("ast").GetOptionalUtf8();
+        if (ast) {
+            metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
 
         const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
@@ -2021,9 +2064,12 @@ NActors::IActor* CreateScriptExecutionFinisher(
     Ydb::StatusIds::StatusCode operationStatus,
     Ydb::Query::ExecStatus execStatus,
     NYql::TIssues issues, 
-    TString queryPlan)
+    TMaybe<NKqpProto::TKqpStatsQuery> queryStats,
+    TMaybe<TString> queryPlan, 
+    TMaybe<TString> queryAst
+    )
 {
-    return new TScriptExecutionFinisher(executionId, database, leaseGeneration, operationStatus, execStatus, std::move(issues), std::move(queryPlan));
+    return new TScriptExecutionFinisher(executionId, database, leaseGeneration, operationStatus, execStatus, std::move(issues), std::move(queryStats), std::move(queryPlan), std::move(queryAst));
 }
 
 NActors::IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev) {

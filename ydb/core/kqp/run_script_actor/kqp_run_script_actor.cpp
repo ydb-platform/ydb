@@ -166,8 +166,7 @@ private:
         if (!FinalStatusIsSaved) {
             FinalStatusIsSaved = true;
             Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
-                                                    Issues, std::move(QueryPlan)));
-            return;
+                                                     Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst)));
         }
         
         if (RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
@@ -306,6 +305,14 @@ private:
         
         if (record.GetResponse().HasQueryPlan()) {
             QueryPlan = record.GetResponse().GetQueryPlan();
+        }
+
+        if (record.GetResponse().HasQueryStats()) {
+            QueryStats = record.GetResponse().GetQueryStats();
+        }
+
+        if (record.GetResponse().HasQueryAst()) {
+            QueryAst = record.GetResponse().GetQueryAst();
         }
 
         Finish(record.GetYdbStatus());
@@ -476,7 +483,9 @@ private:
     ui32 SaveResultInflight = 0;
     ui32 SaveResultMetaInflight = 0;
     bool PendingResultMeta = false;
-    TString QueryPlan = "{}";
+    TMaybe<TString> QueryPlan;
+    TMaybe<TString> QueryAst;
+    TMaybe<NKqpProto::TKqpStatsQuery> QueryStats;
 };
 
 } // namespace

@@ -44,7 +44,6 @@ bool FillQueryContent(const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::T
     }
 }
 
-
 std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest)
 {
@@ -66,7 +65,8 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
         }
     }
 
-
+    kqpRequest.MutableRequest()->SetCollectStats(GetCollectStatsMode(req.stats_mode()));
+    kqpRequest.MutableRequest()->SetSyntax(req.script_content().syntax());
 
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
     kqpRequest.MutableRequest()->SetKeepSession(false);

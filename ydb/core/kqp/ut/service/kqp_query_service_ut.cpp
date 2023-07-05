@@ -329,16 +329,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }
 
-    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
+    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, i32 tries = -1) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
         NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
         do {
             if (!op.Initialized()) {
                 Sleep(TDuration::MilliSeconds(10));
             }
+            if (tries > 0) {
+                --tries;
+            }
             op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId);
             UNIT_ASSERT_C(op.GetValueSync().Status().IsSuccess(), op.GetValueSync().Status().GetStatus() << ":" << op.GetValueSync().Status().GetIssues().ToString());
-        } while (!op.GetValueSync().Ready());
+        } while (!op.GetValueSync().Ready() && tries != 0);
         return op.GetValueSync();
     }
 
@@ -408,6 +411,14 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    void ValidatePlan(const TString& plan) {
+        UNIT_ASSERT(!plan.empty());
+        UNIT_ASSERT(plan != "{}");
+        NJson::TJsonValue jsonPlan;
+        NJson::ReadJsonTree(plan, &jsonPlan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(jsonPlan));
+    }
+
     Y_UNIT_TEST(ExplainScript) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -424,11 +435,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Explain);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
-        UNIT_ASSERT(!readyOp.Metadata().ExecStats.query_plan().empty());
 
-        NJson::TJsonValue plan;
-        NJson::ReadJsonTree(readyOp.Metadata().ExecStats.query_plan(), &plan, true);
-        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+        ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
     }
 
     Y_UNIT_TEST(ParseScript) {
@@ -474,6 +482,92 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::BAD_REQUEST, scriptExecutionOperation.Status().GetStatus());
         UNIT_ASSERT(scriptExecutionOperation.Status().GetIssues().Size() == 1);
         UNIT_ASSERT_EQUAL_C(scriptExecutionOperation.Status().GetIssues().back().GetMessage(), "Query mode is not specified", scriptExecutionOperation.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteScriptPg) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteScriptSettings()
+            .Syntax(Ydb::Query::SYNTAX_PG);
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT * FROM (VALUES
+                (1::int8, 'one'),
+                (2::int8, 'two'),
+                (3::int8, 'three')
+            ) AS t;
+        )", settings).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ScriptContent.Syntax, ESyntax::Pg);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        
+        CompareYson(R"([
+            ["1";"one"];
+            ["2";"two"];
+            ["3";"three"]
+        ])", FormatResultSetYson(results.GetResultSet()));
+    }
+
+
+    void ExecuteScriptWithStatsMode (Ydb::Query::StatsMode statsMode) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteScriptSettings()
+            .StatsMode(statsMode);
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        auto readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
+
+        if (statsMode == Ydb::Query::STATS_MODE_NONE) {
+            return;
+        }
+
+        // TODO: more checks?
+        UNIT_ASSERT_C(readyOp.Metadata().ExecStats.query_phases_size() == 1, readyOp.Metadata().ExecStats);
+        UNIT_ASSERT_C(readyOp.Metadata().ExecStats.total_duration_us() > 0, readyOp.Metadata().ExecStats);
+
+        if (statsMode == Ydb::Query::STATS_MODE_BASIC) {
+            return;
+        }
+
+        ValidatePlan(readyOp.Metadata().ExecStats.query_plan());    
+    }
+    
+
+    Y_UNIT_TEST(ExecuteScriptStatsBasic) {
+        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_BASIC);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptStatsFull) {
+        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_FULL);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptStatsProfile) {
+        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_PROFILE);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptStatsNone) {
+        ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_NONE);
     }
 
     Y_UNIT_TEST(ListScriptExecutions) {

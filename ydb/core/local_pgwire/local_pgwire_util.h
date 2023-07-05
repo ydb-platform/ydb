@@ -217,14 +217,6 @@ inline std::optional<NYdb::TPgType> GetPgTypeFromYdbType(NYdb::TType type) {
     }
 }
 
-inline TString ToPgSyntax(TStringBuf query, const std::unordered_map<TString, TString>& connectionParams) {
-    auto itOptions = connectionParams.find("options");
-    if (itOptions == connectionParams.end()) {
-        return TStringBuilder() << "--!syntax_pg\n" << query; // default
-    }
-    return TStringBuilder() << "--!" << itOptions->second << "\n" << query;
-}
-
 inline NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::Scripting::ExecuteYqlResponse&& proto) {
     TVector<NYdb::TResultSet> res;
     TMaybe<NYdb::NTable::TQueryStats> queryStats;
@@ -246,10 +238,6 @@ struct TConvertedQuery {
     TString Query;
     NYdb::TParams Params;
 };
-
-inline TString ToPgSyntax(TConvertedQuery query, const std::unordered_map<TString, TString>& connectionParams) {
-    return ToPgSyntax(query.Query, connectionParams);
-}
 
 inline TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
     auto& bindData = statement.BindData;

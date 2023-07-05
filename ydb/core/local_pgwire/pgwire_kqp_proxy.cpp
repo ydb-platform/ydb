@@ -110,7 +110,9 @@ protected:
                     request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
                 }
             }
-            request.SetQuery(ToPgSyntax(query, ConnectionParams_));
+            // TODO(xenoxeno): check ConnectionParams_ to support different syntax
+            request.SetSyntax(Ydb::Query::SYNTAX_PG);
+            request.SetQuery(TString(query));
         }
     }
 

@@ -370,7 +370,7 @@ public:
             auto result = std::make_unique<TEvColumnShard::TEvReadBlobRangesResult>(TabletId);
 
             for (const auto& blobRange : ev->BlobRanges) {
-                if (data.size() < blobRange.Offset + blobRange.Size) {
+                if (status != NKikimrProto::ERROR && data.size() < blobRange.Offset + blobRange.Size) {
                     LOG_S_ERROR("GetObjectResponse '" << *key << "', data size: " << data.size()
                         << " is too small for blob range {" << blobRange.Offset << "," << blobRange.Size << "}"
                         << " at tablet " << TabletId);

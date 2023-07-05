@@ -591,7 +591,8 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
     if (!extracted) {
         dropped = DroppedEvictedBlobs.contains(evict);
         if (!dropped) {
-            return false; // update after erase
+            LOG_S_NOTICE("Update after forget '" << evict.Blob << "' at tablet " << TabletInfo->TabletID);
+            return false;
         }
         extracted = ExtractEvicted(old, meta, true);
     }

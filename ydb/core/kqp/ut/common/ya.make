@@ -5,6 +5,7 @@ SRCS(
     kqp_ut_common.cpp
     kqp_ut_common.h
     re2_udf.cpp
+    string_udf.cpp
 )
 
 PEERDIR(

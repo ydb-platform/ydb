@@ -26,6 +26,65 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(ContainerRegistryCombiner) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePredicateExtractForDataQueries(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+        settings.SetAppConfig(appConfig);
+
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `ImageByRegistry` (
+                id_registryId String,
+                id_name	String,
+                id_imageId	String,
+                created	Int64,
+                updated	Int64,
+                status	String,
+                PRIMARY KEY (id_registryId, id_name, id_imageId)
+            );
+
+        )").GetValueSync());
+
+        auto testQueryParams = [&] (TString query, TParams params) {
+            AssertSuccessResult(session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).GetValueSync());
+
+            UNIT_ASSERT(db.StreamExecuteScanQuery(query, params).GetValueSync().IsSuccess());
+        };
+
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `ImageByRegistry` (id_registryId, id_name, id_imageId, status) VALUES
+                ("10", "One", "10", "One"),
+                ("20", "Two", "20", "Two");
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        auto params4 = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$pred_registry").OptionalString("10").Build()
+            .AddParam("$pred_image_name").String("One").Build()
+            .AddParam("$pred_result_name_parts").Int32(2).Build()
+            .Build();
+
+        testQueryParams(R"(
+            --!syntax_v1
+            DECLARE $pred_registry AS String?;
+            DECLARE $pred_image_name AS String;
+            DECLARE $pred_result_name_parts AS Int32;
+            SELECT String::JoinFromList(name, "/") as name, count(1) AS cnt
+            FROM (SELECT ListTake(String::SplitToList(name, "/"), $pred_result_name_parts)
+                AS name FROM (SELECT id_name AS name FROM `ImageByRegistry` WHERE
+                (id_registryId = $pred_registry) AND (id_name LIKE $pred_image_name)) ) GROUP BY name ORDER BY name ASC;
+        )", params4);
+    }
+
     Y_UNIT_TEST(SimpleUpsertSelect) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

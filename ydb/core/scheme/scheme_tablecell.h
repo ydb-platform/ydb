@@ -44,34 +44,27 @@ public:
         Y_VERIFY(ref.size() < Max<ui32>(), " Too large blob size for TCell");
     }
 
-    TCell(const char* ptr, ui32 sz)
-        : DataSize_(sz)
+    TCell(const char* ptr, ui32 size)
+        : DataSize_(size)
         , IsInline_(0)
         , IsNull_(ptr == nullptr)
         , Ptr(ptr)
     {
-        Y_VERIFY_DEBUG(ptr || sz == 0);
+        Y_VERIFY_DEBUG(ptr || size == 0);
 
-        if (CanInline(sz)) {
+        if (CanInline(size)) {
             IsInline_ = 1;
             IntVal = 0;
 
-            if (sz == 8) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 4) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 2) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 1) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 7) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 6) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 5) {
-                memcpy(&IntVal, ptr, sz);
-            } else if (sz == 3) {
-                memcpy(&IntVal, ptr, sz);
+            switch (size) {
+                case 8: memcpy(&IntVal, ptr, 8); break;
+                case 7: memcpy(&IntVal, ptr, 7); break;
+                case 6: memcpy(&IntVal, ptr, 6); break;
+                case 5: memcpy(&IntVal, ptr, 5); break;
+                case 4: memcpy(&IntVal, ptr, 4); break;
+                case 3: memcpy(&IntVal, ptr, 3); break;
+                case 2: memcpy(&IntVal, ptr, 2); break;
+                case 1: memcpy(&IntVal, ptr, 1); break;
             }
         }
     }

@@ -65,15 +65,6 @@ inline NYql::NDqProto::EDqStatsMode GetKqpStatsMode(Ydb::Table::QueryStatsCollec
     }
 }
 
-inline bool CheckSession(const TString& sessionId, NYql::TIssues& issues) {
-    if (sessionId.empty()) {
-        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty session id"));
-        return false;
-    }
-
-    return true;
-}
-
 inline bool CheckQuery(const TString& query, NYql::TIssues& issues) {
     if (query.empty()) {
         issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Empty query text"));

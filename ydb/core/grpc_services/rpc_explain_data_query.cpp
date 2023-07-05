@@ -55,15 +55,14 @@ public:
             ev->Record.SetTraceId(traceId.GetRef());
         }
 
-        NYql::TIssues issues;
-        if (CheckSession(req->session_id(), issues)) {
+        if (CheckSession(req->session_id(), Request_.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
         } else {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
-        if (!CheckQuery(req->yql_text(), issues)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+        if (!CheckQuery(req->yql_text(), Request_.get())) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);

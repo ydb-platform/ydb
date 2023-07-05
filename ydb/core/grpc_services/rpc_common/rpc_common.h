@@ -50,5 +50,25 @@ inline void SetPeerName(TEvTxUserProxy::TEvProposeTransaction* ev, const IReques
     ev->Record.SetPeerName(ctx.GetPeerName());
 }
 
+inline bool CheckSession(const TString& sessionId, IRequestCtxBase* ctx) {
+    static const auto err = TString("Empty session id");
+    if (sessionId.empty()) {
+        ctx->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, err));
+        return false;
+    }
+
+    return true;
+}
+
+inline bool CheckQuery(const TString& query, IRequestCtxBase* ctx) {
+    static const auto err = TString("Empty query text");
+    if (query.empty()) {
+        ctx->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, err));
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

@@ -42,7 +42,6 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
 
     // Disable "in progress" constraints
     DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
-    DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
     return true;
 }

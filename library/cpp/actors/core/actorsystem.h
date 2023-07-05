@@ -309,5 +309,9 @@ namespace NActors {
             DeferredPreStop.push_back(std::move(fn));
         }
 
+        /* This is the base for memory profiling tags.
+       System sets memory profiling tag for debug version of lfalloc.
+       The tag is set as "base_tag + actor_activity_type". */
+        static ui32 MemProfActivityBase;
     };
 }

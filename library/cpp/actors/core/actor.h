@@ -11,18 +11,6 @@
 #include <util/generic/noncopyable.h>
 
 namespace NActors {
-struct TActorActivityTag {};
-}
-
-template <>
-class TLocalProcessKeyStateIndexConstructor<NActors::TActorActivityTag> {
-public:
-    static ui32 BuildCurrentIndex(const TStringBuf name, const ui32 /*currentNamesCount*/) {
-        return NProfiling::MakeTag(name.data());
-    }
-};
-
-namespace NActors {
     class TActorSystem;
     class TMailboxTable;
     struct TMailboxHeader;
@@ -599,6 +587,8 @@ namespace NActors {
         }
     };
 
+    struct TActorActivityTag {};
+
     inline size_t GetActivityTypeCount() {
         return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetCount();
     }
@@ -648,7 +638,7 @@ namespace NActors {
         template <typename T>
         struct HasActorActivityType<T, decltype((void)T::ActorActivityType, (const char*)nullptr)>: std::true_type {};
 
-        static ui32 GetActivityTypeIndexImpl() {
+        static ui32 GetActivityTypeIndex() {
             if constexpr(HasActorName<TDerived>::value) {
                 return TLocalProcessKey<TActorActivityTag, TDerived::ActorName>::GetIndex();
             } else if constexpr (HasActorActivityType<TDerived>::value) {
@@ -658,11 +648,6 @@ namespace NActors {
                 // 200 characters is limit for solomon metric tag length
                 return TLocalProcessExtKey<TActorActivityTag, TDerived, 200>::GetIndex();
             }
-        }
-
-        static ui32 GetActivityTypeIndex() {
-            static const ui32 result = GetActivityTypeIndexImpl();
-            return result;
         }
 
     protected:

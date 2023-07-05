@@ -1,18 +1,11 @@
 #pragma once
 
 #include <util/string/builder.h>
-#include <util/system/mutex.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
-#include <library/cpp/actors/prof/tag.h>
-
-template <class T>
-class TLocalProcessKeyStateIndexConstructor {
-public:
-};
 
 template <typename T>
 class TLocalProcessKeyState {
@@ -29,46 +22,59 @@ public:
         return *Singleton<TLocalProcessKeyState<T>>();
     }
 
-    ui32 GetCount() const {
-        return MaxKeysCount;
+    size_t GetCount() const {
+        return StartIndex + Names.size();
     }
 
     TStringBuf GetNameByIndex(size_t index) const {
-        Y_VERIFY(index < Names.size());
-        return Names[index];
+        if (index < StartIndex) {
+            return StaticNames[index];
+        } else {
+            index -= StartIndex;
+            Y_ENSURE(index < Names.size());
+            return Names[index];
+        }
     }
 
     size_t GetIndexByName(TStringBuf name) const {
-        TGuard<TMutex> g(Mutex);
         auto it = Map.find(name);
         Y_ENSURE(it != Map.end());
         return it->second;
     }
 
-    TLocalProcessKeyState() {
-        Names.resize(MaxKeysCount);
-    }
-
 private:
-
-    static constexpr ui32 MaxKeysCount = 1000000;
-
     size_t Register(TStringBuf name) {
-        TGuard<TMutex> g(Mutex);
-        const ui32 index = TLocalProcessKeyStateIndexConstructor<T>::BuildCurrentIndex(name, Names.size());
-        auto x = Map.emplace(name, index);
+        auto x = Map.emplace(name, Names.size()+StartIndex);
         if (x.second) {
-            Y_VERIFY(index < Names.size(), "a lot of actors or tags for memory monitoring");
-            Names[index] = name;
+            Names.emplace_back(name);
         }
 
         return x.first->second;
     }
 
+    size_t Register(TStringBuf name, ui32 index) {
+        Y_VERIFY(index < StartIndex);
+        auto x = Map.emplace(name, index);
+        Y_VERIFY(x.second || x.first->second == index);
+        StaticNames[index] = name;
+        return x.first->second;
+    }
+
 private:
+    static constexpr ui32 StartIndex = 2000;
+
+    TVector<TString> FillStaticNames() {
+        TVector<TString> staticNames;
+        staticNames.reserve(StartIndex);
+        for (ui32 i = 0; i < StartIndex; i++) {
+            staticNames.push_back(TStringBuilder() << "Activity_" << i);
+        }
+        return staticNames;
+    }
+
+    TVector<TString> StaticNames = FillStaticNames();
     TVector<TString> Names;
     THashMap<TString, size_t> Map;
-    TMutex Mutex;
 };
 
 template <typename T, const char* Name>
@@ -121,6 +127,9 @@ public:
 
     static size_t GetIndex(EnumT key) {
         ui32 index = static_cast<ui32>(key);
+        if (index < TLocalProcessKeyState<T>::StartIndex) {
+            return index;
+        }
         Y_VERIFY(index < Enum2Index.size());
         return Enum2Index[index];
     }
@@ -135,10 +144,14 @@ private:
         for (const auto& [k, v] : names) {
             maxId = Max(maxId, static_cast<ui32>(k));
         }
-        enum2Index.resize(maxId + 1);
+        enum2Index.resize(maxId+1);
+        for (ui32 i = 0; i <= maxId && i < TLocalProcessKeyState<T>::StartIndex; i++) {
+            enum2Index[i] = i;
+        }
+
         for (const auto& [k, v] : names) {
             ui32 enumId = static_cast<ui32>(k);
-            enum2Index[enumId] = TLocalProcessKeyState<T>::GetInstance().Register(v);
+            enum2Index[enumId] = TLocalProcessKeyState<T>::GetInstance().Register(v, enumId);
         }
         return enum2Index;
     }

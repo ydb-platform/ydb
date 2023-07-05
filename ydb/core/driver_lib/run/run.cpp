@@ -1602,6 +1602,25 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     return sil;
 }
 
+void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
+    Y_VERIFY(as != nullptr);
+    if (as->MemProfActivityBase != 0)
+        return;
+    TVector<TString> holders;
+    TVector<const char*> activityNames;
+    for (ui32 i = 0; i < NKikimrServices::TActivity::EType_ARRAYSIZE; ++i) {
+        auto current = (NKikimrServices::TActivity::EType)i;
+        const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str();
+        if (currName[0] == '\0') {
+            holders.push_back("EActivityType_" + ToString<ui32>(i));
+            currName = holders.back().c_str();
+        }
+        activityNames.push_back(currName);
+    }
+    as->MemProfActivityBase = NProfiling::MakeTags(activityNames);
+    Y_VERIFY(as->MemProfActivityBase != 0);
+}
+
 void TKikimrRunner::KikimrStart() {
 
     if (!!PollerThreads) {
@@ -1610,6 +1629,7 @@ void TKikimrRunner::KikimrStart() {
 
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
+        RegisterBaseTagForMemoryProfiling(ActorSystem.Get());
         ActorSystem->Start();
     }
 

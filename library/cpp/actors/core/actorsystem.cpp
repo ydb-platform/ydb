@@ -320,4 +320,6 @@ namespace NActors {
         CpuManager->Cleanup();
         Scheduler.Destroy();
     }
+
+    ui32 TActorSystem::MemProfActivityBase;
 }

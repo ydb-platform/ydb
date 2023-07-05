@@ -190,7 +190,7 @@ namespace NActors {
                     ui32 activityType = actor->GetActivityType();
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
-                        NProfiling::TMemoryTagScope::Reset(ActorSystem->MemProfActivityBase + activityType);
+                        NProfiling::TMemoryTagScope::Reset(activityType);
                     }
 
                     actor->Receive(ev);

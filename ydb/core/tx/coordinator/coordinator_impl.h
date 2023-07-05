@@ -401,7 +401,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
 public:
     struct Schema : NIceDb::Schema {
-        static const ui32 CurrentVersion;
+        static constexpr ui64 CurrentVersion = 1;
 
         struct Transaction : Table<0> {
             struct ID : Column<0, NScheme::NTypeIds::Uint64> {}; // PK
@@ -422,10 +422,13 @@ public:
         };
 
         struct State : Table<2> {
-            enum EKeyType {
-                KeyLastPlanned,
-                DatabaseVersion,
-                AcquireReadStepLast,
+            enum EKeyType : ui64 {
+                KeyLastPlanned = 0,
+                DatabaseVersion = 1,
+                AcquireReadStepLast = 2,
+                LastBlockedActorX1 = 3,
+                LastBlockedActorX2 = 4,
+                LastBlockedStep = 5,
             };
 
             struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK
@@ -446,6 +449,37 @@ public:
         };
 
         using TTables = SchemaTables<Transaction, AffectedSet, State, DomainConfiguration>;
+
+        template<class TCallback>
+        static bool LoadState(NIceDb::TNiceDb& db, State::EKeyType key, TCallback&& callback) {
+            auto rowset = db.Table<State>().Key(key).Select<State::StateValue>();
+
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            if (rowset.IsValid()) {
+                callback(rowset.GetValue<State::StateValue>());
+            }
+
+            return true;
+        }
+
+        static bool LoadState(NIceDb::TNiceDb& db, State::EKeyType key, std::optional<ui64>& out) {
+            return LoadState(db, key, [&out](ui64 value) {
+                out.emplace(value);
+            });
+        }
+
+        static bool LoadState(NIceDb::TNiceDb& db, State::EKeyType key, ui64& out) {
+            return LoadState(db, key, [&out](ui64 value) {
+                out = value;
+            });
+        }
+
+        static void SaveState(NIceDb::TNiceDb& db, State::EKeyType key, ui64 value) {
+            db.Table<State>().Key(key).Update<State::StateValue>(value);
+        }
     };
 
 private:

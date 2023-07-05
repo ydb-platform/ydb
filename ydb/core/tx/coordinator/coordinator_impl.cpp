@@ -51,8 +51,6 @@ static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvPro
     return proposal;
 }
 
-const ui32 TTxCoordinator::Schema::CurrentVersion = 1;
-
 TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)

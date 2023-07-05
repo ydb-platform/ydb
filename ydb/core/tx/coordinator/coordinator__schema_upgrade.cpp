@@ -18,19 +18,17 @@ struct TTxCoordinator::TTxUpgrade : public TTransactionBase<TTxCoordinator> {
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         NIceDb::TNiceDb db(txc.DB);
 
-
-        auto row = db.Table<Schema::State>().Key(Schema::State::DatabaseVersion).Select<Schema::State::StateValue>();
-        if (!row.IsReady()) {
+        std::optional<ui64> databaseVersion;
+        if (!Schema::LoadState(db, Schema::State::DatabaseVersion, databaseVersion)) {
             return false;
         }
 
-        if (!row.IsValid()) {
-            db.Table<Schema::State>().Key(Schema::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::StateValue>(Schema::CurrentVersion));
+        if (!databaseVersion) {
+            Schema::SaveState(db, Schema::State::DatabaseVersion, Schema::CurrentVersion);
             return true;
         }
 
-        Schema::State::StateValue::Type databaseVersion = row.GetValue<Schema::State::StateValue>();
-        if (Schema::CurrentVersion == databaseVersion) {
+        if (*databaseVersion == Schema::CurrentVersion) {
             return true;
         }
 
@@ -38,7 +36,7 @@ struct TTxCoordinator::TTxUpgrade : public TTransactionBase<TTxCoordinator> {
         FLOG_LOG_S(ctx, NActors::NLog::PRI_CRIT, NKikimrServices::TX_COORDINATOR,
              "tablet# " << Self->Tablet() <<
              " SEND to self TEvents::TEvPoisonPill" <<
-             " databaseVersion# " <<  databaseVersion <<
+             " databaseVersion# " << *databaseVersion <<
              " CurrentDataBaseVersion# " << Schema::CurrentVersion <<
              " reason# no realisation for upgrade scheme present");
         return true;

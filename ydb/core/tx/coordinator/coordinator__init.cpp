@@ -15,6 +15,8 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     bool HaveProcessingParams = false;
     ui64 LastPlanned = 0;
     ui64 LastAcquired = 0;
+    TActorId LastBlockedActor;
+    ui64 LastBlockedStep = 0;
 
     TTxInit(TSelf *coordinator)
         : TBase(coordinator)
@@ -29,6 +31,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
         ready &= LoadDomainConfiguration(db);
         ready &= LoadLastPlanned(db);
         ready &= LoadLastAcquired(db);
+        ready &= LoadLastBlocked(db);
 
         return ready;
     }
@@ -72,30 +75,39 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     }
 
     bool LoadLastPlanned(NIceDb::TNiceDb &db) {
-        auto rowset = db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Select<Schema::State::StateValue>();
-
-        if (!rowset.IsReady())
-            return false;
-
-        if (rowset.IsValid())
-            LastPlanned = rowset.GetValue<Schema::State::StateValue>();
-
-        return true;
+        return Schema::LoadState(db, Schema::State::KeyLastPlanned, LastPlanned);
     }
 
     bool LoadLastAcquired(NIceDb::TNiceDb &db) {
-        auto rowset = db.Table<Schema::State>().Key(Schema::State::AcquireReadStepLast).Select<Schema::State::StateValue>();
+        return Schema::LoadState(db, Schema::State::AcquireReadStepLast, LastAcquired);
+    }
 
-        if (!rowset.IsReady())
+    bool LoadLastBlocked(NIceDb::TNiceDb &db) {
+        ui64 x1 = 0;
+        ui64 x2 = 0;
+        ui64 step = 0;
+
+        bool ready = true;
+        ready &= Schema::LoadState(db, Schema::State::LastBlockedActorX1, x1);
+        ready &= Schema::LoadState(db, Schema::State::LastBlockedActorX2, x2);
+        ready &= Schema::LoadState(db, Schema::State::LastBlockedStep, step);
+
+        if (!ready) {
             return false;
+        }
 
-        if (rowset.IsValid())
-            LastAcquired = rowset.GetValue<Schema::State::StateValue>();
-
+        LastBlockedActor = TActorId(x1, x2);
+        LastBlockedStep = step;
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
+        // Assume worst case, everything up to LastBlockedStep was planned
+        LastPlanned = Max(LastPlanned, LastBlockedStep);
+
+        // Assume worst case, last planned step was also acquired
+        LastAcquired = Max(LastAcquired, LastPlanned);
+
         Self->VolatileState.LastPlanned = LastPlanned;
         Self->VolatileState.LastSentStep = LastPlanned;
         Self->VolatileState.LastAcquired = LastAcquired;

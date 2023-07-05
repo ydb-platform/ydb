@@ -661,17 +661,18 @@ public:
         auto& event = ev->Get()->Record;
         auto& request = event.GetRequest();
 
-        auto traceId = event.GetTraceId();
+        const auto traceId = event.GetTraceId();
         TKqpRequestInfo requestInfo(traceId);
-        auto sessionId = request.GetSessionId();
-        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
+        const auto sessionId = request.GetSessionId();
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
-        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId << ", trace_id: " << traceId);
         Counters->ReportPingSession(dbCounters, request.ByteSize());
 
         TActorId targetId;
+        // Local session
         if (sessionInfo) {
+            KQP_PROXY_LOG_D("Received ping session request, has local session, trace_id: " << traceId);
+
             targetId = sessionInfo->WorkerId;
             const bool isIdle = LocalSessions->IsSessionIdle(sessionInfo);
             if (isIdle) {
@@ -686,13 +687,18 @@ public:
                 ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
                 : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY;
             record.MutableResponse()->SetSessionStatus(sessionStatus);
-            Send(SelfId(), result.release(), IEventHandle::FlagTrackDelivery, requestId);
+            Send(ev->Sender, result.release(), 0, ev->Cookie);
             return;
-        } else {
-            targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
-            if (!targetId) {
-                return;
-            }
+        }
+
+        // Forward request to another proxy
+        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
+
+        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId << ", trace_id: " << traceId);
+
+        targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
+        if (!targetId) {
+            return;
         }
 
         TDuration timeout = DEFAULT_KEEP_ALIVE_TIMEOUT;

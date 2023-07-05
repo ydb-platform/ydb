@@ -17,6 +17,8 @@
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
+#include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
+
 #include <util/generic/vector.h>
 #include <memory>
 
@@ -521,6 +523,37 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren()[0].Name, ".sys");
+    }
+
+    Y_UNIT_TEST(PingNotExistedSession) {
+        NKikimrConfig::TAppConfig appConfig;
+        NYdb::TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        ui16 grpc = server.GetPort();
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = false;
+
+        {
+            NGrpc::TGRpcClientLow clientLow;
+            auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Table::V1::TableService>(clientConfig);
+
+            Ydb::Table::KeepAliveRequest request;
+            request.set_session_id("ydb://session/3?node_id=2&id=YDB0NDRhNjItYWQwZmIzMTktMWUyOTE4ZWYtYzE0NzJjNg==");
+
+            NGrpc::TResponseCallback<Ydb::Table::KeepAliveResponse> responseCb =
+                [&allDoneOk](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Table::KeepAliveResponse&& response) -> void {
+                    UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
+                    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_SESSION);
+                    allDoneOk = true;
+            };
+
+            connection->DoRequest(request, std::move(responseCb), &Ydb::Table::V1::TableService::Stub::AsyncKeepAlive);
+        }
+
+        UNIT_ASSERT(allDoneOk);
     }
 } // namspace NKqp
 } // namespace NKikimr

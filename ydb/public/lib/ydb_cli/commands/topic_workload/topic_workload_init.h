@@ -1,21 +1,24 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_workload.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_operations_scenario.h>
 
-namespace NYdb {
-    namespace NConsoleClient {
-        class TCommandWorkloadTopicInit: public TWorkloadCommand {
-        public:
-            TCommandWorkloadTopicInit();
-            virtual void Config(TConfig& config) override;
-            virtual void Parse(TConfig& config) override;
-            virtual int Run(TConfig& config) override;
+namespace NYdb::NConsoleClient {
 
-        private:
-            TString TopicName;
+class TCommandWorkloadTopicInit : public TWorkloadCommand {
+public:
+    TCommandWorkloadTopicInit();
 
-            ui32 PartitionCount;
-            ui32 ConsumerCount;
-        };
-    }
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    class TScenario : public TTopicOperationsScenario {
+        int DoRun(const TConfig& config) override;
+    };
+
+    TScenario Scenario;
+};
+
 }

@@ -8,54 +8,42 @@
 
 using namespace NYdb::NConsoleClient;
 
+int TCommandWorkloadTopicInit::TScenario::DoRun(const TConfig& config)
+{
+    CreateTopic(config.Database, TopicName, PartitionCount, ConsumerCount);
+
+    return EXIT_SUCCESS;
+}
+
 TCommandWorkloadTopicInit::TCommandWorkloadTopicInit()
     : TWorkloadCommand("init", {}, "Create and initialize topic for workload")
-    , PartitionCount(1)
 {
 }
 
-void TCommandWorkloadTopicInit::Config(TConfig& config) {
+void TCommandWorkloadTopicInit::Config(TConfig& config)
+{
     TYdbCommand::Config(config);
 
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption("topic", "Topic name.")
         .DefaultValue(TOPIC)
-        .StoreResult(&TopicName);
+        .StoreResult(&Scenario.TopicName);
 
     config.Opts->AddLongOption('p', "partitions", "Number of partitions in the topic.")
         .DefaultValue(128)
-        .StoreResult(&PartitionCount);
+        .StoreResult(&Scenario.PartitionCount);
     config.Opts->AddLongOption('c', "consumers", "Number of consumers in the topic.")
         .DefaultValue(1)
-        .StoreResult(&ConsumerCount);
+        .StoreResult(&Scenario.ConsumerCount);
 }
 
-void TCommandWorkloadTopicInit::Parse(TConfig& config) {
+void TCommandWorkloadTopicInit::Parse(TConfig& config)
+{
     TClientCommand::Parse(config);
 }
 
-int TCommandWorkloadTopicInit::Run(TConfig& config) {
-    Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*Driver);
-
-    auto fullTopicName = TCommandWorkloadTopicDescribe::GenerateFullTopicName(config.Database, TopicName);
-    auto describeTopicResult = topicClient->DescribeTopic(fullTopicName, {}).GetValueSync();
-    if (describeTopicResult.GetTopicDescription().GetTotalPartitionsCount() != 0) {
-        Cout << "Topic " << TopicName << " already exists.\n";
-        return EXIT_FAILURE;
-    }
-
-    NYdb::NTopic::TCreateTopicSettings settings;
-    settings.PartitioningSettings(PartitionCount, PartitionCount);
-
-    for (ui32 consumerIdx = 0; consumerIdx < ConsumerCount; ++consumerIdx) {
-        settings.BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(consumerIdx))
-            .EndAddConsumer();
-    }
-
-    auto result = topicClient->CreateTopic(fullTopicName, settings).GetValueSync();
-    ThrowOnError(result);
-
-    return EXIT_SUCCESS;
+int TCommandWorkloadTopicInit::Run(TConfig& config)
+{
+    return Scenario.Run(config);
 }

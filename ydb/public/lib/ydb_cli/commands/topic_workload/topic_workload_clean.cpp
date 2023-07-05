@@ -9,32 +9,36 @@
 
 using namespace NYdb::NConsoleClient;
 
+int TCommandWorkloadTopicClean::TScenario::DoRun(const TConfig& config)
+{
+    TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
+
+    DropTopic(config.Database, TopicName);
+
+    return EXIT_SUCCESS;
+}
+
 TCommandWorkloadTopicClean::TCommandWorkloadTopicClean()
     : TWorkloadCommand("clean", {}, "drop topic created in init phase")
 {
 }
 
-void TCommandWorkloadTopicClean::Config(TConfig& config) {
+void TCommandWorkloadTopicClean::Config(TConfig& config)
+{
     TYdbCommand::Config(config);
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption("topic", "Topic name.")
         .DefaultValue(TOPIC)
-        .StoreResult(&TopicName);
+        .StoreResult(&Scenario.TopicName);
 }
 
-void TCommandWorkloadTopicClean::Parse(TConfig& config) {
+void TCommandWorkloadTopicClean::Parse(TConfig& config)
+{
     TClientCommand::Parse(config);
 }
 
-int TCommandWorkloadTopicClean::Run(TConfig& config) {
-    Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(*Driver);
-
-    TCommandWorkloadTopicDescribe::DescribeTopic(config.Database, TopicName, *Driver);
-
-    TString fullTopicName = TCommandWorkloadTopicDescribe::GenerateFullTopicName(config.Database, TopicName);
-    auto result = topicClient->DropTopic(fullTopicName).GetValueSync();
-    ThrowOnError(result);
-    return EXIT_SUCCESS;
+int TCommandWorkloadTopicClean::Run(TConfig& config)
+{
+    return Scenario.Run(config);
 }

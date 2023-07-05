@@ -13,6 +13,7 @@ target_link_libraries(ydb-apps-ydb-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-unittest_main
+  cpp-client-ydb_topic
 )
 target_link_options(ydb-apps-ydb-ut PRIVATE
   -ldl

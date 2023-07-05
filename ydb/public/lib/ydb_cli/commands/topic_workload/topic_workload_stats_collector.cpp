@@ -62,9 +62,12 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
 }
 
 void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
+    PrintHeader();
+
     auto startTime = Now();
     WarmupTime = startTime + TDuration::Seconds(WarmupSec);
     auto stopTime = startTime + TDuration::Seconds(TotalSec + 1);
+
     int windowIt = 1;
     auto windowDuration = TDuration::Seconds(WindowSec);
     while (Now() < stopTime && !*ErrorFlag) {
@@ -77,6 +80,7 @@ void TTopicWorkloadStatsCollector::PrintWindowStatsLoop() {
         }
         Sleep(std::max(TDuration::Zero(), Now() - windowTime(windowIt)));
     }
+
     CollectThreadEvents();
 }
 

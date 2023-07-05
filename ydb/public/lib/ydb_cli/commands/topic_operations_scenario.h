@@ -41,6 +41,7 @@ public:
     bool PrintTimestamp;
     double Percentile;
     TString TopicName;
+    ui32 PartitionCount = 1;
     ui32 ProducerThreadCount;
     ui32 ConsumerThreadCount;
     ui32 ConsumerCount;
@@ -50,6 +51,13 @@ public:
     ui32 Codec;
 
 protected:
+    void CreateTopic(const TString& database,
+                     const TString& topic,
+                     ui32 partitionCount,
+                     ui32 consumerCount);
+    void DropTopic(const TString& database,
+                   const TString& topic);
+
     void StartConsumerThreads(std::vector<std::future<void>>& threads,
                               const TString& database);
     void StartProducerThreads(std::vector<std::future<void>>& threads,
@@ -69,6 +77,11 @@ protected:
 
 private:
     virtual int DoRun(const TClientCommand::TConfig& config) = 0;
+
+    void EnsureTopicNotExist(const TString& topic);
+    void CreateTopic(const TString& topic,
+                     ui32 partitionCount,
+                     ui32 consumerCount);
 
     static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
 

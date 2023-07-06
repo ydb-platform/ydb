@@ -71,8 +71,10 @@ public:
                 dataCenters.emplace("dc2", NKikimr::NPersQueueTests::TPQTestClusterInfo{"dc2.logbroker.yandex.net", false});
             }
             Server.AnnoyingClient->InitDCs(dataCenters);
+            Server.AnnoyingClient->CheckClustersList(Server.CleverServer->GetRuntime(), true, dataCenters);
         } else {
             Server.AnnoyingClient->InitDCs(DataCenters, LocalDC);
+            Server.AnnoyingClient->CheckClustersList(Server.CleverServer->GetRuntime(), true, DataCenters);
         }
         Server.AnnoyingClient->InitSourceIds();
         CreateTopic(GetTestTopic(), GetLocalCluster());

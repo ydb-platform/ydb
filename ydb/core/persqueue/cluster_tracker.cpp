@@ -90,6 +90,8 @@ private:
     }
 
     void SendClustersList(TActorId subscriberId) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PQ_METACACHE, "SendClustersList");
+
         auto ev = MakeHolder<TEvClusterTracker::TEvClustersUpdate>();
 
         ev->ClustersList = ClustersList;

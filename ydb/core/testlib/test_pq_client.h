@@ -2,6 +2,7 @@
 #include "test_client.h"
 
 #include <ydb/core/client/flat_ut_client.h>
+#include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -669,6 +670,39 @@ public:
             UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES ("Cluster", 1);
             UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES ("Topics", 0);
         )___");
+    }
+
+    void CheckClustersList(TTestActorRuntime* runtime, bool waitForUpdate = true, THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST) {
+        UNIT_ASSERT(runtime != nullptr);
+
+        auto compareInfo = [](const TString& name, const TPQTestClusterInfo& info, const NPQ::NClusterTracker::TClustersList::TCluster& trackerInfo) {
+            UNIT_ASSERT_EQUAL(name, trackerInfo.Name);
+            UNIT_ASSERT_EQUAL(name, trackerInfo.Datacenter);
+            UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer);
+            UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled);
+            UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight);
+        };
+
+        TInstant now = TInstant::Now();
+
+        auto edgeActor = runtime->AllocateEdgeActor();
+        
+         while (true) {
+            Cerr << "=== CheckClustersList\n";
+            runtime->Send(new IEventHandle(NKikimr::NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActor, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe));
+            auto trackerResponse = runtime->GrabEdgeEvent<NKikimr::NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
+
+            if (!waitForUpdate || trackerResponse->ClustersListUpdateTimestamp && trackerResponse->ClustersListUpdateTimestamp.GetRef() >= now + TDuration::Seconds(5)) {
+                for (auto& clusterInfo : trackerResponse->ClustersList->Clusters) {
+                    auto it = clusters.find(clusterInfo.Name);
+                    UNIT_ASSERT(it != clusters.end());
+                    compareInfo(it->first, it->second, clusterInfo);
+                }
+                Cerr << "=== CheckClustersList Ok\n";
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
     }
 
     void UpdateDcEnabled(const TString& name, bool enabled) {

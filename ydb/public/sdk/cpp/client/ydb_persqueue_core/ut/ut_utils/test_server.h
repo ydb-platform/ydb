@@ -50,6 +50,7 @@ public:
         AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort, databaseName);
         if (doClientInit) {
             AnnoyingClient->FullInit();
+            AnnoyingClient->CheckClustersList(CleverServer->GetRuntime());
         }
     }
 

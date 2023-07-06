@@ -87,6 +87,9 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
 
             Server->AnnoyingClient->FullInit();
+            if (!TenantModeEnabled())
+                Server->AnnoyingClient->CheckClustersList(Server->CleverServer->GetRuntime());
+
             Server->AnnoyingClient->CreateConsumer("user");
             if (TenantModeEnabled()) {
                 Cerr << "=== Will create fst-class topics\n";

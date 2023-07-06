@@ -140,6 +140,8 @@ inline void* TSystemMmap::Mmap(size_t size)
 
 inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
+    Y_VERIFY_DEBUG(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
+    Y_VERIFY_DEBUG(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
     return ::munmap(addr, size);
 }
 #endif

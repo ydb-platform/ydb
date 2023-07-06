@@ -35,7 +35,6 @@ Y_UNIT_TEST(AlignedMmapPageSize) {
     );
 }
 
-#ifndef _win_
 Y_UNIT_TEST(UnalignedMmapPageSize) {
     TAlignedPagePool::ResetGlobalsUT();
     TAlignedPagePoolImpl<TFakeUnalignedMmap> alloc(__LOCATION__);
@@ -131,8 +130,6 @@ Y_UNIT_TEST(UnalignedMmapUnalignedSize) {
         , size + (TAlignedPagePool::ALLOC_AHEAD_PAGES - 2) * TAlignedPagePool::POOL_PAGE_SIZE
     );
 }
-
-#endif // _win_
 
 } // Y_UNIT_TEST_SUITE(TAlignedPagePoolTest)
 

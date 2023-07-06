@@ -209,7 +209,7 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     }
                 }
             } else {
-                Y_FAIL_S("Cannot retrieve cdc stream scan info: " << pathId);
+                // nop, scan is completed
             }
             break;
         default:

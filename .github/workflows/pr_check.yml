@@ -26,7 +26,7 @@ jobs:
         id: check-ownership-membership
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
           script: |
             // This is used primarily in forks. Repository owner
             // should be allowed to run anything.

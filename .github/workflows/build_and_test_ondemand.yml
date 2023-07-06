@@ -54,7 +54,7 @@ jobs:
         with:
           mode: start
           yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
           folder-id: ${{secrets.YC_FOLDER}}
           image-id: ${{inputs.image}}
           disk-size: ${{vars.DISK_SIZE && vars.DISK_SIZE || '1023GB'}}
@@ -129,7 +129,7 @@ jobs:
         with:
           mode: stop
           yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
           label: ${{ needs.provide-runner.outputs.label }}
           instance-id: ${{ needs.provide-runner.outputs.instance-id }}
           

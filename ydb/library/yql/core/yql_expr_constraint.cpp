@@ -568,19 +568,20 @@ private:
             return false;
         };
 
-        const auto filterForUnique = Strict ? [outItemType](const TConstraintNode::TPathType& path) {
-            return bool(TConstraintNode::GetSubTypeByPath(path, *outItemType));
-        } : TConstraintNode::TPathFilter(filter);
+        const auto filterForUnique = [inItemType, outItemType](const TConstraintNode::TPathType& path) {
+            const auto castResult = CastResult<Strict>(TConstraintNode::GetSubTypeByPath(path, *inItemType), TConstraintNode::GetSubTypeByPath(path, *outItemType));
+            return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+        };
 
-        const auto filterForDistinct = Strict ? [inItemType, outItemType](const TConstraintNode::TPathType& path) {
+        const auto filterForDistinct = [inItemType, outItemType](const TConstraintNode::TPathType& path) {
             return NUdf::ECastOptions::Complete == CastResult<Strict>(TConstraintNode::GetSubTypeByPath(path, *inItemType), TConstraintNode::GetSubTypeByPath(path, *outItemType));
-        } : TConstraintNode::TPathFilter(filter);
+        };
 
         FilterFromHead<TPassthroughConstraintNode>(input, filter, ctx);
         FilterFromHead<TSortedConstraintNode>(input, filter, ctx);
         FilterFromHead<TChoppedConstraintNode>(input, filter, ctx);
-        FilterFromHead<TUniqueConstraintNode>(input, filter, ctx);
-        FilterFromHead<TDistinctConstraintNode>(input, filter, ctx);
+        FilterFromHead<TUniqueConstraintNode>(input, filterForUnique, ctx);
+        FilterFromHead<TDistinctConstraintNode>(input, filterForDistinct, ctx);
         FilterFromHead<TPartOfSortedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filterForUnique, ctx);

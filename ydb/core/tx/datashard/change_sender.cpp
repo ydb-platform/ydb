@@ -160,7 +160,7 @@ class TChangeSender: public TActor<TChangeSender> {
         }
 
         if (Enqueued) {
-            Handle(std::move(Enqueued));
+            Handle(std::exchange(Enqueued, {}));
         }
     }
 

@@ -102,13 +102,23 @@ public:
             currentSchema.Serialize(schemaUdpateProto);
             *alterData->Description.MutableSchema() = schemaUdpateProto;
         }
-        
+
+        const ui64 currentTtlVersion = tableInfo->Description.HasTtlSettings() ? tableInfo->Description.GetTtlSettings().GetVersion() : 0;
         if (AlterRequest.HasAlterTtlSettings()) {
-            if (!currentSchema.ValidateTtlSettings(AlterRequest.GetAlterTtlSettings(), errors)) {
-                return nullptr;
+            const auto& ttlUpdate = AlterRequest.GetAlterTtlSettings();
+            if (ttlUpdate.HasUseTiering()) {
+                alterData->Description.MutableTtlSettings()->SetUseTiering(ttlUpdate.GetUseTiering());
             }
-            const ui64 currentTtlVersion = alterData->Description.HasTtlSettings() ? alterData->Description.GetTtlSettings().GetVersion() : 0;
-            *alterData->Description.MutableTtlSettings() = AlterRequest.GetAlterTtlSettings();
+
+            if (ttlUpdate.HasEnabled()) {
+                if (!currentSchema.ValidateTtlSettings(ttlUpdate, errors)) {
+                    return nullptr;
+                }
+                *alterData->Description.MutableTtlSettings()->MutableEnabled() = ttlUpdate.GetEnabled();
+            }
+            if (ttlUpdate.HasDisabled()) {
+                *alterData->Description.MutableTtlSettings()->MutableDisabled() = ttlUpdate.GetDisabled();
+            }
             alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
         }
         return alterData;

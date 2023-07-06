@@ -357,6 +357,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
 
     // Spilling counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;

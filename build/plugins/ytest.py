@@ -140,7 +140,18 @@ def validate_test(unit, kw):
     invalid_requirements_for_distbuild = [
         requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')
     ]
-    sb_tags = [tag for tag in tags if tag.startswith('sb:')]
+
+    sb_tags = []
+    # XXX Unfortunately, some users have already started using colons
+    # in their tag names. Use skip set to avoid treating their tag as system ones.
+    # Remove this check when all such user tags are removed.
+    skip_set = ('ynmt_benchmark', 'bert_models', 'zeliboba_map')
+    # Verify the prefixes of the system tags to avoid pointless use of the REQUIREMENTS macro parameters in the TAG macro.
+    for tag in tags:
+        if tag.startswith('sb:'):
+            sb_tags.append(tag)
+        elif ':' in tag and not tag.startswith('ya:') and tag.split(':')[0] not in skip_set:
+            errors.append("Only [[imp]]sb:[[rst]] and [[imp]]ya:[[rst]] prefixes are allowed in system tags: {}".format(tag))
 
     if is_fat:
         if size != consts.TestSize.Large:

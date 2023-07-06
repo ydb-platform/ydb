@@ -102,6 +102,22 @@ void TTopicOperationsScenario::DropTopic(const TString& database,
     ThrowOnError(result);
 }
 
+void TTopicOperationsScenario::DropTable(const TString& database, const TString& table)
+{
+    NTable::TTableClient client(*Driver);
+    auto session = GetSession(client);
+    auto result = session.DropTable(database + "/" + table).GetValueSync();
+    ThrowOnError(result);
+}
+
+void TTopicOperationsScenario::ExecSchemeQuery(const TString& query)
+{
+    NTable::TTableClient client(*Driver);
+    auto session = GetSession(client);
+    auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    ThrowOnError(result);
+}
+
 void TTopicOperationsScenario::EnsureTopicNotExist(const TString& topic)
 {
     Y_VERIFY(Driver);
@@ -134,6 +150,13 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
 
     auto result = client.CreateTopic(topic, settings).GetValueSync();
     ThrowOnError(result);
+}
+
+NTable::TSession TTopicOperationsScenario::GetSession(NTable::TTableClient& client)
+{
+    auto result = client.GetSession({}).GetValueSync();
+    ThrowOnError(result);
+    return result.GetSession();
 }
 
 void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void>>& threads,

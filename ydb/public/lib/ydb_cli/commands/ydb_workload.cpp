@@ -5,6 +5,7 @@
 #include "click_bench.h"
 #include "tpch.h"
 #include "topic_workload/topic_workload.h"
+#include "transfer_workload/transfer_workload.h"
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
@@ -41,6 +42,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandKv>());
     AddCommand(std::make_unique<TCommandClickBench>());
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
+    AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTpch>());
 }
 

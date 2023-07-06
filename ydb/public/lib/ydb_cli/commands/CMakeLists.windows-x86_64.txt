@@ -7,6 +7,7 @@
 
 
 add_subdirectory(topic_workload)
+add_subdirectory(transfer_workload)
 get_built_tool_path(
   TOOL_rescompiler_bin
   TOOL_rescompiler_dependency
@@ -27,6 +28,7 @@ target_link_libraries(clicommands PUBLIC
   public-lib-operation_id
   common
   topic_workload
+  transfer_workload
   lib-ydb_cli-dump
   lib-ydb_cli-import
   topic
@@ -89,6 +91,7 @@ target_link_libraries(clicommands.global PUBLIC
   public-lib-operation_id
   common
   topic_workload
+  transfer_workload
   lib-ydb_cli-dump
   lib-ydb_cli-import
   topic

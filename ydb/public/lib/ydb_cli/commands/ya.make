@@ -43,6 +43,7 @@ PEERDIR(
     ydb/public/lib/operation_id
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/topic_workload
+    ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic

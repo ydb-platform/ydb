@@ -10,7 +10,7 @@ using namespace NYdb::NConsoleClient;
 
 int TCommandWorkloadTopicInit::TScenario::DoRun(const TConfig& config)
 {
-    CreateTopic(config.Database, TopicName, PartitionCount, ConsumerCount);
+    CreateTopic(config.Database, TopicName, TopicPartitionCount, ConsumerCount);
 
     return EXIT_SUCCESS;
 }
@@ -32,7 +32,7 @@ void TCommandWorkloadTopicInit::Config(TConfig& config)
 
     config.Opts->AddLongOption('p', "partitions", "Number of partitions in the topic.")
         .DefaultValue(128)
-        .StoreResult(&Scenario.PartitionCount);
+        .StoreResult(&Scenario.TopicPartitionCount);
     config.Opts->AddLongOption('c', "consumers", "Number of consumers in the topic.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerCount);

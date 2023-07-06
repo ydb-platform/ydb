@@ -21,6 +21,13 @@ class TDriver;
 
 }
 
+namespace NYdb::NTable {
+
+class TSession;
+class TTableClient;
+
+}
+
 namespace NYdb::NConsoleClient {
 
 class TTopicWorkloadStatsCollector;
@@ -41,7 +48,7 @@ public:
     bool PrintTimestamp;
     double Percentile;
     TString TopicName;
-    ui32 PartitionCount = 1;
+    ui32 TopicPartitionCount = 1;
     ui32 ProducerThreadCount;
     ui32 ConsumerThreadCount;
     ui32 ConsumerCount;
@@ -49,6 +56,8 @@ public:
     size_t MessageRate;
     size_t ByteRate;
     ui32 Codec;
+    TString TableName;
+    ui32 TablePartitionCount = 1;
 
 protected:
     void CreateTopic(const TString& database,
@@ -57,6 +66,10 @@ protected:
                      ui32 consumerCount);
     void DropTopic(const TString& database,
                    const TString& topic);
+
+    void DropTable(const TString& database, const TString& table);
+
+    void ExecSchemeQuery(const TString& query);
 
     void StartConsumerThreads(std::vector<std::future<void>>& threads,
                               const TString& database);
@@ -82,6 +95,8 @@ private:
     void CreateTopic(const TString& topic,
                      ui32 partitionCount,
                      ui32 consumerCount);
+
+    static NTable::TSession GetSession(NTable::TTableClient& client);
 
     static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
 

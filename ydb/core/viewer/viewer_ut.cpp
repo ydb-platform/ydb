@@ -33,6 +33,16 @@ using namespace NMonitoring;
 #define Ctest Cerr
 #endif
 
+#ifdef address_sanitizer_enabled
+#define SANITIZER_TYPE address
+#endif
+#ifdef memory_sanitizer_enabled
+#define SANITIZER_TYPE memory
+#endif
+#ifdef thread_sanitizer_enabled
+#define SANITIZER_TYPE thread
+#endif
+
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
 
@@ -431,6 +441,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         Ctest << "Request timer = " << timer.Passed() << Endl;
         Ctest << "BASE_PERF = " << BASE_PERF << Endl;
-        UNIT_ASSERT_LT(timer.Passed(), 10 * BASE_PERF);
+
+#ifndef SANITIZER_TYPE
+#if !defined(NDEBUG) || defined(_hardening_enabled_) 
+        UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 30 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 30 * BASE_PERF);
+#else
+        UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 10 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 10 * BASE_PERF);
+#endif
+#endif
     }
 }

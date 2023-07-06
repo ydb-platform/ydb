@@ -1,3 +1,5 @@
+#include "run_ydb.h"
+
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -10,28 +12,12 @@
 
 Y_UNIT_TEST_SUITE(YdbWorkloadTopic) {
 
-TString ExecYdbWorkloadTopic(TList<TString> args)
+TString ExecYdb(const TList<TString>& args)
 {
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload topic ${args}
     //
-    args.push_front("topic");
-    args.push_front("workload");
-
-    args.push_front("/" + GetEnv("YDB_DATABASE"));
-    args.push_front("-d");
-
-    args.push_front("grpc://" + GetEnv("YDB_ENDPOINT"));
-    args.push_front("-e");
-
-    TShellCommand command(BinaryPath("ydb/apps/ydb/ydb"), args);
-    command.Run().Wait();
-
-    if (command.GetExitCode() != 0) {
-        ythrow yexception() << "command `" << command.GetQuotedCommand() << "` exit with code " << command.GetExitCode();
-    }
-
-    return command.GetOutput();
+    return RunYdb({"workload", "topic"}, args);
 }
 
 struct TTopicConfigurationMatcher {
@@ -58,9 +44,9 @@ void ExpectTopic(const TTopicConfigurationMatcher& matcher)
 }
 
 Y_UNIT_TEST(RunFull) {
-    ExecYdbWorkloadTopic({"init"});
-    auto output = ExecYdbWorkloadTopic({"run", "full", "-s", "10"});
-    ExecYdbWorkloadTopic({"clean"});
+    ExecYdb({"init"});
+    auto output = ExecYdb({"run", "full", "-s", "10"});
+    ExecYdb({"clean"});
 
     TVector<TString> lines, columns;
 
@@ -78,33 +64,33 @@ Y_UNIT_TEST(Init_Clean)
     //
     // default `init` + `clean`
     //
-    ExecYdbWorkloadTopic({"init"});
+    ExecYdb({"init"});
     ExpectTopic({.Topic="workload-topic", .Partitions=128, .Consumers=1});
 
-    ExecYdbWorkloadTopic({"clean"});
+    ExecYdb({"clean"});
     ExpectTopic({.Topic="workload-topic", .Partitions=0, .Consumers=0});
 
     //
     // specific `init` + `clean`
     //
-    ExecYdbWorkloadTopic({"init", "--topic", "qqqq", "-p", "3", "-c", "5"});
+    ExecYdb({"init", "--topic", "qqqq", "-p", "3", "-c", "5"});
     ExpectTopic({.Topic="qqqq", .Partitions=3, .Consumers=5});
 
-    UNIT_ASSERT_EXCEPTION(ExecYdbWorkloadTopic({"clean"}), yexception);
+    UNIT_ASSERT_EXCEPTION(ExecYdb({"clean"}), yexception);
 
-    ExecYdbWorkloadTopic({"clean", "--topic", "qqqq"});
+    ExecYdb({"clean", "--topic", "qqqq"});
     ExpectTopic({.Topic="qqqq", .Partitions=0, .Consumers=0});
 }
 
 Y_UNIT_TEST(Clean_Without_Init)
 {
-    UNIT_ASSERT_EXCEPTION(ExecYdbWorkloadTopic({"clean"}), yexception);
+    UNIT_ASSERT_EXCEPTION(ExecYdb({"clean"}), yexception);
 }
 
 Y_UNIT_TEST(Double_Init)
 {
-    ExecYdbWorkloadTopic({"init"});
-    UNIT_ASSERT_EXCEPTION(ExecYdbWorkloadTopic({"init"}), yexception);
+    ExecYdb({"init"});
+    UNIT_ASSERT_EXCEPTION(ExecYdb({"init"}), yexception);
 }
 
 }

@@ -30,6 +30,7 @@ target_link_options(ydb-apps-ydb-ut PRIVATE
 target_sources(ydb-apps-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/ut/workload-topic.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/ut/workload-transfer-topic-to-table.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/ut/run_ydb.cpp
 )
 set_property(
   TARGET

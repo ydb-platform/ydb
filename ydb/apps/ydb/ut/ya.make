@@ -4,9 +4,12 @@ DEPENDS(
     ydb/apps/ydb
 )
 
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+
 SRCS(
     workload-topic.cpp
     workload-transfer-topic-to-table.cpp
+    run_ydb.cpp
 )
 
 PEERDIR(

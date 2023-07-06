@@ -1,13 +1,10 @@
+#include "run_ydb.h"
+
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-
-#include <util/string/cast.h>
-#include <util/string/split.h>
-#include <util/system/env.h>
-#include <util/system/shellcommand.h>
 
 Y_UNIT_TEST_SUITE(YdbWorkloadTransferTopicToTable) {
 
@@ -21,16 +18,6 @@ struct TTableConfigMatcher {
     TString Name = "transfer-table";
     ui32 Partitions = 128;
 };
-
-TString GetYdbEndpoint()
-{
-    return GetEnv("YDB_ENDPOINT");
-}
-
-TString GetYdbDatabase()
-{
-    return GetEnv("YDB_DATABASE");
-}
 
 NYdb::NTable::TSession GetSession(NYdb::NTable::TTableClient& client)
 {
@@ -87,28 +74,12 @@ void ExpectTable(const TTableConfigMatcher& matcher)
     }
 }
 
-TString ExecYdb(TList<TString> args)
+TString ExecYdb(const TList<TString>& args)
 {
     //
-    // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload topic ${args}
+    // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload transfer topic-to-table ${args}
     //
-    TShellCommand command(BinaryPath("ydb/apps/ydb/ydb"));
-
-    command << "-e" << ("grpc://" + GetYdbEndpoint());
-    command << "-d" << ("/" + GetYdbDatabase());
-    command << "workload" << "transfer" << "topic-to-table";
-
-    for (auto& arg : args) {
-        command << arg;
-    }
-
-    command.Run().Wait();
-
-    if (command.GetExitCode() != 0) {
-        ythrow yexception() << "command `" << command.GetQuotedCommand() << "` exit with code " << command.GetExitCode();
-    }
-
-    return command.GetOutput();
+    return RunYdb({"workload", "transfer", "topic-to-table"}, args);
 }
 
 void RunYdb(const TList<TString>& args,

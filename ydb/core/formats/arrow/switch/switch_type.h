@@ -142,12 +142,12 @@ bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callba
         case NScheme::NTypeIds::Double:
             return callback(TTypeWrapper<arrow::DoubleType>());
         case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
             return callback(TTypeWrapper<arrow::StringType>());
         case NScheme::NTypeIds::String:
         case NScheme::NTypeIds::String4k:
         case NScheme::NTypeIds::String2m:
         case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Json:
         case NScheme::NTypeIds::DyNumber:
         case NScheme::NTypeIds::JsonDocument:
             return callback(TTypeWrapper<arrow::BinaryType>());

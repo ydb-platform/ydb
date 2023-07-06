@@ -4785,7 +4785,7 @@ namespace {
                 case NScheme::NTypeIds::Utf8:
                     return arrow::field(name, arrow::utf8());
                 case NScheme::NTypeIds::Json:
-                    return arrow::field(name, arrow::binary());
+                    return arrow::field(name, arrow::utf8());
                 case NScheme::NTypeIds::Yson:
                     return arrow::field(name, arrow::binary());
                 case NScheme::NTypeIds::Date:

@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         TString errors;
         UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Utf8) }}));
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Json) }}));
         NJson::TJsonValue testJson;
         testJson["key"] = "value";
         updates.AddRow().Add<std::string>(testJson.GetStringRobust());
@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         TString errors;
         UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Utf8) }}));
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Json) }}));
         {
             NJson::TJsonValue testJson;
             testJson["key"] = "value";

@@ -37,6 +37,7 @@ target_link_options(ydb-library-yql-minikql-ut PRIVATE
   -ldl
 )
 target_sources(ydb-library-yql-minikql-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/aligned_page_pool_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder_ut.cpp

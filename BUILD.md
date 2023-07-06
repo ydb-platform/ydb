@@ -108,7 +108,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
 
 2. Configure `Ccache` to use remote storage using environment variables
     ```bash
-    export CCACHE_REMOTE_STORAGE="http://158.160.20.102:8080|read-only|layout=bazel"
+    export CCACHE_REMOTE_STORAGE="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
     export CCACHE_SLOPPINESS=locale
     export CCACHE_BASEDIR=~/ydbwork/
    
@@ -117,7 +117,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     <summary>or using Ccache config file</summary>
 
     ```bash
-    ccache -o remote_storage="http://158.160.20.102:8080|read-only|layout=bazel"
+    ccache -o remote_storage="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
     ccache -o sloppiness=locale 
     ccache -o base_dir=~/ydbwork/
    

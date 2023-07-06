@@ -692,7 +692,8 @@ namespace NTable {
             size_t KeyCellDefaultsSize = KeyCellDefaults->Size();
             Key.resize(KeyCellDefaultsSize);
 
-            for (size_t pos = 0; pos < KeyCellDefaultsSize; ++pos) {
+            size_t infoSize = Part->Scheme->Groups[0].ColsKeyData.size();
+            for (size_t pos = infoSize; pos < KeyCellDefaultsSize; ++pos) {
                 Key[pos] = (*KeyCellDefaults)[pos];
             }
         }
@@ -1152,10 +1153,11 @@ namespace NTable {
 
             KeyInitialized = true;
 
-            auto& info = Part->Scheme->Groups[0].ColsKeyData;
-            size_t infoSize = info.size();
-            for (size_t pos = 0; pos < infoSize; ++pos) {
-                Key[pos] = Main.GetRecord()->Cell(info[pos]);
+            auto it = Key.begin();
+            auto* record = Main.GetRecord();
+            for (auto & info : Part->Scheme->Groups[0].ColsKeyData) {
+                *it = record->Cell(info);
+                ++it;
             }
         }
 
@@ -1251,7 +1253,7 @@ namespace NTable {
 
         // Key is lazily initialized so needs to be mutable
         mutable bool KeyInitialized = false;
-        mutable TVector<TCell> Key;
+        mutable TSmallVec<TCell> Key;
 
         // History state is used when we need to position into history data
         struct THistoryState {

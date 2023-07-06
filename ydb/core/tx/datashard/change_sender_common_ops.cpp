@@ -443,6 +443,15 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
     HTML(html) {
         Header(html, TStringBuilder() << type << " change sender", DataShard.TabletId);
 
+        SimplePanel(html, "Info", [this](IOutputStream& html) {
+            HTML(html) {
+                DL_CLASS("dl-horizontal") {
+                    TermDesc(html, "MemLimit", MemLimit);
+                    TermDesc(html, "MemUsage", MemUsage);
+                }
+            }
+        });
+
         SimplePanel(html, "Partition senders", [this](IOutputStream& html) {
             HTML(html) {
                 TABLE_CLASS("table table-hover") {
@@ -453,6 +462,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                             TABLEH() { html << "Ready"; }
                             TABLEH() { html << "Pending"; }
                             TABLEH() { html << "Prepared"; }
+                            TABLEH() { html << "Broadcasting"; }
                             TABLEH() { html << "Actor"; }
                         }
                     }
@@ -465,6 +475,7 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                                 TABLED() { html << sender.Ready; }
                                 TABLED() { html << sender.Pending.size(); }
                                 TABLED() { html << sender.Prepared.size(); }
+                                TABLED() { html << sender.Broadcasting.size(); }
                                 TABLED() { ActorLink(html, DataShard.TabletId, PathId, partitionId); }
                             }
                         }
@@ -554,6 +565,36 @@ void TBaseChangeSender::RenderHtmlPage(TEvChangeExchange::ESenderType type, NMon
                                 TABLED() { html << record.GetKind(); }
                                 TABLED() { PathLink(html, record.GetTableId()); }
                                 TABLED() { html << record.GetSchemaVersion(); }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        CollapsedPanel(html, "Broadcasting", "broadcasting", [this](IOutputStream& html) {
+            HTML(html) {
+                TABLE_CLASS("table table-hover") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { html << "#"; }
+                            TABLEH() { html << "Order"; }
+                            TABLEH() { html << "BodySize"; }
+                            TABLEH() { html << "Partitions"; }
+                            TABLEH() { html << "PendingPartitions"; }
+                            TABLEH() { html << "CompletedPartitions"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        ui32 i = 0;
+                        for (const auto& [order, broadcast] : Broadcasting) {
+                            TABLER() {
+                                TABLED() { html << ++i; }
+                                TABLED() { html << order; }
+                                TABLED() { html << broadcast.Record.BodySize; }
+                                TABLED() { html << broadcast.Partitions.size(); }
+                                TABLED() { html << broadcast.PendingPartitions.size(); }
+                                TABLED() { html << broadcast.CompletedPartitions.size(); }
                             }
                         }
                     }

@@ -148,9 +148,10 @@ Y_UNIT_TEST_SUITE(Scheme) {
         const int ITERATIONS = 1000;//10000000;
 
         {
+            TString res;
             TInstant start = TInstant::Now();
             for (int i = 0; i < ITERATIONS; ++i) {
-                TSerializedCellVec::Serialize(cells);
+                TSerializedCellVec::Serialize(res, cells);
             }
             TInstant finish = TInstant::Now();
             Cerr << "Serialize: " << finish - start << Endl;

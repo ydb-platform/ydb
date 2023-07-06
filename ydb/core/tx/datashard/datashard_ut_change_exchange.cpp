@@ -1,4 +1,5 @@
 #include "datashard_ut_common.h"
+#include "change_sender_common_ops.h"
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
@@ -2564,6 +2565,88 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         waitProgress(2);
+    }
+
+    Y_UNIT_TEST(EnqueueRequestProcessSend) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Utf8", false, false},
+            })
+        );
+
+        bool ready = false;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+                ready = true;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        if (!ready) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&ready](IEventHandle&) {
+                return ready;
+            });
+            server->GetRuntime()->DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(prevObserver);
+
+        THolder<IEventHandle> delayed;
+        prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvChangeExchangePrivate::EvReady) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto value = TString(200_KB, 'A');
+        // make sender busy
+        ExecSQL(server, edgeActor, Sprintf(R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, "%s");
+        )", value.c_str()));
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
+                return bool(delayed);
+            });
+            server->GetRuntime()->DispatchEvents(opts);
+        }
+
+        ExecSQL(server, edgeActor, Sprintf(R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (2, "%s"),
+            (3, "%s");
+        )", value.c_str(), value.c_str()));
+
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(delayed.Release(), 0, true);
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            Sprintf(R"({"update":{"value":"%s"},"key":[1]})", value.c_str()),
+            Sprintf(R"({"update":{"value":"%s"},"key":[2]})", value.c_str()),
+            Sprintf(R"({"update":{"value":"%s"},"key":[3]})", value.c_str()),
+        });
     }
 
     Y_UNIT_TEST(AwsRegion) {

@@ -227,6 +227,8 @@ void TBaseChangeSender::OnReady(ui64 partitionId) {
     if (sender.Prepared) {
         SendPreparedRecords(partitionId);
     }
+
+    RequestRecords();
 }
 
 void TBaseChangeSender::OnGone(ui64 partitionId) {

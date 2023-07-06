@@ -74,7 +74,8 @@ public:
 
 private:
     void FreePage(void* addr) {
-        Y_VERIFY_DEBUG(0 == T::Munmap(addr, PageSize), "Munmap failed: %s", LastSystemErrorText());
+        auto res = T::Munmap(addr, PageSize);
+        Y_VERIFY_DEBUG(0 == res, "Munmap failed: %s", LastSystemErrorText());
     }
 
 private:

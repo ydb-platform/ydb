@@ -25,6 +25,7 @@ struct TJoinLabel {
     TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType, const TUniqueConstraintNode* unique, const TDistinctConstraintNode* distinct);
     TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label);
     TString FullName(const TStringBuf& column) const;
+    TVector<TString> AllNames(const TStringBuf& column) const;
     TStringBuf ColumnName(const TStringBuf& column) const;
     TStringBuf TableName(const TStringBuf& column) const;
     bool HasTable(const TStringBuf& table) const;

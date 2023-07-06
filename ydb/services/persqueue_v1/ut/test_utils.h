@@ -15,28 +15,6 @@ static constexpr int DEBUG_LOG_LEVEL = 7;
 
 using namespace NKikimr::NPersQueueTests;
 
-// TODO: Remove and replace all usage with ApiTestSetup
-#define SETUP_API_TEST_PREREQUISITES()\
-    const TString topic = "topic1";\
-    const TString cluster = "dc1";\
-    const TString pqRoot = "/Root/PQ";\
-    const TString messageGroupId = "test-message-group-id";\
-    TPortManager pm;\
-    const ui16 port = pm.GetPort(2134);\
-    const ui16 grpc = pm.GetPort(2135);\
-    TServerSettings settings = PQSettings(port);\
-    TServer server = TServer(settings);\
-    server.EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpc));\
-    TFlatMsgBusPQClient client(settings, grpc);\
-    client.FullInit();\
-    client.CheckClustersList(server->GetRuntime());\
-    client.CreateTopic("rt3.dc1--" + TString(topic), 1);\
-    EnableLogs(server, { NKikimrServices::PQ_WRITE_PROXY });\
-    TPQDataWriter writer(messageGroupId, grpc, client, server.GetRuntime());\
-    writer.WaitWritePQServiceInitialization();\
-    auto channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());\
-    auto service = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);\
-
 template<typename TStream, typename TMessage = google::protobuf::Message>
 void AssertSuccessfullStreamingOperation(bool ok, std::unique_ptr<TStream>& stream, TMessage* message = nullptr) {
     if (!ok) {

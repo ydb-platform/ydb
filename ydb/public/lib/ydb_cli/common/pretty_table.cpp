@@ -31,9 +31,9 @@ bool TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& w
 
     for (size_t columnIndex : xrange(Columns.size())) {
         if (columnIndex == 0) {
-            o << "| ";
+            o << "│ ";
         } else {
-            o << " | ";
+            o << " │ ";
         }
 
         if (const size_t width = widths.at(columnIndex)) {
@@ -60,7 +60,7 @@ bool TPrettyTable::TRow::PrintColumns(IOutputStream& o, const TVector<size_t>& w
             }
         }
     }
-    o << " |" << Endl;
+    o << " │" << Endl;
 
     return next;
 }
@@ -76,7 +76,7 @@ void TPrettyTable::TRow::PrintFreeText(IOutputStream& o, size_t width) const {
         TStringBuf token = line.Token();
 
         while (token) {
-            o << "| " << RightPad(token.SubStr(0, width), width) << " |" << Endl;
+            o << "│ " << RightPad(token.SubStr(0, width), width) << " │" << Endl;
             token.Skip(width);
         }
     }

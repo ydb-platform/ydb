@@ -116,8 +116,9 @@ public:
         }
 
         StartTime = TInstant::Now();
+        FetchToken = response.NextFetchToken;
         const auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
-        if (response.ResultSet->RowsCount() == 0) {
+        if (response.ResultSet->RowsCount() == 0 || !FetchToken) {
             Fq::Private::PingTaskRequest pingTaskRequest;
             pingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
             pingTaskRequest.set_result_set_count(1);
@@ -160,7 +161,7 @@ public:
         auto fetchScriptResultCounters = Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT);
         fetchScriptResultCounters->InFly->Inc();
         StartTime = TInstant::Now();
-        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, TString, int64_t, int64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, ExecutionId, 0, Offset));
+        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, TString, int64_t, TString>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, ExecutionId, 0, FetchToken));
     }
 
     Fq::Private::WriteTaskResultRequest CreateProtoRequestWithoutResultSet(ui64 startRowIndex) {
@@ -183,6 +184,7 @@ private:
     TCounters Counters;
     TInstant StartTime;
     int64_t Offset = 0;
+    TString FetchToken;
 };
 
 std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& params,

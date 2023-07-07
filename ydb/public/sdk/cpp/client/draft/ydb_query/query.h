@@ -195,7 +195,6 @@ private:
 
 struct TFetchScriptResultsSettings : public TRequestSettings<TFetchScriptResultsSettings> {
     FLUENT_SETTING(TString, FetchToken);
-    FLUENT_SETTING_DEFAULT(ui64, RowsOffset, 0);
     FLUENT_SETTING_DEFAULT(ui64, RowsLimit, 1000);
 };
 
@@ -205,23 +204,23 @@ public:
     ui64 GetResultSetIndex() const { return ResultSetIndex_; }
     const TResultSet& GetResultSet() const { return *ResultSet_; }
     TResultSet ExtractResultSet() { return std::move(*ResultSet_); }
-    const TString& NextPageToken() const { return NextPageToken_; }
+    const TString& GetNextFetchToken() const { return NextFetchToken_; }
 
     explicit TFetchScriptResultsResult(TStatus&& status)
         : TStatus(std::move(status))
     {}
 
-    TFetchScriptResultsResult(TStatus&& status, TResultSet&& resultSet, i64 resultSetIndex, const TString& nextPageToken)
+    TFetchScriptResultsResult(TStatus&& status, TResultSet&& resultSet, i64 resultSetIndex, const TString& nextFetchToken)
         : TStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , ResultSetIndex_(resultSetIndex)
-        , NextPageToken_(nextPageToken)
+        , NextFetchToken_(nextFetchToken)
     {}
 
 private:
     TMaybe<TResultSet> ResultSet_;
     i64 ResultSetIndex_ = 0;
-    TString NextPageToken_;
+    TString NextFetchToken_;
 };
 
 using TAsyncFetchScriptResultsResult = NThreading::TFuture<TFetchScriptResultsResult>;

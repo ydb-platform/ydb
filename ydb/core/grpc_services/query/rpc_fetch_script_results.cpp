@@ -50,17 +50,12 @@ public:
             return;
         }
 
-        if (req->rows_offset() < 0) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid rows offset");
-            return;
-        }
-
         if (req->rows_limit() > MAX_ROWS_LIMIT) {
             Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Rows limit is too large. Values <= " << MAX_ROWS_LIMIT << " are allowed");
             return;
         }
 
-        RowsOffset = req->rows_offset();
+        RowsOffset = 0;
         if (!req->fetch_token().Empty()) {
             auto fetch_token = TryFromString<ui64>(req->fetch_token());
             if (fetch_token) {

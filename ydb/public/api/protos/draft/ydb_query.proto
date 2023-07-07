@@ -261,11 +261,7 @@ message FetchScriptResultsRequest {
 
     int64 result_set_id = 6;
 
-    oneof fetch {
-        string fetch_token = 2 [(Ydb.length).le = 1024];
-    }
-
-    int64 rows_offset = 3 [(Ydb.value) = ">= 0"];
+    string fetch_token = 2 [(Ydb.length).le = 1024];
     int64 rows_limit = 4 [(Ydb.value) = ">= 0"];
 }
 

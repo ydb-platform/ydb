@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-        
+
         CompareYson(R"([
             ["1";"one"];
             ["2";"two"];
@@ -550,10 +550,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             return;
         }
 
-        ValidatePlan(readyOp.Metadata().ExecStats.query_plan());    
+        ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
     }
-    
-
     Y_UNIT_TEST(ExecuteScriptStatsBasic) {
         ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_BASIC);
     }
@@ -818,7 +816,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 sql.append("]);");
             }
         }
-        
+
         auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
 
@@ -840,7 +838,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(results.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(EmptyNextPageToken) {
+    Y_UNIT_TEST(EmptyNextFetchToken) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
@@ -852,7 +850,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-        UNIT_ASSERT(results.NextPageToken().Empty());
+        UNIT_ASSERT(results.GetNextFetchToken().Empty());
 
         TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), NUMBER_OF_ROWS);
@@ -881,7 +879,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), i * ROWS_LIMIT + j);
             }
 
-            settings.FetchToken(results.NextPageToken());
+            settings.FetchToken(results.GetNextFetchToken());
         }
     }
 }

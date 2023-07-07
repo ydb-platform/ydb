@@ -100,15 +100,15 @@ struct TEvYdbCompute {
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {
-        TEvFetchScriptResultRequest(TString executionId, int64_t resultSetId, int64_t rowOffset)
+        TEvFetchScriptResultRequest(TString executionId, int64_t resultSetId, const TString& fetchToken)
             : ExecutionId(std::move(executionId))
             , ResultSetId(resultSetId)
-            , RowOffset(rowOffset)
+            , FetchToken(fetchToken)
         {}
 
         TString ExecutionId;
         int64_t ResultSetId = 0;
-        int64_t RowOffset = 0;
+        TString FetchToken;
     };
 
     struct TEvFetchScriptResultResponse : public NActors::TEventLocal<TEvFetchScriptResultResponse, EvFetchScriptResultResponse> {
@@ -117,12 +117,14 @@ struct TEvYdbCompute {
             , Status(status)
         {}
 
-        explicit TEvFetchScriptResultResponse(NYdb::TResultSet resultSet)
+        explicit TEvFetchScriptResultResponse(NYdb::TResultSet resultSet, const TString& nextFetchToken)
             : ResultSet(std::move(resultSet))
+            , NextFetchToken(nextFetchToken)
             , Status(NYdb::EStatus::SUCCESS)
         {}
 
         TMaybe<NYdb::TResultSet> ResultSet;
+        TString NextFetchToken;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
     };

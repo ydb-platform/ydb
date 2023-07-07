@@ -91,7 +91,6 @@ public:
         if (settings.FetchToken_) {
             request.set_fetch_token(settings.FetchToken_);
         }
-        request.set_rows_offset(settings.RowsOffset_);
         request.set_rows_limit(settings.RowsLimit_);
 
         auto promise = NThreading::NewPromise<TFetchScriptResultsResult>();

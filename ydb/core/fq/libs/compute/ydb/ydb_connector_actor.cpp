@@ -78,14 +78,14 @@ public:
 
     void Handle(const TEvYdbCompute::TEvFetchScriptResultRequest::TPtr& ev) {
         NYdb::NQuery::TFetchScriptResultsSettings settings;
-        settings.RowsOffset(ev->Get()->RowOffset);
+        settings.FetchToken(ev->Get()->FetchToken);
         QueryClient
             ->FetchScriptResults(ev->Get()->ExecutionId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), response.GetNextFetchToken()), 0, cookie);
                     } else {
                         actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.GetIssues(), response.GetStatus()), 0, cookie);
                     }

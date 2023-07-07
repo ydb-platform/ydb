@@ -175,6 +175,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString &script) {
 
 bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
     TStringStream statsStr;
+    TMaybe<TString> fullStats;
     {
         ui32 currentIndex = 0;
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
@@ -203,12 +204,23 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
             if (streamPart.HasQueryStats()) {
                 const auto& queryStats = streamPart.GetQueryStats();
                 statsStr << Endl << queryStats.ToString() << Endl;
+
+                if (queryStats.GetPlan()) {
+                    fullStats = queryStats.GetPlan();
+                }
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
     if (statsStr.Size()) {
         Cout << Endl << "Statistics:" << statsStr.Str();
+    }
+
+    if (fullStats) {
+        Cout << Endl << "Full statistics:" << Endl;
+
+        TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
+        queryPlanPrinter.Print(*fullStats);
     }
 
     if (IsInterrupted()) {

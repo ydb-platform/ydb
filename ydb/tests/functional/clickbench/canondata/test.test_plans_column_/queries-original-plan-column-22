@@ -96,7 +96,7 @@
                                                                                                             "Id": 106
                                                                                                         },
                                                                                                         "Constant": {
-                                                                                                            "Text": ""
+                                                                                                            "Bytes": ""
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -134,7 +134,7 @@
                                                                                                             "Id": 108
                                                                                                         },
                                                                                                         "Constant": {
-                                                                                                            "Text": "Google"
+                                                                                                            "Bytes": "Google"
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -152,7 +152,9 @@
                                                                                                                     "Id": 108
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 9
+                                                                                                            "FunctionType": 2,
+                                                                                                            "Id": 9,
+                                                                                                            "KernelIdx": 0
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -161,8 +163,13 @@
                                                                                                         "Column": {
                                                                                                             "Id": 110
                                                                                                         },
-                                                                                                        "Constant": {
-                                                                                                            "Text": ".google."
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 109
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 18
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -171,16 +178,8 @@
                                                                                                         "Column": {
                                                                                                             "Id": 111
                                                                                                         },
-                                                                                                        "Function": {
-                                                                                                            "Arguments": [
-                                                                                                                {
-                                                                                                                    "Id": 14
-                                                                                                                },
-                                                                                                                {
-                                                                                                                    "Id": 110
-                                                                                                                }
-                                                                                                            ],
-                                                                                                            "Id": 9
+                                                                                                        "Constant": {
+                                                                                                            "Bytes": ".google."
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -192,10 +191,15 @@
                                                                                                         "Function": {
                                                                                                             "Arguments": [
                                                                                                                 {
+                                                                                                                    "Id": 14
+                                                                                                                },
+                                                                                                                {
                                                                                                                     "Id": 111
                                                                                                                 }
                                                                                                             ],
-                                                                                                            "Id": 10
+                                                                                                            "FunctionType": 2,
+                                                                                                            "Id": 9,
+                                                                                                            "KernelIdx": 1
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -207,10 +211,40 @@
                                                                                                         "Function": {
                                                                                                             "Arguments": [
                                                                                                                 {
-                                                                                                                    "Id": 109
+                                                                                                                    "Id": 112
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 18
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 114
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 113
+                                                                                                                }
+                                                                                                            ],
+                                                                                                            "Id": 10
+                                                                                                        }
+                                                                                                    }
+                                                                                                },
+                                                                                                {
+                                                                                                    "Assign": {
+                                                                                                        "Column": {
+                                                                                                            "Id": 115
+                                                                                                        },
+                                                                                                        "Function": {
+                                                                                                            "Arguments": [
+                                                                                                                {
+                                                                                                                    "Id": 110
                                                                                                                 },
                                                                                                                 {
-                                                                                                                    "Id": 112
+                                                                                                                    "Id": 114
                                                                                                                 }
                                                                                                             ],
                                                                                                             "Id": 11
@@ -220,7 +254,7 @@
                                                                                                 {
                                                                                                     "Filter": {
                                                                                                         "Predicate": {
-                                                                                                            "Id": 113
+                                                                                                            "Id": 115
                                                                                                         }
                                                                                                     }
                                                                                                 },
@@ -317,7 +351,7 @@
                                                                                                                             "Id": 106
                                                                                                                         },
                                                                                                                         "Constant": {
-                                                                                                                            "Text": ""
+                                                                                                                            "Bytes": ""
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -355,7 +389,7 @@
                                                                                                                             "Id": 108
                                                                                                                         },
                                                                                                                         "Constant": {
-                                                                                                                            "Text": "Google"
+                                                                                                                            "Bytes": "Google"
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -373,7 +407,9 @@
                                                                                                                                     "Id": 108
                                                                                                                                 }
                                                                                                                             ],
-                                                                                                                            "Id": 9
+                                                                                                                            "FunctionType": 2,
+                                                                                                                            "Id": 9,
+                                                                                                                            "KernelIdx": 0
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -382,8 +418,13 @@
                                                                                                                         "Column": {
                                                                                                                             "Id": 110
                                                                                                                         },
-                                                                                                                        "Constant": {
-                                                                                                                            "Text": ".google."
+                                                                                                                        "Function": {
+                                                                                                                            "Arguments": [
+                                                                                                                                {
+                                                                                                                                    "Id": 109
+                                                                                                                                }
+                                                                                                                            ],
+                                                                                                                            "Id": 18
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -392,16 +433,8 @@
                                                                                                                         "Column": {
                                                                                                                             "Id": 111
                                                                                                                         },
-                                                                                                                        "Function": {
-                                                                                                                            "Arguments": [
-                                                                                                                                {
-                                                                                                                                    "Id": 14
-                                                                                                                                },
-                                                                                                                                {
-                                                                                                                                    "Id": 110
-                                                                                                                                }
-                                                                                                                            ],
-                                                                                                                            "Id": 9
+                                                                                                                        "Constant": {
+                                                                                                                            "Bytes": ".google."
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -413,10 +446,15 @@
                                                                                                                         "Function": {
                                                                                                                             "Arguments": [
                                                                                                                                 {
+                                                                                                                                    "Id": 14
+                                                                                                                                },
+                                                                                                                                {
                                                                                                                                     "Id": 111
                                                                                                                                 }
                                                                                                                             ],
-                                                                                                                            "Id": 10
+                                                                                                                            "FunctionType": 2,
+                                                                                                                            "Id": 9,
+                                                                                                                            "KernelIdx": 1
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },
@@ -428,10 +466,40 @@
                                                                                                                         "Function": {
                                                                                                                             "Arguments": [
                                                                                                                                 {
-                                                                                                                                    "Id": 109
+                                                                                                                                    "Id": 112
+                                                                                                                                }
+                                                                                                                            ],
+                                                                                                                            "Id": 18
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Assign": {
+                                                                                                                        "Column": {
+                                                                                                                            "Id": 114
+                                                                                                                        },
+                                                                                                                        "Function": {
+                                                                                                                            "Arguments": [
+                                                                                                                                {
+                                                                                                                                    "Id": 113
+                                                                                                                                }
+                                                                                                                            ],
+                                                                                                                            "Id": 10
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "Assign": {
+                                                                                                                        "Column": {
+                                                                                                                            "Id": 115
+                                                                                                                        },
+                                                                                                                        "Function": {
+                                                                                                                            "Arguments": [
+                                                                                                                                {
+                                                                                                                                    "Id": 110
                                                                                                                                 },
                                                                                                                                 {
-                                                                                                                                    "Id": 112
+                                                                                                                                    "Id": 114
                                                                                                                                 }
                                                                                                                             ],
                                                                                                                             "Id": 11
@@ -441,7 +509,7 @@
                                                                                                                 {
                                                                                                                     "Filter": {
                                                                                                                         "Predicate": {
-                                                                                                                            "Id": 113
+                                                                                                                            "Id": 115
                                                                                                                         }
                                                                                                                     }
                                                                                                                 },

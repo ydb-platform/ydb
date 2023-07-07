@@ -19,6 +19,7 @@ target_link_libraries(core-kqp-query_compiler PUBLIC
   core-kqp-common
   ydb-core-protos
   ydb-library-mkql_proto
+  core-arrow_kernels-request
   yql-dq-integration
   yql-dq-opt
   yql-dq-tasks

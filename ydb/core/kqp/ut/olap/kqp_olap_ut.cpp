@@ -1723,7 +1723,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 #endif
 
+#if SSA_RUNTIME_VERSION >= 3U
+    Y_UNIT_TEST(PredicatePushdown_LikePushedDownForStringType) {
+#else
     Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownForStringType) {
+#endif
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1742,8 +1746,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto result = CollectStreamResult(it);
         auto ast = result.QueryStats->Getquery_ast();
+#if SSA_RUNTIME_VERSION >= 3U
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                        TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
+#else
         UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
-                        TStringBuilder() << "Predicate pushed down. Query: " << query);
+                        TStringBuilder() << "Predicate was pushed down. Query: " << query);
+#endif
     }
 
     Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {

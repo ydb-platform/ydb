@@ -244,6 +244,10 @@ public:
         return kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::Scalar;
     }
 
+    bool IsBlock() const {
+        return GetKind() == ETypeAnnotationKind::Block;
+    }
+
     bool HasFixedSizeRepr() const {
         return (GetFlags() & (TypeHasDynamicSize | TypeNonPersistable | TypeNonComputable)) == 0;
     }

@@ -81,7 +81,7 @@ std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> LoadKernels(con
     std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> ret(loader->GetKernelsCount());
     auto deleter = [loader](const arrow::compute::ScalarKernel*) {};
     for (ui32 i = 0; i < ret.size(); ++i) {
-        ret[i] = std::shared_ptr<const arrow::compute::ScalarKernel>(loader->GetKernel(i), deleter);
+        ret[i] = std::shared_ptr<const arrow::compute::ScalarKernel>(loader->GetKernel(ret.size() - 1 - i), deleter);
     }
 
     return ret;

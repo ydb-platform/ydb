@@ -22,7 +22,7 @@ class TProgramBuilder {
     TString Error;
 public:
     mutable THashMap<ui32, TString> Sources;
-    
+
     explicit TProgramBuilder(const IColumnResolver& columnResolver, const TKernelsRegistry& kernelsRegistry)
         : ColumnResolver(columnResolver)
         , KernelsRegistry(kernelsRegistry)
@@ -54,7 +54,7 @@ private:
     }
     TAssign MakeFunction(const std::string& name,
                                 const NKikimrSSA::TProgram::TAssignment::TFunction& func);
-    NSsa::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant); 
+    NSsa::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant);
     NSsa::TAggregateAssign MakeAggregate(const std::string& name, const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func);
     NSsa::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues);
 

@@ -264,6 +264,7 @@ public:
 
             auto issue = YqlIssue({}, TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, message);
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
+            Counters->Counters->TxReplySizeExceededError->Inc();
             return;
         }
 
@@ -634,6 +635,9 @@ private:
             TStringBuilder message;
             message << NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(result.GetStatus()) << ": ";
             for (const auto &err : result.GetError()) {
+                if (err.GetKind() == NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED) {
+                    Counters->Counters->DataShardTxReplySizeExceededError->Inc();
+                }
                 message << "[" << NKikimrTxDataShard::TError_EKind_Name(err.GetKind()) << "] " << err.GetReason() << "; ";
             }
             LOG_E(message);

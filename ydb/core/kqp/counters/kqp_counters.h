@@ -332,6 +332,8 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
 
@@ -341,6 +343,8 @@ public:
 public:
     // Transactions
     THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters> TxByKind;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TxReplySizeExceededError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataShardTxReplySizeExceededError;
 
     // Compile service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheSize;

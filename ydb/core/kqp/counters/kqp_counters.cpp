@@ -743,6 +743,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     CreateTxKindCounters(TKqpTransactionInfo::EKind::ReadOnly, "ReadOnly");
     CreateTxKindCounters(TKqpTransactionInfo::EKind::WriteOnly, "WriteOnly");
     CreateTxKindCounters(TKqpTransactionInfo::EKind::ReadWrite, "ReadWrite");
+    TxReplySizeExceededError = KqpGroup->GetCounter("Tx/TxReplySizeExceededErrorCount", true);
+    DataShardTxReplySizeExceededError = KqpGroup->GetCounter("Tx/DataShardTxReplySizeExceededErrorCount", true);
 
     /* Compile service */
     CompileQueryCacheSize = YdbGroup->GetNamedCounter("name", "table.query.compilation.cached_query_count", false);
@@ -1188,6 +1190,14 @@ const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::RecompileReques
 
 const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetActiveSessionActors() const {
     return TKqpCountersBase::ActiveSessionActors;
+}
+
+const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetTxReplySizeExceededError() const {
+    return TxReplySizeExceededError;
+}
+
+const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetDataShardTxReplySizeExceededError() const {
+    return DataShardTxReplySizeExceededError;
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetQueryTypeCounter(

@@ -1,6 +1,7 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/config.proto";
 
 package NKikimrVDiskData;
 
@@ -121,6 +122,8 @@ message TSyncerVDiskEntry {
 message TSyncerEntryPoint {
     optional NKikimrBlobStorage.TLocalGuidInfo LocalGuidInfo = 5;
     repeated TSyncerVDiskEntry Entries = 10;
+    // Info about YDB version of VDisk which made this record
+    optional NKikimrConfig.TStoredCompatibilityInfo CompatibilityInfo = 15;
 };
 
 message TIncrHugeChunks {

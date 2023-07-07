@@ -1935,6 +1935,9 @@ message TCompatibilityRule {
         Test1 = 1;
         Test2 = 2;
         Interconnect = 3;
+        PDisk = 4;
+        VDisk = 5;
+        BlobStorageController = 6;
     }
 
     optional string Build = 1;

@@ -910,6 +910,14 @@ namespace NKikimr {
                                                 << TPDiskErrorState::StateToString(VCtx->GetPDiskErrorState());
                                         }
                                     }
+                                } else if (VCtx->LocalRecoveryErrorStr) {
+                                    TABLER() {
+                                        TABLED() {str << "Error Details";}
+                                        TABLED() {
+                                            str << "LocalRecovery reported error: "
+                                                << VCtx->LocalRecoveryErrorStr;
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -36,6 +36,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
+    library/cpp/threading/hot_swap
 )
 
 YQL_LAST_ABI_VERSION()

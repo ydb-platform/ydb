@@ -1256,6 +1256,18 @@ message TTableServiceConfig {
         optional uint32 MaxRetryNumber = 3 [default = 10];
     }
 
+    message TIteratorReadsRetrySettings {
+        optional uint32 StartDelayMs = 1;
+        optional uint32 MaxDelayMs = 8;
+
+        optional uint32 MaxShardRetries = 2;
+        optional uint32 MaxShardResolves = 3;
+        optional double UnsertaintyRatio = 4;
+        optional double Multiplier = 5;
+        optional uint32 IteratorResponseTimeoutMs = 6;
+        optional uint32 MaxTotalRetries = 7;
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1305,6 +1317,7 @@ message TTableServiceConfig {
     }
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
+    optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
 };
 
 // Config describes immediate controls and allows

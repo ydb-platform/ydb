@@ -6,14 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(atomic)
-add_subdirectory(chunk_queue)
-add_subdirectory(equeue)
-add_subdirectory(future)
-add_subdirectory(hot_swap)
-add_subdirectory(light_rw_lock)
-add_subdirectory(local_executor)
-add_subdirectory(poor_man_openmp)
-add_subdirectory(queue)
-add_subdirectory(skip_list)
-add_subdirectory(task_scheduler)
+
+add_library(cpp-threading-hot_swap)
+target_link_libraries(cpp-threading-hot_swap PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-deprecated-atomic
+)
+target_sources(cpp-threading-hot_swap PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/threading/hot_swap/hot_swap.cpp
+)

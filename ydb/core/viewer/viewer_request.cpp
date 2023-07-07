@@ -1,3 +1,5 @@
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
 #include "viewer_request.h"
 #include "wb_req.h"
 

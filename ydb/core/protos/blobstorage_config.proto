@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
@@ -8,31 +9,6 @@ import "library/cpp/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
 
-// Enum defining PDisk underlying drive type (rotational or solid state)
-enum EPDiskType {
-    ROT = 0; // rotational drives (HDD)
-    SSD = 1; // solid state drives (SSD)
-    NVME = 2; // PCIe-connected solid state drives (NVMe SSD)
-    UNKNOWN_TYPE = 3; // used if device type is unknown or if group consists of different PDisk device types
-}
-
-// Virtual group life cycle state
-enum EVirtualGroupState {
-    NEW = 0; // just created
-    CREATE_FAILED = 1; // error while creating VirtualGroup
-    WORKING = 2; // operational
-    DELETING = 3; // going to delete from Hive
-}
-
-message TGroupDecommitStatus {
-    enum E {
-        NONE = 0; // no decomission
-        PENDING = 1; // decommission machinery is starting
-        IN_PROGRESS = 2; // decomission underway
-        DONE = 3; // group decomission complete
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TYPICAL HOST CONFIGURATIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -40,7 +16,7 @@ message TGroupDecommitStatus {
 // Single drive descriptor of typical host configuration structure
 message THostConfigDrive {
     string Path = 1; // path to the device on the host node
-    EPDiskType Type = 2; // drive type (rotational or solid state)
+    NKikimrBlobStorage.EPDiskType Type = 2; // drive type (rotational or solid state)
     bool SharedWithOs = 3; // is this drive shared with OS in any way? (i.e. has OS partitions)
     bool ReadCentric = 4; // is this drive read-centric?
     uint64 Kind = 5; // nontransparent user-defined kind used for filtering when picking up groups
@@ -147,7 +123,7 @@ message TGroupUsagePattern {
 message TPDiskFilter {
     message TRequiredProperty {
         oneof Property {
-            EPDiskType Type = 1; // require certain drive type
+            NKikimrBlobStorage.EPDiskType Type = 1; // require certain drive type
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
@@ -430,7 +406,7 @@ message TAddDriveSerial {
     string Serial = 1;
     uint64 BoxId = 2;
     uint64 Kind = 3;
-    EPDiskType PDiskType = 4; // default UNKNOWN type implies auto-detection of drive type
+    NKikimrBlobStorage.EPDiskType PDiskType = 4; // default UNKNOWN type implies auto-detection of drive type
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 5;
 }
 
@@ -603,7 +579,7 @@ message TBaseConfig {
         uint32 NodeId = 1;
         uint32 PDiskId = 2;
         string Path = 3;
-        EPDiskType Type = 4;
+        NKikimrBlobStorage.EPDiskType Type = 4;
         ETriStateBool SharedWithOs = 5;
         ETriStateBool ReadCentric = 6;
         uint64 Kind = 7;
@@ -640,11 +616,11 @@ message TBaseConfig {
         bool Ready = 12; // is disk READY in terms of BSC (stable READY status for some period of time)
     }
     message TVirtualGroupInfo {
-        EVirtualGroupState State = 1;
+        NKikimrBlobStorage.EVirtualGroupState State = 1;
         string Name = 2;
         uint64 BlobDepotId = 3;
         string ErrorReason = 4;
-        TGroupDecommitStatus.E DecommitStatus = 5;
+        NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 5;
     }
     message TGroup {
         uint32 GroupId = 1;
@@ -674,7 +650,7 @@ message TBaseConfig {
         uint32 NodeId = 3;
         uint32 PDiskId = 4;
         string Path = 5;
-        EPDiskType Type = 6;
+        NKikimrBlobStorage.EPDiskType Type = 6;
         uint64 Guid = 7;
         TDriveLifeStage.E LifeStage = 8;
     }

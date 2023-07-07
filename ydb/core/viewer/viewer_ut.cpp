@@ -5,6 +5,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include "json_handlers.h"
 #include "json_tabletinfo.h"
 #include "json_vdiskinfo.h"

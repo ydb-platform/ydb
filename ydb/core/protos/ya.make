@@ -13,7 +13,8 @@ SRCS(
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto
-    blobstorage_controller.proto
+    blobstorage_base.proto
+    blobstorage_base3.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
     blobstorage_pdisk_config.proto

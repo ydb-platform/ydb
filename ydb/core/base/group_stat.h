@@ -2,8 +2,6 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/blobstorage.pb.h>
-
 #include <util/datetime/base.h>
 
 #include <array>
@@ -160,14 +158,16 @@ namespace NKikimr {
             }
         }
 
-        void Serialize(NKikimrBlobStorage::TEvGroupStatReport::TLatencyHistogram *pb) const {
+        template<typename TProto>
+        void Serialize(TProto *pb) const {
             pb->ClearBuckets();
             for (ui32 value : Buckets) {
                 pb->AddBuckets(value);
             }
         }
 
-        bool Deserialize(const NKikimrBlobStorage::TEvGroupStatReport::TLatencyHistogram& pb) {
+        template<typename TProto>
+        bool Deserialize(const TProto& pb) {
             if (pb.BucketsSize() != NumGroupStatBuckets) {
                 return false;
             }
@@ -222,13 +222,15 @@ namespace NKikimr {
             histogram.Update(sample, now);
         }
 
-        void Serialize(NKikimrBlobStorage::TEvGroupStatReport *pb) const {
+        template<typename TProto>
+        void Serialize(TProto *pb) const {
             PutTabletLog.Serialize(pb->MutablePutTabletLog());
             PutUserData.Serialize(pb->MutablePutUserData());
             GetFast.Serialize(pb->MutableGetFast());
         }
 
-        bool Deserialize(const NKikimrBlobStorage::TEvGroupStatReport& pb) {
+        template<typename TProto>
+        bool Deserialize(const TProto& pb) {
             return PutTabletLog.Deserialize(pb.GetPutTabletLog()) &&
                 PutUserData.Deserialize(pb.GetPutUserData()) &&
                 GetFast.Deserialize(pb.GetGetFast());

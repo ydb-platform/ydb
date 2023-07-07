@@ -19,7 +19,6 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/table_adapter.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/blobstorage_controller.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/counters_bs_controller.pb.h>
 #include <ydb/core/protos/services.pb.h>

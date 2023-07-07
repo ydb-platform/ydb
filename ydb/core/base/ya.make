@@ -20,6 +20,7 @@ SRCS(
     counters.cpp
     counters.h
     defs.h
+    domain.cpp
     domain.h
     event_filter.cpp
     event_filter.h

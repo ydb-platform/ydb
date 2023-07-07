@@ -34,6 +34,7 @@
 #include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/client/metadata/types_metadata.h>
 #include <ydb/core/client/metadata/functions_metadata.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>

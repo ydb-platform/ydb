@@ -1,4 +1,5 @@
 #include "blobstorage_vdiskid.h"
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 
@@ -19,6 +20,10 @@ namespace NKikimr {
     TVDiskID::TVDiskID(IInputStream &str) {
         if (!Deserialize(str))
             ythrow yexception() << "incorrect format";
+    }
+
+    bool TVDiskID::SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const {
+        return x.GetGroupID() == GroupID && x.GetGroupGeneration() == GroupGeneration;
     }
 
     bool TVDiskID::SameDisk(const NKikimrBlobStorage::TVDiskID &x) const {

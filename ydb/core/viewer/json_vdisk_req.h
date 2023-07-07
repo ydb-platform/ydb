@@ -4,7 +4,6 @@
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/viewer/json/json.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include "viewer.h"
 #include "json_pipe_req.h"
 

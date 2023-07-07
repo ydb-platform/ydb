@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "gen.h"
-#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
     namespace NSizeGenerator {

@@ -60,6 +60,7 @@ target_sources(ydb-core-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/board_replica.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/counters.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/base/domain.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/event_filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/group_stat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/kikimr_issue.cpp

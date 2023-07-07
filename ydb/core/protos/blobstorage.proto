@@ -1,6 +1,8 @@
 import "library/cpp/actors/protos/actors.proto";
 import "library/cpp/actors/protos/interconnect.proto";
 import "ydb/core/protos/base.proto";
+import "ydb/core/protos/blobstorage_base.proto";
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_config.proto";
@@ -10,62 +12,11 @@ import "ydb/core/protos/blobstorage_disk_color.proto";
 package NKikimrBlobStorage;
 option java_package = "ru.yandex.kikimr.proto";
 
-// VDisk handle and store LogoBlobs in different ways, below we define several classes of these blobs
-enum EPutHandleClass {
-    TabletLog = 1;      // usually small size, requires low latency, rarely read sequentially (RT/TMP)
-    AsyncBlob = 2;      // async blobs, usually sstables and their parts (NoneRT/NoneTMP)
-    UserData = 3;       // user data that we write as separate blobs (RT/NoneTMP)
-
-    // NOTE: currently NoneRT/TMP blobs must be treated as AsyncBlob
-}
-
-// VDisk handle read of LogoBlobs in different ways, below we define several classes of these requests
-enum EGetHandleClass {
-    AsyncRead = 1;      // read of tablet's compacted data
-    FastRead = 2;       // reads initiated by the user (fast)
-    Discover = 3;       // reads from Discover query (OOB)
-    LowRead = 4;        // background reads initiabed by the user (should not affect TabletLog and FastRead)
-}
-
 message TMessageId {
     // (SequenceId, MsgId) pair identifies message order, used to implement flow control (i.e. windows)
     optional uint64 SequenceId = 1;
     optional uint64 MsgId = 2;
 }
-
-enum EVDiskQueueId {
-    option allow_alias = true;
-
-    Unknown = 0;
-    // EPutHandleClass
-    PutTabletLog = 1;
-    PutAsyncBlob = 2;
-    PutUserData = 3;
-    // EGetHandleClass
-    GetAsyncRead = 4;
-    GetFastRead = 5;
-    GetDiscover = 6;
-    GetLowRead = 7;
-
-    // Declare Begin and End last in order to get real names from EVDiskQueueId_Name()
-    Begin = 1;
-    End = 8;
-};
-
-enum EVDiskInternalQueueId {
-    option allow_alias = true;
-
-    IntUnknown = 0;
-    IntBegin = 1;
-    IntGetAsync = 1;
-    IntGetFast = 2;
-    IntPutLog = 3;
-    IntPutHugeForeground = 4;
-    IntPutHugeBackground = 5;
-    IntGetDiscover = 6;
-    IntLowRead = 7;
-    IntEnd = 8;
-};
 
 message TVDiskCostSettings {
     optional uint64 SeekTimeUs = 1;
@@ -113,8 +64,8 @@ message TMsgQoS {
     optional uint32 DeadlineSeconds = 1;
     optional TMessageId MsgId = 2;
     optional uint64 Cost = 3;
-    optional EVDiskQueueId ExtQueueId = 5;
-    optional EVDiskInternalQueueId IntQueueId = 6;
+    optional NKikimrBlobStorage.EVDiskQueueId ExtQueueId = 5;
+    optional NKikimrBlobStorage.EVDiskInternalQueueId IntQueueId = 6;
     optional TVDiskCostSettings CostSettings = 7;
     optional bool SendMeCostSettings = 8;
     optional TWindowFeedback Window = 9;
@@ -130,25 +81,9 @@ message TMsgQoS {
 
 // message VDisk sends to the client, when backpressure window changes
 message TEvVWindowChange {
-    optional EVDiskQueueId FrontQueueId = 1;
+    optional NKikimrBlobStorage.EVDiskQueueId FrontQueueId = 1;
     optional TWindowFeedback Window = 2;
     optional bool DropConnection = 3; // emergency connection drop
-}
-
-// status flags we provide in responses
-enum EStatusFlags {  // Never use this type for storage, use ui32 bitset
-    StatusIsValid = 1;                          // 0000 0000 0001, if not set, status flags could not be obtained
-    StatusDiskSpaceCyan = 128;                  // 0000 1000 0000
-    StatusDiskSpaceLightYellowMove = 2;         // 0000 0000 0010
-    StatusDiskSpaceYellowStop = 512;            // 0010 0000 0000
-    StatusDiskSpaceLightOrange = 256;           // 0001 0000 0000
-    StatusDiskSpacePreOrange = 1024;            // 0100 0000 0000
-    StatusDiskSpaceOrange = 4;                  // 0000 0000 0100
-    StatusDiskSpaceRed = 8;                     // 0000 0000 1000
-    StatusDiskSpaceBlack = 64;                  // 0000 0100 0000
-    StatusMaskDiskSpace = 1998;                 // 0111 1100 1110
-    StatusNewOwner = 16;                        // 0000 0001 0000
-    StatusNotEnoughDiskSpaceForOperation = 32;  // 0000 0010 0000
 }
 
 message TTimestamps {
@@ -199,7 +134,7 @@ message TEvVPatchStart {
     optional bool NotifyIfNotReady = 4;
     optional uint64 Cookie = 5;
 
-    optional EGetHandleClass HandleClass = 6;
+    optional NKikimrBlobStorage.EGetHandleClass HandleClass = 6;
 
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
@@ -245,7 +180,7 @@ message TEvVPatchDiff {
     optional bool ForceEnd = 8;
     optional bool NotifyIfNotReady = 9;
     
-    optional EPutHandleClass HandleClass = 11;
+    optional NKikimrBlobStorage.EPutHandleClass HandleClass = 11;
 
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
@@ -260,7 +195,7 @@ message TEvVPatchXorDiff {
     optional uint32 FromPartId = 6;
     optional bool NotifyIfNotReady = 7;
 
-    optional EPutHandleClass HandleClass = 8;
+    optional NKikimrBlobStorage.EPutHandleClass HandleClass = 8;
 
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
@@ -378,7 +313,7 @@ message TEvVPut {
     optional bool IgnoreBlock = 5;
     optional bool NotifyIfNotReady = 6;
     optional uint64 Cookie = 7;
-    optional EPutHandleClass HandleClass = 9;
+    optional NKikimrBlobStorage.EPutHandleClass HandleClass = 9;
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
 
@@ -423,7 +358,7 @@ message TEvVMultiPut {
     optional bool IgnoreBlock = 3 [default = false];
     optional bool NotifyIfNotReady = 4;
     optional uint64 Cookie = 5;
-    optional EPutHandleClass HandleClass = 6;
+    optional NKikimrBlobStorage.EPutHandleClass HandleClass = 6;
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
 }
@@ -483,7 +418,7 @@ message TEvVGet {
     optional uint64 Cookie = 9;
     optional TMsgQoS MsgQoS = 10;
     optional bool IndexOnly = 12 [default = false];
-    optional EGetHandleClass HandleClass = 13;
+    optional NKikimrBlobStorage.EGetHandleClass HandleClass = 13;
 
     optional bool SuppressBarrierCheck = 20 [default = false]; // set to true to prevent hull from validating barriers
 

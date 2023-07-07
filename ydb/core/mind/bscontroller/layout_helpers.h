@@ -2,10 +2,10 @@
 
 #include "defs.h"
 
-#include <ydb/core/mind/bscontroller/group_layout_checker.h>
-#include <ydb/core/mind/bscontroller/group_mapper.h>
-#include <ydb/core/mind/bscontroller/group_geometry_info.h>
-#include <ydb/core/mind/bscontroller/types.h>
+#include "group_layout_checker.h"
+#include "group_mapper.h"
+#include "group_geometry_info.h"
+#include "types.h"
 
 namespace NKikimr {
 

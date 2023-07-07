@@ -2,10 +2,12 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/blobstorage.pb.h>
-
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>
+
+namespace NKikimrBlobStorage {
+    class TVDiskID;
+} // NKikimrBlobStorage
 
 namespace NKikimr {
 
@@ -40,9 +42,7 @@ struct TVDiskID {
         return x.GroupID == GroupID && x.GroupGeneration == GroupGeneration;
     }
 
-    bool SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const {
-        return x.GetGroupID() == GroupID && x.GetGroupGeneration() == GroupGeneration;
-    }
+    bool SameGroupAndGeneration(const NKikimrBlobStorage::TVDiskID &x) const;
 
     bool SameExceptGeneration(const TVDiskID &x) const {
         return x.GroupID == GroupID && x.FailRealm == FailRealm && x.FailDomain == FailDomain && x.VDisk == VDisk;

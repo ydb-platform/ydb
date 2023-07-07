@@ -10,8 +10,8 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
-#include <ydb/core/protos/blobstorage.pb.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/util/yverify_stream.h>
 
 #include <library/cpp/actors/wilson/wilson_trace.h>

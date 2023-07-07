@@ -1,3 +1,5 @@
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
 #include "json_handlers.h"
 
 #include "json_nodelist.h"

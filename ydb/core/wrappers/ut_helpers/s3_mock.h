@@ -67,6 +67,8 @@ public:
 
     TClientRequest* CreateClient() override;
 
+    const THashMap<TString, TString>& GetData() const { return Data; }
+
 private:
     const TSettings Settings;
     THashMap<TString, TString> Data;

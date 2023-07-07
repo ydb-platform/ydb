@@ -5785,7 +5785,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["MapJoinCore"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables); IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content();
-            return ctx.NewCallable(inputToCheck.Pos(), "EmptyIterator", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+            return KeepConstraints(ctx.NewCallable(inputToCheck.Pos(), "EmptyIterator", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
         }
 
         if (const TCoMapJoinCore mapJoin(node); IsEmptyContainer(mapJoin.RightDict().Ref())) {

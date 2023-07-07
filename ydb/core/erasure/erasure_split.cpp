@@ -177,6 +177,7 @@ namespace NKikimr {
 
         TDataPartSet p;
         TRope copy(whole);
+        copy.Compact();
         erasure.SplitData(crcMode, copy, p);
         Y_VERIFY(p.Parts.size() == parts.size());
         for (ui32 i = 0; i < parts.size(); ++i) {

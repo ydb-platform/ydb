@@ -444,6 +444,7 @@ message TUpdateSettings {
     repeated bool EnableGroupLayoutSanitizer = 10;
     // TODO
     // repeated TSerialManagementStage.E SerialManagementStage = 11;
+    repeated bool AllowMultipleRealmsOccupation = 12;
 }
 
 message TBoxStoragePoolId {

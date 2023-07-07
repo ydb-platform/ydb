@@ -169,7 +169,8 @@ namespace NKikimr {
                         }
 
                         TString errorReason;
-                        if (!CheckLayoutByGroupDefinition(group, pdiskLocations, Geometry, errorReason)) {
+                        if (!CheckLayoutByGroupDefinition(group, pdiskLocations, Geometry,
+                                State.Self.AllowMultipleRealmsOccupation, errorReason)) {
                             layoutIsValid = false;
                         }
                     }

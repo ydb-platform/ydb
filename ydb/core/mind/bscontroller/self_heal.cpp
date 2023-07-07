@@ -250,6 +250,7 @@ namespace NKikimr::NBsController {
         TIntrusiveList<TGroupRecord, TWithInvalidLayout> GroupsWithInvalidLayout;
         std::shared_ptr<std::atomic_uint64_t> UnreassignableGroups;
         bool GroupLayoutSanitizerEnabled = false;
+        bool AllowMultipleRealmsOccupation = true;
         THostRecordMap HostRecords;
 
         using TTopologyDescr = std::tuple<TBlobStorageGroupType::EErasureSpecies, ui32, ui32, ui32>;
@@ -278,6 +279,12 @@ namespace NKikimr::NBsController {
             if (const auto& setting = ev->Get()->GroupLayoutSanitizerEnabled) {
                 bool previousSetting = std::exchange(GroupLayoutSanitizerEnabled, *setting);
                 if (!previousSetting && GroupLayoutSanitizerEnabled) {
+                    UpdateLayoutInformationForAllGroups();
+                }
+            }
+            if (const auto& setting = ev->Get()->AllowMultipleRealmsOccupation) {
+                bool previousSetting = std::exchange(AllowMultipleRealmsOccupation, *setting);
+                if (previousSetting != AllowMultipleRealmsOccupation) {
                     UpdateLayoutInformationForAllGroups();
                 }
             }
@@ -463,10 +470,8 @@ namespace NKikimr::NBsController {
             }
 
             TString error;
-            bool isValid = CheckLayoutByGroupDefinition(groupDef,
-                    pdisks,
-                    *group.Content.Geometry,
-                    error);
+            bool isValid = CheckLayoutByGroupDefinition(groupDef, pdisks, *group.Content.Geometry,
+                    AllowMultipleRealmsOccupation, error);
 
             if (group.LayoutValid && !isValid) {
                 group.LayoutError = error;

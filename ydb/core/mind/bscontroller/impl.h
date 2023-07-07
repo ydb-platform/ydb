@@ -1460,6 +1460,7 @@ private:
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
+    bool AllowMultipleRealmsOccupation = true;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 

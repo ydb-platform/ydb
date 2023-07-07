@@ -29,6 +29,7 @@ namespace NKikimr::NBsController {
         TVector<std::tuple<TVDiskID, NKikimrBlobStorage::EVDiskStatus, bool>> VDiskStatusUpdate;
         TVector<std::pair<TVDiskID, bool>> VDiskIsReadyUpdate;
         std::optional<bool> GroupLayoutSanitizerEnabled;
+        std::optional<bool> AllowMultipleRealmsOccupation;
 
         ui64 ConfigTxSeqNo = 0;
     };

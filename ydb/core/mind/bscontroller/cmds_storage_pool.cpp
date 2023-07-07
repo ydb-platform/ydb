@@ -445,6 +445,7 @@ namespace NKikimr::NBsController {
         settings->AddEnableGroupLayoutSanitizer(Self.GroupLayoutSanitizerEnabled);
         // TODO:
         // settings->AddSerialManagementStage(Self.SerialManagementStage);
+        settings->AddAllowMultipleRealmsOccupation(Self.AllowMultipleRealmsOccupation);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status) {

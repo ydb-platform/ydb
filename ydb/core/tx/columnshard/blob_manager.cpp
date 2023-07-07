@@ -626,8 +626,13 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
 }
 
 bool TBlobManager::EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) {
-    db.EraseEvictBlob(evict);
-    return DroppedEvictedBlobs.erase(evict);
+    Y_VERIFY(!EvictedBlobs.contains(evict)); // erase before drop
+
+    if (DroppedEvictedBlobs.erase(evict)) {
+        db.EraseEvictBlob(evict);
+        return true;
+    }
+    return false;
 }
 
 bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) {

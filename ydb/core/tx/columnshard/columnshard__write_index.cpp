@@ -270,7 +270,9 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
         for (auto& [pathId, blobs] : pathBlobs) {
             ++ExportNo;
-            Self->SendExport(ctx, ExportNo, tierName, pathId, std::move(blobs));
+            Y_VERIFY(pathId);
+            auto event = std::make_unique<TEvPrivate::TEvExport>(ExportNo, tierName, pathId, std::move(blobs));
+            Self->ExportBlobs(ctx, std::move(event));
         }
         Self->ActiveEvictions -= pathBlobs.size();
     }

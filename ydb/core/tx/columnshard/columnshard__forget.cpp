@@ -45,15 +45,17 @@ bool TTxForget::Execute(TTransactionContext& txc, const TActorContext&) {
         TBlobManagerDb blobManagerDb(txc.DB);
 
         TString strBlobs;
+        TString unknownBlobs;
         for (auto& evict : msg.Evicted) {
             bool erased = Self->BlobManager->EraseOneToOne(evict, blobManagerDb);
             if (erased) {
                 strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
             } else {
-                LOG_S_WARN(TxPrefix() << "forget unknown blob " << evict.Blob << TxSuffix());
+                unknownBlobs += "'" + evict.Blob.ToStringNew() + "' ";
             }
         }
-        LOG_S_INFO(TxPrefix() << "forget evicted blobs " << strBlobs << TxSuffix());
+        LOG_S_INFO(TxPrefix() << "forget evicted blobs " << strBlobs
+            << (unknownBlobs.size() ? ", forget unknown blobs " : "") << unknownBlobs << TxSuffix());
 
         Self->IncCounter(COUNTER_FORGET_SUCCESS);
     } else {

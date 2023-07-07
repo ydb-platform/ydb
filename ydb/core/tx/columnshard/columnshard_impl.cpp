@@ -954,36 +954,28 @@ void TColumnShard::Reexport(const TActorContext& ctx) {
     for (auto& [tierName, evictSet] : tierBlobsToReexport) {
         ++exportNo;
         LOG_S_INFO("Reexport " << exportNo << " at tablet " << TabletID());
-        ctx.Send(SelfId(), new TEvPrivate::TEvExport(exportNo, tierName, evictSet));
+        ExportBlobs(ctx, std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, evictSet));
     }
 }
 
-void TColumnShard::SendExport(const TActorContext& ctx, ui64 exportNo, TString tierName, ui64 pathId,
-                            THashSet<TUnifiedBlobId>&& blobs) {
-    LOG_S_INFO("Init export " << exportNo << " for pathId " << pathId << " of " << blobs.size() << " blobs, tier '"
-        << tierName << "' at tablet " << TabletID());
+void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPrivate::TEvExport>&& event) {
+    Y_VERIFY(event);
+    Y_VERIFY(event->ExportNo);
+    Y_VERIFY(event->Blobs.size());
+    Y_VERIFY(event->SrcToDstBlobs.size() == event->Blobs.size());
 
-    Y_VERIFY(exportNo);
-    Y_VERIFY(pathId);
-    ctx.Send(SelfId(), new TEvPrivate::TEvExport(exportNo, tierName, pathId, std::move(blobs)));
-}
-
-void TColumnShard::ExportBlobs(const TActorContext& ctx, TEvPrivate::TEvExport::TPtr& ev) const {
-    Y_VERIFY(ev->Get()->Blobs.size());
-
-    TStringBuilder strBlobs;
-    for (auto& [blobId, _] : ev->Get()->Blobs) {
-        strBlobs << "'" << blobId.ToStringNew() << "' ";
-    }
-
-    const auto& tierName = ev->Get()->TierName;
+    const auto& tierName = event->TierName;
     if (auto s3 = GetS3ActorForTier(tierName)) {
-        LOG_S_DEBUG("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
-        auto event = std::make_unique<TEvPrivate::TEvExport>(ev, s3);
+        TStringBuilder strBlobs;
+        for (auto& [blobId, _] : event->Blobs) {
+            strBlobs << "'" << blobId.ToStringNew() << "' ";
+        }
+
+        event->SetS3Actor(s3);
+        LOG_S_NOTICE("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
         ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
     } else {
-        LOG_S_INFO("Cannot export blobs "
-            << strBlobs << "(no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
+        LOG_S_INFO("Cannot export blobs (no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
     }
 }
 

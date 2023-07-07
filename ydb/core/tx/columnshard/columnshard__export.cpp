@@ -108,14 +108,12 @@ void TTxExportFinish::Complete(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx) {
     auto& msg = *ev->Get();
     auto status = msg.Status;
+    Y_VERIFY(status != NKikimrProto::UNKNOWN);
 
     ui64 exportNo = msg.ExportNo;
     auto& tierName = msg.TierName;
 
-    if (status == NKikimrProto::UNKNOWN) {
-        LOG_S_DEBUG("Export (write): id " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
-        ExportBlobs(ctx, ev);
-    } else if (status == NKikimrProto::ERROR && msg.Blobs.empty()) {
+    if (status == NKikimrProto::ERROR && msg.Blobs.empty()) {
         LOG_S_WARN("Export (fail): id " << exportNo << " tier '" << tierName << "' error: "
             << ev->Get()->SerializeErrorsToString() << "' at tablet " << TabletID());
     } else {

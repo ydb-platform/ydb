@@ -7,6 +7,7 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
 ENDIF()
 
 SRCS(
+    auto_config_initializer.cpp
     config.cpp
     config.h
     config_parser.cpp
@@ -162,6 +163,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
 
 RECURSE_ROOT_RELATIVE(
     ydb/core

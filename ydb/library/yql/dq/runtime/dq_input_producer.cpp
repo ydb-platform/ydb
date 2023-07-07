@@ -19,6 +19,7 @@ public:
     TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs, TDqMeteringStats::TInputStatsMeter stats)
         : TBase(memInfo)
         , Inputs(std::move(inputs))
+        , Alive(Inputs.size())
         , Batch(Inputs.empty() ? nullptr : Inputs.front()->GetInputType())
         , Stats(stats)
     {}
@@ -71,21 +72,32 @@ private:
     }
 
     NUdf::EFetchStatus FindBuffer() {
-        bool allFinished = true;
         Batch.clear();
 
-        for (auto& input : Inputs) {
+        auto startIndex = Index++;
+        size_t i = 0;
+
+        while (i < Alive) {
+            auto currentIndex = (startIndex + i) % Alive;
+            auto& input = Inputs[currentIndex];
             if (input->Pop(Batch)) {
                 return NUdf::EFetchStatus::Ok;
             }
-            allFinished &= input->IsFinished();
+            if (input->IsFinished()) {
+                std::swap(Inputs[currentIndex], Inputs[Alive - 1]);
+                --Alive;
+            } else {
+                ++i;
+            }
         }
 
-        return allFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+        return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
     }
 
 private:
     TVector<IDqInput::TPtr> Inputs;
+    size_t Alive;
+    size_t Index = 0;
     TUnboxedValueBatch Batch;
     TDqMeteringStats::TInputStatsMeter Stats;
 };

@@ -41,12 +41,11 @@ void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition
 }
 
 void TMergePartialStream::AddPoolSource(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter) {
-    if (!batch || !batch->num_rows()) {
+    if (!batch || !batch->num_rows() || (filter && filter->IsTotalDenyFilter())) {
         return;
     }
     Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortSchema));
     if (!poolId) {
-        IndependentBatches.emplace_back(batch);
         AddNewToHeap(poolId, batch, filter, true);
     } else {
         auto it = BatchPools.find(*poolId);

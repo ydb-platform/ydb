@@ -255,7 +255,6 @@ private:
     }
 
     THashMap<ui32, std::deque<TIteratorData>> BatchPools;
-    std::vector<std::shared_ptr<arrow::RecordBatch>> IndependentBatches;
     std::vector<TBatchIterator> SortHeap;
     std::shared_ptr<arrow::Schema> SortSchema;
     const bool Reverse;

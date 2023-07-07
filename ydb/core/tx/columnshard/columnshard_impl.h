@@ -236,6 +236,7 @@ protected:
     }
 
     STFUNC(StateWork) {
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);

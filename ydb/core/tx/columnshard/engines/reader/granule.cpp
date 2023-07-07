@@ -38,7 +38,9 @@ TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
     RawDataSize += batchSize;
     const ui64 filtersSize = portionInfo.NumRows() * (8 + 8);
     RawDataSize += filtersSize;
-    ACFL_DEBUG("event", "RegisterBatchForFetching")("columns_count", Owner->GetReadMetadata()->GetAllColumns().size())("batch_raw_size", batchSize)("granule_size", RawDataSize);
+    ACFL_DEBUG("event", "RegisterBatchForFetching")
+        ("columns_count", Owner->GetReadMetadata()->GetAllColumns().size())("batch_raw_size", batchSize)("granule_size", RawDataSize)
+        ("filter_size", filtersSize);
 
     Y_VERIFY(!ReadyFlag);
     ui32 batchGranuleIdx = Batches.size();
@@ -129,6 +131,7 @@ void TGranule::CheckReady() {
     if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
         ReadyFlag = true;
         ACFL_DEBUG("event", "granule_ready")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
+        Y_VERIFY(RawDataSizeReal <= RawDataSize);
         Owner->OnGranuleReady(GranuleId);
     }
 }

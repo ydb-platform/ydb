@@ -217,7 +217,7 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
-                    if (!settings.Filter) {
+                    if (!settings.PgDelete && !settings.Filter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
@@ -507,7 +507,6 @@ public:
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
-
                 if (mode == "drop") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {
@@ -522,14 +521,28 @@ public:
                         .Done()
                         .Ptr();
                 } else if (mode == "delete") {
-                    YQL_ENSURE(settings.Filter);
-                    return Build<TKiDeleteTable>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .Table().Build(key.GetTablePath())
-                        .Filter(settings.Filter.Cast())
-                        .Done()
-                        .Ptr();
+                    YQL_ENSURE(settings.Filter || settings.PgDelete);
+                    if (settings.Filter) {
+                        return Build<TKiDeleteTable>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Table().Build(key.GetTablePath())
+                            .Filter(settings.Filter.Cast())
+                            .Done()
+                            .Ptr();
+                    } else {
+                        return Build<TKiWriteTable>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Table().Build(key.GetTablePath())
+                            .Input(settings.PgDelete.Cast())
+                            .Mode()
+                                .Value("delete_on")
+                            .Build()
+                            .Settings(settings.Other)
+                            .Done()
+                            .Ptr();
+                    }
                 } else {
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))

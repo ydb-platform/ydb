@@ -25,7 +25,10 @@ bool GetEquiJoinKeyTypes(TExprBase leftInput, const TString& leftColumnName, con
         rightType = rightType->Cast<TOptionalExprType>()->GetItemType();
     }
 
-    YQL_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Data);
+    if (rightType->GetKind() != ETypeAnnotationKind::Data) {
+        Y_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Pg);
+        return false;
+    }
     rightData = rightType->Cast<TDataExprType>();
 
     auto leftInputType = leftInput.Ref().GetTypeAnn();

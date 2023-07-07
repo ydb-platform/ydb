@@ -142,12 +142,16 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
         MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
 
         auto memberType = rowType->GetMemberType(i);
-        auto typeId = memberType->IsOptional()
-            ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, memberType)->GetItemType())->GetSchemeType()
-            : AS_TYPE(TDataType, memberType)->GetSchemeType();
+        if (memberType->IsOptional()) {
+            memberType = AS_TYPE(TOptionalType, memberType)->GetItemType();
+        }
 
-        // TODO: support pg types
-        rowTypes[i] = NScheme::TTypeInfo(typeId);
+        if (memberType->IsPg()) {
+            auto pgType = AS_TYPE(TPgType, memberType);
+            rowTypes[i] = NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgType->GetTypeId()));
+        } else {
+            rowTypes[i] = NScheme::TTypeInfo(AS_TYPE(TDataType, memberType)->GetSchemeType());
+        }
     }
 
     TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());

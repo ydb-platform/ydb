@@ -15,7 +15,7 @@ Release date: May 5, 2023. To update to version 23.1, select the [Downloads](dow
 * Improved formats of data exchanged between query stages. As a result, we accelerated SELECTs by 10% on parameterized queries and by up to 30% on write operations.
 * Added [autoconfiguring](deploy/configuration/config.md#autoconfig) for the actor system pools based on the workload against them. This improves performance through more effective CPU sharing.
 * Optimized the predicate logic: Processing of parameterized OR or IN constraints is automatically delegated to DataShard.
-* For scan queries, you can now effectively search for individual rows using a primary key or secondary indexes. This can bring you a substantial gain in performance in many cases. Similarly to regular queries, to use a secondary index, you need to explicitly specify its name in the query text using the `VIEW` keyword.
+* (Experimental) For scan queries, you can now effectively search for individual rows using a primary key or secondary indexes. This can bring you a substantial gain in performance in many cases. Similarly to regular queries, to use a secondary index, you need to explicitly specify its name in the query text using the `VIEW` keyword.
 * The query's computational graph is now cached at query runtime, reducing the CPU resources needed to build the graph.
 
 **Bug fixes:**

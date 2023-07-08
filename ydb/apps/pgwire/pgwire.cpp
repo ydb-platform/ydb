@@ -112,7 +112,7 @@ TPgWire::TPgWire(int argc, char** argv) {
 
 TIntrusivePtr<NActors::NLog::TSettings> TPgWire::BuildLoggerSettings() {
     const NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
-    TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_WARN);
+    TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER, NActors::NLog::PRI_WARN);
     loggerSettings->Append(
         NActorsServices::EServiceCommon_MIN,
         NActorsServices::EServiceCommon_MAX,

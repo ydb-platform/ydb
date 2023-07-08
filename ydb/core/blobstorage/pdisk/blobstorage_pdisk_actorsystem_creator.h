@@ -39,7 +39,7 @@ public:
         setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
 
         auto logSettings = MakeIntrusive<NActors::NLog::TSettings>(NActors::TActorId(1, "logger"),
-                NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, ui32{0});
+                NActorsServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, ui32{0});
         logSettings->Append(
             NActorsServices::EServiceCommon_MIN,
             NActorsServices::EServiceCommon_MAX,

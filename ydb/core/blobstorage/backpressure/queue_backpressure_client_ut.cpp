@@ -221,7 +221,7 @@ public:
         // LOGGER
         NActors::TActorId loggerActorId{1, "logger"};
         TIntrusivePtr<NActors::NLog::TSettings> logSettings{new NActors::NLog::TSettings{loggerActorId,
-            NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0}};
+            NActorsServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0}};
         logSettings->Append(
             NActorsServices::EServiceCommon_MIN,
             NActorsServices::EServiceCommon_MAX,

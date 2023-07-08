@@ -323,7 +323,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     ///////////////////////// LOGGER ///////////////////////////////////////////////
     NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
     TIntrusivePtr<NActors::NLog::TSettings> logSettings;
-    logSettings.Reset(new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR,
+    logSettings.Reset(new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER, NActors::NLog::PRI_ERROR,
                                                    NActors::NLog::PRI_DEBUG, 0)); // NOTICE
     logSettings->Append(
         NActorsServices::EServiceCommon_MIN,

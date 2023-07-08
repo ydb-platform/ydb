@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
         // custom logger settings
         auto loggerSettings = MakeIntrusive<NLog::TSettings>(
                 TActorId(0, "logger"),
-                (NLog::EComponent)410,
+                NActorsServices::LOGGER,
                 priority,
                 priority,
                 0U);

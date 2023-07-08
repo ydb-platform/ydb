@@ -4106,7 +4106,7 @@ public:
 
         NActors::TActorId loggerActorId = NActors::TActorId(setup->NodeId, "logger");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
-            new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
+            new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER,
                 IsVerbose ? NLog::PRI_ERROR : NLog::PRI_CRIT,
                 IsVerbose ? NLog::PRI_ERROR : NLog::PRI_CRIT,
                 0));

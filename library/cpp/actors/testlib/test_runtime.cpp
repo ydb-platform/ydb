@@ -513,7 +513,7 @@ namespace NActors {
 
     void TTestActorRuntimeBase::InitNode(TNodeDataBase* node, size_t nodeIndex) {
         const NActors::TActorId loggerActorId = NActors::TActorId(FirstNodeId + nodeIndex, "logger");
-        node->LogSettings = new NActors::NLog::TSettings(loggerActorId, 410 /* NKikimrServices::LOGGER */,
+        node->LogSettings = new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER,
             NActors::NLog::PRI_WARN,  NActors::NLog::PRI_WARN, 0);
         node->LogSettings->SetAllowDrop(false);
         node->LogSettings->SetThrottleDelay(TDuration::Zero());

@@ -1161,7 +1161,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 
     auto logConfig = runConfig.AppConfig.GetLogConfig();
     LogSettings.Reset(new NActors::NLog::TSettings(NActors::TActorId(runConfig.NodeId, "logger"),
-        NKikimrServices::LOGGER,
+        NActorsServices::LOGGER,
         (NActors::NLog::EPriority)logConfig.GetDefaultLevel(),
         (NActors::NLog::EPriority)logConfig.GetDefaultSamplingLevel(),
         logConfig.GetDefaultSamplingRate(),

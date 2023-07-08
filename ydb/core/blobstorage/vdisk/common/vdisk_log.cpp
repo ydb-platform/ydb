@@ -35,7 +35,7 @@ namespace  NKikimr {
     // TFakeLoggerCtx -- fake implementation of ILoggerCtx
     ////////////////////////////////////////////////////////////////////////////
     TFakeLoggerCtx::TFakeLoggerCtx()
-        : Settings({}, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_DEBUG, 0)
+        : Settings({}, NActorsServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_DEBUG, 0)
     {
         Settings.Append(
             NActorsServices::EServiceCommon_MIN,

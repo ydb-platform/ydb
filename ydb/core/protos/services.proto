@@ -148,7 +148,7 @@ enum EServiceKikimr {
     TX_ALLOCATOR_CLIENT = 404;
     LONG_TX_SERVICE = 405;
 
-    LOGGER = 410;
+    // LOGGER = 410;
     MSGBUS_TRACER = 411;
     MSGBUS_REQUEST = 412; // deprecated, use RPC_REQUEST
     GRPC_SERVER = 413;

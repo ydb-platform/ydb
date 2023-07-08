@@ -38,7 +38,7 @@ public:
         AppData->Counters = Counters;
 
         NActors::TActorId loggerActorId = TActorId(1, "logger");
-        TIntrusivePtr<NLog::TSettings> logSettings = new NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
+        TIntrusivePtr<NLog::TSettings> logSettings = new NLog::TSettings(loggerActorId, NActorsServices::LOGGER,
                 (IsVerbose ? NLog::PRI_NOTICE : NLog::PRI_CRIT),
                 NLog::PRI_DEBUG, 0);
         logSettings->Append(

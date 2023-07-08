@@ -171,7 +171,7 @@ public:
     TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR)
         : MaxNodeId(numNodes)
         , AppData(0, 0, 0, 0, {{"IC", 0}}, nullptr, nullptr, nullptr, &ProgramShouldContinue)
-        , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NKikimrServices::LOGGER, defaultPrio))
+        , LoggerSettings_(MakeIntrusive<NLog::TSettings>(TActorId(0, "logger"), NActorsServices::LOGGER, defaultPrio))
         , InterconnectMock(0, Max<ui64>(), this) // burst capacity (bytes), bytes per second
     {
         AppData.Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();

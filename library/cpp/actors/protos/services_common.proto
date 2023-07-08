@@ -14,6 +14,7 @@ enum EServiceCommon {
     INTERCONNECT_NETWORK = 6;
     INTERCONNECT_SESSION = 7;
     HTTP = 8;
+    LOGGER = 9;
 
     // This value is reserved boundary. Is must not be aliased with any values
     // TODO: use reseved values upon protobuf update

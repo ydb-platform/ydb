@@ -405,6 +405,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePredicateExtractForScanQuery = serviceConfig.GetEnablePredicateExtractForScanQueries();
     kqpConfig.EnableSequentialReads = serviceConfig.GetEnableSequentialReads();
     kqpConfig.EnableKqpImmediateEffects = serviceConfig.GetEnableKqpImmediateEffects();
+    kqpConfig.EnablePreparedDdl = serviceConfig.GetEnablePreparedDdl();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
 }
 

@@ -1308,6 +1308,7 @@ message TTableServiceConfig {
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     optional bool EnableSequentialReads = 38 [default = false];
     optional bool EnableKqpImmediateEffects = 39 [default = true];
+    optional bool EnablePreparedDdl = 42 [default = false];
 
     enum EBindingsMode {
         BM_ENABLED = 0;

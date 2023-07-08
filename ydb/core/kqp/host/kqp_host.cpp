@@ -1327,6 +1327,8 @@ private:
 
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+
         if (settings.DocumentApiRestricted) {
             SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
         }
@@ -1523,9 +1525,12 @@ private:
         };
 
         // Kikimr provider
+        auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx);
+
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
-        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, ExternalSourceFactory, IsInternalCall);
-        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, queryExecutor);
+        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx,
+            ExternalSourceFactory, IsInternalCall);
+        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx, queryExecutor);
 
         FillSettings.AllResultsBytesLimit = Nothing();
         FillSettings.RowsLimitPerWrite = SessionCtx->Config()._ResultRowsLimit.Get().GetRef();

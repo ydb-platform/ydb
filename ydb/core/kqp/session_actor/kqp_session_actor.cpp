@@ -889,8 +889,16 @@ public:
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
-        auto& txCtx = *QueryState->TxCtx;
+        if (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+            YQL_ENSURE(QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
+            YQL_ENSURE(tx->StagesSize() == 0);
 
+            SendToSchemeExecuter(tx);
+            ++QueryState->CurrentTx;
+            return false;
+        }
+
+        auto& txCtx = *QueryState->TxCtx;
         bool literal = tx && tx->IsLiteralTx();
 
         if (commit) {
@@ -994,6 +1002,14 @@ public:
         SendToExecuter(std::move(request));
         ++QueryState->CurrentTx;
         return false;
+    }
+
+    void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
+        auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
+        auto executerActor = CreateKqpSchemeExecuter(tx, SelfId(), Settings.Database, userToken,
+            QueryState->TxCtx->TxAlloc);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
     }
 
     void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {

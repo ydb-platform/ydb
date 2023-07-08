@@ -324,10 +324,12 @@ public:
             }
 
             if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, queryType) && (newOp & KikimrSchemeOps())) {
-                TString message = TStringBuilder() << "Operation '" << newOp
-                    << "' can't be performed in query";
-                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
-                return {false, issues};
+                if (EffectiveIsolationLevel) {
+                    TString message = TStringBuilder() << "Scheme operations can't be performed inside transaction, "
+                        << "operation: " << newOp;
+                    issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_OPERATION, message));
+                    return {false, issues};
+                }
             }
 
             if (queryType == EKikimrQueryType::Ddl && (newOp & KikimrDataOps())) {

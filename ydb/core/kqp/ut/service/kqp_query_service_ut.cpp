@@ -329,6 +329,36 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(totalTasks, 2);
     }
 
+    Y_UNIT_TEST(QueryDdl) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            CREATE TABLE TestDdl (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().empty());
+
+        result = db.ExecuteQuery(R"(
+            UPSERT INTO TestDdl (Key, Value) VALUES (1, "One");
+            SELECT * FROM TestDdl;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, i32 tries = -1) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
         NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
@@ -552,6 +582,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
     }
+
     Y_UNIT_TEST(ExecuteScriptStatsBasic) {
         ExecuteScriptWithStatsMode(Ydb::Query::STATS_MODE_BASIC);
     }

@@ -862,10 +862,6 @@ public:
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {
-            if (!EnsureNotPrepare("CREATE TABLE", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -886,31 +882,27 @@ public:
             }
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
-            if (SessionCtx->Query().PrepareOnly) {
-                future = CreateDummySuccess();
-            } else {
-                bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-                switch (tableTypeItem) {
-                    case ETableType::ExternalTable: {
-                        future = Gateway->CreateExternalTable(cluster,
-                            ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), false);
-                        break;
+            bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            switch (tableTypeItem) {
+                case ETableType::ExternalTable: {
+                    future = Gateway->CreateExternalTable(cluster,
+                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), false);
+                    break;
+                }
+                case ETableType::TableStore: {
+                    if (!isColumn) {
+                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                            TStringBuilder() << "TABLESTORE with not COLUMN store"));
+                        return SyncError();
                     }
-                    case ETableType::TableStore: {
-                        if (!isColumn) {
-                            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                                TStringBuilder() << "TABLESTORE with not COLUMN store"));
-                            return SyncError();
-                        }
-                        future = Gateway->CreateTableStore(cluster,
-                            ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings));
-                        break;
-                    }
-                    case ETableType::Table:
-                    case ETableType::Unknown: {
-                        future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true);
-                        break;
-                    }
+                    future = Gateway->CreateTableStore(cluster,
+                        ParseCreateTableStoreSettings(maybeCreate.Cast(), table.Metadata->TableSettings));
+                    break;
+                }
+                case ETableType::Table:
+                case ETableType::Unknown: {
+                    future = isColumn ? Gateway->CreateColumnTable(table.Metadata, true) : Gateway->CreateTable(table.Metadata, true);
+                    break;
                 }
             }
 

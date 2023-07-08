@@ -1159,8 +1159,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("not supported");
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION, [](const NYql::TIssue& issue) {
+            return issue.GetMessage().Contains("can't be performed in data query");
         }));
 
         result = session.ExecuteDataQuery(Q_(R"(

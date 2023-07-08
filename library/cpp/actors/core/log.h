@@ -197,8 +197,8 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     class TLoggerActor: public TActor<TLoggerActor> {
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::LOG_ACTOR;
+        static IActor::EActivityType ActorActivityType() {
+            return IActor::EActivityType::LOG_ACTOR;
         }
 
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,

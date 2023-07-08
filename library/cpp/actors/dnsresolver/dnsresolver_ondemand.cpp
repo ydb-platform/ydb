@@ -13,7 +13,7 @@ namespace NDnsResolver {
         { }
 
         static constexpr EActivityType ActorActivityType() {
-            return DNS_RESOLVER;
+            return EActivityType::DNS_RESOLVER;
         }
 
     private:

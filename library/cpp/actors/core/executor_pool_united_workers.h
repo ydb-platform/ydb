@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "balancer.h"
+#include "indexes.h"
 #include "scheduler_queue.h"
 
 #include <library/cpp/actors/util/cpu_load_log.h>
@@ -31,7 +32,7 @@ namespace NActors {
 
         volatile bool StopFlag = false;
         TMinusOneCpuEstimator<1024> MinusOneCpuEstimator;
-
+        const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
         TUnitedWorkers(
             const TUnitedWorkersConfig& config,

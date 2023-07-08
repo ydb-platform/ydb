@@ -52,7 +52,7 @@ namespace NActors {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                 hpnow = GetCycleCountFast();
                 elapsed += hpnow - hpstart;
-                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, elapsed);
+                wctx.AddElapsedCycles(ActorSystemIndex, elapsed);
                 if (parked > 0) {
                     wctx.AddParkedCycles(parked);
                 }

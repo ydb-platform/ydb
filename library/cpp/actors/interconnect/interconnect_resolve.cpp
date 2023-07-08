@@ -39,7 +39,7 @@ namespace NActors {
         { }
 
         static constexpr EActivityType ActorActivityType() {
-            return NAMESERVICE;
+            return EActivityType::NAMESERVICE;
         }
 
         void Bootstrap() {

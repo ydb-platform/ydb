@@ -11,7 +11,7 @@ class TMadSquirrel : public TActor<TMadSquirrel> {
 
 public:
     static constexpr auto ActorActivityType() {
-        return ACTORLIB_COMMON;
+        return IActor::EActivityType::ACTORLIB_COMMON;
     }
 
     TMadSquirrel()

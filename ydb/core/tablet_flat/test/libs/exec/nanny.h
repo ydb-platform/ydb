@@ -79,7 +79,7 @@ namespace NFake {
         };
 
         TNanny()
-            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TNanny::Inbox))
+            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TNanny::Inbox), NActors::EInternalActorType::OTHER)
             , Fake(NTable::CreateFakeDb())
         {
             Fake->Init(NTable::TScheme());

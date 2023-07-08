@@ -232,7 +232,7 @@ namespace NActors {
 
             if (needToWait && wctx.HasCapturedMessageBox) {
                 timers.HPNow = GetCycleCountFast();
-                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timers.HPNow - timers.HPStart);
+                wctx.AddElapsedCycles(ActorSystemIndex, timers.HPNow - timers.HPStart);
                 return 0;
             }
 
@@ -260,7 +260,7 @@ namespace NActors {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                 timers.HPNow = GetCycleCountFast();
                 timers.Elapsed += timers.HPNow - timers.HPStart;
-                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timers.Elapsed);
+                wctx.AddElapsedCycles(ActorSystemIndex, timers.Elapsed);
                 if (timers.Parked > 0) {
                     wctx.AddParkedCycles(timers.Parked);
                 }

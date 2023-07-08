@@ -49,12 +49,12 @@ public:
         Names.resize(MaxKeysCount);
     }
 
-private:
-
-    static constexpr ui32 MaxKeysCount = 1000000;
-
     size_t Register(TStringBuf name) {
         TGuard<TMutex> g(Mutex);
+        auto it = Map.find(name);
+        if (it != Map.end()) {
+            return it->second;
+        }
         const ui32 index = TLocalProcessKeyStateIndexConstructor<T>::BuildCurrentIndex(name, Names.size());
         auto x = Map.emplace(name, index);
         if (x.second) {
@@ -64,6 +64,10 @@ private:
 
         return x.first->second;
     }
+
+private:
+
+    static constexpr ui32 MaxKeysCount = 1000000;
 
 private:
     TVector<TString> Names;
@@ -115,11 +119,11 @@ private:
 template <typename T, typename EnumT>
 class TEnumProcessKey {
 public:
-    static TStringBuf GetName(EnumT key) {
+    static TStringBuf GetName(const EnumT key) {
         return TLocalProcessKeyState<T>::GetInstance().GetNameByIndex(GetIndex(key));
     }
 
-    static size_t GetIndex(EnumT key) {
+    static size_t GetIndex(const EnumT key) {
         ui32 index = static_cast<ui32>(key);
         Y_VERIFY(index < Enum2Index.size());
         return Enum2Index[index];

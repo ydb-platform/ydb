@@ -4,6 +4,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <library/cpp/actors/core/actor.h>
 #include <library/cpp/messagebus/ybus.h>
 #include <library/cpp/messagebus/protobuf/ybusbuf.h>
 #include <library/cpp/messagebus/session_config.h>

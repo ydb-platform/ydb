@@ -1338,21 +1338,21 @@ namespace NActors {
             }
         }
 
-        wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+        wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
         return result;
     }
 
     TPoolId TUnitedWorkers::WaitSequence(TCpu& cpu, TWorkerContext& wctx, TTimeTracker& timeTracker) {
         TPoolId result;
         if (cpu.ActiveWait(Us2Ts(Config.SpinThresholdUs), result)) {
-            wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+            wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
             return result;
         }
         if (cpu.StartBlocking(result)) {
-            wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+            wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
             return result;
         }
-        wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+        wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
         cpu.LoadLog.RegisterBusyPeriod(GetCycleCountFast());
         bool wakeup;
         do {

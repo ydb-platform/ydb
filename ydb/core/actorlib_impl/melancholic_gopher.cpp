@@ -23,7 +23,7 @@ class TMelancholicGopher : public TActor<TMelancholicGopher> {
     }
 public:
     static constexpr EActivityType ActorActivityType() {
-        return ACTORLIB_COMMON;
+        return EActivityType::ACTORLIB_COMMON;
     }
 
     TMelancholicGopher(double surveyForSeconds, const TActorId &reportTo)
@@ -68,7 +68,7 @@ class TGopherMother : public TActorBootstrapped<TGopherMother> {
     }
 public:
     static constexpr EActivityType ActorActivityType() {
-        return ACTORLIB_COMMON;
+        return EActivityType::ACTORLIB_COMMON;
     }
 
     TGopherMother(const TVector<std::pair<ui32, double>> &lineProfile, ui32 lines, ui32 shotsInRound)

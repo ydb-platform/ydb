@@ -4,6 +4,7 @@
 #include "executor_thread.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
+#include "indexes.h"
 #include "harmonizer.h"
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
@@ -82,7 +83,7 @@ namespace NActors {
         IHarmonizer *Harmonizer;
 
         const i16 Priority = 0;
-
+        const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
         struct TSemaphore {
             i64 OldSemaphore = 0; // 34 bits

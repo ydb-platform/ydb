@@ -21,7 +21,7 @@ namespace NInterconnect {
 
         public:
             static constexpr IActor::EActorActivity ActorActivityType() {
-                return INTERCONNECT_MONACTOR;
+                return EActivityType::INTERCONNECT_MONACTOR;
             }
 
             TQueryProcessor(const TActorId& sender, bool json)
@@ -190,7 +190,7 @@ namespace NInterconnect {
 
     public:
         static constexpr IActor::EActorActivity ActorActivityType() {
-            return INTERCONNECT_MONACTOR;
+            return EActivityType::INTERCONNECT_MONACTOR;
         }
 
         TInterconnectMonActor(TIntrusivePtr<TInterconnectProxyCommon> common)

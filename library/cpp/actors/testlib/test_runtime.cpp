@@ -85,7 +85,7 @@ namespace NActors {
     class TTestActorRuntimeBase::TEdgeActor : public TActor<TEdgeActor> {
     public:
         static constexpr EActivityType ActorActivityType() {
-            return TEST_ACTOR_RUNTIME;
+            return EActivityType::TEST_ACTOR_RUNTIME;
         }
 
         TEdgeActor(TTestActorRuntimeBase* runtime)
@@ -1802,7 +1802,7 @@ namespace NActors {
         class TReplyActor : public TActor<TReplyActor> {
         public:
             static constexpr EActivityType ActorActivityType() {
-                return TEST_ACTOR_RUNTIME;
+                return EActivityType::TEST_ACTOR_RUNTIME;
             }
 
             TReplyActor(TStrandingActorDecorator* owner)
@@ -1818,7 +1818,7 @@ namespace NActors {
         };
 
         static constexpr EActivityType ActorActivityType() {
-            return TEST_ACTOR_RUNTIME;
+            return EActivityType::TEST_ACTOR_RUNTIME;
         }
 
         TStrandingActorDecorator(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors,

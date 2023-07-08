@@ -77,19 +77,20 @@ namespace NActors {
     // actor's class. But `complete` handler is invoked in parent context and can use its contents. Do not forget to
     // handle TEvInvokeResult event by calling Process/GetResult method, whichever is necessary.
 
-    template<typename TCallback, typename TCompletion, ui32 Activity>
-    class TInvokeActor : public TActorBootstrapped<TInvokeActor<TCallback, TCompletion, Activity>> {
+    template<typename TCallback, typename TCompletion, class TEnum>
+    class TInvokeActor : public TActorBootstrapped<TInvokeActor<TCallback, TCompletion, TEnum>> {
+    private:
+        using TBase = TActorBootstrapped<TInvokeActor<TCallback, TCompletion, TEnum>>;
         TCallback Callback;
         TCompletion Complete;
-
+        const TEnum Activity;
+        static_assert(std::is_enum<TEnum>::value);
     public:
-        static constexpr auto ActorActivityType() {
-            return static_cast<IActor::EActorActivity>(Activity);
-        }
-
-        TInvokeActor(TCallback&& callback, TCompletion&& complete)
-            : Callback(std::move(callback))
+        TInvokeActor(TCallback&& callback, TCompletion&& complete, const TEnum activity)
+            : TBase(activity)
+            , Callback(std::move(callback))
             , Complete(std::move(complete))
+            , Activity(activity)
         {}
 
         void Bootstrap(const TActorId& parentId, const TActorContext& ctx) {
@@ -101,10 +102,10 @@ namespace NActors {
         }
     };
 
-    template<ui32 Activity, typename TCallback, typename TCompletion>
-    std::unique_ptr<IActor> CreateInvokeActor(TCallback&& callback, TCompletion&& complete) {
-        return std::make_unique<TInvokeActor<std::decay_t<TCallback>, std::decay_t<TCompletion>, Activity>>(
-            std::forward<TCallback>(callback), std::forward<TCompletion>(complete));
+    template<typename TEnum, typename TCallback, typename TCompletion>
+    std::unique_ptr<IActor> CreateInvokeActor(TCallback&& callback, TCompletion&& complete, const TEnum activity) {
+        return std::make_unique<TInvokeActor<std::decay_t<TCallback>, std::decay_t<TCompletion>, TEnum>>(
+            std::forward<TCallback>(callback), std::forward<TCompletion>(complete), activity);
     }
 
     template <class TInvokeExecutor>

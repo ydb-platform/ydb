@@ -242,7 +242,7 @@ namespace NActors {
 
         public:
             static constexpr EActivityType ActorActivityType() {
-                return ACTORLIB_STATS;
+                return EActivityType::ACTORLIB_STATS;
             }
 
             TProfilerActor(TDynamicCountersPtr counters, TString dir, std::unique_ptr<IProfilerLogic> profiler)

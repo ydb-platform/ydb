@@ -929,4 +929,11 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui3
     return result;
 }
 
+std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original) {
+    if (!original) {
+        return nullptr;
+    }
+    return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
+}
+
 }

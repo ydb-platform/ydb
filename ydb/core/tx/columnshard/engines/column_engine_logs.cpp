@@ -347,7 +347,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
     // Cleanup empty granules
     for (auto& pathId : emptyGranulePaths) {
         for (auto& emptyGranules : EmptyGranuleTracks(pathId)) {
-            // keep first one => megre, keep nothing => drop.
+            // keep first one => merge, keep nothing => drop.
             bool keepFirst = !pathsToDrop.contains(pathId);
             for (auto& [mark, granule] : emptyGranules) {
                 if (keepFirst) {

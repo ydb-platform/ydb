@@ -15,7 +15,7 @@ NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
     // Leave only requested columns
     auto resultBatch = NArrow::ExtractColumns(batch, ResultSchema);
 
-    NOlap::TPartialReadResult out(nullptr, nullptr, resultBatch, lastKey);
+    NOlap::TPartialReadResult out(nullptr, resultBatch, lastKey);
 
     out.ApplyProgram(ReadMetadata->GetProgram());
     return std::move(out);

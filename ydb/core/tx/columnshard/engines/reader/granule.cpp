@@ -8,7 +8,9 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
-    RawDataSizeReal += NArrow::GetBatchDataSize(batch);
+    GranuleDataSize.Take(batchInfo.GetRealBatchSizeVerified());
+    GranuleDataSize.Free(batchInfo.GetPredictedBatchSize());
+    RawDataSizeReal += batchInfo.GetRealBatchSizeVerified();
     if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
         return;
     }
@@ -45,7 +47,7 @@ TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
     Y_VERIFY(!ReadyFlag);
     ui32 batchGranuleIdx = Batches.size();
     WaitBatches.emplace(batchGranuleIdx);
-    Batches.emplace_back(TBatchAddress(GranuleId, batchGranuleIdx), *this, portionInfo);
+    Batches.emplace_back(TBatchAddress(GranuleId, batchGranuleIdx), *this, portionInfo, batchSize);
     Y_VERIFY(GranuleBatchNumbers.emplace(batchGranuleIdx).second);
     Owner->OnNewBatch(Batches.back());
     return Batches.back();
@@ -131,7 +133,6 @@ void TGranule::CheckReady() {
     if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
         ReadyFlag = true;
         ACFL_DEBUG("event", "granule_ready")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
-        Y_VERIFY(RawDataSizeReal <= RawDataSize);
         Owner->OnGranuleReady(GranuleId);
     }
 }

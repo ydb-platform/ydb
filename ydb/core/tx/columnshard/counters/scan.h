@@ -38,6 +38,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr NoResultsAckRequest;
+    NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
 public:
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -69,7 +70,27 @@ public:
     NMonitoring::THistogramPtr HistogramCacheBlobBytesDuration;
     NMonitoring::THistogramPtr HistogramMissCacheBlobBytesDuration;
 
+    NMonitoring::TDynamicCounters::TCounterPtr BlobsWaitingDuration;
+    NMonitoring::THistogramPtr HistogramBlobsWaitingDuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
+
     TScanCounters(const TString& module = "Scan");
+
+    void AckWaitingInfo(const TDuration d) const {
+        AckWaitingDuration->Add(d.MicroSeconds());
+    }
+
+    void OnBlobReceived(const ui32 size) const {
+        BlobsReceivedCount->Add(1);
+        BlobsReceivedBytes->Add(size);
+    }
+
+    void OnBlobsWaitDuration(const TDuration d) const {
+        BlobsWaitingDuration->Add(d.MicroSeconds());
+        HistogramBlobsWaitingDuration->Collect(d.MicroSeconds());
+    }
 
     void OnEmptyAck() const {
         NoResultsAckRequest->Add(1);

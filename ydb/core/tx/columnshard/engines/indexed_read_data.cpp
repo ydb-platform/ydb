@@ -13,13 +13,17 @@ namespace NKikimr::NOlap {
 namespace {
 
 // Slices a batch into smaller batches and appends them to result vector (which might be non-empty already)
-void SliceBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                const int64_t maxRowsInBatch,
-                std::vector<std::shared_ptr<arrow::RecordBatch>>& result)
+std::vector<std::shared_ptr<arrow::RecordBatch>> SliceBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
+                const int64_t maxRowsInBatch)
 {
+    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    if (!batch->num_rows()) {
+        return result;
+    }
+    result.reserve(result.size() + batch->num_rows() / maxRowsInBatch + 1);
     if (batch->num_rows() <= maxRowsInBatch) {
         result.push_back(batch);
-        return;
+        return result;
     }
 
     int64_t offset = 0;
@@ -28,6 +32,7 @@ void SliceBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
         result.emplace_back(batch->Slice(offset, rows));
         offset += rows;
     }
+    return result;
 };
 
 std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>
@@ -148,7 +153,7 @@ void TIndexedReadData::InitRead() {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
-        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.Records[0].Granule);
+        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.Granule());
         granule->RegisterBatchForFetching(portionInfo);
         if (prevGranule != portionInfo.Granule()) {
             Y_VERIFY(granulesReady.emplace(portionInfo.Granule()).second);
@@ -258,7 +263,7 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
     auto out = ReadyToOut(maxRowsInBatch);
     const bool requireResult = GranulesContext->IsFinished(); // not indexed or the last indexed read (even if it's empty)
     if (requireResult && out.empty()) {
-        out.push_back(TPartialReadResult(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady(), NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())));
+        out.push_back(TPartialReadResult(nullptr, NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())));
     }
     return out;
 }
@@ -366,7 +371,10 @@ void TIndexedReadData::MergeTooSmallBatches(const std::shared_ptr<TMemoryAggrega
     auto batch = NArrow::ToBatch(*res);
 
     std::vector<TPartialReadResult> merged;
-    merged.emplace_back(TPartialReadResult(GetMemoryAccessor(), memAggregation, batch, out.back().GetLastReadKey()));
+
+    auto g = std::make_shared<TScanMemoryLimiter::TGuard>(GetMemoryAccessor(), memAggregation);
+    g->Take(NArrow::GetBatchMemorySize(batch));
+    merged.emplace_back(TPartialReadResult(g, batch, out.back().GetLastReadKey()));
     out.swap(merged);
 }
 
@@ -381,47 +389,29 @@ std::vector<TPartialReadResult> TIndexedReadData::MakeResult(std::vector<std::ve
     bool isDesc = ReadMetadata->IsDescSorted();
 
     for (auto& batches : granules) {
-        if (batches.empty()) {
-            continue;
-        }
-
-        {
-            std::vector<std::shared_ptr<arrow::RecordBatch>> splitted;
-            splitted.reserve(batches.size());
-            for (auto& batch : batches) {
-                SliceBatch(batch, maxRowsInBatch, splitted);
-            }
-            batches.swap(splitted);
-        }
-
         if (isDesc) {
-            std::vector<std::shared_ptr<arrow::RecordBatch>> reversed;
-            reversed.reserve(batches.size());
-            for (int i = batches.size() - 1; i >= 0; --i) {
-                auto& batch = batches[i];
-                auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
-                auto res = arrow::compute::Take(batch, permutation);
-                Y_VERIFY(res.ok());
-                reversed.push_back((*res).record_batch());
-            }
-            batches.swap(reversed);
+            std::reverse(batches.begin(), batches.end());
         }
-
         for (auto& batch : batches) {
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey(), isDesc));
-
-            if (batch->num_rows() == 0) {
-                Y_VERIFY_DEBUG(false, "Unexpected empty batch");
-                continue;
+            if (isDesc) {
+                auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
+                batch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
             }
+            std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard = std::make_shared<TScanMemoryLimiter::TGuard>(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady());
+            memGuard->Take(NArrow::GetBatchMemorySize(batch));
 
-            // Extract the last row's PK
-            auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
-            auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
+            std::vector<std::shared_ptr<arrow::RecordBatch>> splitted = SliceBatch(batch, maxRowsInBatch);
 
-            // Leave only requested columns
-            auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->GetResultSchema());
-            out.emplace_back(TPartialReadResult(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady(), resultBatch, lastKey));
+            for (auto& batch : splitted) {
+                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, indexInfo.GetReplaceKey(), isDesc));
+                // Extract the last row's PK
+                auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
+                auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
+
+                // Leave only requested columns
+                auto resultBatch = NArrow::ExtractColumns(batch, ReadMetadata->GetResultSchema());
+                out.emplace_back(TPartialReadResult(memGuard, resultBatch, lastKey));
+            }
         }
     }
     

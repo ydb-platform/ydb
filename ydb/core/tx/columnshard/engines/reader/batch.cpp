@@ -7,10 +7,11 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-TBatch::TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo)
+TBatch::TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo, const ui64 predictedBatchSize)
     : BatchAddress(address)
     , Portion(portionInfo.Records[0].Portion)
     , Granule(owner.GetGranuleId())
+    , PredictedBatchSize(predictedBatchSize)
     , Owner(&owner)
     , PortionInfo(&portionInfo)
 {

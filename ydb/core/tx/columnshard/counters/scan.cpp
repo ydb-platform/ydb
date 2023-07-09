@@ -13,6 +13,7 @@ TScanCounters::TScanCounters(const TString& module)
     , GeneralFetchBytes(TBase::GetDeriviative("GeneralFetch/Bytes"))
     , GeneralFetchCount(TBase::GetDeriviative("GeneralFetch/Count"))
     , NoResultsAckRequest(TBase::GetDeriviative("NoResultsAckRequest"))
+    , AckWaitingDuration(TBase::GetDeriviative("AckWaitingDuration"))
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))
     , PostFilterBytes(TBase::GetDeriviative("PostFilterBytes"))
@@ -42,7 +43,12 @@ TScanCounters::TScanCounters(const TString& module)
     , HistogramMissCacheBlobsCountDuration(TBase::GetHistogram("MissCacheBlobsCountDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
     , HistogramCacheBlobBytesDuration(TBase::GetHistogram("CacheBlobBytesDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
     , HistogramMissCacheBlobBytesDuration(TBase::GetHistogram("MissCacheBlobBytesDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
-{
+
+    , BlobsWaitingDuration(TBase::GetDeriviative("BlobsWaitingDuration"))
+    , HistogramBlobsWaitingDuration(TBase::GetHistogram("BlobsWaitingDuration", NMonitoring::ExponentialHistogram(13, 2, 256)))
+
+    , BlobsReceivedCount(TBase::GetDeriviative("BlobsReceivedCount"))
+    , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes")) {
 }
 
 NKikimr::NColumnShard::TScanAggregations TScanCounters::BuildAggregations() {

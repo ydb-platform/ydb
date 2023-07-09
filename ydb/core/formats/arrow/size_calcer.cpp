@@ -96,13 +96,52 @@ ui32 TRowSizeCalculator::GetRowBytesSize(const ui32 row) const {
     return result;
 }
 
+ui64 GetArrayDataRawSize(const std::shared_ptr<arrow::ArrayData>& data) {
+    if (!data) {
+        return 0;
+    }
+    ui64 result = 0;
+    for (auto&& i : data->buffers) {
+        if (i) {
+            result += i->capacity();
+        }
+    }
+    for (auto&& i : data->child_data) {
+        for (auto&& b : i->buffers) {
+            if (b) {
+                result += b->capacity();
+            }
+        }
+    }
+    if (data->dictionary) {
+        for (auto&& b : data->dictionary->buffers) {
+            if (b) {
+                result += b->capacity();
+            }
+        }
+    }
+    return result;
+}
+
+
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch) {
         return 0;
     }
     ui64 bytes = 0;
-    for (auto& column : batch->columns()) { // TODO: use column_data() instead of columns()
+    for (auto& column : batch->columns()) {
         bytes += GetArrayDataSize(column);
+    }
+    return bytes;
+}
+
+ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    if (!batch) {
+        return 0;
+    }
+    ui64 bytes = 0;
+    for (auto& column : batch->column_data()) {
+        bytes += GetArrayDataRawSize(column);
     }
     return bytes;
 }

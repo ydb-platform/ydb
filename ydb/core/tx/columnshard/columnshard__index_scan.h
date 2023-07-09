@@ -31,7 +31,6 @@ class TReadyResults {
 private:
     const NColumnShard::TConcreteScanCounters Counters;
     std::deque<NOlap::TPartialReadResult> Data;
-    i64 SumSize = 0;
     i64 RecordsCount = 0;
 public:
     TString DebugString() const {
@@ -39,7 +38,6 @@ public:
         sb
             << "count:" << Data.size() << ";"
             << "records_count:" << RecordsCount << ";"
-            << "sum_size:" << SumSize << ";"
             ;
         if (Data.size()) {
             sb << "schema=" << Data.front().GetResultBatch()->schema()->ToString() << ";";
@@ -52,7 +50,6 @@ public:
 
     }
     NOlap::TPartialReadResult& emplace_back(NOlap::TPartialReadResult&& v) {
-        SumSize += v.GetSize();
         RecordsCount += v.GetResultBatch()->num_rows();
         Data.emplace_back(std::move(v));
         return Data.back();
@@ -62,7 +59,6 @@ public:
             return NOlap::TPartialReadResult();
         }
         auto result = std::move(Data.front());
-        SumSize -= result.GetSize();
         RecordsCount -= result.GetResultBatch()->num_rows();
         Data.pop_front();
         return result;

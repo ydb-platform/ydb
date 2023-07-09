@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/core/protos/services.pb.h>
 #include <library/cpp/actors/core/log.h>
@@ -94,9 +95,12 @@ public:
         void FreeAll();
         void Free(const ui64 size);
         void Take(const ui64 size);
+        std::shared_ptr<TGuard> MakeSame() const {
+            return std::make_shared<TGuard>(MemoryAccessor, MemorySignals);
+        }
     };
 
-    class IMemoryAccessor {
+    class IMemoryAccessor: public NColumnShard::TMonitoringObjectsCounter<IMemoryAccessor> {
     private:
         TAtomicCounter InWaitingFlag = 0;
         std::shared_ptr<TScanMemoryLimiter> Owner;
@@ -114,6 +118,7 @@ public:
         {
 
         }
+
         bool HasBuffer() {
             return Owner->HasBufferOrSubscribe(nullptr);
         }

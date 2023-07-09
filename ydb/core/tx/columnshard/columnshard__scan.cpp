@@ -94,10 +94,14 @@ public:
         , ScanCountersPool(scanCountersPool)
         , Stats(ScanCountersPool)
     {
+        NoTasksStartInstant = Now();
         KeyYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetKeyYqlSchema();
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN)
+            ("SelfId", SelfId())("TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)
+        );
         auto g = Stats.MakeGuard("processing");
         ScanActorId = ctx.SelfID;
         Schedule(Deadline, new TEvents::TEvWakeup);
@@ -187,13 +191,16 @@ private:
             auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
             Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
             ScanIterator->Apply(t);
+            if (!ScanIterator->HasWaitingTasks() && !NoTasksStartInstant) {
+                NoTasksStartInstant = Now();
+            }
         }
         ContinueProcessing();
     }
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         auto g = Stats.MakeGuard("ack");
-
+        AckReceivedInstant = TMonotonic::Now();
         if (!ComputeActorId) {
             ComputeActorId = ev->Sender;
         }
@@ -214,6 +221,7 @@ private:
         --InFlightReads;
         auto& event = *ev->Get();
         const auto& blobRange = event.BlobRange;
+        ScanCountersPool.OnBlobReceived(blobRange.Size);
         Stats.BlobReceived(blobRange, event.FromCache, event.ConstructTime);
 
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
@@ -234,6 +242,10 @@ private:
             {
                 auto g = Stats.MakeGuard("AddData");
                 ScanIterator->AddData(blobRange, event.Data);
+                if (ScanIterator->HasWaitingTasks() && NoTasksStartInstant) {
+                    ScanCountersPool.OnBlobsWaitDuration(Now() - *NoTasksStartInstant);
+                    NoTasksStartInstant.reset();
+                }
             }
             ContinueProcessing();
         }
@@ -500,6 +512,10 @@ private:
                 << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
                 << " stats:" << Stats.DebugString();
+        } else {
+            Y_VERIFY(AckReceivedInstant);
+            ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
+            AckReceivedInstant.reset();
         }
 
         Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
@@ -551,6 +567,7 @@ private:
 private:
     const TActorId ColumnShardActorId;
     const TActorId ScanComputeActorId;
+    std::optional<TMonotonic> AckReceivedInstant;
     TActorId ComputeActorId;
     TActorId ScanActorId;
     TActorId BlobCacheActorId;
@@ -737,6 +754,7 @@ private:
     };
 
     TScanStats Stats;
+    std::optional<TInstant> NoTasksStartInstant = TInstant::Zero();
     ui64 Rows = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;

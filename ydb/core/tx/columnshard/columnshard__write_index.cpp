@@ -284,11 +284,11 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
 }
 
 void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWriteIndex::TPtr& ev,
-                                    bool ok, ui64 blobsWritten, ui64 bytesWritten) {
+    bool ok, ui64 blobsWritten, ui64 bytesWritten) {
     auto changes = ev->Get()->IndexChanges;
     Y_VERIFY(changes);
 
-   TablesManager.MutablePrimaryIndex().FreeLocks(changes);
+    TablesManager.MutablePrimaryIndex().FreeLocks(changes);
 
     if (changes->IsInsert()) {
         BackgroundController.FinishIndexing();

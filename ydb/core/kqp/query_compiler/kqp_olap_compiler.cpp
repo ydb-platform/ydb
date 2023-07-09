@@ -39,11 +39,11 @@ public:
         , ReadProto(readProto)
         , ResultColNames(resultColNames)
         , ExprContext(exprCtx)
+        , YqlKernelsFuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone())
         , YqlKernelRequestBuilder(nullptr)
     {
-        auto yqlKernelsFuncRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
-        NKikimr::NMiniKQL::FillStaticModules(*yqlKernelsFuncRegistry);
-        YqlKernelRequestBuilder = std::make_unique<TKernelRequestBuilder>(*yqlKernelsFuncRegistry);
+        NKikimr::NMiniKQL::FillStaticModules(*YqlKernelsFuncRegistry);
+        YqlKernelRequestBuilder = std::make_unique<TKernelRequestBuilder>(*YqlKernelsFuncRegistry);
 
         for (const auto& [_, columnMeta] : tableMeta.Columns) {
             YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
@@ -100,6 +100,20 @@ public:
         return YqlKernelRequestBuilder->AddBinaryOp(op, arg1Type, arg2Type, retBlockType);
     }
 
+    ui32 AddYqlKernelJsonExists(const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) {
+        auto arg1Type = GetArgType(arg1);
+        auto arg2Type = GetArgType(arg2);
+        auto retBlockType = ConvertToBlockType(retType);
+        return YqlKernelRequestBuilder->JsonExists(arg1Type, arg2Type, retBlockType);
+    }
+
+    ui32 AddYqlKernelJsonValue(const TExprBase& arg1, const TExprBase& arg2, const TTypeAnnotationNode* retType) {
+        auto arg1Type = GetArgType(arg1);
+        auto arg2Type = GetArgType(arg2);
+        auto retBlockType = ConvertToBlockType(retType);
+        return YqlKernelRequestBuilder->JsonValue(arg1Type, arg2Type, retBlockType);
+    }
+
     void AddParameterName(const TString& name) {
         ReadProto.AddOlapProgramParameterNames(name);
     }
@@ -141,11 +155,18 @@ private:
         return type;
     }
 
+    const TTypeAnnotationNode* GetColumnTypeByName(const TString &name) {
+        auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
+        YQL_ENSURE(rowItemType->GetKind() == ETypeAnnotationKind::Struct, "Input for OLAP lambda must contain Struct inside.");
+        auto structType = rowItemType->Cast<TStructExprType>();
+        return structType->FindItemType(name);
+    }
+
     const TTypeAnnotationNode* GetArgType(const TExprBase& arg) {
         auto argType = arg.Ptr()->GetTypeAnn();
         if (arg.Maybe<TCoAtom>() && argType->GetKind() == ETypeAnnotationKind::Unit) {
             // Column name
-            return ConvertToBlockType(ExprContext.MakeType<TDataExprType>(EDataSlot::Utf8));
+            return ConvertToBlockType(GetColumnTypeByName(arg.Cast<TCoAtom>().StringValue()));
         }
         return ExprContext.MakeType<TScalarExprType>(argType);
     }
@@ -160,6 +181,7 @@ private:
     const std::vector<std::string>& ResultColNames;
     std::unordered_map<std::string, ui32> KqpAggColNameToId;
     TExprContext& ExprContext;
+    TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
 };
 
@@ -306,9 +328,27 @@ ui64 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ct
     return assignCmd->GetColumn().GetId();
 }
 
-ui64 ConvertJsonValueToColumn(const TKqpOlapJsonValue& /*cast*/, TKqpOlapCompileContext& /*ctx*/) {
-    YQL_ENSURE(false, "Not implemented JsonValue in SSA program!");
-    return 0;
+ui64 ConvertJsonValueToColumn(const TKqpOlapJsonValue& jsonValueCallable, TKqpOlapCompileContext& ctx) {
+    Y_VERIFY(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_VALUE pushdown is supported starting from the v3 of SSA runtime.");
+
+    ui32 columnId = GetOrCreateColumnId(jsonValueCallable.Column(), ctx);
+    ui32 pathId = GetOrCreateColumnId(jsonValueCallable.Path(), ctx);
+
+    TProgram::TAssignment* command = ctx.CreateAssignCmd();
+    auto* jsonValueFunc = command->MutableFunction();
+
+    jsonValueFunc->AddArguments()->SetId(columnId);
+    jsonValueFunc->AddArguments()->SetId(pathId);
+
+    jsonValueFunc->SetFunctionType(TProgram::YQL_KERNEL);
+    auto returningTypeArg = jsonValueCallable.ReturningType();
+    auto idx = ctx.AddYqlKernelJsonValue(
+        jsonValueCallable.Column(),
+        jsonValueCallable.Path(),
+        ctx.ExprCtx().MakeType<TOptionalExprType>(returningTypeArg.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()));
+    jsonValueFunc->SetKernelIdx(idx);
+
+    return command->GetColumn().GetId();
 }
 
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
@@ -460,9 +500,26 @@ TProgram::TAssignment* CompileExists(const TKqpOlapFilterExists& exists,
     return notCommand;
 }
 
-TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& /*cast*/, TKqpOlapCompileContext& /*ctx*/) {
-    YQL_ENSURE(false, "Not implemented JsonExists in SSA program!");
-    return nullptr;
+TProgram::TAssignment* CompileJsonExists(const TKqpOlapJsonExists& jsonExistsCallable, TKqpOlapCompileContext& ctx) {
+    Y_VERIFY(NKikimr::NSsa::RuntimeVersion >= 3, "JSON_EXISTS pushdown is supported starting from the v3 of SSA runtime.");
+
+    ui32 columnId = GetOrCreateColumnId(jsonExistsCallable.Column(), ctx);
+    ui32 pathId = GetOrCreateColumnId(jsonExistsCallable.Path(), ctx);
+
+    TProgram::TAssignment* command = ctx.CreateAssignCmd();
+    auto* jsonExistsFunc = command->MutableFunction();
+
+    jsonExistsFunc->AddArguments()->SetId(columnId);
+    jsonExistsFunc->AddArguments()->SetId(pathId);
+
+    jsonExistsFunc->SetFunctionType(TProgram::YQL_KERNEL);
+    auto idx = ctx.AddYqlKernelJsonExists(
+        jsonExistsCallable.Column(),
+        jsonExistsCallable.Path(),
+        ctx.ExprCtx().MakeType<TOptionalExprType>(ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool)));
+    jsonExistsFunc->SetKernelIdx(idx);
+
+    return command;
 }
 
 TProgram::TAssignment* BuildLogicalProgram(const TExprNode::TChildrenType& args, ui32 function,

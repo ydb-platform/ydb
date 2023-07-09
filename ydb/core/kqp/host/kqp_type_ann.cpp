@@ -918,9 +918,10 @@ bool ValidateOlapJsonOperation(const TExprNode::TPtr& node, TExprContext& ctx) {
         return false;
     }
     auto path = node->Child(TKqpOlapJsonOperationBase::idx_Path);
-    if (!EnsureAtom(*path, ctx)) {
+    auto *pathTypeAnn = path->GetTypeAnn();
+    if (pathTypeAnn->GetKind() != ETypeAnnotationKind::Data || pathTypeAnn->Cast<TDataExprType>()->GetSlot() != EDataSlot::Utf8) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-            TStringBuilder() << "Expected string as path in OLAP JSON function, got: " << path->Content()
+            TStringBuilder() << "Expected Utf8 as path in OLAP JSON function, got: " << path->Content()
         ));
         return false;
     }

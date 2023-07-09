@@ -507,7 +507,7 @@
             "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 0, "Name": "Column", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Path", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "Path", "Type": "TCoUtf8"}
             ]
         },
         {

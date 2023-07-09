@@ -414,11 +414,11 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
         Y_VERIFY(bResourceId.AppendNull().ok());
         Y_VERIFY(bLevel.Append(i).ok());
         Y_VERIFY(bBinaryStr.AppendNull().ok());
-        Y_VERIFY(bJsonVal.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2": "val2"}})")).ok());
+        Y_VERIFY(bJsonVal.Append(std::string(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})")).ok());
         Y_VERIFY(bJsonDoc.AppendNull().ok());
     }
 
-    auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(R"({"col1": "val1", "obj": {"obj_col2": "val2"}})");
+    auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(R"({"col1": "val1", "obj": {"obj_col2_int": 16}})");
     Y_VERIFY(maybeJsonDoc.Defined());
     for (size_t i = rowCount / 2 + 1; i <= rowCount; ++i) {
         Y_VERIFY(bId.Append(i).ok());

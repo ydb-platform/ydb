@@ -179,6 +179,18 @@
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"}
         },
         {
+            "Name": "TKqlSequencer",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlSequencer"},
+            "Children": [
+                {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "AutoIncrementColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "InputItemType", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqlLookupIndex",
             "Base": "TKqlLookupIndexBase",
             "Match": {"Type": "Callable", "Name": "KqlLookupIndex"}
@@ -387,6 +399,17 @@
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
                 {"Index": 3, "Name": "LookupKeysType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpCnSequencer",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnSequencer"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "AutoIncrementColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "InputItemType", "Type": "TExprBase"}
             ]
         },
         {

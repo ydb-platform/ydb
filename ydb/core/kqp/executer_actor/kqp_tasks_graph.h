@@ -90,6 +90,7 @@ struct TGraphMeta {
     TActorId ExecuterId;
     bool UseFollowers = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
+    TString Database;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena; 
@@ -107,8 +108,9 @@ struct TGraphMeta {
 
 struct TTaskInputMeta {
     // these message are allocated using the protubuf arena.
-    NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings;
-    NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings;
+    NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
+    NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
+    NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
 };
 
 struct TTaskOutputMeta {

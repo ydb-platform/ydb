@@ -10,6 +10,8 @@ SRCS(
     kqp_read_table.cpp
     kqp_runtime_impl.h
     kqp_scan_data.cpp
+    kqp_sequencer_actor.cpp
+    kqp_sequencer_factory.cpp
     kqp_scan_data_meta.cpp
     kqp_spilling_file.cpp
     kqp_stream_lookup_actor.cpp

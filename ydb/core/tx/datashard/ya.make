@@ -294,6 +294,7 @@ RECURSE_FOR_TESTS(
     ut_reassign
     ut_replication
     ut_rs
+    ut_sequence
     ut_snapshot
     ut_stats
     ut_upload_rows

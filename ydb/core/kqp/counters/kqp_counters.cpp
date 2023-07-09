@@ -793,6 +793,12 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
 
+    /* sequencers */
+
+    SequencerActorsCount = KqpGroup->GetCounter("Sequencer/ActorCount", false);
+    SequencerErrors = KqpGroup->GetCounter("Sequencer/Errors", true);
+    SequencerOk = KqpGroup->GetCounter("Sequencer/Ok", true);
+
     LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram(
         "PhyTx/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
     DataTxTotalTimeHistogram = KqpGroup->GetHistogram(

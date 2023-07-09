@@ -63,6 +63,7 @@ message TKqpPhyColumn {
     TKqpPhyColumnId Id = 1;
     uint32 TypeId = 2;
     string PgTypeName = 3;
+    string DefaultFromSequence = 4;
 }
 
 enum EKqpPhyTableKind {
@@ -255,6 +256,14 @@ message TKqpPhyCnStreamLookup {
     bytes ResultType = 5;
 }
 
+message TKqpPhyCnSequencer {
+    TKqpPhyTableId Table = 1;
+    repeated string Columns = 2;
+    repeated string AutoIncrementColumns = 3;  
+    bytes InputType = 4;
+    bytes OutputType = 5;
+}
+
 message TKqpPhyConnection {
     uint32 StageIndex = 1;
     uint32 OutputIndex = 2;
@@ -271,6 +280,7 @@ message TKqpPhyConnection {
         TKqpPhyCnValue Value = 10;
         TKqpPhyCnMerge Merge = 11;
         TKqpPhyCnStreamLookup StreamLookup = 12;
+        TKqpPhyCnSequencer Sequencer = 14;
     };
 }
 

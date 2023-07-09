@@ -21,6 +21,8 @@ NYql::NNodes::TExprBase KqpBuildReadTableRangesStage(NYql::NNodes::TExprBase nod
 
 NYql::NNodes::TExprBase KqpBuildLookupTableStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 
+NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
+
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase KqpRemoveRedundantSortByPk(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,

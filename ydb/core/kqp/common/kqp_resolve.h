@@ -33,6 +33,7 @@ public:
         TVector<TString> KeyColumns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         ETableKind TableKind = ETableKind::Unknown;
+        THashMap<TString, TString> Sequences;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfo;
 
         const TMap<TString, TColumn>& GetColumnsRemap() const {

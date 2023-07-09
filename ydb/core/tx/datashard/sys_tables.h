@@ -13,15 +13,17 @@ struct TSysTables {
         NScheme::TTypeInfo PType;
         TString PTypeMod;
         i32 KeyOrder = -1;
+        TString DefaultFromSequence;
 
         TTableColumnInfo() = default;
 
-        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type, const TString& typeMod = {}, i32 keyOrder = -1)
+        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type, const TString& typeMod = {}, i32 keyOrder = -1, const TString& defaultFromSequence = {})
             : Name(name)
             , Id(colId)
             , PType(type)
             , PTypeMod(typeMod)
             , KeyOrder(keyOrder)
+            , DefaultFromSequence(defaultFromSequence)
         {}
     };
 

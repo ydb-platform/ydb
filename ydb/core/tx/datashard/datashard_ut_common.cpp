@@ -1109,7 +1109,7 @@ void CreateShardedTable(
 
     auto& tx = *request->Record.MutableTransaction()->MutableModifyScheme();
     NKikimrSchemeOp::TTableDescription* desc = nullptr;
-    if (opts.Indexes_) {
+    if (opts.Indexes_ || opts.Sequences_) {
         tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
         desc = tx.MutableCreateIndexedTable()->MutableTableDescription();
     } else {
@@ -1120,6 +1120,8 @@ void CreateShardedTable(
     UNIT_ASSERT(desc);
     desc->SetName(name);
 
+    std::vector<TString> defaultFromSequences;
+
     for (const auto& column : opts.Columns_) {
         auto col = desc->AddColumns();
         col->SetName(column.Name);
@@ -1129,6 +1131,10 @@ void CreateShardedTable(
             desc->AddKeyColumnNames(column.Name);
         }
         col->SetFamilyName(column.Family);
+        if (column.DefaultFromSequence) {
+            col->SetDefaultFromSequence(column.DefaultFromSequence);
+            defaultFromSequences.emplace_back(column.DefaultFromSequence);
+        }
     }
 
     for (const auto& family : opts.Families_) {
@@ -1162,6 +1168,11 @@ void CreateShardedTable(
         attr->SetValue(v);
     }
 
+    for(const TString& name: defaultFromSequences) {
+        auto seq = tx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
+        seq->SetName(name);
+    }
+    
     desc->SetUniformPartitionsCount(opts.Shards_);
 
     if (!opts.EnableOutOfOrder_)

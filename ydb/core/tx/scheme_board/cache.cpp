@@ -755,6 +755,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
+                column.DefaultFromSequence = columnDesc.GetDefaultFromSequence();
 
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());

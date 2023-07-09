@@ -10,6 +10,8 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -538,7 +540,8 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
-        if (!rowType->FindItem(keyColumnName)) {
+        const auto& columnInfo = table.second->Metadata->Columns.at(keyColumnName);
+        if (!rowType->FindItem(keyColumnName) && !columnInfo.IsAutoIncrement()) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
@@ -1200,8 +1203,74 @@ TStatus AnnotateKqpEffects(const TExprNode::TPtr& node, TExprContext& ctx) {
 
 TStatus AnnotateWriteConstraint(const TExprNode::TPtr& node, TExprContext& ctx) {
     Y_UNUSED(ctx);
+
     auto* input = node->Child(TKqpWriteConstraint::idx_Input);
+    if (!input->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
     node->SetTypeAnn(input->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData)
+{
+    auto& input = node->ChildRef(TKqlSequencer::idx_Input);
+
+    const TStructExprType *rowType = nullptr;
+
+    auto inputType = input->GetTypeAnn();
+    if (inputType->GetKind() == ETypeAnnotationKind::List) {
+        auto listType = inputType->Cast<TListExprType>();
+        auto itemType = listType->GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+          rowType = itemType->Cast<TStructExprType>();
+        }
+    } else if (inputType->GetKind() == ETypeAnnotationKind::Stream) {
+        auto streamType = inputType->Cast<TStreamExprType>();
+        auto itemType = streamType->GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+          rowType = itemType->Cast<TStructExprType>();
+        }
+    }
+
+    auto resolveResult = ResolveTable(node->Child(TKqlSequencer::idx_Table), ctx, cluster, tablesData);
+    if (!resolveResult.second) {
+        return TStatus::Error;
+    }
+
+    auto table = resolveResult.second;
+    YQL_ENSURE(rowType);
+    absl::flat_hash_set<TString, THash<TString>> missingKeyColumns;
+    for(const auto& key: table->Metadata->KeyColumnNames) {
+        if (rowType->FindItem(key)) {
+            continue;
+        }
+
+        const auto& infoIt = table->Metadata->Columns.find(key);
+        YQL_ENSURE(infoIt != table->Metadata->Columns.end());
+        const auto& info = infoIt->second;
+        if (info.IsAutoIncrement()) {
+            auto [_, inserted] = missingKeyColumns.emplace(key);
+            YQL_ENSURE(inserted, "unexpected duplicates in key columns.");
+        }
+    }
+
+    TVector<const TItemExprType *> seqRowTypeItems = rowType->GetItems();
+    for (auto &column : missingKeyColumns) {
+        auto columnType = table->GetColumnType(column);
+        YQL_ENSURE(columnType);
+        seqRowTypeItems.push_back(
+            ctx.MakeType<TItemExprType>(column, columnType));
+    }
+
+    const TTypeAnnotationNode *expectedRowType =
+        ctx.MakeType<TStructExprType>(seqRowTypeItems);
+
+    auto listSeqType = ctx.MakeType<TListExprType>(expectedRowType);
+    node->SetTypeAnn(listSeqType);
+
     return TStatus::Ok;
 }
 
@@ -1295,6 +1364,51 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     node->SetTypeAnn(node->Head().GetTypeAnn());
     return TStatus::Ok;
 }
+
+TStatus AnnotateSequencerConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    if (!EnsureArgsCount(*node, 5, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TKqpCnSequencer::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!TDqOutput::Match(node->Child(TKqpCnSequencer::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TDqCnMerge::idx_Output)->Pos()),
+            TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpCnSequencer::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnSequencer::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnSequencer::idx_AutoIncrementColumns), ctx)) {
+        return TStatus::Error;
+    }
+
+    auto inputNodeTypeNode = node->Child(TKqpCnSequencer::idx_InputItemType);
+    if (!EnsureType(*inputNodeTypeNode, ctx)) {
+        return TStatus::Error;
+    }
+
+    TCoAtomList columns{node->ChildPtr(TKqpCnSequencer::idx_Columns)};
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+} 
 
 TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns) {
@@ -1445,6 +1559,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateDqConnection(input, ctx);
             }
 
+            if (TKqpCnSequencer::Match(input.Get())) {
+                return AnnotateSequencerConnection(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
+            }
+
             if (TKqpCnStreamLookup::Match(input.Get())) {
                 return AnnotateStreamLookupConnection(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -1471,6 +1589,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpWriteConstraint::Match(input.Get())) {
                 return AnnotateWriteConstraint(input, ctx);
+            }
+
+            if (TKqlSequencer::Match(input.Get())) {
+                return AnnotateSequencer(input, ctx, cluster, *tablesData);
             }
 
             if (TKqpProgram::Match(input.Get())) {

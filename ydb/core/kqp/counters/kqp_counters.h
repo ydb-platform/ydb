@@ -390,6 +390,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Sequences counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SequencerErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SequencerOk;
+
     // Physical tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;

@@ -405,18 +405,21 @@ struct TShardedTableOptions {
     using TSelf = TShardedTableOptions;
 
     struct TColumn {
-        TColumn(const TString& name, const TString& type, bool isKey, bool notNull, TString family = {})
+        TColumn(const TString& name, const TString& type, bool isKey, bool notNull, TString family = {}, const TString& defaultFromSequence = {})
             : Name(name)
             , Type(type)
             , IsKey(isKey)
             , NotNull(notNull)
-            , Family(family) {}
+            , Family(family)
+            , DefaultFromSequence(defaultFromSequence)
+        {}
 
         TString Name;
         TString Type;
         bool IsKey;
         bool NotNull;
         TString Family;
+        TString DefaultFromSequence;
     };
 
     struct TIndex {
@@ -476,6 +479,7 @@ struct TShardedTableOptions {
     TABLE_OPTION(bool, Replicated, false);
     TABLE_OPTION(std::optional<EReplicationConsistency>, ReplicationConsistency, std::nullopt);
     TABLE_OPTION(TAttributes, Attributes, {});
+    TABLE_OPTION(bool, Sequences, false);
 
 #undef TABLE_OPTION
 #undef TABLE_OPTION_IMPL

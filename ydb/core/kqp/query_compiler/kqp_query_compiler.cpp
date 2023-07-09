@@ -154,6 +154,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         phyColumn.MutableId()->SetId(column->Id);
         phyColumn.MutableId()->SetName(column->Name);
         phyColumn.SetTypeId(column->TypeInfo.GetTypeId());
+        phyColumn.SetDefaultFromSequence(column->DefaultFromSequence);
 
         if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
             phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetTypeDesc()));
@@ -995,6 +996,42 @@ private:
                 newSortColumn->SetColumn(sortColumn.Column().StringValue());
                 newSortColumn->SetAscending(sortColumn.SortDirection().Value() == TTopSortSettings::AscendingSort);
             }
+            return;
+        }
+
+        if (auto maybeSequencer = connection.Maybe<TKqpCnSequencer>()) {
+            TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+            auto& sequencerProto = *connectionProto.MutableSequencer();
+
+            auto sequencer = maybeSequencer.Cast();
+            auto tableMeta = TablesData->ExistingTable(Cluster, sequencer.Table().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillTableId(sequencer.Table(), *sequencerProto.MutableTable());
+            FillTablesMap(sequencer.Table(), sequencer.Columns(), tablesMap);
+
+            const auto resultType = sequencer.Ref().GetTypeAnn();
+            YQL_ENSURE(resultType, "Empty sequencer result type");
+            YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected sequencer result type");
+            const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
+            sequencerProto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
+
+            const auto inputNodeType = sequencer.InputItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputNodeType, "Empty sequencer input type");
+            YQL_ENSURE(inputNodeType->GetKind() == ETypeAnnotationKind::List, "Unexpected input type");
+            const auto inputItemType = inputNodeType->Cast<TListExprType>()->GetItemType();
+            sequencerProto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
+
+            auto autoIncrementColumns = sequencer.AutoIncrementColumns();
+            for(const auto& column : autoIncrementColumns) {
+                sequencerProto.AddAutoIncrementColumns(column.StringValue());
+            }
+
+            auto resultColumns = sequencer.Columns();
+            for(const auto& column: resultColumns) {
+                sequencerProto.AddColumns(column.StringValue());
+            }
+
             return;
         }
 

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "schemeshard_ui64id.h"
-
 #include <ydb/core/base/pathid.h>
+#include <ydb/core/util/ui64id.h>
 
 #include <util/generic/utility.h>
 #include <util/stream/output.h>

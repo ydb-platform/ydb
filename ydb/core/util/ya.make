@@ -54,6 +54,8 @@ SRCS(
     type_alias.h
     ulid.cpp
     ulid.h
+    ui64id.cpp
+    ui64id.h
     wildcard.h
 )
 

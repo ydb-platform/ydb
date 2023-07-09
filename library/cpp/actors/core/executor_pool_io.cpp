@@ -5,8 +5,8 @@
 #include <library/cpp/actors/util/datetime.h>
 
 namespace NActors {
-    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity, ui32 maxActivityType)
-        : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
+    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity)
+        : TExecutorPoolBase(poolId, threads, affinity)
         , Threads(new TThreadCtx[threads])
         , PoolName(poolName)
     {}
@@ -16,8 +16,7 @@ namespace NActors {
             cfg.PoolId,
             cfg.Threads,
             cfg.PoolName,
-            new TAffinity(cfg.Affinity),
-            cfg.MaxActivityType
+            new TAffinity(cfg.Affinity)
         )
     {}
 

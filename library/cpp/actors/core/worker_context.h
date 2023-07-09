@@ -34,11 +34,10 @@ namespace NActors {
         i64 HPStart = 0;
         ui32 ExecutedEvents = 0;
 
-        TWorkerContext(TWorkerId workerId, TCpuId cpuId, size_t activityVecSize)
+        TWorkerContext(TWorkerId workerId, TCpuId cpuId)
             : WorkerId(workerId)
             , CpuId(cpuId)
             , Lease(WorkerId, NeverExpire)
-            , WorkerStats(activityVecSize)
         {}
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS

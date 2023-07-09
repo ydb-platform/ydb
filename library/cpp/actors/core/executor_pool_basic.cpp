@@ -29,7 +29,7 @@ namespace NActors {
         i16 maxThreadCount,
         i16 defaultThreadCount,
         i16 priority)
-        : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
+        : TExecutorPoolBase(poolId, threads, affinity)
         , SpinThreshold(spinThreshold)
         , SpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , Threads(new TThreadCtx[threads])
@@ -48,6 +48,7 @@ namespace NActors {
         , Harmonizer(harmonizer)
         , Priority(priority)
     {
+        Y_UNUSED(maxActivityType);
         i16 limit = Min(threads, (ui32)Max<i16>());
         if (DefaultThreadCount) {
             DefaultThreadCount = Min(DefaultThreadCount, limit);
@@ -79,7 +80,7 @@ namespace NActors {
             cfg.TimePerMailbox,
             cfg.EventsPerMailbox,
             cfg.RealtimePriority,
-            cfg.MaxActivityType,
+            0,
             cfg.MinThreadCount,
             cfg.MaxThreadCount,
             cfg.DefaultThreadCount,

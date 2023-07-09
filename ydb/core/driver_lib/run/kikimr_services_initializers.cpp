@@ -265,7 +265,6 @@ void AddExecutorPool(
     const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
     const NKikimrConfig::TActorSystemConfig& systemConfig,
     ui32 poolId,
-    ui32 maxActivityType,
     ui32& unitedThreads,
     const NKikimr::TAppData* appData)
 {
@@ -287,7 +286,6 @@ void AddExecutorPool(
         basic.SpinThreshold = poolConfig.GetSpinThreshold();
         basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
         basic.RealtimePriority = poolConfig.GetRealtimePriority();
-        basic.MaxActivityType = maxActivityType;
         if (poolConfig.HasTimePerMailboxMicroSecs()) {
             basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
         } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
@@ -312,7 +310,6 @@ void AddExecutorPool(
         io.PoolName = poolConfig.GetName();
         io.Threads = poolConfig.GetThreads();
         io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-        io.MaxActivityType = maxActivityType;
         cpuManager.IO.emplace_back(std::move(io));
         break;
     }
@@ -323,7 +320,6 @@ void AddExecutorPool(
         united.Concurrency = poolConfig.GetConcurrency();
         united.Weight = (NActors::TPoolWeight)poolConfig.GetWeight();
         united.Allowed = ParseAffinity(poolConfig.GetAffinity());
-        united.MaxActivityType = maxActivityType;
         if (poolConfig.HasTimePerMailboxMicroSecs()) {
             united.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
         } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
@@ -388,14 +384,14 @@ static TUnitedWorkersConfig CreateUnitedWorkersConfig(const NKikimrConfig::TActo
     return result;
 }
 
-static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config, ui32 maxActivityType,
+static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config,
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
     ui32 unitedThreads = 0;
     cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
     for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
-        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, maxActivityType, unitedThreads, appData);
+        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, unitedThreads, appData);
     }
     cpuManager.UnitedWorkers = CreateUnitedWorkersConfig(config.GetUnitedWorkers(), unitedThreads);
     return cpuManager;
@@ -601,8 +597,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
     setup->NodeId = NodeId;
-    setup->MaxActivityType = GetActivityTypeCount();
-    setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType, appData);
+    setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
 
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {

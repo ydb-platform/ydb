@@ -1134,7 +1134,7 @@ namespace NActors {
             // Reinitialize per cpu pool stats with right MaxActivityType
             for (const TCpuAllocation& cpuAlloc : allocation.Items) {
                 TCpu& cpu = Cpus[cpuAlloc.CpuId];
-                cpu.PoolStats[cfg.PoolId] = TExecutorThreadStats(cfg.MaxActivityType);
+                cpu.PoolStats[cfg.PoolId] = TExecutorThreadStats();
             }
 
             // Setup WakeOrderCpus: left to right exclusive cpus, then left to right shared cpus.
@@ -1374,7 +1374,7 @@ namespace NActors {
     }
 
     TUnitedExecutorPool::TUnitedExecutorPool(const TUnitedExecutorPoolConfig& cfg, TUnitedWorkers* united)
-        : TExecutorPoolBaseMailboxed(cfg.PoolId, cfg.MaxActivityType)
+        : TExecutorPoolBaseMailboxed(cfg.PoolId)
         , United(united)
         , PoolName(cfg.PoolName)
     {

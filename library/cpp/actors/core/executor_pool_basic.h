@@ -120,7 +120,7 @@ namespace NActors {
                            TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                            ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX,
                            int realtimePriority = 0,
-                           ui32 maxActivityType = 1,
+                           ui32 maxActivityType = 0 /* deprecated */,
                            i16 minThreadCount = 0,
                            i16 maxThreadCount = 0,
                            i16 defaultThreadCount = 0,

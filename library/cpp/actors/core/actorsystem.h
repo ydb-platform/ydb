@@ -99,7 +99,6 @@ namespace NActors {
         TCpuManagerConfig CpuManager;
 
         TAutoPtr<ISchedulerThread> Scheduler;
-        ui32 MaxActivityType = 5; // for default entries
 
         TInterconnectSetup Interconnect;
 
@@ -272,10 +271,6 @@ namespace NActors {
 
         TActorId LookupLocalService(const TActorId& x) const;
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
-
-        ui32 GetMaxActivityType() const {
-            return SystemSetup ? SystemSetup->MaxActivityType : 1;
-        }
 
         TInstant Timestamp() const {
             return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp));

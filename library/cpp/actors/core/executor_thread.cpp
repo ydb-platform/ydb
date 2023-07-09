@@ -40,7 +40,7 @@ namespace NActors {
             ui32 eventsPerMailbox)
         : ActorSystem(actorSystem)
         , ExecutorPool(executorPool)
-        , Ctx(workerId, cpuId, actorSystem ? actorSystem->GetMaxActivityType() : 1)
+        , Ctx(workerId, cpuId)
         , ThreadName(threadName)
         , IsUnitedWorker(true)
     {

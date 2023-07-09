@@ -18,6 +18,7 @@ public:
 namespace NActors {
 enum class EInternalActorType {
     OTHER = 0,
+    INCORRECT_ACTOR_TYPE_INDEX,
     ACTOR_SYSTEM,
     ACTORLIB_COMMON,
     ACTORLIB_STATS,
@@ -43,6 +44,10 @@ enum class EInternalActorType {
 
 class TActorTypeOperator {
 public:
+    static constexpr ui32 GetMaxAvailableActorsCount() {
+        return TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount();
+    }
+
     template <class TEnum>
     static ui32 GetEnumActivityType(const TEnum enumValue) {
         return TEnumProcessKey<TActorActivityTag, TEnum>::GetIndex(enumValue);
@@ -54,6 +59,10 @@ public:
 
     static ui32 GetOtherActivityIndex() {
         return TEnumProcessKey<TActorActivityTag, EInternalActorType>::GetIndex(EInternalActorType::OTHER);
+    }
+
+    static ui32 GetActorActivityIncorrectIndex() {
+        return TEnumProcessKey<TActorActivityTag, EInternalActorType>::GetIndex(EInternalActorType::INCORRECT_ACTOR_TYPE_INDEX);
     }
 };
 }

@@ -14,13 +14,10 @@ namespace NActors {
         actor->Registered(sys, owner);
     }
 
-    TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId, ui32 maxActivityType)
+    TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
         , MailboxTable(new TMailboxTable)
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        , Stats(maxActivityType)
-#endif
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
@@ -54,8 +51,8 @@ namespace NActors {
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, ui32 maxActivityType)
-        : TExecutorPoolBaseMailboxed(poolId, maxActivityType)
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity)
+        : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
         , ThreadsAffinity(affinity)
     {}
@@ -119,8 +116,11 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
-        if (at >= Stats.MaxActivityType())
-            at = 0;
+        Y_VERIFY_DEBUG(at < Stats.ActorsAliveByActivity.size());
+        if (at >= Stats.MaxActivityType()) {
+            at = TActorTypeOperator::GetActorActivityIncorrectIndex();
+            Y_VERIFY(at < Stats.ActorsAliveByActivity.size());
+        }
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
         if (ActorSystem->MonitorStuckActors()) {
             with_lock (StuckObserverMutex) {

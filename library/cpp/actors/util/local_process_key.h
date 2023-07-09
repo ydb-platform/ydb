@@ -9,6 +9,13 @@
 #include <util/generic/serialized_enum.h>
 #include <library/cpp/actors/prof/tag.h>
 
+class TLocalProcessKeyStateIndexLimiter {
+public:
+    static constexpr ui32 GetMaxKeysCount() {
+        return 10000;
+    }
+};
+
 template <class T>
 class TLocalProcessKeyStateIndexConstructor {
 public:
@@ -67,7 +74,7 @@ public:
 
 private:
 
-    static constexpr ui32 MaxKeysCount = 1000000;
+    static constexpr ui32 MaxKeysCount = TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount();
 
 private:
     TVector<TString> Names;

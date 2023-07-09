@@ -40,7 +40,6 @@ namespace NActors {
         TDuration TimePerMailbox = DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX;
         int RealtimePriority = 0;
-        ui32 MaxActivityType = 5;
         i16 MinThreadCount = 0;
         i16 MaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
@@ -52,7 +51,6 @@ namespace NActors {
         TString PoolName;
         ui32 Threads = 1;
         TCpuMask Affinity; // Executor thread affinity
-        ui32 MaxActivityType = 5;
     };
 
     struct TUnitedExecutorPoolConfig {
@@ -70,9 +68,6 @@ namespace NActors {
         // Single mailbox execution limits
         TDuration TimePerMailbox = DEFAULT_TIME_PER_MAILBOX;
         ui32 EventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX;
-
-        // Introspection
-        ui32 MaxActivityType = 5;
 
         // Long-term balancing
         TBalancingConfig Balancing;

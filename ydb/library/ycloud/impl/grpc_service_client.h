@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/grpc/client/grpc_client_low.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <util/string/ascii.h>
 #include "grpc_service_settings.h"
 

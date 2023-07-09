@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/mon.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include "viewer.h"
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/health_check/health_check.h>

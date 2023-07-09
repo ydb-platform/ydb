@@ -1,8 +1,8 @@
-#include "kikimr_issue.h"
+#include "issue_helpers.h"
 
 namespace NKikimr {
 
-const char IssueMapResource[] = "kikimr_issue.txt";
+const char IssueMapResource[] = "ydb_issue.txt";
 
 static_assert(NYql::DEFAULT_ERROR == NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
     "value of particular and common error mismatched for \"DEFAULT_ERROR\"");

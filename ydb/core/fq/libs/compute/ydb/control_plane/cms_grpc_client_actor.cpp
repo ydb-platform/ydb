@@ -1,7 +1,7 @@
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>

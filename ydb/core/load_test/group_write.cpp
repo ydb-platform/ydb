@@ -4,7 +4,7 @@
 #include "quantile.h"
 #include "speed.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/util/lz4_data_generator.h>
 
 #include <google/protobuf/text_format.h>

@@ -1,7 +1,7 @@
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include "proxy.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>

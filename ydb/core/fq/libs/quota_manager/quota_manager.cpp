@@ -14,7 +14,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #define LOG_E(stream) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)

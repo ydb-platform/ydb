@@ -16,6 +16,7 @@ target_link_libraries(providers-dq-worker_manager PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  ydb-library-ydb_issue
   yql-utils-failure_injector
   providers-common-config
   providers-common-gateway

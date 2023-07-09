@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_id.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>

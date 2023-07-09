@@ -15,7 +15,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/wilson.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>

@@ -12,7 +12,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/utils/actors
-    ydb/core/protos
+    ydb/library/services
 )
 
 YQL_LAST_ABI_VERSION()

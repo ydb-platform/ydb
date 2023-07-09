@@ -12,8 +12,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/protos/services.pb.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <ydb/library/pdisk_io/wcache.h>

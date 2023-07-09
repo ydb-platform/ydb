@@ -1,7 +1,7 @@
 #include "http.h"
 #include "xml.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/core/ymq/actor/actor.h>
 #include <ydb/core/ymq/actor/auth_factory.h>

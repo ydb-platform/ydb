@@ -25,7 +25,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <ydb/library/ycloud/api/access_service.h>

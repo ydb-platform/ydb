@@ -19,7 +19,7 @@
 
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_local.h>

@@ -4,7 +4,7 @@
 
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/datashard/sys_tables.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

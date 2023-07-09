@@ -1,6 +1,6 @@
 #include "update_limit_actor.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/rate_limiter/utils/path.h>
 

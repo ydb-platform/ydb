@@ -3,7 +3,7 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

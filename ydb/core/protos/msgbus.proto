@@ -19,7 +19,6 @@ import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/sqs.proto";
-import "ydb/core/protos/issue_id.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/load_test.proto";
@@ -27,6 +26,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/library/ydb_issue/proto/issue_id.proto";
 
 import "google/protobuf/descriptor.proto";
 

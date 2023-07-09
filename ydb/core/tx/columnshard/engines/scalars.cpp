@@ -1,7 +1,7 @@
 #include "scalars.h"
 
 #include <ydb/core/formats/arrow/switch_type.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NOlap {
 

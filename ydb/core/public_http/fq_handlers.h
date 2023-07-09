@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/service_fq.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/public_http/protos/fq.pb.h>
 
 namespace NKikimr::NPublicHttp {

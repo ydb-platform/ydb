@@ -4,7 +4,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/counters_hive.pb.h>
 #include <ydb/core/util/tuples.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <util/generic/array_ref.h>
 

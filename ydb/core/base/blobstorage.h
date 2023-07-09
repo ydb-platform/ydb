@@ -12,7 +12,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
 #include <library/cpp/lwtrace/shuttle.h>

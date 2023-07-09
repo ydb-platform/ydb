@@ -1,5 +1,5 @@
 #include <ydb/core/base/tablet_resolver.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tabletid.h>

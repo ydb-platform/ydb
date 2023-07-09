@@ -7,7 +7,7 @@
 #include <util/string/builder.h>
 
 #include <library/cpp/actors/core/log.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <google/protobuf/text_format.h>
 
 #include "tablet_tracing_signals.h"

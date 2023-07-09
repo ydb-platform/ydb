@@ -9,7 +9,7 @@
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/csv.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>

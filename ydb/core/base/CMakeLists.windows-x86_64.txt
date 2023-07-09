@@ -15,12 +15,6 @@ get_built_tool_path(
   tools/enum_parser/enum_parser
   enum_parser
 )
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
 
 add_library(ydb-core-base)
 target_link_libraries(ydb-core-base PUBLIC
@@ -46,10 +40,10 @@ target_link_libraries(ydb-core-base PUBLIC
   ydb-library-login
   ydb-library-pdisk_io
   library-pretty_types_print-protobuf
+  ydb-library-ydb_issue
   api-protos-out
   library-yql-minikql
   cpp-deprecated-atomic
-  library-cpp-resource
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-base PRIVATE
@@ -63,7 +57,6 @@ target_sources(ydb-core-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/domain.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/event_filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/group_stat.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/kikimr_issue.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/path.cpp
@@ -94,45 +87,4 @@ generate_enum_serilization(ydb-core-base
   ${CMAKE_SOURCE_DIR}/ydb/core/base/quoter.h
   INCLUDE_HEADERS
   ydb/core/base/quoter.h
-)
-
-add_global_library_for(ydb-core-base.global ydb-core-base)
-target_link_libraries(ydb-core-base.global PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-actors-core
-  cpp-actors-helpers
-  cpp-actors-interconnect
-  cpp-actors-protos
-  cpp-actors-wilson
-  cpp-deprecated-enum_codegen
-  library-cpp-logger
-  library-cpp-lwtrace
-  cpp-lwtrace-mon
-  library-cpp-random_provider
-  library-cpp-time_provider
-  core-base-services
-  ydb-core-debug
-  ydb-core-erasure
-  ydb-core-protos
-  core-protos-out
-  ydb-library-aclib
-  ydb-library-login
-  ydb-library-pdisk_io
-  library-pretty_types_print-protobuf
-  api-protos-out
-  library-yql-minikql
-  cpp-deprecated-atomic
-  library-cpp-resource
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(ydb-core-base.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/base/f531e5f3938fdb7748ac5883aae02753.cpp
-)
-resources(ydb-core-base.global
-  ${CMAKE_BINARY_DIR}/ydb/core/base/f531e5f3938fdb7748ac5883aae02753.cpp
-  INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/kikimr_issue.txt
-  KEYS
-  kikimr_issue.txt
 )

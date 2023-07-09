@@ -11,7 +11,7 @@
 #include "flat_util_misc.h"
 #include "util_fmt_abort.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {
 namespace NTable {

@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
 #include <library/cpp/actors/core/actorid.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/debug/valgrind_check.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/string.h>

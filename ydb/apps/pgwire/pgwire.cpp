@@ -1,6 +1,6 @@
 #include <ydb/core/pgproxy/pg_listener.h>
 #include <ydb/core/pgproxy/pg_log.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <util/system/mlock.h>
 #include <util/stream/file.h>
 #include <library/cpp/getopt/last_getopt.h>

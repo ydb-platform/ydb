@@ -12,7 +12,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>
 

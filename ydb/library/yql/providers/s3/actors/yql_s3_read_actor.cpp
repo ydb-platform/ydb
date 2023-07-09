@@ -37,7 +37,7 @@
 #include "yql_s3_source_factory.h"
 #include "yql_s3_actors_util.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>

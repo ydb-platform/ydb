@@ -1,7 +1,7 @@
 #include "batch_only.h"
 #include "stream.h"
 #include <ydb/core/formats/arrow/common/validation.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>

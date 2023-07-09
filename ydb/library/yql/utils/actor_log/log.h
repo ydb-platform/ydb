@@ -2,7 +2,7 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/log/tls_backend.h>
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor.h>

@@ -11,7 +11,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/security/secure_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

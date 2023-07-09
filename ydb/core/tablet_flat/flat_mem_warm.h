@@ -13,7 +13,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/core/util/btree_cow.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>

@@ -1,6 +1,6 @@
 #include "shared_resources.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/logger/actor.h>
 

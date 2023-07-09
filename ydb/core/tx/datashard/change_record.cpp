@@ -8,7 +8,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/protos/change_exchange.pb.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/binary_json/read.h>
 
 #include <util/stream/str.h>

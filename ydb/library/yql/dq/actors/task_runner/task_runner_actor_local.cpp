@@ -1,6 +1,6 @@
 #include "task_runner_actor.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>

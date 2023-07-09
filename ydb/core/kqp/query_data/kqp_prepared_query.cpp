@@ -7,7 +7,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/log.h>
 

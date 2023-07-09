@@ -20,7 +20,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/public/lib/base/msgbus.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <util/string/escape.h>
 

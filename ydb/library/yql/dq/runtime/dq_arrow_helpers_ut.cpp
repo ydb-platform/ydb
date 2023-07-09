@@ -1,6 +1,6 @@
 #include "dq_arrow_helpers.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <memory>
 #include <ydb/library/yql/public/udf/udf_data_type.h>

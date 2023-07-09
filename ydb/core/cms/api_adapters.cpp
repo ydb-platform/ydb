@@ -1,6 +1,6 @@
 #include "cms_impl.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 

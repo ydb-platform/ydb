@@ -1,11 +1,11 @@
 #include "kqp_run_script_actor.h"
 
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

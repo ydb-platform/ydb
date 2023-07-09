@@ -99,7 +99,7 @@
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/pq_l2_service.h>
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>

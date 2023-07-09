@@ -7,7 +7,7 @@
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <util/system/yassert.h>
 #include <util/string/join.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>

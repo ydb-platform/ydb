@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <util/network/sock.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include "sock_listener.h"
 #include "sock_config.h"

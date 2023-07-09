@@ -9,7 +9,7 @@
 #include <library/cpp/actors/interconnect/interconnect_address.h>
 #include <ydb/core/base/tablet_pipe.h>
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/bitmap.h>

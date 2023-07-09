@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/log.h>
 #include <util/system/mutex.h>
 

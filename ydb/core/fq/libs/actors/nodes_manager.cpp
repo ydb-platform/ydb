@@ -14,7 +14,7 @@
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <library/cpp/actors/core/log.h>
 #include <util/system/hostname.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 
 #define LOG_E(stream) \

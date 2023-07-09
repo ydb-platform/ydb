@@ -1,6 +1,6 @@
 #include <util/generic/serialized_enum.h>
 #include <util/generic/singleton.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NEnumSerializationRuntime {
 

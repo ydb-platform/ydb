@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/subdomains.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 

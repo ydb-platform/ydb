@@ -1,5 +1,5 @@
 #include "hash_by_columns.h"
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/minikql/jsonpath/jsonpath.h>

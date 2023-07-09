@@ -46,7 +46,7 @@
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/core/fq/libs/actors/nodes_manager.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>

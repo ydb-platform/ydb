@@ -9,7 +9,7 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/actor_log/log.h>

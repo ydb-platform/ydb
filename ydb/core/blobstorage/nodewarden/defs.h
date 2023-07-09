@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/mailbox_queue_revolving.h>
 #include <library/cpp/actors/core/invoke.h>
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/blobstorage/nodewarden/group_stat_aggregator.h>

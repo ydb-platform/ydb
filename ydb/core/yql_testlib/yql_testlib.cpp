@@ -4,7 +4,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>

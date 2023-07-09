@@ -7,7 +7,7 @@
 #include <ydb/core/pgproxy/pg_proxy.h>
 #include <ydb/core/pgproxy/pg_log.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/network/socket.h>
 #include <util/string/hex.h>

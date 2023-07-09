@@ -1,7 +1,7 @@
 #include "sequenceproxy_impl.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 

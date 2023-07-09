@@ -4,7 +4,7 @@
 #include "events.h"
 #include "local_rate_limiter_allocator.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/actor/infly.h>
 #include <ydb/core/ymq/actor/message_delay_stats.h>

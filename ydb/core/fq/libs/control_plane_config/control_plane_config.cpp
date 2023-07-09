@@ -19,7 +19,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/security/util.h>

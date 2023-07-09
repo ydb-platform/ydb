@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include <ydb/core/ymq/actor/events.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 

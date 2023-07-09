@@ -7,7 +7,7 @@
 #include "rpc_common/rpc_common.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>

@@ -46,7 +46,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/statestorage_impl.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>

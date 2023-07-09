@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 #include <ydb/core/tx/scheme_board/cache.h>

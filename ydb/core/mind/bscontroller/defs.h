@@ -21,7 +21,7 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/counters_bs_controller.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/actors/util/ticket_lock.h>
 
 #include <util/datetime/base.h>

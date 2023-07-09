@@ -4,7 +4,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/base/appdata.h>
 

@@ -727,15 +727,25 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) {
             UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(),
                 "Unexpected empty scan query response.");
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+                PrintResultSet(resultSet, resultSetWriter);
+                res.RowsCount += resultSet.RowsCount();
+            }
         }
 
-        if (streamPart.HasResultSet()) {
-            auto resultSet = streamPart.ExtractResultSet();
-            PrintResultSet(resultSet, resultSetWriter);
-            res.RowsCount += resultSet.RowsCount();
+        if constexpr (std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>) {
+            if (streamPart.HasPartialResult()) {
+                const auto& partialResult = streamPart.GetPartialResult();
+                const auto& resultSet = partialResult.GetResultSet();
+                PrintResultSet(resultSet, resultSetWriter);
+                res.RowsCount += resultSet.RowsCount();
+            }
         }
 
-        if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) {
+        if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>
+                || std::is_same_v<TIterator, NYdb::NScripting::TYqlResultPartIterator>) {
             if (streamPart.HasQueryStats() ) {
                 res.QueryStats = NYdb::TProtoAccessor::GetProto(streamPart.GetQueryStats());
 
@@ -757,9 +767,13 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
     return res;
 }
 
-TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it) {
+template<typename TIterator>
+TCollectedStreamResult CollectStreamResult(TIterator& it) {
     return CollectStreamResultImpl(it);
 }
+
+template TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
+template TCollectedStreamResult CollectStreamResult(NYdb::NScripting::TYqlResultPartIterator& it);
 
 TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table) {
     TReadTableSettings settings;
@@ -865,6 +879,15 @@ NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString&
 
         if (map.contains("Operators")) {
             for (const auto &node : map["Operators"].GetArraySafe()) {
+                auto op = FindPlanNodeByKv(node, key, value);
+                if (op.IsDefined()) {
+                    return op;
+                }
+            }
+        }
+
+        if (map.contains("queries")) {
+            for (const auto &node : map["queries"].GetArraySafe()) {
                 auto op = FindPlanNodeByKv(node, key, value);
                 if (op.IsDefined()) {
                     return op;

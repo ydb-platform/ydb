@@ -179,7 +179,8 @@ struct TCollectedStreamResult {
     ui64 RowsCount = 0;
 };
 
-TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
+template<typename TIterator>
+TCollectedStreamResult CollectStreamResult(TIterator& it);
 
 enum class EIndexTypeSql {
     Global,

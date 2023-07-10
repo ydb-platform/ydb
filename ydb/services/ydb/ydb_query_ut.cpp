@@ -1,6 +1,6 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/api/grpc/draft/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
 using namespace NYdb;
 using namespace NGrpc;

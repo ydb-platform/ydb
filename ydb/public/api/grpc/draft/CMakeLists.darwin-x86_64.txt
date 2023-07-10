@@ -120,18 +120,6 @@ get_built_tool_path(
   contrib/tools/protoc/plugins/cpp_styleguide
   cpp_styleguide
 )
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
 
 add_library(api-grpc-draft)
 set_property(TARGET api-grpc-draft PROPERTY
@@ -153,7 +141,6 @@ target_proto_messages(api-grpc-draft PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_long_tx_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_query_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto
 )
 target_proto_addincls(api-grpc-draft

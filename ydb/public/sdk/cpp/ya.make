@@ -12,6 +12,7 @@ RECURSE(
     client/ydb_driver
     client/ydb_persqueue_public
     client/ydb_proto
+    client/ydb_query
     client/ydb_common_client
     client/ydb_datastreams
     client/ydb_scheme

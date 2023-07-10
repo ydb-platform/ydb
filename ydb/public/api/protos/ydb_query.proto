@@ -15,7 +15,6 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 
 message CreateSessionRequest {
-    reserved 1; // session_ttl
 }
 
 message CreateSessionResponse {
@@ -140,7 +139,7 @@ enum ExecMode {
     EXEC_MODE_PARSE = 10;
     EXEC_MODE_VALIDATE = 20;
     EXEC_MODE_EXPLAIN = 30;
-    reserved 40;
+    reserved 40; // EXEC_MODE_PREPARE
     EXEC_MODE_EXECUTE = 50;
 }
 
@@ -163,16 +162,17 @@ message ExecuteQueryRequest {
     }
 
     map<string, TypedValue> parameters = 6;
-    reserved 7; // idempotency_key
-    StatsMode stats_mode = 8;
+    StatsMode stats_mode = 7;
 
     // For queries with multiple result sets, some of them may be computed concurrently.
     // If true, parts of different results sets may be interleaved in response stream.
-    bool concurrent_result_sets = 9;
+    bool concurrent_result_sets = 8;
 }
 
 message ResultSetMeta {
     repeated Ydb.Column columns = 1;
+
+    // TODO: Remove.
     bool truncated = 2;
 }
 
@@ -185,11 +185,8 @@ message ExecuteQueryResponsePart {
     // Result set part
     Ydb.ResultSet result_set = 4;
 
-    // Transaction meta
-    TransactionMeta tx_meta = 5;
-
-    // Result sets meta (first part only)
-    repeated ResultSetMeta result_sets_meta = 6;
+    reserved 5; // tx_meta
+    reserved 6; // result_sets_meta
 
     // Execution statistics (last part only)
     Ydb.TableStats.QueryStats exec_stats = 7;
@@ -211,22 +208,23 @@ message ExecuteScriptRequest {
 
     // Session identifier. If empty, implicit session is created for script execution.
     string session_id = 2 [(Ydb.length).le = 1024];
-    reserved 3; // tx_id
-    ExecMode exec_mode = 4;
+    ExecMode exec_mode = 3;
 
     oneof script {
-        QueryContent script_content = 5;
-        VersionedScriptId script_id = 6;
+        QueryContent script_content = 4;
+        VersionedScriptId script_id = 5;
     }
 
-    map<string, TypedValue> parameters = 7;
+    map<string, TypedValue> parameters = 6;
 
-    bool persistent = 8; // TODO: Persistent execution / persistent results?
-    string execution_name = 9 [(Ydb.length).le = 1024];
-    reserved 10; // idempotency_key
-    StatsMode stats_mode = 11;
-    map<string, string> attributes = 12 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
-    google.protobuf.Duration results_ttl = 13; // After script execution operation finishes, TTL will start counting. After this TTL the results will be removed from database.
+    bool persistent = 7; // TODO: Persistent execution / persistent results?
+    string execution_name = 8 [(Ydb.length).le = 1024];
+    StatsMode stats_mode = 9;
+    map<string, string> attributes = 10 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
+
+    // After script execution operation finishes, TTL will start counting.
+    // After this TTL the results will be removed from database.
+    google.protobuf.Duration results_ttl = 11;
 }
 
 enum ExecStatus {
@@ -246,7 +244,7 @@ message ExecuteScriptMetadata {
     VersionedScriptId script_id = 4;
 
     map<string, string> attributes = 5 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
-    repeated ResultSetMeta result_set_meta = 6;
+    repeated ResultSetMeta result_sets_meta = 6;
 
     ExecMode exec_mode = 7;
     // Execution statistics

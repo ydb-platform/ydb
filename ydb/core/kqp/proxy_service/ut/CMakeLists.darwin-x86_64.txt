@@ -23,7 +23,7 @@ target_link_libraries(ydb-core-kqp-proxy_service-ut PUBLIC
   core-kqp-run_script_actor
   kqp-ut-common
   yql-sql-pg_dummy
-  client-draft-ydb_query
+  cpp-client-ydb_query
   cpp-client-ydb_driver
   ydb-services-ydb
 )

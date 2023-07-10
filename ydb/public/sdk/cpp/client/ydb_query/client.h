@@ -19,6 +19,10 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSelf = TClientSettings;
 };
 
+// ! WARNING: Experimental API
+// ! This API is currently in experimental state and is a subject for changes.
+// ! No backward and/or forward compatibility guarantees are provided.
+// ! DO NOT USE for production workloads.
 class TQueryClient {
 public:
     TQueryClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());

@@ -81,7 +81,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   yql-utils-actor_log
   api-protos
   public-lib-fq
-  client-draft-ydb_query
+  cpp-client-ydb_query
   cpp-client-ydb_operation
   cpp-client-ydb_table
 )

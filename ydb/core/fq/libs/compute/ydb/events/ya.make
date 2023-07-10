@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/fq/libs/protos
     ydb/public/api/grpc/draft
     ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/client/ydb_query
 )
 
 END()

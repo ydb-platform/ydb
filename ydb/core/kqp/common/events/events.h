@@ -6,7 +6,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/shutdown/events.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

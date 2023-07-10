@@ -8,7 +8,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
 #include <library/cpp/actors/core/actor.h>

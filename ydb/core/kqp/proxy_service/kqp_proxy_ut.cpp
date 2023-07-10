@@ -8,7 +8,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>

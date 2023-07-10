@@ -5,7 +5,7 @@
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
 
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/event_local.h>

@@ -19,7 +19,7 @@ target_link_libraries(kqp-ut-common PUBLIC
   yql-utils-backtrace
   public-lib-yson_value
   cpp-client-draft
-  client-draft-ydb_query
+  cpp-client-ydb_query
   cpp-client-ydb_proto
   cpp-client-ydb_scheme
   cpp-client-ydb_table

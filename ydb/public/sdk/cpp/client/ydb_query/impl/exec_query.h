@@ -2,8 +2,8 @@
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/query.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/tx.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/tx.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 

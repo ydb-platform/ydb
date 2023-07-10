@@ -21,7 +21,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <google/protobuf/util/message_differencer.h>
 

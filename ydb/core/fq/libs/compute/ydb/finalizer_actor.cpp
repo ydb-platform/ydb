@@ -9,7 +9,7 @@
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
 #include <library/cpp/actors/core/actor.h>

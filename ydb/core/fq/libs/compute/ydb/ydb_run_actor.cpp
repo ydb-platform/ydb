@@ -20,7 +20,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 

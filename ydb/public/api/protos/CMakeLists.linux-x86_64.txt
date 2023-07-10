@@ -464,7 +464,6 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_long_tx.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_maintenance.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_query.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_federation_discovery.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
@@ -483,6 +482,7 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_monitoring.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_operation.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_query_stats.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_query.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_rate_limiter.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_scheme.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_scripting.proto

@@ -450,7 +450,7 @@ public:
         , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
     {
     }
-    
+
     void OnRunQuery() override {
         TString sql = R"(
             DECLARE $database AS Text;
@@ -561,7 +561,7 @@ private:
 
 class TScriptLeaseUpdater : public TQueryBase {
 public:
-    TScriptLeaseUpdater(const TString& database, const TString& executionId, TDuration leaseDuration) 
+    TScriptLeaseUpdater(const TString& database, const TString& executionId, TDuration leaseDuration)
         : Database(database)
         , ExecutionId(executionId)
         , LeaseDuration(leaseDuration)
@@ -571,7 +571,7 @@ public:
         TString sql = R"(
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
-            
+
             SELECT lease_deadline FROM `.metadata/script_execution_leases`
                 WHERE database = $database AND execution_id = $execution_id;
         )";
@@ -605,7 +605,7 @@ public:
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $lease_deadline AS Timestamp;
-            
+
             UPDATE `.metadata/script_execution_leases`
             SET lease_deadline=$lease_deadline
             WHERE database = $database AND execution_id = $execution_id;
@@ -763,7 +763,7 @@ public:
         )";
 
         TString serializedStats = "{}";
-        if (kqpStats) { 
+        if (kqpStats) {
             NJson::TJsonValue statsJson;
             Ydb::TableStats::QueryStats queryStats;
             NGRpcService::FillQueryStats(queryStats, *kqpStats);
@@ -797,7 +797,7 @@ public:
             .AddParam("$ast")
                 .Utf8(queryAst.GetOrElse(""))
                 .Build();
-        
+
         RunDataQuery(sql, &params, txControl);
     }
 
@@ -826,7 +826,7 @@ public:
         Ydb::Query::ExecStatus execStatus,
         NYql::TIssues issues,
         TMaybe<NKqpProto::TKqpStatsQuery> queryStats = Nothing(),
-        TMaybe<TString> queryPlan = Nothing(), 
+        TMaybe<TString> queryPlan = Nothing(),
         TMaybe<TString> queryAst = Nothing()
     )
         : Database(database)
@@ -1037,7 +1037,7 @@ private:
 class TForgetScriptExecutionOperationActor : public TQueryBase {
 public:
     explicit TForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev)
-        : Request(std::move(ev)) 
+        : Request(std::move(ev))
     {
     }
 
@@ -1130,7 +1130,7 @@ public:
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
                 .Build();
-        
+
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
         SetQueryResultHandler(&TForgetScriptExecutionOperationActor::OnForgetOperation);
     }
@@ -1273,7 +1273,7 @@ public:
             for (auto i = 0; i < value.GetIntegerRobust(); i++) {
                 const NJson::TJsonValue* metaValue;
                 value.GetValuePointer(i, &metaValue);
-                NProtobufJson::Json2Proto(*metaValue, *metadata.add_result_set_meta());
+                NProtobufJson::Json2Proto(*metaValue, *metadata.add_result_sets_meta());
             }
         }
 
@@ -1726,9 +1726,9 @@ private:
 
 class TSaveScriptExecutionResultMetaActor : public TActorBootstrapped<TSaveScriptExecutionResultMetaActor> {
 public:
-    TSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMetas) 
+    TSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMetas)
         : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), SerializedMetas(serializedMetas)
-    {   
+    {
     }
 
     void Bootstrap() {
@@ -1836,7 +1836,7 @@ private:
 
 class TSaveScriptExecutionResultActor : public TActorBootstrapped<TSaveScriptExecutionResultActor> {
 public:
-    TSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows) 
+    TSaveScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, TInstant expireAt, i64 firstRow, std::vector<TString>&& serializedRows)
         : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetId(resultSetId), ExpireAt(expireAt), FirstRow(firstRow), SerializedRows(std::move(serializedRows))
     {
     }
@@ -1885,12 +1885,12 @@ public:
 
             SELECT result_set_metas, operation_status, issues
             FROM `.metadata/script_executions`
-            WHERE database = $database 
+            WHERE database = $database
               AND execution_id = $execution_id;
 
             SELECT row_id, result_set
             FROM `.metadata/result_sets`
-            WHERE database = $database 
+            WHERE database = $database
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
@@ -1927,7 +1927,7 @@ public:
 
         { // columns
             NYdb::TResultSetParser result(ResultSets[0]);
-        
+
             if (!result.TryNextRow()) {
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Script execution not found");
                 return;
@@ -2018,9 +2018,9 @@ private:
 
 class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
 public:
-    TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit) 
+    TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit)
         : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetId(resultSetId), Offset(offset), Limit(limit)
-    {   
+    {
     }
 
     void Bootstrap() {
@@ -2063,9 +2063,9 @@ NActors::IActor* CreateScriptExecutionFinisher(
     ui64 leaseGeneration,
     Ydb::StatusIds::StatusCode operationStatus,
     Ydb::Query::ExecStatus execStatus,
-    NYql::TIssues issues, 
+    NYql::TIssues issues,
     TMaybe<NKqpProto::TKqpStatsQuery> queryStats,
-    TMaybe<TString> queryPlan, 
+    TMaybe<TString> queryPlan,
     TMaybe<TString> queryAst
     )
 {

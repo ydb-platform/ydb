@@ -15,10 +15,6 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    ydb_query
-)
-
 RECURSE_FOR_TESTS(
     ut
 )

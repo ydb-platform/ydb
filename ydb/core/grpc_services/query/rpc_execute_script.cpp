@@ -5,7 +5,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

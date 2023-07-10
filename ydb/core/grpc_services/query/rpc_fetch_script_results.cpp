@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>

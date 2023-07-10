@@ -4,7 +4,7 @@
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/query.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 
 #include <library/cpp/actors/core/actor.h>
 

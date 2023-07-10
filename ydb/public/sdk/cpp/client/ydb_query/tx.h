@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/grpc/draft/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 

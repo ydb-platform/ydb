@@ -10,7 +10,7 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
 #include <library/cpp/actors/core/actor.h>

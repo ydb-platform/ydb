@@ -685,11 +685,12 @@ public:
 
         TInstant now = TInstant::Now();
 
+
         auto edgeActor = runtime->AllocateEdgeActor();
-        
-         while (true) {
-            Cerr << "=== CheckClustersList\n";
-            runtime->Send(new IEventHandle(NKikimr::NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActor, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe));
+        Cerr << "=== CheckClustersList. Subcribe to ClusterTracker from " << edgeActor << " \n";
+        runtime->Send(new IEventHandle(NKikimr::NPQ::NClusterTracker::MakeClusterTrackerID(), edgeActor, new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe));
+
+        while (true) {
             auto trackerResponse = runtime->GrabEdgeEvent<NKikimr::NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
 
             if (!waitForUpdate || trackerResponse->ClustersListUpdateTimestamp && trackerResponse->ClustersListUpdateTimestamp.GetRef() >= now + TDuration::Seconds(5)) {
@@ -698,10 +699,9 @@ public:
                     UNIT_ASSERT(it != clusters.end());
                     compareInfo(it->first, it->second, clusterInfo);
                 }
-                Cerr << "=== CheckClustersList Ok\n";
+                Cerr << "=== CheckClustersList. Ok\n";
                 break;
             }
-            Sleep(TDuration::MilliSeconds(100));
         }
     }
 

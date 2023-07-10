@@ -8,6 +8,7 @@
 #include <arrow/compute/cast.h>
 #include <arrow/array.h>
 #include <arrow/array/builder_binary.h>
+#include <util/system/mutex.h>
 
 extern "C" {
 #include "utils/date.h"
@@ -47,11 +48,24 @@ bool HasPgKernel(ui32 procOid) {
     return FindExec(procOid) != nullptr;
 }
 
+namespace {
+    TAtomicCounter Initialized = 0;
+    TMutex InitializationLock;
+}
+
 void RegisterPgKernels() {
+    if (Initialized.Val()) {
+        return;
+    }
+    TGuard<TMutex> g(InitializationLock);
+    if (Initialized.Val()) {
+        return;
+    }
 #include "pg_kernels_register.0.inc"
 #include "pg_kernels_register.1.inc"
 #include "pg_kernels_register.2.inc"
 #include "pg_kernels_register.3.inc"
+    Initialized = 1;
 }
 
 const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType, const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType) {

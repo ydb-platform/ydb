@@ -151,13 +151,13 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
     }
 
     Y_UNIT_TEST(TWriteSession_SeqNoShift) {
-        auto setup1 = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
-        SDKTestSetup setup2("SeqNoShift_Dc2", false);
+        auto setup1 = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false, TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_TRACE);
+        SDKTestSetup setup2("SeqNoShift_Dc2", false, TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_TRACE);
         setup2.SetSingleDataCenter("dc2");
         setup2.AddDataCenter("dc1", *setup1, true);
-        setup2.Start(true, false, TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_TRACE);
+        setup2.Start(true, false);
         setup1->AddDataCenter("dc2", setup2, true);
-        setup1->Start(true, false, TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_TRACE);
+        setup1->Start(true, false);
 
         TString sourceId1 = SDKTestSetup::GetTestMessageGroupId() + "1";
         TString sourceId2 = SDKTestSetup::GetTestMessageGroupId() + "2";

@@ -15,13 +15,14 @@ protected:
     THolder<TTempFileHandle> NetDataFile;
     THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> DataCenters;
     TString LocalDC = "dc1";
-    TTestServer Server = TTestServer(false /* don't start */);
-
+    TTestServer Server;
     TLog Log = TLog("cerr");
 
 public:
-    SDKTestSetup(const TString& testCaseName, bool start = true)
-        : TestCaseName(testCaseName)
+    SDKTestSetup(const TString& testCaseName, bool start = true,
+                 const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG)
+        : TestCaseName(testCaseName) 
+        , Server(false, Nothing(), logServices, logPriority)
     {
         InitOptions();
         if (start) {
@@ -59,10 +60,8 @@ public:
         std::srand(seed);
     }
 
-    void Start(bool waitInit = true, bool addBrokenDatacenter = false, 
-            const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG) {
+    void Start(bool waitInit = true, bool addBrokenDatacenter = false) {
         Server.StartServer(false);
-        Server.EnableLogs(logServices, logPriority);
         Server.AnnoyingClient->InitRoot();
         if (DataCenters.empty()) {
             THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> dataCenters;

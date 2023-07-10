@@ -1,6 +1,5 @@
 from google.protobuf import text_format
 import ydb.apps.dstool.lib.common as common
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import sys
 
 description = 'Add disk to storage box by serial number'
@@ -10,7 +9,7 @@ def add_options(p):
     p.add_argument('--serial', type=str, required=True, help='Disk serial number')
     p.add_argument('--box', type=int, required=True, help='Box of PDisk')
     p.add_argument('--kind', type=int, help='Kind of PDisk')
-    types = kikimr_bsconfig.EPDiskType.keys()
+    types = common.EPDiskType.keys()
     p.add_argument('--pdisk-type', type=str, choices=types, default='UNKNOWN_TYPE', help='Type of PDisk')
     p.add_argument('--pdisk-config', type=str, metavar='TEXT_PROTOBUF', help='Proto config for PDisk')
     common.add_basic_format_options(p)
@@ -24,7 +23,7 @@ def create_request(args):
     if args.kind:
         cmd.Kind = args.kind
     if args.pdisk_type:
-        cmd.PDiskType = kikimr_bsconfig.EPDiskType.Value(args.pdisk_type)
+        cmd.PDiskType = common.EPDiskType.Value(args.pdisk_type)
     if args.pdisk_config:
         text_format.Parse(args.pdisk_config, cmd.PDiskConfig)
     return request

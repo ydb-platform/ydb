@@ -83,7 +83,7 @@ def do(args):
         row['Path'] = pdisk.Path
         row['Status'] = kikimr_bsconfig.EDriveStatus.Name(pdisk.DriveStatus)
         row['DecommitStatus'] = kikimr_bsconfig.EDecommitStatus.Name(pdisk.DecommitStatus)
-        row['Type'] = kikimr_bsconfig.EPDiskType.Name(pdisk.Type)
+        row['Type'] = common.EPDiskType.Name(pdisk.Type)
         row['BoxId'] = pdisk.BoxId
         row['Kind'] = pdisk.Kind
         row['Guid'] = pdisk.Guid

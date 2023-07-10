@@ -63,9 +63,9 @@ def do(args):
 
             for group in base_config.Group:
                 if group.VirtualGroupInfo.Name in names_remaining:
-                    if group.VirtualGroupInfo.State == common.kikimr_bsconfig.EVirtualGroupState.WORKING:
+                    if group.VirtualGroupInfo.State == common.EVirtualGroupState.WORKING:
                         names_remaining.remove(group.VirtualGroupInfo.Name)
-                    elif group.VirtualGroupInfo.State == common.kikimr_bsconfig.EVirtualGroupState.CREATE_FAILED:
+                    elif group.VirtualGroupInfo.State == common.EVirtualGroupState.CREATE_FAILED:
                         names_remaining.remove(group.VirtualGroupInfo.Name)
                         errors.append(f'{group.VirtualGroupInfo.Name}: {group.ErrorReason}')
 

@@ -34,7 +34,7 @@ class TableOutput(object):
                     if value == 'bytes':
                         cell = f'{common.bytes_string(cell)}'
                     elif value == '%':
-                        cell = '{0:.1%}'.format(cell)if cell is not None else 'None'
+                        cell = '{0:.1%}'.format(cell) if cell is not None else 'None'
                     else:
                         assert False
                     row[key] = cell

@@ -101,7 +101,7 @@ def do(args):
                 key = *vslot_id, *common.get_vdisk_id_json(vdisk['VDiskId'])
                 vdisk_status[key] = vdisk['Replicated'] and vdisk['VDiskState'] == 'OK'
             except KeyError:
-                common.print_if_not_quiet(args, 'Failed to fetch VDisk status for VSlotId %s' % vslot_id, file=sys.stderr)
+                common.print_if_not_quiet(args, 'Failed to fetch VDisk status for VSlotId %s' % (vslot_id,), file=sys.stderr)
                 error = True
         if error:
             common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)

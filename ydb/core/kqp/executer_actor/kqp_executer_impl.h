@@ -1011,6 +1011,11 @@ protected:
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
         }
+
+        if (Planner) {
+            Planner->Unsubscribe();
+        }
+
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
             this->Send(this->SelfId(), new TEvents::TEvPoison);

@@ -47,6 +47,7 @@ public:
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
     void Submit();
     ui32 GetCurrentRetryDelay(ui32 requestId);
+    void Unsubscribe();
 
 private:
 

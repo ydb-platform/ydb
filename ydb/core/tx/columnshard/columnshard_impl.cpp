@@ -971,9 +971,9 @@ void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPriv
             strBlobs << "'" << blobId.ToStringNew() << "' ";
         }
 
-        event->SetS3Actor(s3);
+        event->DstActor = s3;
         LOG_S_NOTICE("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
-        ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
+        ctx.Register(CreateExportActor(TabletID(), SelfId(), event.release()));
     } else {
         LOG_S_INFO("Cannot export blobs (no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
     }

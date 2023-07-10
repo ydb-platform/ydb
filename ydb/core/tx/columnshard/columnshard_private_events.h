@@ -170,10 +170,6 @@ struct TEvPrivate {
             }
         }
 
-        void SetS3Actor(TActorId s3) {
-            DstActor = s3;
-        }
-
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {
             if (hasError) {
                 Status = NKikimrProto::ERROR;

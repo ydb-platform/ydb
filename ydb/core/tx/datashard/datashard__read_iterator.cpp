@@ -106,8 +106,8 @@ public:
     void AddRow(const TDbTupleRef& key, const TDbTupleRef& value) override {
         Y_UNUSED(key);
 
-        Rows.emplace_back(value.Cells());
-        BytesCount += Rows.back().DataSize();
+        size_t DataSize = Batch.Append(value.Cells());
+        BytesCount += DataSize;
     }
 
     TString Finish() override {
@@ -117,12 +117,15 @@ public:
     size_t Bytes() const override { return BytesCount; }
 
 public:
-    TVector<TOwnedCellVec> FlushBatch() { return std::move(Rows); }
+    void FlushBatch(TOwnedCellVecBatch & result) {
+        result = std::move(Batch);
+        Batch = {};
+    }
 
 private:
     std::vector<std::pair<TString, NScheme::TTypeInfo>> Columns;
 
-    TVector<TOwnedCellVec> Rows;
+    TOwnedCellVecBatch Batch;
     ui64 BytesCount = 0;
 
     std::unique_ptr<IBlockBuilder> Clone() const override {
@@ -665,7 +668,9 @@ public:
             }
             case NKikimrTxDataShard::CELLVEC: {
                 auto& cellBuilder = static_cast<TCellBlockBuilder&>(BlockBuilder);
-                result.SetRows(cellBuilder.FlushBatch());
+                TOwnedCellVecBatch batch;
+                cellBuilder.FlushBatch(batch);
+                result.SetBatch(std::move(batch));
                 break;
             }
             default: {

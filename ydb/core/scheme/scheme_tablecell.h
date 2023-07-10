@@ -499,6 +499,125 @@ private:
     TVector<TCell> Cells;
 };
 
+class TOwnedCellVecBatch {
+public:
+    TOwnedCellVecBatch();
+
+    TOwnedCellVecBatch(const TOwnedCellVecBatch& rhs) = delete;
+
+    TOwnedCellVecBatch & operator=(const TOwnedCellVecBatch& rhs) = delete;
+
+    TOwnedCellVecBatch(const TOwnedCellVecBatch&& rhs) = default;
+
+    TOwnedCellVecBatch & operator=(TOwnedCellVecBatch&& rhs) = default;
+
+    size_t Append(TConstArrayRef<TCell> cells);
+
+    size_t Size() const {
+        return Cells.size();
+    }
+
+    bool Empty() const {
+        return Cells.empty();
+    }
+
+    bool empty() const {
+        return Cells.empty();
+    }
+
+    using iterator = TVector<TConstArrayRef<TCell>>::iterator;
+    using const_iterator = TVector<TConstArrayRef<TCell>>::const_iterator;
+
+    iterator begin() {
+        return Cells.begin();
+    }
+
+    iterator end() {
+        return Cells.end();
+    }
+
+    const_iterator cbegin() {
+        return Cells.cbegin();
+    }
+
+    const_iterator cend() {
+        return Cells.cend();
+    }
+
+    TConstArrayRef<TCell> operator[](size_t index) const {
+        return Cells[index];
+    }
+
+    TConstArrayRef<TCell> front() const {
+        return Cells.front();
+    }
+
+    TConstArrayRef<TCell> back() const {
+        return Cells.back();
+    }
+
+private:
+    static constexpr size_t InitialBufferSizeDegree = 16;
+
+    class Buffer {
+    public:
+        Buffer(uint8_t sizeDegree)
+            : BufferBegin(reinterpret_cast<char *>(malloc(1ULL << sizeDegree)))
+            , SizeDegree(sizeDegree)
+        {
+            if (Y_UNLIKELY(!BufferBegin)) {
+                throw std::bad_alloc();
+            }
+        }
+
+        Buffer(const Buffer & rhs) = delete;
+
+        Buffer & operator=(const Buffer && rhs) = delete;
+
+        Buffer(Buffer && rhs) {
+            std::swap(BufferBegin, rhs.BufferBegin);
+            std::swap(Position, rhs.Position);
+            std::swap(SizeDegree, rhs.SizeDegree);
+        }
+
+        char * Allocate(size_t size) {
+            if (AvailableSize() < size) {
+                return nullptr;
+            }
+
+            char * result = BufferBegin + Position;
+            Position += size;
+
+            return result;
+        }
+
+        uint8_t GetSizeDegree() const {
+            return SizeDegree;
+        }
+
+        size_t Size() const {
+            return 1ULL << SizeDegree;
+        }
+
+        size_t AvailableSize() const {
+            return Size() - Position;
+        }
+
+        ~Buffer() {
+            if (BufferBegin)
+                free(BufferBegin);
+        }
+
+    private:
+        char * BufferBegin = nullptr;
+        size_t Position = 0;
+        uint8_t SizeDegree = 0;
+    };
+
+    TVector<Buffer> Buffers;
+    TVector<TConstArrayRef<TCell>> Cells;
+};
+
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry& typeRegistry);
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);

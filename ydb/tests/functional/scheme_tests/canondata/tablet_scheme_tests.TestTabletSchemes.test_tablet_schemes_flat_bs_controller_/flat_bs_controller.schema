@@ -99,7 +99,7 @@
             {
                 "ColumnId": 20,
                 "ColumnName": "AllowMultipleRealmsOccupation",
-                "ColumnType": "Uint32"
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],

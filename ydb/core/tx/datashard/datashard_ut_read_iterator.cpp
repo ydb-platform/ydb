@@ -673,20 +673,32 @@ struct TTestHelper {
             || newLock->GetGeneration() != prevLock->GetGeneration());
     }
 
-    void TestChunkRead(ui32 chunkSize, ui32 rowCount) {
+    void TestChunkRead(ui32 chunkSize, ui32 rowCount, ui32 ranges = 1, ui32 limit = Max<ui32>()) {
         UpsertMany(1, rowCount);
 
         auto request = GetBaseReadRequest("table-1-many", 1, NKikimrTxDataShard::CELLVEC, TRowVersion::Max());
         request->Record.ClearSnapshot();
-        AddRangeQuery<ui32>(
-            *request,
-            {1, 1, 1},
-            true,
-            {rowCount + 1, 1, 1},
-            true
-        );
+
+        ui32 base = 1;
+        for (ui32 i = 0; i < ranges; ++i) {
+            ui32 count = rowCount / ranges;
+            if (i < (rowCount % ranges)) {
+                ++count;
+            }
+            AddRangeQuery<ui32>(
+                *request,
+                {base, 1, 1},
+                true,
+                {base + count - 1, Max<ui32>(), Max<ui32>()},
+                true
+            );
+            base += count;
+        }
 
         request->Record.SetMaxRowsInResult(chunkSize);
+        if (limit != Max<ui32>()) {
+            request->Record.SetTotalRowsLimit(limit);
+        }
 
         auto readResult = SendRead("table-1-many", request.release());
         UNIT_ASSERT(readResult);
@@ -697,10 +709,12 @@ struct TTestHelper {
         while (!readResult->Record.GetFinished()) {
             readResult = WaitReadResult();
             UNIT_ASSERT(readResult);
-            rowsRead += readResult->GetRowsCount();
+            ui32 count = readResult->GetRowsCount();
+            UNIT_ASSERT_C(count > 0 || readResult->Record.GetFinished(), "Unexpected empty intermediate result");
+            rowsRead += count;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(rowsRead, rowCount);
+        UNIT_ASSERT_VALUES_EQUAL(rowsRead, Min(rowCount, limit));
     }
 
     struct THangedReturn {
@@ -1944,6 +1958,56 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(ShouldReadRangeChunk100) {
         TTestHelper helper;
         helper.TestChunkRead(99, 10000);
+    }
+
+    Y_UNIT_TEST(ShouldLimitReadRangeChunk1Limit100) {
+        TTestHelper helper;
+        helper.TestChunkRead(1, 1000, 1, 100);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk99Limit98) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 1000, 10, 98);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk99Limit99) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 1000, 10, 99);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk99Limit100) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 1000, 10, 100);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk99Limit101) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 1000, 10, 101);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk99Limit198) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 1000, 10, 198);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk99Limit900) {
+        TTestHelper helper;
+        helper.TestChunkRead(99, 1000, 10, 900);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk100Limit900) {
+        TTestHelper helper;
+        helper.TestChunkRead(100, 1000, 10, 900);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk100Limit1000) {
+        TTestHelper helper;
+        helper.TestChunkRead(100, 1000, 10, 1000);
+    }
+
+    Y_UNIT_TEST(ShouldLimitRead10RangesChunk100Limit1001) {
+        TTestHelper helper;
+        helper.TestChunkRead(100, 1000, 10, 1001);
     }
 
     Y_UNIT_TEST(ShouldReadKeyPrefix1) {

@@ -35,6 +35,7 @@ target_link_libraries(core-formats-arrow PUBLIC
   ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber
+  ydb-library-services
 )
 target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp

@@ -58,6 +58,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   library-persqueue-topic_parser
   parser-pg_wrapper-interface
   yql-public-types
+  ydb-library-services
   api-grpc-draft
   api-protos
   public-lib-operation_id

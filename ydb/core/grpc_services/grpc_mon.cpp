@@ -1,6 +1,7 @@
 #include "grpc_mon.h"
 
 #include <ydb/core/base/events.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/monlib/service/pages/templates.h>

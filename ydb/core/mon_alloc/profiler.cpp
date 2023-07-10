@@ -1,6 +1,8 @@
 #include "profiler.h"
 #include "tcmalloc.h"
 
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>

@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/metering
     ydb/core/protos
     ydb/core/tablet_flat
+    ydb/library/services
 )
 
 END()

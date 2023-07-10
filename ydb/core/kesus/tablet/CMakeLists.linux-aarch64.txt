@@ -22,6 +22,7 @@ target_link_libraries(core-kesus-tablet PUBLIC
   ydb-core-metering
   ydb-core-protos
   ydb-core-tablet_flat
+  ydb-library-services
 )
 target_sources(core-kesus-tablet PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/events.cpp

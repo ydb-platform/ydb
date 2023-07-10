@@ -26,6 +26,7 @@ PEERDIR(
     library/cpp/yt/memory
     ydb/core/base
     ydb/core/control
+    ydb/library/services
 )
 
 END()

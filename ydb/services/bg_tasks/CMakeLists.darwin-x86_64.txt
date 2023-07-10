@@ -19,6 +19,7 @@ target_link_libraries(ydb-services-bg_tasks PUBLIC
   services-metadata-abstract
   services-bg_tasks-abstract
   services-bg_tasks-protos
+  ydb-library-services
 )
 target_sources(ydb-services-bg_tasks PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/bg_tasks/service.cpp

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/tx/columnshard
     ydb/core/tx/long_tx_service/public
+    ydb/library/services
 )
 
 YQL_LAST_ABI_VERSION()

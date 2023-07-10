@@ -120,6 +120,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/types
+    ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/operation_id

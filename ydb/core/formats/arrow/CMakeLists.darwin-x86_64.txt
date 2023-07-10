@@ -34,6 +34,7 @@ target_link_libraries(core-formats-arrow PUBLIC
   ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber
+  ydb-library-services
   ydb-library-arrow_clickhouse
 )
 target_sources(core-formats-arrow PRIVATE

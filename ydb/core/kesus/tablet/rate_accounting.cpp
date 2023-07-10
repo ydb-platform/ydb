@@ -6,6 +6,7 @@
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/metering/time_grid.h>
 #include <ydb/core/metering/bill_record.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 

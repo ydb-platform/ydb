@@ -1,5 +1,7 @@
 #include "grpc_endpoint.h"
 
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 

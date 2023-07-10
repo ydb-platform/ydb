@@ -3,6 +3,7 @@
 #include "one_batch_input_stream.h"
 #include "common/validation.h"
 #include "merging_sorted_input_stream.h"
+#include "permutations.h"
 #include "serializer/batch_only.h"
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
@@ -25,49 +26,6 @@
 #define Y_VERIFY_OK(status) Y_VERIFY(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
-
-namespace {
-
-#if 0
-std::shared_ptr<arrow::Array> CastToInt32Array(const std::shared_ptr<arrow::Array>& arr) {
-    auto newData = arr->data()->Copy();
-    newData->type = arrow::int32();
-    return std::make_shared<arrow::Int32Array>(newData);
-}
-
-std::shared_ptr<arrow::Array> CastToInt64Array(const std::shared_ptr<arrow::Array>& arr) {
-    auto newData = arr->data()->Copy();
-    newData->type = arrow::int64();
-    return std::make_shared<arrow::Int64Array>(newData);
-}
-
-// We need more types than arrow::compute::SortToIndices() support out of the box
-std::shared_ptr<arrow::UInt64Array> SortPermutation(const std::shared_ptr<arrow::Array>& arr) {
-    switch (arr->type_id()) {
-        case arrow::Type::DATE32:
-        case arrow::Type::TIME32:
-        {
-            auto res = arrow::compute::SortToIndices(*CastToInt32Array(arr));
-            Y_VERIFY_OK(res.status());
-            return std::static_pointer_cast<arrow::UInt64Array>(*res);
-        }
-        case arrow::Type::DATE64:
-        case arrow::Type::TIMESTAMP:
-        case arrow::Type::TIME64:
-        {
-            auto res = arrow::compute::SortToIndices(*CastToInt64Array(arr));
-            Y_VERIFY_OK(res.status());
-            return std::static_pointer_cast<arrow::UInt64Array>(*res);
-        }
-        default:
-            break;
-    }
-    auto res = arrow::compute::SortToIndices(*arr);
-    Y_VERIFY_OK(res.status());
-    return std::static_pointer_cast<arrow::UInt64Array>(*res);
-}
-#endif
-}
 
 template <typename TType>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
@@ -698,79 +656,6 @@ int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr
     Y_VERIFY(x);
     Y_VERIFY(y);
     return ScalarCompare(*x, *y);
-}
-
-std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
-    if (size < 1) {
-        return {};
-    }
-
-    arrow::UInt64Builder builder;
-    if (!builder.Reserve(size).ok()) {
-        return {};
-    }
-
-    if (reverse) {
-        ui64 value = size - 1;
-        for (i64 i = 0; i < size; ++i, --value) {
-            if (!builder.Append(value).ok()) {
-                return {};
-            }
-        }
-    } else {
-        for (i64 i = 0; i < size; ++i) {
-            if (!builder.Append(i).ok()) {
-                return {};
-            }
-        }
-    }
-
-    std::shared_ptr<arrow::UInt64Array> out;
-    if (!builder.Finish(&out).ok()) {
-        return {};
-    }
-    return out;
-}
-
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const std::shared_ptr<arrow::Schema>& sortingKey) {
-    auto keyBatch = ExtractColumns(batch, sortingKey);
-    auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns());
-    std::vector<TRawReplaceKey> points;
-    points.reserve(keyBatch->num_rows());
-
-    for (int i = 0; i < keyBatch->num_rows(); ++i) {
-        points.push_back(TRawReplaceKey(keyColumns.get(), i));
-    }
-
-    bool haveNulls = false;
-    for (auto& column : *keyColumns) {
-        if (HasNulls(column)) {
-            haveNulls = true;
-            break;
-        }
-    }
-
-    if (haveNulls) {
-        std::sort(points.begin(), points.end());
-    } else {
-        std::sort(points.begin(), points.end(),
-            [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-                return a.CompareNotNull(b) == std::partial_ordering::less;
-            }
-        );
-    }
-
-    arrow::UInt64Builder builder;
-    Y_VERIFY_OK(builder.Reserve(points.size()));
-
-    for (auto& point : points) {
-        Y_VERIFY_OK(builder.Append(point.GetPosition()));
-    }
-
-    std::shared_ptr<arrow::UInt64Array> out;
-    Y_VERIFY_OK(builder.Finish(&out));
-    return out;
 }
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,

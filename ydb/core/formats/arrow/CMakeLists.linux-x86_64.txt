@@ -45,6 +45,7 @@ target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp

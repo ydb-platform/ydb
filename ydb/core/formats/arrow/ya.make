@@ -44,6 +44,7 @@ SRCS(
     merging_sorted_input_stream.cpp
     merging_sorted_input_stream.h
     one_batch_input_stream.h
+    permutations.cpp
     sort_cursor.h
     program.cpp
     ssa_program_optimizer.cpp

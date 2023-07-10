@@ -18,6 +18,7 @@ public:
         , Granule(granule)
         , Mark(mark)
     {
+        Mark.ShrinkToFit();
         Y_VERIFY(Mark.Size());
     }
 

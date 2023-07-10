@@ -1,6 +1,9 @@
 #pragma once
+#include "permutations.h"
+#include "common/validation.h"
 #include <ydb/core/base/defs.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 #include <compare>
 
 namespace NKikimr::NArrow {
@@ -14,19 +17,32 @@ class TReplaceKeyTemplate {
 public:
     static constexpr bool IsOwning = std::is_same_v<TArrayVecPtr, std::shared_ptr<TArrayVec>>;
 
-    TReplaceKeyTemplate(TArrayVecPtr columns, int position)
+    void ShrinkToFit() {
+        if (Columns->front()->length() == 1) {
+            Y_VERIFY(Position == 0);
+        } else {
+            auto columnsNew = std::make_shared<TArrayVec>();
+            for (auto&& i : *Columns) {
+                columnsNew->emplace_back(NArrow::CopyRecords(i, { Position }));
+            }
+            Columns = columnsNew;
+            Position = 0;
+        }
+    }
+
+    TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)
         : Columns(columns)
         , Position(position)
     {
-        Y_VERIFY_DEBUG(Size() > 0 && Position < Column(0).length());
+        Y_VERIFY_DEBUG(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
-    TReplaceKeyTemplate(TArrayVec&& columns, int position)
+    TReplaceKeyTemplate(TArrayVec&& columns, const ui64 position)
         : Columns(std::make_shared<TArrayVec>(std::move(columns)))
         , Position(position)
     {
-        Y_VERIFY_DEBUG(Size() > 0 && Position < Column(0).length());
+        Y_VERIFY_DEBUG(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     size_t Hash() const {
@@ -140,7 +156,7 @@ public:
     template<typename T = TArrayVecPtr> requires IsOwning
     std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
         auto batch = RestoreBatch(schema);
-        Y_VERIFY(Position < batch->num_rows());
+        Y_VERIFY(Position < (ui64)batch->num_rows());
         return batch->Slice(Position, 1);
     }
 
@@ -186,7 +202,7 @@ public:
 
 private:
     TArrayVecPtr Columns = nullptr;
-    int Position = 0;
+    ui64 Position = 0;
 
     static size_t TypedHash(const arrow::Array& ar, int pos, arrow::Type::type typeId) {
         switch (typeId) {

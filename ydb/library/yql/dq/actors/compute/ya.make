@@ -15,8 +15,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base
-    ydb/core/protos
+    library/cpp/actors/wilson/protos
+    ydb/library/services
+    ydb/library/ydb_issue/proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime

@@ -17,8 +17,9 @@ target_link_libraries(dq-actors-compute PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
-  ydb-core-base
-  ydb-core-protos
+  actors-wilson-protos
+  ydb-library-services
+  library-ydb_issue-proto
   yql-dq-common
   yql-dq-proto
   yql-dq-runtime

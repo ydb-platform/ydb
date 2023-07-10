@@ -1651,6 +1651,9 @@ message TEvRead {
     // When specified requests are handled in reverse order as well as range reads
     optional bool Reverse = 10;
 
+    // Limits total number of rows which iterator can read.
+    optional uint64 TotalRowsLimit = 12;
+
     // Request must contain either keys, queries or program
     // mixed requests are not supported
 

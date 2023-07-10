@@ -848,6 +848,7 @@ public:
         record.SetReverse(Settings.GetReverse());
         if (limit) {
             record.SetMaxRows(*limit);
+            record.SetTotalRowsLimit(*limit);
         }
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 

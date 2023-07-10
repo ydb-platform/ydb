@@ -13,6 +13,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/fq/libs/test_connection/events/events.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
 #include <ydb/core/fq/libs/ydb/util.h>
@@ -828,13 +829,16 @@ public:
         const auto& subset = objectStorageParams.subset(0);
 
         // Schema
-        auto columnsTransformFunction = [](const Ydb::Column& column) -> TString {
+        NYql::TExprContext context;
+        auto columnsTransformFunction = [&](const Ydb::Column& column) -> TString {
+            NYdb::TTypeParser typeParser(column.type());
+            auto node = MakeType(typeParser, context);
+            auto typeName = NYql::FormatType(node);
             return fmt::format(
                 "    {columnName} {columnType}",
                 "columnName"_a = EncloseAndEscapeString(column.name(), '`'),
-                "columnType"_a =
-                    NYdb::TType{column.type()}
-                        .ToString()); // TODO: check if this conversion could lead to valnurability
+                "columnType"_a = typeName
+            );
         };
         auto columnsBegin =
             MakeMappedIterator(subset.schema().column().begin(), columnsTransformFunction);

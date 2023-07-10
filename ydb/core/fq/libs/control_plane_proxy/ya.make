@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/rate_limiter/events
+    ydb/core/fq/libs/result_formatter
     ydb/core/mon
     ydb/library/folder_service
     ydb/library/security

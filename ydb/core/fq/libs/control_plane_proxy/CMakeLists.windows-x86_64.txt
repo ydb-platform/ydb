@@ -26,6 +26,7 @@ target_link_libraries(fq-libs-control_plane_proxy PUBLIC
   libs-control_plane_proxy-events
   fq-libs-control_plane_storage
   libs-rate_limiter-events
+  fq-libs-result_formatter
   ydb-core-mon
   ydb-library-folder_service
   ydb-library-security

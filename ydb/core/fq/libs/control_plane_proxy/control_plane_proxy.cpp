@@ -369,11 +369,15 @@ private:
     }
 };
 
-TString EncloseAndEscapeString(const TString& value, char enclosingChar) {
+TString EscapeString(const TString& value, char enclosingChar) {
     auto escapedValue = value;
     SubstGlobal(
         escapedValue, TString{enclosingChar}, TStringBuilder{} << '\\' << enclosingChar);
-    return TStringBuilder{} << enclosingChar << escapedValue << enclosingChar;
+    return escapedValue;
+}
+
+TString EncloseAndEscapeString(const TString& value, char enclosingChar) {
+    return TStringBuilder{} << enclosingChar << EscapeString(value, enclosingChar) << enclosingChar;
 }
 
 class TCreateConnectionInYDBActor :
@@ -837,7 +841,7 @@ public:
         auto columnsEnd =
             MakeMappedIterator(subset.schema().column().end(), columnsTransformFunction);
 
-        // WithOptiuons
+        // WithOptions
         auto withOptions = std::unordered_map<TString, TString>{};
         withOptions.insert(
             {"DATA_SOURCE", TStringBuilder{} << '"' << ConnectionName << '"'});
@@ -851,13 +855,13 @@ public:
         }
         for (auto& kv : subset.format_setting()) {
             withOptions.insert(
-                {EncloseAndEscapeString(kv.first, '"'),
+                {EncloseAndEscapeString(kv.first, '`'),
                  EncloseAndEscapeString(kv.second, '"')});
         };
 
         if (!subset.partitioned_by().empty()) {
             auto stringEscapeMapper = [](const TString& value) {
-                return EncloseAndEscapeString(value, '"');
+                return EscapeString(value, '"');
             };
 
             auto partitionBy =

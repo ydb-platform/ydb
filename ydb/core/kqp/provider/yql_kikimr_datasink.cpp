@@ -161,6 +161,15 @@ private:
         return TStatus::Error;
     }
 
+    static void HandleDropTable(TIntrusivePtr<TKikimrSessionContext>& ctx, const NCommon::TWriteTableSettings& settings,
+        const TKikimrKey& key, const TStringBuf& cluster)
+    {
+        auto tableType = settings.TableType.IsValid()
+            ? GetTableTypeFromString(settings.TableType.Cast())
+            : ETableType::Table; // v0, pg support
+        ctx->Tables().GetOrAddTable(TString(cluster), ctx->GetDatabase(), key.GetTablePath(), tableType);
+    }
+
     TStatus HandleWrite(TExprBase node, TExprContext& ctx) override {
         auto cluster = node.Ref().Child(1)->Child(1)->Content();
         TKikimrKey key(ctx);
@@ -180,10 +189,7 @@ private:
                 auto mode = settings.Mode.Cast();
 
                 if (mode == "drop") {
-                    auto tableType = settings.TableType.IsValid()
-                        ? GetTableTypeFromString(settings.TableType.Cast())
-                        : ETableType::Table; // v0 support
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
+                    HandleDropTable(SessionCtx, settings, key, cluster);
                     return TStatus::Ok;
                 } else if (
                     mode == "upsert" ||
@@ -211,7 +217,7 @@ private:
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
-                    if (!settings.Filter) {
+                    if (!settings.PgDelete && !settings.Filter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
@@ -256,6 +262,9 @@ private:
                     }
 
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
+                    return TStatus::Ok;
+                } else if (mode == "drop") {
+                    HandleDropTable(SessionCtx, settings, key, cluster);
                     return TStatus::Ok;
                 }
 
@@ -470,6 +479,23 @@ public:
         return false;
     }
 
+    static TExprNode::TPtr MakeKiDropTable(const TExprNode::TPtr& node, const NCommon::TWriteTableSettings& settings,
+        const TKikimrKey& key, TExprContext& ctx)
+    {
+        YQL_ENSURE(!settings.Columns);
+        auto tableType = settings.TableType.IsValid()
+            ? settings.TableType.Cast()
+            : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0, pg support
+        return Build<TKiDropTable>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink(node->Child(1))
+            .Table().Build(key.GetTablePath())
+            .Settings(settings.Other)
+            .TableType(tableType)
+            .Done()
+            .Ptr();
+    }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content());
 
@@ -481,20 +507,8 @@ public:
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
-
                 if (mode == "drop") {
-                    YQL_ENSURE(!settings.Columns);
-                    auto tableType = settings.TableType.IsValid()
-                        ? settings.TableType.Cast()
-                        : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0 support
-                    return Build<TKiDropTable>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .Table().Build(key.GetTablePath())
-                        .Settings(settings.Other)
-                        .TableType(tableType)
-                        .Done()
-                        .Ptr();
+                    return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {
                     YQL_ENSURE(settings.Filter);
                     YQL_ENSURE(settings.Update);
@@ -507,14 +521,28 @@ public:
                         .Done()
                         .Ptr();
                 } else if (mode == "delete") {
-                    YQL_ENSURE(settings.Filter);
-                    return Build<TKiDeleteTable>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .Table().Build(key.GetTablePath())
-                        .Filter(settings.Filter.Cast())
-                        .Done()
-                        .Ptr();
+                    YQL_ENSURE(settings.Filter || settings.PgDelete);
+                    if (settings.Filter) {
+                        return Build<TKiDeleteTable>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Table().Build(key.GetTablePath())
+                            .Filter(settings.Filter.Cast())
+                            .Done()
+                            .Ptr();
+                    } else {
+                        return Build<TKiWriteTable>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Table().Build(key.GetTablePath())
+                            .Input(settings.PgDelete.Cast())
+                            .Mode()
+                                .Value("delete_on")
+                            .Build()
+                            .Settings(settings.Other)
+                            .Done()
+                            .Ptr();
+                    }
                 } else {
                     return Build<TKiWriteTable>(ctx, node->Pos())
                         .World(node->Child(0))
@@ -592,6 +620,9 @@ public:
                         .TableType(tableType)
                         .Done()
                         .Ptr();
+
+                 } else if (mode == "drop") {
+                    return MakeKiDropTable(node, settings, key, ctx);
                 } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");
                 }

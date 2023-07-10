@@ -14,8 +14,6 @@ namespace NYql {
         using namespace NNodes;
 
         class TGenericIODiscoveryTransformer: public TGraphTransformerBase {
-            using TDbId2Endpoint = THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>;
-
         public:
             TGenericIODiscoveryTransformer(TGenericState::TPtr state)
                 : State_(std::move(state))
@@ -50,7 +48,7 @@ namespace NYql {
                         const auto clusterName = read.DataSource().Cluster().StringValue();
                         YQL_CLOG(DEBUG, ProviderGeneric) << "found cluster name: " << clusterName;
 
-                        auto databaseId = State_->Configuration->ClusterConfigs[clusterName].GetDatabaseId();
+                        auto databaseId = State_->Configuration->ClusterNamesToClusterConfigs[clusterName].GetDatabaseId();
                         if (databaseId) {
                             YQL_CLOG(DEBUG, ProviderGeneric) << "found database id: " << databaseId;
                             const auto idKey = std::make_pair(databaseId, NYql::DatabaseType::Generic);
@@ -72,9 +70,11 @@ namespace NYql {
                 // Apply([response = DbResolverResponse_](...))
                 const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
                 AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future) {
-                    if (const auto res = response.lock())
+                    if (const auto res = response.lock()) {
                         *res = std::move(future.ExtractValue());
+                    }
                 });
+
                 return TStatus::Async;
             }
 
@@ -89,33 +89,65 @@ namespace NYql {
                     ctx.IssueManager.AddIssues(DbResolverResponse_->Issues);
                     return TStatus::Error;
                 }
-                FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(),
-                                        DbResolverResponse_->DatabaseId2Endpoint.end());
+
+                // Copy resolver results and reallocate pointer
+                auto databaseIdsToEndpointsResolved = std::move(DbResolverResponse_->DatabaseId2Endpoint);
+
                 DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ResolvedIds: " << FullResolvedIds_.size();
-                const auto& id2Clusters = State_->Configuration->DatabaseIdsToClusterNames;
-                for (const auto& [dbIdWithType, info] : FullResolvedIds_) {
-                    const auto& dbId = dbIdWithType.first;
-                    const auto iter = id2Clusters.find(dbId);
-                    if (iter == id2Clusters.end()) {
-                        continue;
-                    }
-                }
-                return TStatus::Ok;
+
+                // Modify cluster configs with resolved ids
+                return ModifyClusterConfigs(databaseIdsToEndpointsResolved, ctx);
             }
 
             void Rewind() final {
                 AsyncFuture_ = {};
-                FullResolvedIds_.clear();
                 DbResolverResponse_.reset(new NYql::TDbResolverResponse);
             }
 
         private:
+            TStatus ModifyClusterConfigs(const TDbResolverResponse::TDatabaseEndpointsMap& databaseIdsToEndpoints, TExprContext& ctx) {
+                const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
+                auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
+
+                for (const auto& [databaseIdWithType, endpointSrc] : databaseIdsToEndpoints) {
+                    const auto& databaseId = databaseIdWithType.first;
+
+                    YQL_CLOG(DEBUG, ProviderGeneric) << "resolved database id: " << databaseId
+                                                     << ",  endpoint: " << endpointSrc.Endpoint;
+
+                    auto clusterNamesIter = databaseIdsToClusterNames.find(databaseId);
+
+                    if (clusterNamesIter == databaseIdsToClusterNames.cend()) {
+                        TIssues issues;
+                        issues.AddIssue(TStringBuilder() << "no cluster names for database id " << databaseId);
+                        ctx.IssueManager.AddIssues(issues);
+                        return TStatus::Error;
+                    }
+
+                    for (const auto& clusterName : clusterNamesIter->second) {
+                        auto clusterConfigIter = clusterNamesToClusterConfigs.find(clusterName);
+
+                        if (clusterConfigIter == clusterNamesToClusterConfigs.end()) {
+                            TIssues issues;
+                            issues.AddIssue(TStringBuilder() << "no cluster names for database id " << databaseIdWithType.first << " and cluster name " << clusterName);
+                            ctx.IssueManager.AddIssues(issues);
+                            return TStatus::Error;
+                        }
+
+                        auto hostPort = endpointSrc.ParseHostPort();
+                        auto endpointDst = clusterConfigIter->second.mutable_endpoint();
+                        endpointDst->set_host(std::get<0>(hostPort));
+                        endpointDst->set_port(std::get<1>(hostPort));
+                    }
+                }
+
+                return TStatus::Ok;
+            }
+
             const TGenericState::TPtr State_;
 
             NThreading::TFuture<void> AsyncFuture_;
-            TDbId2Endpoint FullResolvedIds_;
-            std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_;
+            std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
         };
     }
 

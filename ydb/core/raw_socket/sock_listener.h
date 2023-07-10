@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/actors/core/actor.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include "sock_impl.h"
 #include "sock_config.h"

@@ -37,6 +37,7 @@ struct TDqSettings {
         static constexpr double HashShuffleTasksRatio = 0.5;
         static constexpr ui32 HashShuffleMaxTasks = 24;
         static constexpr bool UseFastPickleTransport = false;
+        static constexpr bool UseOOBTransport = false;
         static constexpr bool AggregateStatsByStage = true;
         static constexpr bool EnableChannelStats = false;
         static constexpr bool ExportStats = false;
@@ -98,6 +99,7 @@ struct TDqSettings {
 
     NCommon::TConfSetting<bool, false> UseWideChannels;
     NCommon::TConfSetting<bool, false> UseFastPickleTransport;
+    NCommon::TConfSetting<bool, false> UseOOBTransport;
 
     NCommon::TConfSetting<bool, false> AggregateStatsByStage;
     NCommon::TConfSetting<bool, false> EnableChannelStats;
@@ -150,6 +152,7 @@ struct TDqSettings {
         SAVE_SETTING(HashShuffleMaxTasks);
         SAVE_SETTING(UseWideChannels);
         SAVE_SETTING(UseFastPickleTransport);
+        SAVE_SETTING(UseOOBTransport);
         SAVE_SETTING(AggregateStatsByStage);
         SAVE_SETTING(EnableChannelStats);
         SAVE_SETTING(ExportStats);

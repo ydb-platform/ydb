@@ -32,15 +32,12 @@ struct TKqpEvents {
         EvRecompileRequest,
         EvScriptRequest,
         EvScriptResponse,
-        EvFetchScriptResultsRequest,
         EvFetchScriptResultsResponse,
         EvKqpProxyPublishRequest,
         EvCancelScriptExecutionRequest,
         EvCancelScriptExecutionResponse,
         EvCancelQueryRequest,
         EvCancelQueryResponse,
-        EvGetRunScriptActorRequest, // TODO: remove when there will be fetch script result through database
-        EvGetRunScriptActorResponse, // TODO: remove when there will be fetch script result through database
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

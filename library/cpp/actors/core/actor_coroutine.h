@@ -211,7 +211,8 @@ namespace NActors {
         THolder<TActorCoroImpl> Impl;
 
     public:
-        TActorCoro(THolder<TActorCoroImpl> impl, ui32 activityType = IActor::ACTOR_COROUTINE)
+        template <class TEnumActivityType = IActor::EActivityType>
+        TActorCoro(THolder<TActorCoroImpl> impl, const TEnumActivityType activityType = IActor::EActivityType::ACTOR_COROUTINE)
             : IActorCallback(static_cast<TReceiveFunc>(&TActorCoro::StateFunc), activityType)
             , Impl(std::move(impl))
         {}

@@ -112,7 +112,7 @@ TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprContext& 
 
             auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
                 .Column(maybeColMember.Cast().Name())
-                .Path(maybePathUtf8.Cast().Literal());
+                .Path(maybePathUtf8.Cast());
             if (maybeReturningType) {
                 builder.ReturningType(maybeReturningType.Cast());
             } else {
@@ -351,10 +351,9 @@ TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx,
 TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
 {
     auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
-    auto path = jsonExists.JsonPath().Cast<TCoUtf8>().Literal();
     return Build<TKqpOlapJsonExists>(ctx, pos)
         .Column(columnName)
-        .Path(path)
+        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
         .Done();
 }
 

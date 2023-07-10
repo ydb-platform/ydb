@@ -12,9 +12,40 @@ import "ydb/public/api/protos/draft/fq.proto";
 message TInPlaceCompute {
 }
 
+message TComputeDatabaseConfig {
+    TYdbStorageConfig Connection = 1;
+    string Tenant = 2;
+}
+
+message TDatabaseMapping {
+    repeated TComputeDatabaseConfig Common = 1;
+    map<string, TComputeDatabaseConfig> ScopeToComputeDatabase = 2;
+}
+
+message TYdbComputeControlPlane {
+    message TSingle {
+        TYdbStorageConfig Connection = 1;
+    }
+
+    message TCms {
+        TDatabaseMapping DatabaseMapping = 1;
+    }
+
+    message TYdbcp {
+        TDatabaseMapping DatabaseMapping = 2;
+    }
+
+    bool Enable = 1;
+    oneof type {
+        TSingle Single = 2;
+        TCms Cms = 3;
+        TYdbcp Ydbcp = 4;
+    }
+}
+
 message TYdbCompute {
     bool Enable = 1;
-    TYdbStorageConfig Connection = 2;
+    TYdbComputeControlPlane ControlPlane = 2;
 }
 
 enum EComputeType {

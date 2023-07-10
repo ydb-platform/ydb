@@ -508,7 +508,7 @@ void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
 void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
     NScheme::TSchemeClient schemeClient(driver);
     NTable::TTableClient tableClient(driver);
-    TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path);
+    TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path, {}, true, false);
     VerifyStatus(status, TStringBuilder() << "RemoveDirectoryRecursive, path: " << path.Quote());
     LOG_DEBUG("Directory is removed recursively, path: " << path.Quote());
 }

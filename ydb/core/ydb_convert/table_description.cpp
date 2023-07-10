@@ -5,7 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <util/generic/hash.h>

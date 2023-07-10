@@ -53,10 +53,8 @@ public:
         const auto traceId = Request_->GetTraceId();
         const auto requestType = Request_->GetRequestType();
 
-        NYql::TIssues issues;
-
-        if (!CheckSession(req->session_id(), issues)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+        if (!CheckSession(req->session_id(), Request_.get())) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
         if (!req->has_tx_control()) {
@@ -112,7 +110,6 @@ public:
                     NYql::TIssues issues;
                     issues.AddIssue(NYql::ExceptionToIssue(ex));
                     return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-                    return;
                 }
 
                 queryAction = NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;

@@ -21,7 +21,7 @@ TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
 {
 }
 
-TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const DatabaseIds& ids) const
+TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const TDatabaseAuthMap& ids) const
 {
     // Cloud database ids validataion
     for (const auto& kv: ids) {

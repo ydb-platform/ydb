@@ -184,7 +184,7 @@ void AddRangeQuery(
     auto fromBuf = TSerializedCellVec::Serialize(fromCells);
     auto toBuf = TSerializedCellVec::Serialize(toCells);
 
-    request.Ranges.emplace_back(fromBuf, toBuf, fromInclusive, toInclusive);
+    request.Ranges.emplace_back(std::move(fromBuf), std::move(toBuf), fromInclusive, toInclusive);
 }
 
 struct TTableInfo {

@@ -22,7 +22,7 @@ static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 } // anonymous namespace
 
 
-NScanPrivate::TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot,
+TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot,
     const TComputeRuntimeSettings& settings, std::vector<NActors::TActorId>&& computeActors, const ui64 txId,
     const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
@@ -86,6 +86,7 @@ void TKqpScanFetcherActor::Bootstrap() {
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
+    Y_VERIFY(ev->Get()->GetFreeSpace());
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): " << ev->Sender;
     if (!InFlightComputes.OnComputeAck(ev->Sender, ev->Get()->GetFreeSpace())) {
         ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "EvAckData (" << SelfId() << "): " << ev->Sender << " IGNORED";
@@ -95,7 +96,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) 
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvTerminateFromCompute::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromCompute: " << ev->Sender;
+    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "TEvTerminateFromCompute")("sender", ev->Sender);
     for (auto&& itTablet : InFlightShards) {
         for (auto&& it : itTablet.second) {
             auto state = it.second;
@@ -115,6 +116,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvTerminateFromComput
             }
         }
     }
+    PassAway();
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
@@ -429,6 +431,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvInterconnect::TEvNodeDisconnected::T
             if (state->ActorId && state->ActorId.NodeId() == nodeId) {
                 SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                break;
             }
         }
     }
@@ -448,12 +451,13 @@ bool TKqpScanFetcherActor::SendGlobalFail(const NDqProto::EComputeState state, N
     return true;
 }
 
-bool TKqpScanFetcherActor::ProvideDataToCompute(TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state) {
+bool TKqpScanFetcherActor::ProvideDataToCompute(const NActors::TActorId& scannerId, TEvKqpCompute::TEvScanData& msg, TShardState::TPtr state) noexcept {
     if (msg.IsEmpty()) {
         InFlightComputes.OnEmptyDataReceived(state->TabletId, msg.RequestedBytesLimitReached || msg.Finished);
     } else {
-        ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "PROVIDING (FROM " << SelfId() << "): used free compute " << InFlightComputes.DebugString();
         auto computeActorInfo = InFlightComputes.OnDataReceived(state->TabletId, msg.RequestedBytesLimitReached || msg.Finished);
+        ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << SelfId() << " PROVIDING (FROM " << scannerId << " to " << computeActorInfo.GetActorId() <<
+            "): used free compute " << InFlightComputes.DebugString();
         Send(computeActorInfo.GetActorId(), new TEvScanExchange::TEvSendData(msg, state->TabletId));
     }
     return true;
@@ -518,7 +522,7 @@ THolder<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(
     return ev;
 }
 
-void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) {
+void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) noexcept {
     auto& msg = *ev->Get();
 
     auto state = GetShardState(msg, ev->Sender);
@@ -542,17 +546,22 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         << ";in flight shards=" << InFlightShards.GetShardsCount()
         << ";delayed_for=" << latency.SecondsFloat() << " seconds by ratelimiter"
         << ";tablet_id=" << state->TabletId);
-    ProvideDataToCompute(msg, state);
+    ProvideDataToCompute(ev->Sender, msg, state);
+    state->AvailablePacks = msg.AvailablePacks;
     InFlightShards.MutableStatistics(state->TabletId).AddPack(rowsCount, 0);
-
     Stats.AddReadStat(state->ScannerIdx, rowsCount, 0);
 
     bool stopFinally = false;
-    CA_LOG_T("EVLOGKQP:" << IsAggregationRequest << "/" << Meta.GetItemsLimit() << "/" << InFlightShards.GetTotalRowsCount() << "/" << rowsCount);
+    CA_LOG_D("EVLOGKQP:" << IsAggregationRequest << "/" << Meta.GetItemsLimit() << "/" << InFlightShards.GetTotalRowsCount() << "/" << rowsCount);
     if (!msg.Finished) {
         if (msg.RequestedBytesLimitReached) {
             InFlightShards.NeedAck(state);
-            SendScanDataAck(state);
+            if (!state->AvailablePacks || *state->AvailablePacks == 0) {
+                ReturnShardInPool(state);
+                DoAckAvailableWaiting();
+            } else {
+                SendScanDataAck(state);
+            }
         }
     } else {
         CA_LOG_D("Chunk " << state->TabletId << "/" << state->ScannerIdx << " scan finished");
@@ -627,6 +636,10 @@ void TKqpScanFetcherActor::StartReadShard(TShardState::TPtr state) {
     SendStartScanRequest(state, state->Generation);
 }
 
+bool TKqpScanFetcherActor::ReturnShardInPool(TShardState::TPtr state) {
+    return InFlightComputes.ReturnShardInPool(state);
+}
+
 bool TKqpScanFetcherActor::SendScanDataAck(TShardState::TPtr state) {
     ui64 freeSpace;
     if (!InFlightComputes.PrepareShardAck(state, freeSpace)) {
@@ -678,6 +691,7 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
     // so after several consecutive delivery problem responses retry logic should
     // resolve shard details again.
     if (state->RetryAttempt >= MAX_SHARD_RETRIES) {
+        Send(state->ActorId, new NActors::TEvents::TEvPoisonPill());
         return ResolveShard(*state);
     }
 

@@ -17,7 +17,7 @@ bool TAssembleFilter::DoExecuteImpl() {
     OriginalCount = batch->num_rows();
     Filter = std::make_shared<NArrow::TColumnFilter>(NOlap::FilterPortion(batch, *ReadMetadata));
     if (!Filter->Apply(batch)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount)("columns_count", FilterColumnIds.size());
         FilteredBatch = nullptr;
         return true;
     }
@@ -27,7 +27,7 @@ bool TAssembleFilter::DoExecuteImpl() {
             Filter = std::make_shared<NArrow::TColumnFilter>(Filter->CombineSequentialAnd(*earlyFilter));
             if (!earlyFilter->Apply(batch)) {
                 NYDBTest::TControllers::GetColumnShardController()->OnAfterFilterAssembling(batch);
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount);
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_data")("original_count", OriginalCount)("columns_count", FilterColumnIds.size());;
                 FilteredBatch = nullptr;
                 return true;
             } else {

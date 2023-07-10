@@ -440,7 +440,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
 
 template <bool IsMapJoin>
 const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool stream, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 6, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
         return nullptr;
     }
 
@@ -513,6 +513,15 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
     auto rightTableLabel = join.RightLabel().Maybe<TCoAtom>()
         ? join.RightLabel().Cast<TCoAtom>().Value()
         : TStringBuf("");
+
+    if (input->ChildrenSize() > 6U) {
+        for (auto i = 0U; i < input->Tail().ChildrenSize(); ++i) {
+            if (const auto& flag = *input->Tail().Child(i); !flag.IsAtom({"LeftAny", "RightAny"})) {
+                ctx.AddError(TIssue(ctx.GetPosition(flag.Pos()), TStringBuilder() << "Unsupported DQ join option: " << flag.Content()));
+                return nullptr;
+            }
+        }
+    }
 
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabel, *rightStructType,
         rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);

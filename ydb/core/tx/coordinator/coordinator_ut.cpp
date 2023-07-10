@@ -463,11 +463,14 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
                     "Expected tenant coordinator to restore a version 2 config:\n" << pr.second.DebugString());
             }
 
+            // runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
             Cerr << (TStringBuilder() << "Rebooting coordinators a second time" << Endl);
             hooks.PersistConfig_.clear();
             for (ui64 coordinatorId : coordinators) {
+                Cerr << (TStringBuilder() << TInstant::Now() << " Rebooting coordinator " << coordinatorId << Endl);
                 RebootTablet(runtime, coordinatorId, sender);
             }
+            Cerr << (TStringBuilder() << TInstant::Now() << " Finished rebooting coordinators a second time" << Endl);
 
             runtime.SimulateSleep(TDuration::MilliSeconds(50));
             UNIT_ASSERT_C(hooks.PersistConfig_.empty(), "Unexpected persist attempt after a second reboot");

@@ -2,6 +2,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/pgproxy/pg_proxy_types.h>
+#include <ydb/core/pgproxy/pg_proxy_events.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -156,6 +157,44 @@ inline TString ColumnValueToString(NYdb::TValueParser& valueParser) {
     }
 }
 
+inline NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& valueParser) {
+    switch (valueParser.GetKind()) {
+    case NYdb::TTypeParser::ETypeKind::Primitive:
+        return {.Value = ColumnPrimitiveValueToString(valueParser)};
+    case NYdb::TTypeParser::ETypeKind::Optional: {
+        NPG::TEvPGEvents::TRowValueField value;
+        valueParser.OpenOptional();
+        if (!valueParser.IsNull()) {
+            value = ColumnValueToRowValueField(valueParser);
+        }
+        valueParser.CloseOptional();
+        return value;
+    }
+    case NYdb::TTypeParser::ETypeKind::Tuple: {
+        TString value;
+        valueParser.OpenTuple();
+        while (valueParser.TryNextElement()) {
+            if (!value.empty()) {
+                value += ',';
+            }
+            value += ColumnValueToString(valueParser);
+        }
+        valueParser.CloseTuple();
+        return {.Value = value};
+    }
+    case NYdb::TTypeParser::ETypeKind::Pg: {
+        auto pg = valueParser.GetPg();
+        if (!pg.IsNull()) {
+            return {.Value = valueParser.GetPg().Content_};
+        } else {
+            return {};
+        }
+    }
+    default:
+        return {};
+    }
+}
+
 inline uint32_t GetPgOidFromYdbType(NYdb::TType type) {
     NYdb::TTypeParser parser(type);
     switch (parser.GetKind()) {
@@ -167,12 +206,15 @@ inline uint32_t GetPgOidFromYdbType(NYdb::TType type) {
     }
 }
 
-inline TString ToPgSyntax(TStringBuf query, const std::unordered_map<TString, TString>& connectionParams) {
-    auto itOptions = connectionParams.find("options");
-    if (itOptions == connectionParams.end()) {
-        return TStringBuilder() << "--!syntax_pg\n" << query; // default
+inline std::optional<NYdb::TPgType> GetPgTypeFromYdbType(NYdb::TType type) {
+    NYdb::TTypeParser parser(type);
+    switch (parser.GetKind()) {
+        case NYdb::TTypeParser::ETypeKind::Pg: {
+            return parser.GetPg();
+        default:
+            return {};
+        }
     }
-    return TStringBuilder() << "--!" << itOptions->second << "\n" << query;
 }
 
 inline NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::Scripting::ExecuteYqlResponse&& proto) {
@@ -196,10 +238,6 @@ struct TConvertedQuery {
     TString Query;
     NYdb::TParams Params;
 };
-
-inline TString ToPgSyntax(TConvertedQuery query, const std::unordered_map<TString, TString>& connectionParams) {
-    return ToPgSyntax(query.Query, connectionParams);
-}
 
 inline TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
     auto& bindData = statement.BindData;
@@ -227,22 +265,17 @@ inline TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
     };
 }
 
-inline bool IsWhitespaceASCII(char c)
-{
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+inline bool IsQueryEmptyChar(char c) {
+    return c == ' ' || c == ';' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
-inline bool IsWhitespace(TStringBuf query) {
+inline bool IsQueryEmpty(TStringBuf query) {
     for (char c : query) {
-        if (!IsWhitespaceASCII(c)) {
+        if (!IsQueryEmptyChar(c)) {
             return false;
         }
     }
     return true;
-}
-
-inline bool IsQueryEmpty(TStringBuf query) {
-    return IsWhitespace(query);
 }
 
 } //namespace NLocalPgWire

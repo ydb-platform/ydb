@@ -9,6 +9,7 @@ SRCS(
     grpc_pq_write.h
     persqueue.cpp
     persqueue.h
+    services_initializer.cpp
     topic.cpp
 )
 

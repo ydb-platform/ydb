@@ -119,12 +119,12 @@ static void Run(i64 instances = 1) {
 
         NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
-            new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
-        //logSettings->Append(
-        //    NActorsServices::EServiceCommon_MIN,
-        //    NActorsServices::EServiceCommon_MAX,
-        //    NActorsServices::EServiceCommon_Name
-        //);
+            new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
+        logSettings->Append(
+            NActorsServices::EServiceCommon_MIN,
+            NActorsServices::EServiceCommon_MAX,
+            NActorsServices::EServiceCommon_Name
+        );
         logSettings->Append(
             NKikimrServices::EServiceKikimr_MIN,
             NKikimrServices::EServiceKikimr_MAX,

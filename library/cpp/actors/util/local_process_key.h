@@ -1,11 +1,25 @@
 #pragma once
 
 #include <util/string/builder.h>
+#include <util/system/mutex.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
+#include <library/cpp/actors/prof/tag.h>
+
+class TLocalProcessKeyStateIndexLimiter {
+public:
+    static constexpr ui32 GetMaxKeysCount() {
+        return 10000;
+    }
+};
+
+template <class T>
+class TLocalProcessKeyStateIndexConstructor {
+public:
+};
 
 template <typename T>
 class TLocalProcessKeyState {
@@ -22,59 +36,50 @@ public:
         return *Singleton<TLocalProcessKeyState<T>>();
     }
 
-    size_t GetCount() const {
-        return StartIndex + Names.size();
+    ui32 GetCount() const {
+        return MaxKeysCount;
     }
 
     TStringBuf GetNameByIndex(size_t index) const {
-        if (index < StartIndex) {
-            return StaticNames[index];
-        } else {
-            index -= StartIndex;
-            Y_ENSURE(index < Names.size());
-            return Names[index];
-        }
+        Y_VERIFY(index < Names.size());
+        return Names[index];
     }
 
     size_t GetIndexByName(TStringBuf name) const {
+        TGuard<TMutex> g(Mutex);
         auto it = Map.find(name);
         Y_ENSURE(it != Map.end());
         return it->second;
     }
 
-private:
+    TLocalProcessKeyState() {
+        Names.resize(MaxKeysCount);
+    }
+
     size_t Register(TStringBuf name) {
-        auto x = Map.emplace(name, Names.size()+StartIndex);
+        TGuard<TMutex> g(Mutex);
+        auto it = Map.find(name);
+        if (it != Map.end()) {
+            return it->second;
+        }
+        const ui32 index = TLocalProcessKeyStateIndexConstructor<T>::BuildCurrentIndex(name, Names.size());
+        auto x = Map.emplace(name, index);
         if (x.second) {
-            Names.emplace_back(name);
+            Y_VERIFY(index < Names.size(), "a lot of actors or tags for memory monitoring");
+            Names[index] = name;
         }
 
-        return x.first->second;
-    }
-
-    size_t Register(TStringBuf name, ui32 index) {
-        Y_VERIFY(index < StartIndex);
-        auto x = Map.emplace(name, index);
-        Y_VERIFY(x.second || x.first->second == index);
-        StaticNames[index] = name;
         return x.first->second;
     }
 
 private:
-    static constexpr ui32 StartIndex = 2000;
 
-    TVector<TString> FillStaticNames() {
-        TVector<TString> staticNames;
-        staticNames.reserve(StartIndex);
-        for (ui32 i = 0; i < StartIndex; i++) {
-            staticNames.push_back(TStringBuilder() << "Activity_" << i);
-        }
-        return staticNames;
-    }
+    static constexpr ui32 MaxKeysCount = TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount();
 
-    TVector<TString> StaticNames = FillStaticNames();
+private:
     TVector<TString> Names;
     THashMap<TString, size_t> Map;
+    TMutex Mutex;
 };
 
 template <typename T, const char* Name>
@@ -121,15 +126,12 @@ private:
 template <typename T, typename EnumT>
 class TEnumProcessKey {
 public:
-    static TStringBuf GetName(EnumT key) {
+    static TStringBuf GetName(const EnumT key) {
         return TLocalProcessKeyState<T>::GetInstance().GetNameByIndex(GetIndex(key));
     }
 
-    static size_t GetIndex(EnumT key) {
+    static size_t GetIndex(const EnumT key) {
         ui32 index = static_cast<ui32>(key);
-        if (index < TLocalProcessKeyState<T>::StartIndex) {
-            return index;
-        }
         Y_VERIFY(index < Enum2Index.size());
         return Enum2Index[index];
     }
@@ -144,14 +146,10 @@ private:
         for (const auto& [k, v] : names) {
             maxId = Max(maxId, static_cast<ui32>(k));
         }
-        enum2Index.resize(maxId+1);
-        for (ui32 i = 0; i <= maxId && i < TLocalProcessKeyState<T>::StartIndex; i++) {
-            enum2Index[i] = i;
-        }
-
+        enum2Index.resize(maxId + 1);
         for (const auto& [k, v] : names) {
             ui32 enumId = static_cast<ui32>(k);
-            enum2Index[enumId] = TLocalProcessKeyState<T>::GetInstance().Register(v, enumId);
+            enum2Index[enumId] = TLocalProcessKeyState<T>::GetInstance().Register(v);
         }
         return enum2Index;
     }

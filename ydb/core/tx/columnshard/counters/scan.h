@@ -1,89 +1,28 @@
 #pragma once
 #include "common/owner.h"
+#include <ydb/core/tx/columnshard/resources/memory.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
 
-class TScanDataClassAggregation: public TCommonCountersOwner {
-private:
-    using TBase = TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr DeriviativeInFlightBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr DeriviativeInFlightCount;
-    std::shared_ptr<TValueAggregationClient> InFlightBytes;
-    std::shared_ptr<TValueAggregationClient> InFlightCount;
-public:
-    TScanDataClassAggregation(const TString& moduleId, const TString& signalId)
-        : TBase(moduleId)
-    {
-        DeriviativeInFlightCount = TBase::GetDeriviative(signalId + "/Count");
-        DeriviativeInFlightBytes = TBase::GetDeriviative(signalId + "/Bytes");
-        InFlightCount = TBase::GetValueAutoAggregationsClient(signalId + "/Count");
-        InFlightBytes = TBase::GetValueAutoAggregationsClient(signalId + "/Bytes");
-    }
-
-    void AddFullInfo(const ui64 size) {
-        DeriviativeInFlightCount->Add(1);
-        DeriviativeInFlightBytes->Add(size);
-        InFlightCount->Add(1);
-        InFlightBytes->Add(size);
-    }
-
-    void RemoveFullInfo(const ui64 size) {
-        InFlightCount->Remove(1);
-        InFlightBytes->Remove(size);
-    }
-
-    void AddCount() {
-        DeriviativeInFlightCount->Add(1);
-        InFlightCount->Add(1);
-    }
-
-    void AddBytes(const ui64 size) {
-        DeriviativeInFlightBytes->Add(size);
-        InFlightBytes->Add(size);
-    }
-};
-
 class TScanAggregations {
 private:
     using TBase = TCommonCountersOwner;
-    TScanDataClassAggregation ReadBlobs;
-    TScanDataClassAggregation GranulesProcessing;
-    TScanDataClassAggregation GranulesReady;
+    std::shared_ptr<NOlap::TMemoryAggregation> ReadBlobs;
+    std::shared_ptr<NOlap::TMemoryAggregation> GranulesProcessing;
+    std::shared_ptr<NOlap::TMemoryAggregation> GranulesReady;
+    std::shared_ptr<NOlap::TMemoryAggregation> ResultsReady;
 public:
     TScanAggregations(const TString& moduleId)
-        : ReadBlobs(moduleId, "InFlight/Blobs/Read")
-        , GranulesProcessing(moduleId, "InFlight/Granules/Processing")
-        , GranulesReady(moduleId, "InFlight/Granules/Ready")
-    {
+        : GranulesProcessing(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Granules/Processing"))
+        , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready")) {
     }
 
-    void AddFlightReadInfo(const ui64 size) {
-        ReadBlobs.AddFullInfo(size);
+    const std::shared_ptr<NOlap::TMemoryAggregation>& GetGranulesProcessing() const {
+        return GranulesProcessing;
     }
-
-    void RemoveFlightReadInfo(const ui64 size) {
-        ReadBlobs.RemoveFullInfo(size);
-    }
-
-    void AddGranuleProcessing() {
-        GranulesProcessing.AddCount();
-    }
-
-    void AddGranuleProcessingBytes(const ui64 size) {
-        GranulesProcessing.AddBytes(size);
-    }
-
-    void RemoveGranuleProcessingInfo(const ui64 size) {
-        GranulesProcessing.RemoveFullInfo(size);
-    }
-
-    void AddGranuleReady(const ui64 size) {
-        GranulesReady.AddFullInfo(size);
-    }
-
-    void RemoveGranuleReady(const ui64 size) {
-        GranulesReady.RemoveFullInfo(size);
+    const std::shared_ptr<NOlap::TMemoryAggregation>& GetResultsReady() const {
+        return ResultsReady;
     }
 };
 
@@ -92,6 +31,14 @@ private:
     using TBase = TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr ProcessingOverload;
     NMonitoring::TDynamicCounters::TCounterPtr ReadingOverload;
+
+    NMonitoring::TDynamicCounters::TCounterPtr PriorityFetchBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr PriorityFetchCount;
+    NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchCount;
+
+    NMonitoring::TDynamicCounters::TCounterPtr NoResultsAckRequest;
+    NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
 public:
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -116,26 +63,64 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterFetchedBytes;
     NMonitoring::TDynamicCounters::TCounterPtr TwoPhasesPostFilterUsefulBytes;
 
-    NMonitoring::THistogramPtr HistogramCacheBlobsDuration;
-    NMonitoring::THistogramPtr HistogramMissCacheBlobsDuration;
+    NMonitoring::TDynamicCounters::TCounterPtr Hanging;
+
+    NMonitoring::THistogramPtr HistogramCacheBlobsCountDuration;
+    NMonitoring::THistogramPtr HistogramMissCacheBlobsCountDuration;
+    NMonitoring::THistogramPtr HistogramCacheBlobBytesDuration;
+    NMonitoring::THistogramPtr HistogramMissCacheBlobBytesDuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr BlobsWaitingDuration;
+    NMonitoring::THistogramPtr HistogramBlobsWaitingDuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr BlobsReceivedBytes;
 
     TScanCounters(const TString& module = "Scan");
 
-    void OnProcessingOverloaded() {
+    void AckWaitingInfo(const TDuration d) const {
+        AckWaitingDuration->Add(d.MicroSeconds());
+    }
+
+    void OnBlobReceived(const ui32 size) const {
+        BlobsReceivedCount->Add(1);
+        BlobsReceivedBytes->Add(size);
+    }
+
+    void OnBlobsWaitDuration(const TDuration d) const {
+        BlobsWaitingDuration->Add(d.MicroSeconds());
+        HistogramBlobsWaitingDuration->Collect(d.MicroSeconds());
+    }
+
+    void OnEmptyAck() const {
+        NoResultsAckRequest->Add(1);
+    }
+
+    void OnPriorityFetch(const ui64 size) const {
+        PriorityFetchBytes->Add(size);
+        PriorityFetchCount->Add(1);
+    }
+
+    void OnGeneralFetch(const ui64 size) const {
+        GeneralFetchBytes->Add(size);
+        GeneralFetchCount->Add(1);
+    }
+
+    void OnProcessingOverloaded() const {
         ProcessingOverload->Add(1);
     }
-    void OnReadingOverloaded() {
+    void OnReadingOverloaded() const {
         ReadingOverload->Add(1);
     }
 
-    std::shared_ptr<TScanAggregations> BuildAggregations();
+    TScanAggregations BuildAggregations();
 };
 
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
 public:
-    std::shared_ptr<TScanAggregations> Aggregations;
+    TScanAggregations Aggregations;
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)

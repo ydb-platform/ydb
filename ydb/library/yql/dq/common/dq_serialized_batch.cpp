@@ -1,0 +1,102 @@
+#include "dq_serialized_batch.h"
+
+#include <ydb/library/yql/utils/yql_panic.h>
+
+#include <util/system/unaligned_mem.h>
+
+namespace NYql::NDq {
+
+namespace {
+
+template<typename T>
+void AppendNumber(TRope& rope, T data) {
+    static_assert(std::is_integral_v<T>);
+    rope.Insert(rope.End(), TRope(TString(reinterpret_cast<const char*>(&data), sizeof(T))));
+}
+
+template<typename T>
+T ReadNumber(TStringBuf& src) {
+    static_assert(std::is_integral_v<T>);
+    YQL_ENSURE(src.size() >= sizeof(T), "Premature end of spilled data");
+    T result = ReadUnaligned<T>(src.data());
+    src.Skip(sizeof(T));
+    return result;
+}
+
+class TContigousChunkOverBuf : public IContiguousChunk {
+public:
+    TContigousChunkOverBuf(const std::shared_ptr<TBuffer>& owner, TContiguousSpan span)
+        : Owner_(owner)
+        , Span_(span)
+    {
+    }
+private:
+    TContiguousSpan GetData() const override {
+        return Span_;
+    }
+
+    TMutableContiguousSpan GetDataMut() override {
+        YQL_ENSURE(false, "Payload mutation is not supported");
+    }
+
+    size_t GetOccupiedMemorySize() const override {
+        return Span_.GetSize();
+    }
+
+    const std::shared_ptr<TBuffer> Owner_;
+    const TContiguousSpan Span_;
+};
+
+}
+
+void TDqSerializedBatch::SetPayload(const NKikimr::NMiniKQL::TPagedBuffer::TPtr& buffer) {
+    if (IsOOBTransport((NDqProto::EDataTransportVersion)Proto.GetTransportVersion())) {
+        Payload = NKikimr::NMiniKQL::TPagedBuffer::AsRope(std::move(buffer));
+    } else {
+        Proto.MutableRaw()->reserve(buffer->Size());
+        buffer->CopyTo(*Proto.MutableRaw());
+    }
+ }
+
+TRope SaveForSpilling(TDqSerializedBatch&& batch) {
+    TRope result;
+
+    ui32 transportversion = batch.Proto.GetTransportVersion();
+    ui32 rowCount = batch.Proto.GetRows();
+
+    TRope protoPayload(std::move(*batch.Proto.MutableRaw()));
+
+    AppendNumber(result, transportversion);
+    AppendNumber(result, rowCount);
+    AppendNumber(result, protoPayload.size());
+    result.Insert(result.End(), std::move(protoPayload));
+    AppendNumber(result, batch.Payload.GetSize());
+    result.Insert(result.End(), std::move(batch.Payload));
+
+    return result;
+}
+
+TDqSerializedBatch LoadSpilled(TBuffer&& blob) {
+    auto sharedBuf = std::make_shared<TBuffer>(std::move(blob));
+
+    TStringBuf source(sharedBuf->Data(), sharedBuf->Size());
+    TDqSerializedBatch result;
+    result.Proto.SetTransportVersion(ReadNumber<ui32>(source));
+    result.Proto.SetRows(ReadNumber<ui32>(source));
+
+    size_t protoSize = ReadNumber<size_t>(source);
+    YQL_ENSURE(source.size() >= protoSize, "Premature end of spilled data");
+
+    result.Proto.SetRaw(source.data(), protoSize);
+    source.Skip(protoSize);
+
+    size_t ropeSize = ReadNumber<size_t>(source);
+    YQL_ENSURE(ropeSize == source.size(), "Spilled data is corrupted");
+    if (ropeSize) {
+        result.Payload = TRope(new TContigousChunkOverBuf(sharedBuf, source));
+    }
+
+    return result;
+}
+
+}

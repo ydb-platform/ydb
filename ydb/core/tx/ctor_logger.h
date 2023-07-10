@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/actors/core/log.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 // You have to define TLogThis in local namespace to use these macros
 #define LOG_S_EMERG(stream) { TLogThis(*TlsActivationContext, NActors::NLog::PRI_EMERG, [&](TStringBuilder& ss){ ss << stream; }); }

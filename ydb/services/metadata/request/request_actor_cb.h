@@ -31,7 +31,7 @@ private:
         }
         TResponse response = f.GetValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "incorrect reply: " << response.DebugString();
+            AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("response", response.DebugString());
             NYql::TIssues issue;
             NYql::IssuesFromMessage(response.operation().issues(), issue);
             externalController->OnRequestFailed(issue.ToString());

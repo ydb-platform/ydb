@@ -1,7 +1,7 @@
 #include "flat_part_slice.h"
 #include "util_fmt_desc.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -475,13 +475,13 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
     if (!result->empty()) {
         auto& first = result->front();
         if (first.FirstRowId < beginRowId) {
-            first.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(beginKey));
+            first.FirstKey = TSerializedCellVec(beginKey);
             first.FirstRowId = beginRowId;
             first.FirstInclusive = true;
         }
         auto& last = result->back();
         if (last.LastRowId > endRowId) {
-            last.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(endKey));
+            last.LastKey = TSerializedCellVec(endKey);
             last.LastRowId = endRowId;
             last.LastInclusive = false;
         } else if (last.LastRowId == endRowId && last.LastInclusive) {

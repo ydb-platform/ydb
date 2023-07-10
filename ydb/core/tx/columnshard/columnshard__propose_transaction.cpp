@@ -13,6 +13,7 @@ public:
     TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
         : TBase(self)
         , Ev(ev)
+        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -21,13 +22,22 @@ public:
 
 private:
     TEvColumnShard::TEvProposeTransaction::TPtr Ev;
+    const ui32 TabletTxNo;
     std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> Result;
+
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxProposeTransaction[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
 };
 
 
 bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxProposeTransaction.Execute at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
     NIceDb::TNiceDb db(txc.DB);
@@ -89,7 +99,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                     << " ssId " << Self->CurrentSchemeShardId
                     << " seqNo " << seqNo
                     << " lastSeqNo " << lastSeqNo;
-                LOG_S_INFO(statusMessage);
+                LOG_S_INFO(TxPrefix() << statusMessage << TxSuffix());
                 break;
             }
 
@@ -117,14 +127,14 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 existing.Body = std::move(meta.Body);
             }
 
-            LOG_S_DEBUG("TTxProposeTransaction schema txId " << txId << " at tablet " << Self->TabletID());
+            LOG_S_DEBUG(TxPrefix() << "schema txId " << txId << TxSuffix());
 
             status = NKikimrTxColumnShard::EResultStatus::PREPARED;
             break;
         }
         case NKikimrTxColumnShard::TX_KIND_COMMIT: {
             if (Self->CommitsInFlight.contains(txId)) {
-                LOG_S_DEBUG("TTxProposeTransaction CommitTx (retry) TxId " << txId << " at tablet " << Self->TabletID());
+                LOG_S_DEBUG(TxPrefix() << "CommitTx (retry) TxId " << txId << TxSuffix());
 
                 Y_VERIFY(Self->BasicTxInfo.contains(txId));
                 const auto& txInfo = Self->BasicTxInfo[txId];
@@ -205,7 +215,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
 
             Self->DeadlineQueue.emplace(txInfo.MaxStep, txId);
 
-            LOG_S_DEBUG("TTxProposeTransaction CommitTx txId " << txId << " at tablet " << Self->TabletID());
+            LOG_S_DEBUG(TxPrefix() << "CommitTx txId " << txId << TxSuffix());
 
             status = NKikimrTxColumnShard::EResultStatus::PREPARED;
             break;
@@ -214,9 +224,9 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             NKikimrTxDataShard::TDataTransaction dataTransaction;
             Y_VERIFY(dataTransaction.ParseFromString(record.GetTxBody()));
 
-            LOG_S_DEBUG("TTxProposeTransaction immediate data tx txId " << txId
+            LOG_S_DEBUG(TxPrefix() << "immediate data tx txId " << txId
                 << " '" << dataTransaction.DebugString()
-                << "' at tablet " << Self->TabletID());
+                << TxSuffix());
 
             bool isImmediate = record.GetFlags() & NKikimrTxColumnShard::ETransactionFlag::TX_FLAG_IMMEDIATE;
             if (isImmediate) {
@@ -340,8 +350,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
         Self->IncCounter(COUNTER_PREPARE_SUCCESS);
     } else {
         Self->IncCounter(COUNTER_PREPARE_ERROR);
-        LOG_S_INFO("TTxProposeTransaction error txId " << txId << " at tablet " << Self->TabletID()
-            << " " << statusMessage);
+        LOG_S_INFO(TxPrefix() << "error txId " << txId << " " << statusMessage << TxSuffix());
     }
     return true;
 }
@@ -349,7 +358,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
 void TTxProposeTransaction::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Result);
-    LOG_S_DEBUG("TTxProposeTransaction.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
     ctx.Send(Ev->Get()->GetSource(), Result.release());
 

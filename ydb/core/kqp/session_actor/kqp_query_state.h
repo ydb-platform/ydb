@@ -172,6 +172,7 @@ public:
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
         for (const auto& stage : phyTx.GetStages()) {
+
             auto addTable = [&](const NKqpProto::TKqpPhyTableId& table) {
                 NKikimr::TTableId tableId(table.GetOwnerId(), table.GetTableId());
                 auto it = TableVersions.find(tableId);
@@ -184,9 +185,14 @@ public:
             for (const auto& tableOp : stage.GetTableOps()) {
                 addTable(tableOp.GetTable());
             }
+
             for (const auto& input : stage.GetInputs()) {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                     addTable(input.GetStreamLookup().GetTable());
+                }
+
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
+                    addTable(input.GetSequencer().GetTable());
                 }
             }
 
@@ -379,6 +385,7 @@ public:
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+            type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
             type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
         );
     }

@@ -7,6 +7,7 @@
 namespace NKikimr::NOlap {
 
 bool TKernelsRegistry::Parse(const TString& serialized) {
+    Y_VERIFY(!!serialized);
     auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
     NMiniKQL::FillStaticModules(*functionRegistry);
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();

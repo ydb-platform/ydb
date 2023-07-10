@@ -11,7 +11,7 @@
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/lib/sharding/sharding.h>

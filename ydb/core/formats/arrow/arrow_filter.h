@@ -49,6 +49,10 @@ private:
     void Reset(const ui32 count);
 public:
 
+    ui64 GetDataSize() const {
+        return Filter.capacity() * sizeof(ui32) + Count * sizeof(bool);
+    }
+
     class TIterator {
     private:
         ui32 InternalPosition = 0;

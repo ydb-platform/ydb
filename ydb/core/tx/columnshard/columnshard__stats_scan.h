@@ -55,10 +55,6 @@ public:
 
     NOlap::TPartialReadResult GetBatch() override;
 
-    size_t ReadyResultsCount() const override {
-        return IndexStats.empty() ? 0 : 1;
-    }
-
 private:
     NOlap::TReadStatsMetadata::TConstPtr ReadMetadata;
     bool Reverse{false};

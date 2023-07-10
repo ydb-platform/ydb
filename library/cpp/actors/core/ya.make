@@ -63,6 +63,7 @@ SRCS(
     interconnect.cpp
     interconnect.h
     invoke.h
+    indexes.cpp
     io_dispatcher.cpp
     io_dispatcher.h
     lease.h
@@ -101,6 +102,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(defs.h)
 GENERATE_ENUM_SERIALIZATION(actor.h)
+GENERATE_ENUM_SERIALIZATION(indexes.h)
 GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(

@@ -1529,7 +1529,7 @@ namespace NSQLTranslationV1 {
     TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
     TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});
-    void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table);
-    TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node);
+    void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
+    TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString& prefix = {});
     TString NormalizeTypeString(const TString& str);
 }  // namespace NSQLTranslationV1

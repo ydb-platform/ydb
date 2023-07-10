@@ -81,11 +81,8 @@ namespace NBloom {
 
             NUtil::NBin::TPut out(Raw.mutable_begin());
 
-            if (auto *hdr = out.Skip<NPage::TLabel>()) {
-                hdr->Type = NPage::EPage::Bloom;
-                hdr->Format = 0;
-                hdr->Size = size;
-            }
+            WriteUnaligned<NPage::TLabel>(out.Skip<NPage::TLabel>(),
+                NPage::TLabel::Encode(NPage::EPage::Bloom, 0, size));
 
             if (auto *post = out.Skip<THeader>()) {
                 Zero(*post);

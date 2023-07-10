@@ -1,0 +1,68 @@
+package NKikimrBlobStorage;
+
+// VDisk handle and store LogoBlobs in different ways, below we define several classes of these blobs
+enum EPutHandleClass {
+    TabletLog = 1;      // usually small size, requires low latency, rarely read sequentially (RT/TMP)
+    AsyncBlob = 2;      // async blobs, usually sstables and their parts (NoneRT/NoneTMP)
+    UserData = 3;       // user data that we write as separate blobs (RT/NoneTMP)
+
+    // NOTE: currently NoneRT/TMP blobs must be treated as AsyncBlob
+}
+
+// VDisk handle read of LogoBlobs in different ways, below we define several classes of these requests
+enum EGetHandleClass {
+    AsyncRead = 1;      // read of tablet's compacted data
+    FastRead = 2;       // reads initiated by the user (fast)
+    Discover = 3;       // reads from Discover query (OOB)
+    LowRead = 4;        // background reads initiabed by the user (should not affect TabletLog and FastRead)
+}
+
+enum EVDiskQueueId {
+    option allow_alias = true;
+
+    Unknown = 0;
+    // EPutHandleClass
+    PutTabletLog = 1;
+    PutAsyncBlob = 2;
+    PutUserData = 3;
+    // EGetHandleClass
+    GetAsyncRead = 4;
+    GetFastRead = 5;
+    GetDiscover = 6;
+    GetLowRead = 7;
+
+    // Declare Begin and End last in order to get real names from EVDiskQueueId_Name()
+    Begin = 1;
+    End = 8;
+};
+
+enum EVDiskInternalQueueId {
+    option allow_alias = true;
+
+    IntUnknown = 0;
+    IntBegin = 1;
+    IntGetAsync = 1;
+    IntGetFast = 2;
+    IntPutLog = 3;
+    IntPutHugeForeground = 4;
+    IntPutHugeBackground = 5;
+    IntGetDiscover = 6;
+    IntLowRead = 7;
+    IntEnd = 8;
+};
+
+// status flags we provide in responses
+enum EStatusFlags {  // Never use this type for storage, use ui32 bitset
+    StatusIsValid = 1;                          // 0000 0000 0001, if not set, status flags could not be obtained
+    StatusDiskSpaceCyan = 128;                  // 0000 1000 0000
+    StatusDiskSpaceLightYellowMove = 2;         // 0000 0000 0010
+    StatusDiskSpaceYellowStop = 512;            // 0010 0000 0000
+    StatusDiskSpaceLightOrange = 256;           // 0001 0000 0000
+    StatusDiskSpacePreOrange = 1024;            // 0100 0000 0000
+    StatusDiskSpaceOrange = 4;                  // 0000 0000 0100
+    StatusDiskSpaceRed = 8;                     // 0000 0000 1000
+    StatusDiskSpaceBlack = 64;                  // 0000 0100 0000
+    StatusMaskDiskSpace = 1998;                 // 0111 1100 1110
+    StatusNewOwner = 16;                        // 0000 0001 0000
+    StatusNotEnoughDiskSpaceForOperation = 32;  // 0000 0010 0000
+}

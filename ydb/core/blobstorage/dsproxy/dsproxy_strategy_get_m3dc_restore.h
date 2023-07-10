@@ -31,7 +31,8 @@ namespace NKikimr {
             if (BlobIsPresentAtMainOr2x2(state)) {
                 // everything is in place -- all data is present; generate output blob content and signal success for
                 // this one
-                CreateOutputBlob(state);
+                const bool success = RestoreWholeFromMirror(state);
+                Y_VERIFY(success);
                 state.WholeSituation = TBlobState::ESituation::Present;
                 return EStrategyOutcome::DONE;
             }
@@ -42,9 +43,7 @@ namespace NKikimr {
                 return EStrategyOutcome::IN_PROGRESS;
             }
             // Remaining disks may never answer, start the restoration
-            CreateOutputBlob(state);
-            // Wait for at least one DATA response
-            if (!state.Whole.Needed.IsSubsetOf(state.Whole.Here)) {
+            if (!RestoreWholeFromMirror(state)) {
                 return EStrategyOutcome::IN_PROGRESS;
             }
 
@@ -106,27 +105,6 @@ namespace NKikimr {
             // If the fail model is exceeded, we should wait for more responses
             const auto& checker = info.GetQuorumChecker();
             return checker.CheckFailModelForSubgroup(beingWaitedFor);
-        }
-
-
-        static void CreateOutputBlob(TBlobState& state) {
-            for (const TBlobState::TState& part : state.Parts) {
-                // calculate the interval of the part buffer we have to copy into the output buffer
-                TIntervalSet<i32> dataToAdd(part.Here);
-                dataToAdd.Subtract(state.Whole.Here);
-                state.Whole.Here.Add(dataToAdd);
-                for (const auto& range : dataToAdd) {
-                    ui32 begin = range.first;
-                    const ui32 end = range.second;
-                    char buffer[4096];
-                    while (begin != end) {
-                        const ui64 len = Min<ui64>(sizeof(buffer), end - begin);
-                        part.Data.Read(begin, buffer, len);
-                        state.Whole.Data.Write(begin, buffer, len);
-                        begin += len;
-                    }
-                }
-            }
         }
 
         static bool BlobIsPresentAtMainOr2x2(const TBlobState& state) {

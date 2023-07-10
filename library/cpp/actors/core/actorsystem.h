@@ -99,7 +99,6 @@ namespace NActors {
         TCpuManagerConfig CpuManager;
 
         TAutoPtr<ISchedulerThread> Scheduler;
-        ui32 MaxActivityType = 5; // for default entries
 
         TInterconnectSetup Interconnect;
 
@@ -273,10 +272,6 @@ namespace NActors {
         TActorId LookupLocalService(const TActorId& x) const;
         TActorId RegisterLocalService(const TActorId& serviceId, const TActorId& actorId);
 
-        ui32 GetMaxActivityType() const {
-            return SystemSetup ? SystemSetup->MaxActivityType : 1;
-        }
-
         TInstant Timestamp() const {
             return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp));
         }
@@ -309,9 +304,5 @@ namespace NActors {
             DeferredPreStop.push_back(std::move(fn));
         }
 
-        /* This is the base for memory profiling tags.
-       System sets memory profiling tag for debug version of lfalloc.
-       The tag is set as "base_tag + actor_activity_type". */
-        static ui32 MemProfActivityBase;
     };
 }

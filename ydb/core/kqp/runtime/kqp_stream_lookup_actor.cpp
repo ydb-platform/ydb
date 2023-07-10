@@ -548,7 +548,7 @@ private:
 
         for (auto& key : read.Keys) {
             YQL_ENSURE(key.Point);
-            request->Keys.emplace_back(TSerializedCellVec::Serialize(key.From));
+            request->Keys.emplace_back(key.From);
         }
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), shardId, true),

@@ -52,6 +52,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     const FederatedQuery::CreateQueryRequest& request = event.Request;
+    const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase = event.ComputeDatabase;
     ui64 resultLimit = 0;
     if (event.Quotas) {
         if (auto it = event.Quotas->find(QUOTA_QUERY_RESULT_LIMIT); it != event.Quotas->end()) {
@@ -212,7 +213,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
         if (request.execute_mode() != FederatedQuery::SAVE) {
             // TODO: move to run actor priority selection
-
+            *queryInternal.mutable_compute_connection() = computeDatabase.connection();
             TSet<TString> disabledConnections;
             for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME)) {
                 if (!Config->AvailableConnections.contains(connection.content().setting().connection_case())) {
@@ -735,6 +736,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         permissions.SetAll();
     }
     FederatedQuery::ModifyQueryRequest& request = event.Request;
+    FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase = event.ComputeDatabase;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
@@ -873,6 +875,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             internal.clear_binding();
             internal.clear_connection();
             internal.clear_resources();
+            *internal.mutable_compute_connection() = computeDatabase.connection();
 
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;

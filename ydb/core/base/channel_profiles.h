@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include <ydb/core/base/blobstorage_grouptype.h>
-#include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
 namespace NKikimr {
 

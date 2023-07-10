@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 package Fq.Private;
 
+import "ydb/core/fq/libs/config/protos/storage.proto";
 import "ydb/core/fq/libs/protos/dq_effects.proto";
 
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
@@ -116,6 +117,7 @@ message GetTaskResult {
         FederatedQuery.QueryContent.QuerySyntax query_syntax = 34;
         string operation_id = 35;
         string execution_id = 36;
+        NFq.NConfig.TYdbStorageConfig compute_connection = 37;
     }
     repeated Task tasks = 1;
 }

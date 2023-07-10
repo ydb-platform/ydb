@@ -105,7 +105,7 @@ struct TDataRow {
             arrow::field("f64", arrow::float64()),
             arrow::field("string", arrow::binary()),
             arrow::field("utf8", arrow::utf8()),
-            arrow::field("json", arrow::binary()),
+            arrow::field("json", arrow::utf8()),
             arrow::field("yson", arrow::binary()),
             arrow::field("date", arrow::uint16()),
             arrow::field("datetime", arrow::uint32()),

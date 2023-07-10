@@ -12,6 +12,7 @@ target_link_libraries(public-lib-base PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-actors-core
   cpp-deprecated-enum_codegen
   library-cpp-messagebus
   messagebus_protobuf

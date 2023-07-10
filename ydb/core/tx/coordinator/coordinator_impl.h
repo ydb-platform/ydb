@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_coordinator.pb.h>
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -183,7 +184,13 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvPlanTick : public TEventLocal<TEvPlanTick, EvPlanTick> {};
+        struct TEvPlanTick : public TEventLocal<TEvPlanTick, EvPlanTick> {
+            const ui64 Step;
+
+            explicit TEvPlanTick(ui64 step)
+                : Step(step)
+            { }
+        };
 
         struct TEvAcquireReadStepFlush : public TEventLocal<TEvAcquireReadStepFlush, EvAcquireReadStepFlush> {};
 
@@ -272,7 +279,6 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
         TSlotQueue Low;
         TSlot RapidSlot; // slot for entries with schedule on 'right now' moment (actually - with min-schedule time in past).
-        bool RapidFreeze;
 
         TAutoPtr<TQ, TQ::TPtrCleanDestructor> Unsorted;
 
@@ -285,8 +291,14 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
             return ret;
         }
 
+        TStepId MinLowSlot() const {
+            if (!Low.empty()) {
+                return Low.begin()->first;
+            }
+            return 0;
+        }
+
         TQueueType()
-            : RapidFreeze(false)
         {}
     };
 
@@ -315,7 +327,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
             const NKikimrSubDomains::TProcessingParams &config);
     ITransaction* CreateTxSchema();
     ITransaction* CreateTxUpgrade();
-    ITransaction* CreateTxPlanStep(TStepId toStep, TVector<TQueueType::TSlot> &slots, bool rapid);
+    ITransaction* CreateTxPlanStep(TStepId toStep, TVector<TQueueType::TSlot> &slots);
     ITransaction* CreateTxRestartMediatorQueue(TTabletId mediatorId, ui64 genCookie);
     ITransaction* CreateTxMediatorConfirmations(TAutoPtr<TMediatorConfirmations> &confirmations);
     ITransaction* CreateTxConsistencyCheck();
@@ -327,9 +339,9 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         TMediators::TPtr Mediators;
         TVector<TTabletId> Coordinators;
 
-        ui64 PlanAhead = 0;
-        ui64 Resolution = 0;
-        ui64 RapidSlotFlushSize = 0;
+        ui64 Resolution = 1000;
+        ui64 ReducedResolution = 1000;
+        ui64 RapidSlotFlushSize = 1000;
 
         bool HaveProcessingParams = false;
 
@@ -376,7 +388,6 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         ui64 LastSentStep = 0;
         ui64 LastAcquired = 0;
         ui64 LastEmptyStep = 0;
-        TMonotonic LastEmptyPlanAt{ };
 
         TQueueType Queue;
 
@@ -390,7 +401,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
 public:
     struct Schema : NIceDb::Schema {
-        static const ui32 CurrentVersion;
+        static constexpr ui64 CurrentVersion = 1;
 
         struct Transaction : Table<0> {
             struct ID : Column<0, NScheme::NTypeIds::Uint64> {}; // PK
@@ -411,10 +422,13 @@ public:
         };
 
         struct State : Table<2> {
-            enum EKeyType {
-                KeyLastPlanned,
-                DatabaseVersion,
-                AcquireReadStepLast,
+            enum EKeyType : ui64 {
+                KeyLastPlanned = 0,
+                DatabaseVersion = 1,
+                AcquireReadStepLast = 2,
+                LastBlockedActorX1 = 3,
+                LastBlockedActorX2 = 4,
+                LastBlockedStep = 5,
             };
 
             struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK
@@ -435,6 +449,37 @@ public:
         };
 
         using TTables = SchemaTables<Transaction, AffectedSet, State, DomainConfiguration>;
+
+        template<class TCallback>
+        static bool LoadState(NIceDb::TNiceDb& db, State::EKeyType key, TCallback&& callback) {
+            auto rowset = db.Table<State>().Key(key).Select<State::StateValue>();
+
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            if (rowset.IsValid()) {
+                callback(rowset.GetValue<State::StateValue>());
+            }
+
+            return true;
+        }
+
+        static bool LoadState(NIceDb::TNiceDb& db, State::EKeyType key, std::optional<ui64>& out) {
+            return LoadState(db, key, [&out](ui64 value) {
+                out.emplace(value);
+            });
+        }
+
+        static bool LoadState(NIceDb::TNiceDb& db, State::EKeyType key, ui64& out) {
+            return LoadState(db, key, [&out](ui64 value) {
+                out = value;
+            });
+        }
+
+        static void SaveState(NIceDb::TNiceDb& db, State::EKeyType key, ui64 value) {
+            db.Table<State>().Key(key).Update<State::StateValue>(value);
+        }
     };
 
 private:
@@ -476,6 +521,18 @@ private:
         THashMap<TActorId, TLastStepSubscriber*> LastStepSubscribers;
     };
 
+    struct TSiblingState {
+        ui64 CoordinatorId = 0;
+
+        ui64 SeqNo = 0;
+        bool Subscribed = false;
+        bool Confirmed = false;
+
+        TMonotonic NextAttempt;
+        TDuration LastRetryDelay;
+        size_t RetryAttempts = 0;
+    };
+
     bool IcbRegistered = false;
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
@@ -487,6 +544,11 @@ private:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     THashMap<TActorId, TLastStepSubscriber> LastStepSubscribers;
     THashMap<TActorId, TPipeServerData> PipeServers;
+    THashMap<ui64, TSiblingState> Siblings;
+    size_t SiblingsConfirmed = 0;
+
+    std::deque<ui64> PendingPlanTicks;
+    std::set<ui64> PendingSiblingSteps;
 
     typedef THashMap<TTabletId, TMediator> TMediatorsIndex;
     TMediatorsIndex Mediators;
@@ -508,6 +570,8 @@ private:
 #endif
 
     void Die(const TActorContext &ctx) override {
+        UnsubscribeFromSiblings();
+
         if (ReadStepSubscriptionManager) {
             ctx.Send(ReadStepSubscriptionManager, new TEvents::TEvPoison);
             ReadStepSubscriptionManager = { };
@@ -582,6 +646,11 @@ private:
     void Handle(TEvTxProxy::TEvUnsubscribeLastStep::TPtr &ev);
     void NotifyUpdatedLastStep();
     void NotifyUpdatedLastStep(const TActorId& actorId, const TLastStepSubscriber& subscriber);
+    void SubscribeToSiblings();
+    void SubscribeToSibling(TSiblingState& state);
+    void UnsubscribeFromSiblings();
+    void Handle(TEvTxProxy::TEvUpdatedLastStep::TPtr &ev);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev);
 
     void Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvMediatorQueueStop::TPtr &ev, const TActorContext &ctx);
@@ -601,7 +670,10 @@ private:
 
     void PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TActorContext &ctx);
 
-    void SchedulePlanTick(const TActorContext &ctx);
+    bool AllowReducedPlanResolution() const;
+    void SchedulePlanTick();
+    void SchedulePlanTickExact(ui64 next);
+    void SchedulePlanTickAligned(ui64 next);
     bool RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<TMediatorStep>> &planned, TTransactionContext &txc, /*TKeyBuilder &kb, */THashMap<TTxId,TVector<TTabletId>> &pushToAffected) const;
 
     void TryInitMonCounters(const TActorContext &ctx);
@@ -667,6 +739,8 @@ public:
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvPrivate::TEvRestoredProcessingParams, Handle);
+                hFunc(TEvTxProxy::TEvUpdatedLastStep, Handle);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             )
 
    STFUNC_TABLET_IGN(StateBroken,)

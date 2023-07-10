@@ -64,7 +64,7 @@ namespace NInterconnect {
         {}
 
         static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::INTERCONNECT_LOAD_RESPONDER;
+            return IActor::EActivityType::INTERCONNECT_LOAD_RESPONDER;
         }
 
     private:
@@ -101,7 +101,7 @@ namespace NInterconnect {
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::INTERCONNECT_LOAD_RESPONDER;
+            return IActor::EActivityType::INTERCONNECT_LOAD_RESPONDER;
         }
 
         TLoadResponderMasterActor()
@@ -151,7 +151,7 @@ namespace NInterconnect {
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::INTERCONNECT_LOAD_ACTOR;
+            return IActor::EActivityType::INTERCONNECT_LOAD_ACTOR;
         }
 
         TLoadActor(const TLoadParams& params)

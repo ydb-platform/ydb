@@ -57,6 +57,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   library-persqueue-topic_parser
   parser-pg_wrapper-interface
   yql-public-types
+  ydb-library-services
   api-grpc-draft
   api-protos
   public-lib-operation_id
@@ -139,4 +140,5 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_execute_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_execute_script.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_fetch_script_results.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/query/rpc_attach_session.cpp
 )

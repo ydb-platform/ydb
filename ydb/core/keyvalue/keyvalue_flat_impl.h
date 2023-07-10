@@ -12,7 +12,6 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
@@ -21,8 +20,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/public/lib/base/msgbus.h>
-#include <ydb/core/protos/blobstorage_controller.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <util/string/escape.h>
 

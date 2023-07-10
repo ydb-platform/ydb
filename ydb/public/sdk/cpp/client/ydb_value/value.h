@@ -74,7 +74,7 @@ struct TPgType {
     TString TypeModifier;
 
     ui32 Oid = 0;
-    i32 Typlen = 0;
+    i16 Typlen = 0;
     i32 Typmod = 0;
 
     TPgType(const TString& typeName, const TString& typeModifier = {})

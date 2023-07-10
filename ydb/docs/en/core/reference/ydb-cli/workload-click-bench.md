@@ -20,7 +20,7 @@ See the description of the command to init the data load:
 {{ ydb-cli }} workload clickbench init --help
 ```
 
-### Available parameters {#init_options}
+### Available parameters {#init-options}
 
 | Parameter name | Parameter description |
 ---|---
@@ -52,7 +52,7 @@ See the description of the command to run the data load:
 {{ ydb-cli }} workload clickbench run --help
 ```
 
-### Global parameters for all types of load {#run_options}
+### Global parameters for all types of load {#run-options}
 
 | Parameter name | Parameter description |
 ---|---

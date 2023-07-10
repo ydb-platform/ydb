@@ -15,13 +15,20 @@ static constexpr int DEBUG_LOG_LEVEL = 7;
 
 class TTestServer {
 public:
-    TTestServer(bool start = true, TMaybe<TSimpleSharedPtr<TPortManager>> portManager = Nothing())
+    TTestServer(bool start = true, TMaybe<TSimpleSharedPtr<TPortManager>> portManager = Nothing(),
+                const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG)
         : PortManager(portManager.GetOrElse(MakeSimpleShared<TPortManager>()))
         , Port(PortManager->GetPort(2134))
         , GrpcPort(PortManager->GetPort(2135))
         , ServerSettings(NKikimr::NPersQueueTests::PQSettings(Port).SetGrpcPort(GrpcPort))
         , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
     {
+        auto loggerInitializer = [logServices, logPriority](NActors::TTestActorRuntime& runtime) {
+            for (auto s : logServices)
+                runtime.SetLogPriority(s, logPriority);
+        };
+        ServerSettings.SetLoggerInitializer(loggerInitializer);
+
         if (start) {
             StartServer();
         }
@@ -41,15 +48,16 @@ public:
 
     void StartServer(bool doClientInit = true, TMaybe<TString> databaseName = Nothing()) {
         PrepareNetDataFile();
+
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
-        EnableLogs();
 
         Cerr << "TTestServer started on Port " << Port << " GrpcPort " << GrpcPort << Endl;
 
         AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort, databaseName);
         if (doClientInit) {
             AnnoyingClient->FullInit();
+            AnnoyingClient->CheckClustersList(CleverServer->GetRuntime());
         }
     }
 

@@ -185,8 +185,8 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_PROXY_INDEXRESTOREGET,
 //            NKikimrServices::BS_PROXY_STATUS,
             NActorsServices::TEST,
-            NKikimrServices::BLOB_DEPOT,
-            NKikimrServices::BLOB_DEPOT_AGENT,
+//            NKikimrServices::BLOB_DEPOT,
+//            NKikimrServices::BLOB_DEPOT_AGENT,
 //            NKikimrServices::HIVE,
 //            NKikimrServices::LOCAL,
 //            NKikimrServices::TEST_SHARD,
@@ -197,7 +197,7 @@ struct TEnvironmentSetup {
             Runtime->SetLogPriority(comp, NLog::PRI_DEBUG);
         }
 
-        Runtime->SetLogPriority(NKikimrServices::TEST_SHARD, NLog::PRI_INFO);
+//        Runtime->SetLogPriority(NKikimrServices::TEST_SHARD, NLog::PRI_INFO);
     }
 
     void SetupStaticStorage() {

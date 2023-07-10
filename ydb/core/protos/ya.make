@@ -13,7 +13,8 @@ SRCS(
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto
-    blobstorage_controller.proto
+    blobstorage_base.proto
+    blobstorage_base3.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
     blobstorage_pdisk_config.proto
@@ -63,7 +64,6 @@ SRCS(
     http_config.proto
     import.proto
     index_builder.proto
-    issue_id.proto
     kesus.proto
     kqp_physical.proto
     kqp_stats.proto
@@ -91,7 +91,6 @@ SRCS(
     scheme_type_metadata.proto
     scheme_type_operation.proto
     serverless_proxy_config.proto
-    services.proto
     shared_cache.proto
     sqs.proto
     follower_group.proto
@@ -148,6 +147,8 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/public/issue/protos
     ydb/library/yql/public/types
+    ydb/library/services
+    ydb/library/ydb_issue/proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

@@ -134,33 +134,17 @@ NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& 
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 
+NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const NConfig::TYdbStorageConfig& config);
+
 template <class TSettings>
 TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
                             const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
-    TString oauth;
-    if (config.GetToken()) {
-        oauth = config.GetToken();
-    } else if (config.GetOAuthFile()) {
-        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
-    } else {
-        oauth = GetEnv("YDB_TOKEN");
-    }
-
-    const TString iamEndpoint = config.GetIamEndpoint();
-    const TString saKeyFile = config.GetSaKeyFile();
-
     TSettings settings;
     settings
         .DiscoveryEndpoint(config.GetEndpoint())
         .Database(config.GetDatabase());
 
-    NKikimr::TYdbCredentialsSettings credSettings;
-    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
-    credSettings.OAuthToken = oauth;
-    credSettings.SaKeyFile = config.GetSaKeyFile();
-    credSettings.IamEndpoint = config.GetIamEndpoint();
-
-    settings.CredentialsProviderFactory(credProviderFactory(credSettings));
+    settings.CredentialsProviderFactory(credProviderFactory(GetYdbCredentialSettings(config)));
 
     if (config.GetUseLocalMetadataService()) {
         settings.SslCredentials(NYdb::TSslCredentials(true));

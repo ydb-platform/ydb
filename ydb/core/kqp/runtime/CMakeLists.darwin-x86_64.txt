@@ -34,7 +34,9 @@ target_link_libraries(core-kqp-runtime PUBLIC
   minikql-comp_nodes-llvm
   library-yql-utils
   dq-actors-protos
+  yql-dq-common
   yql-dq-runtime
+  cpp-threading-hot_swap
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-runtime PRIVATE
@@ -46,6 +48,8 @@ target_sources(core-kqp-runtime PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_read_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_sequencer_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_sequencer_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_meta.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_spilling_file.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_stream_lookup_actor.cpp

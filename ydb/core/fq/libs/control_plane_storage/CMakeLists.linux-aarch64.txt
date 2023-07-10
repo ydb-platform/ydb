@@ -52,6 +52,7 @@ target_sources(fq-libs-control_plane_storage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/validators.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_bindings.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_compute_database.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_connections.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_queries.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_quotas.cpp

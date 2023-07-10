@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             TCompactionPolicy policy;
 
             // almost randome values except forceCountToCompact = 1 and forceSizeToCompact = 100 GB
-            TCompactionPolicy::TGenerationPolicy genPolicy(1, 1, 1, 10*1024*1024*1024, "whoknows", true);
+            TCompactionPolicy::TGenerationPolicy genPolicy(1, 1, 1, 10ULL*1024*1024*1024, "whoknows", true);
 
             for (size_t i = 0; i < 5; ++i) {
                 policy.Generations.push_back(genPolicy);

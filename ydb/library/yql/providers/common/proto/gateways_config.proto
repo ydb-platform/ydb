@@ -542,37 +542,55 @@ message TGenericClusterConfig {
     required string Name = 1;
 
     // Data source kind
-    required NYql.Connector.API.DataSourceKind Kind = 2;
+    required NYql.NConnector.NApi.EDataSourceKind Kind = 8;
 
     // Location represents the network address of a data source instance we want to connect
     oneof Location {
         // Endpoint must be used for on-premise deployments.
-        NYql.Connector.API.Endpoint Endpoint = 3;
+        NYql.NConnector.NApi.TEndpoint Endpoint = 9;
         // DatabaseId must be used when the data source is deployed in cloud.
         // Data source FQDN and port will be resolved by MDB service.
         string DatabaseId = 4;
     }
 
     // Credentials used to access data source instance
-    required NYql.Connector.API.Credentials Credentials = 5;
+    required NYql.NConnector.NApi.TCredentials Credentials = 10;
 
     // Credentials used to access MDB API.
     // When working with data source instances deployed in a cloud, 
     // you should either set (ServiceAccountId, ServiceAccountIdSignature) pair,
-    // or set IAM Token via env variable / credential table.
+    // or set IAM Token.
+    // The names of these fields must satisfy this template function:
+    // https://a.yandex-team.ru/arcadia/contrib/ydb/core/fq/libs/actors/clusters_from_connections.cpp?rev=r11823087#L19
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
+    optional string Token = 11;
+
+    reserved 2, 3, 5;
+}
+
+message TGenericConnectorConfig {
+    // Connector instance network endpoint
+    required NYql.NConnector.NApi.TEndpoint Endpoint = 3;
+    // If true, GRPC Client will use TLS encryption.
+    // Server cert will be verified with system CA cert pool.
+    required bool UseTLS = 2;
+
+    reserved 1;
 }
 
 message TGenericGatewayConfig {
-    // TODO: replace with map<DataSourceKind, Endpoint>
-    required string Endpoint = 1;
+    // Connector service network endpoint 
+    // TODO: replace with map<DataSourceKind, TGenericConnectorConfig>
+    required TGenericConnectorConfig Connector = 5;
 
-    reserved 2;
+    // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;
 
     // MDB API endpoint (do not fill in case of on-prem deployment)
     optional string MdbGateway = 4;
+
+    reserved 1, 2;
 }
 
 /////////////////////////////// Root ///////////////////////////////

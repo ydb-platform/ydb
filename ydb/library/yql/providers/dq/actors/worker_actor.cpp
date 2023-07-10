@@ -354,7 +354,10 @@ private:
             TFailureInjector::Reach("dq_fail_on_channel_pop_finished", [] { throw yexception() << "dq_fail_on_channel_pop_finished"; });
             auto outputActorId = OutChannelId2ActorId[ev->Get()->ChannelId];
             auto& outChannel = OutputMap[outputActorId];
-            TPullResponse response;
+
+            auto responseMsg = MakeHolder<TEvPullDataResponse>();
+            TPullResponse& response = responseMsg->Record;
+
             auto hasData = !ev->Get()->Data.empty();
             Stat.AddCounters2(ev->Get()->Sensors);
 
@@ -370,12 +373,17 @@ private:
             Y_VERIFY(ev->Get()->Data.size() <= 1);
 
             if (ev->Get()->Data.size() == 1) {
-                response.MutableData()->Swap(&ev->Get()->Data.front());
+                TDqSerializedBatch& batch = ev->Get()->Data.front();
+                response.MutableData()->Swap(&batch.Proto);
+                response.MutableData()->ClearPayloadId();
+                if (!batch.Payload.IsEmpty()) {
+                    response.MutableData()->SetPayloadId(responseMsg->AddPayload(std::move(batch.Payload)));
+                }
             }
 
             Stat.FlushCounters(response);
 
-            Send(outputActorId, MakeHolder<TEvPullDataResponse>(response));
+            Send(outputActorId, std::move(responseMsg));
 
             Run(ctx);
         } catch (...) {
@@ -388,13 +396,15 @@ private:
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqWorker::OnPullResponse";
 
+        TPullResponse& response = ev->Get()->Record;
+
         Stat.AddCounters(ev->Get()->Record);
 
         auto& channel = InputMap[ev->Sender];
         channel.Requested = false;
         channel.Retries = 0;
         channel.ResponseTime = TInstant::Now();
-        auto responseType = ev->Get()->Record.GetResponseType();
+        auto responseType = response.GetResponseType();
         if (responseType == FINISH) {
             channel.Finished = true;
             FinishedChannels++;
@@ -403,16 +413,20 @@ private:
             return;
         }
         if (responseType == ERROR) {
-            Send(SelfId(), MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, ev->Get()->Record.GetErrorMessage()));
+            Send(SelfId(), MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, response.GetErrorMessage()));
             return;
         }
         Y_VERIFY (responseType == FINISH || responseType == CONTINUE);
         if (responseType == FINISH) {
             Send(TaskRunnerActor, new TEvPush(channel.ChannelId));
         } else {
-            Send(TaskRunnerActor, new TEvPush(
-                     channel.ChannelId,
-                     std::move(*ev->Get()->Record.MutableData())));
+            TDqSerializedBatch data;
+            if (response.GetData().HasPayloadId()) {
+                data.Payload = ev->Get()->GetPayload(response.GetData().GetPayloadId());
+            }
+            data.Proto = std::move(*response.MutableData());
+            data.Proto.ClearPayloadId();
+            Send(TaskRunnerActor, new TEvPush(channel.ChannelId, std::move(data)));
         }
     }
 

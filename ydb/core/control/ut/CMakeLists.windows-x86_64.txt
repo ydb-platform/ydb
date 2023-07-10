@@ -23,6 +23,9 @@ target_link_libraries(ydb-core-control-ut PUBLIC
   ydb-core-base
   ydb-core-mind
   ydb-core-mon
+  yql-sql-pg_dummy
+  ydb-services-ydb
+  udf-service-exception_policy
 )
 target_sources(ydb-core-control-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_ut.cpp

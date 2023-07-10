@@ -29,7 +29,7 @@ void TNodeWarden::Handle(TEvents::TEvInvokeResult::TPtr ev) {
 
 void TNodeWarden::EnqueueSyncOp(std::function<std::function<void()>(const TActorContext&)> callback) {
     auto complete = [](auto&& resGetter, const TActorContext&) { resGetter()(); };
-    auto actor = CreateInvokeActor<NKikimrServices::TActivity::NODE_WARDEN>(std::move(callback), std::move(complete));
+    auto actor = CreateInvokeActor(std::move(callback), std::move(complete), NKikimrServices::TActivity::NODE_WARDEN);
     if (SyncActorId) {
         // there is other operation currently going on, we have to wait for a while
         SyncOpQ.push(std::move(actor));

@@ -224,7 +224,7 @@ namespace NKikimr {
 
         public:
             static constexpr EActivityType ActorActivityType() {
-                return ACTORLIB_STATS;
+                return EActivityType::ACTORLIB_STATS;
             }
 
             TMemStatsCollector(TDuration interval, std::unique_ptr<IAllocStats> allocStats)

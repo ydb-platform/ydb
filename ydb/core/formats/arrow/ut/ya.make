@@ -26,6 +26,7 @@ SRCS(
     ut_arrow.cpp
     ut_program_step.cpp
     ut_dictionary.cpp
+    ut_size_calcer.cpp
 )
 
 END()

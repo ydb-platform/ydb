@@ -89,11 +89,9 @@ TString TFragmentedBuffer::Print() const {
     return str.Str();
 }
 
-void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range) {
-    Y_VERIFY(range);
-    for (auto it = range.begin(); it != range.end(); ++it) {
-        auto [begin, end] = *it;
-        Write(begin, from.Read(begin, end - begin));
+void TFragmentedBuffer::CopyFrom(const TFragmentedBuffer& from, const TIntervalSet<i32>& range, i32 offset) {
+    for (auto [begin, end] : range) {
+        Write(begin + offset, from.Read(begin, end - begin));
     }
 }
 

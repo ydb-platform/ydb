@@ -82,7 +82,8 @@ namespace NKikimr {
             struct TMisplacedVDisks {
                 enum EFailLevel : ui32 {
                     ALL_OK,
-                    DISK_FAIL,
+                    MULTIPLE_REALM_OCCUPATION,
+                    PDISK_FAIL,
                     DOMAIN_FAIL,
                     REALM_FAIL,
                     EMPTY_SLOT,

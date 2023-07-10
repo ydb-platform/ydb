@@ -1502,18 +1502,6 @@ get_built_tool_path(
   cpp_styleguide
 )
 get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
   tools/enum_parser/enum_parser
@@ -1545,6 +1533,8 @@ target_link_libraries(ydb-core-protos PUBLIC
   yql-dq-proto
   public-issue-protos
   yql-public-types
+  ydb-library-services
+  library-ydb_issue-proto
   contrib-libs-protobuf
 )
 target_proto_messages(ydb-core-protos PRIVATE
@@ -1554,7 +1544,8 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_controller.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_base.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_base3.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk_color.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_pdisk_config.proto
@@ -1604,7 +1595,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/http_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/import.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/index_builder.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/issue_id.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kesus.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_physical.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/kqp_stats.proto
@@ -1632,7 +1622,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_type_metadata.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/scheme_type_operation.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/serverless_proxy_config.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/services.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/shared_cache.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/sqs.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/follower_group.proto

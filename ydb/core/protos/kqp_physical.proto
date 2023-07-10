@@ -5,6 +5,7 @@ package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "google/protobuf/any.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -62,6 +63,7 @@ message TKqpPhyColumn {
     TKqpPhyColumnId Id = 1;
     uint32 TypeId = 2;
     string PgTypeName = 3;
+    string DefaultFromSequence = 4;
 }
 
 enum EKqpPhyTableKind {
@@ -254,6 +256,14 @@ message TKqpPhyCnStreamLookup {
     bytes ResultType = 5;
 }
 
+message TKqpPhyCnSequencer {
+    TKqpPhyTableId Table = 1;
+    repeated string Columns = 2;
+    repeated string AutoIncrementColumns = 3;  
+    bytes InputType = 4;
+    bytes OutputType = 5;
+}
+
 message TKqpPhyConnection {
     uint32 StageIndex = 1;
     uint32 OutputIndex = 2;
@@ -270,6 +280,7 @@ message TKqpPhyConnection {
         TKqpPhyCnValue Value = 10;
         TKqpPhyCnMerge Merge = 11;
         TKqpPhyCnStreamLookup StreamLookup = 12;
+        TKqpPhyCnSequencer Sequencer = 14;
     };
 }
 
@@ -328,6 +339,12 @@ message TKqpPhyResult {
     uint32 QueryResultIndex = 5;
 }
 
+message TKqpSchemeOperation {
+    oneof Operation {
+        NKikimrSchemeOp.TModifyScheme CreateTable = 1;
+    }
+}
+
 message TKqpPhyTx {
     enum EType {
         TYPE_UNSPECIFIED = 0;
@@ -335,6 +352,7 @@ message TKqpPhyTx {
         TYPE_DATA = 2;
         TYPE_SCAN = 3;
         TYPE_GENERIC = 4;
+        TYPE_SCHEME = 5;
     };
 
     EType Type = 1;
@@ -344,6 +362,7 @@ message TKqpPhyTx {
     string Plan = 5;
     bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set
     repeated TKqpPhyTable Tables = 7;
+    TKqpSchemeOperation SchemeOperation = 8;
 }
 
 message TKqpTableInfo {

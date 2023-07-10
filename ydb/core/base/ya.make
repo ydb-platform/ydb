@@ -20,6 +20,7 @@ SRCS(
     counters.cpp
     counters.h
     defs.h
+    domain.cpp
     domain.h
     event_filter.cpp
     event_filter.h
@@ -28,8 +29,6 @@ SRCS(
     group_stat.h
     hive.h
     interconnect_channels.h
-    kikimr_issue.cpp
-    kikimr_issue.h
     localdb.cpp
     localdb.h
     location.h
@@ -103,13 +102,10 @@ PEERDIR(
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
+    ydb/library/ydb_issue
     ydb/public/api/protos/out
     ydb/library/yql/minikql
     library/cpp/deprecated/atomic
-)
-
-RESOURCE(
-    ydb/core/base/kikimr_issue.txt kikimr_issue.txt
 )
 
 GENERATE_ENUM_SERIALIZATION(quoter.h)

@@ -60,7 +60,7 @@ jobs:
           disk-size: ${{vars.DISK_SIZE && vars.DISK_SIZE || '1023GB'}}
           disk-type: network-ssd-nonreplicated
           cores: 32
-          memory: 64GB
+          memory: 128GB
           core-fraction: 100
           zone-id: ru-central1-b
           subnet-id: ${{secrets.YC_SUBNET}}

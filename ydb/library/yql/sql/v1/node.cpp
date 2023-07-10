@@ -3650,27 +3650,35 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
     return BuildTableSource(node->GetPos(), table);
 }
 
-void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table) {
+void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
-        table = TDeferredAtom(node->GetPos(), *literal);
+        table = TDeferredAtom(node->GetPos(), prefix + *literal);
         return;
     }
 
     if (auto access = dynamic_cast<TAccessNode*>(node.Get())) {
         auto ret = access->TryMakeTable();
         if (ret) {
-            table = TDeferredAtom(node->GetPos(), *ret);
+            table = TDeferredAtom(node->GetPos(), prefix + *ret);
             return;
         }
+    }
+
+    if (!prefix.Empty()) {
+        node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
     auto wrappedNode = node->Y("EvaluateAtom", node);
     table = TDeferredAtom(wrappedNode, ctx);
 }
 
-TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node) {
+TDeferredAtom MakeAtomFromExpression(TContext& ctx, TNodePtr node, const TString& prefix) {
     if (auto literal = node->GetLiteral("String")) {
-        return TDeferredAtom(node->GetPos(), *literal);
+        return TDeferredAtom(node->GetPos(), prefix + *literal);
+    }
+
+    if (!prefix.Empty()) {
+        node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
     auto wrappedNode = node->Y("EvaluateAtom", node);

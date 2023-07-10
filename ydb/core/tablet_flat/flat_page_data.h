@@ -175,9 +175,9 @@ namespace NPage {
             Set(raw);
         }
 
-        const auto* Label() const noexcept
+        NPage::TLabel Label() const noexcept
         {
-            return TDeref<const NPage::TLabel>::At(Raw.data());
+            return ReadUnaligned<NPage::TLabel>(Raw.data());
         }
 
         explicit operator bool() const noexcept

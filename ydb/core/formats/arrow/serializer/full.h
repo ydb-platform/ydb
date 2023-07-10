@@ -22,6 +22,9 @@ public:
 class TFullDataDeserializer: public IDeserializer {
 protected:
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const override;
+    virtual TString DoDebugString() const override {
+        return "type=FULL_DATA;";
+    }
 public:
     TFullDataDeserializer() {
 

@@ -111,14 +111,23 @@ namespace NKikimr::NTestShard {
         std::unordered_map<ui64, TWriteInfo> WritesInFlight; // cookie -> TWriteInfo
         ui32 KeysWritten = 0;
         static constexpr TDuration WriteSpeedWindow = TDuration::Seconds(10);
+        static constexpr TDuration ReadSpeedWindow = TDuration::Seconds(10);
         TSpeedMeter WriteSpeed{WriteSpeedWindow};
+        TSpeedMeter ReadSpeed{ReadSpeedWindow};
         TTimeSeries StateServerWriteLatency;
         TTimeSeries WriteLatency;
+        TTimeSeries ReadLatency;
 
         void GenerateKeyValue(TString *key, TString *value, bool *isInline);
         void IssueWrite();
         void ProcessWriteResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TWriteResult>& results);
         void TrimBytesWritten(TInstant now);
+
+        std::unordered_map<ui64, std::tuple<TString, ui32, ui32, TMonotonic>> ReadsInFlight;
+        std::unordered_map<TString, ui32> KeysBeingRead;
+
+        bool IssueRead();
+        void ProcessReadResult(ui64 cookie, const NProtoBuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TReadResult>& results);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // KV tablet delete management code

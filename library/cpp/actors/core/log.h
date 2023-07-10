@@ -197,8 +197,8 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     class TLoggerActor: public TActor<TLoggerActor> {
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::LOG_ACTOR;
+        static IActor::EActivityType ActorActivityType() {
+            return IActor::EActivityType::LOG_ACTOR;
         }
 
         TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
@@ -392,32 +392,103 @@ namespace NActors {
         }
     };
 
-    class TFormattedRecordWriter {
+    class TFormatedStreamWriter {
     private:
-        const TActorContext* ActorContext = nullptr;
-        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
-        ::NActors::NLog::EComponent Component = 0;
         TStringBuilder Builder;
+    protected:
+        template <class TKey, class TValue>
+        TFormatedStreamWriter& Write(const TKey& pName, const TValue& pValue) {
+            Builder << pName << "=" << pValue << ";";
+            return *this;
+        }
+
+        TFormatedStreamWriter& WriteDirectly(const TString& data) {
+            Builder << data;
+            return *this;
+        }
+    public:
+        TFormatedStreamWriter() = default;
+        TFormatedStreamWriter(const TString& info) {
+            Builder << info;
+        }
+        const TString& GetResult() const {
+            return Builder;
+        }
+    };
+
+    class TLogContextBuilder: TNonCopyable, public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        std::optional<::NActors::NLog::EComponent> Component;
+        TLogContextBuilder(std::optional<::NActors::NLog::EComponent> component)
+            : Component(component) {
+        }
     public:
 
-        TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
-            : ActorContext(NActors::TlsActivationContext ? &NActors::TlsActivationContext->AsActorContext() : nullptr)
-            , Priority(priority)
-            , Component(component) {
+        template <class TKey, class TValue>
+        TLogContextBuilder& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
 
+        const std::optional<::NActors::NLog::EComponent>& GetComponent() const {
+            return Component;
+        }
+
+        static TLogContextBuilder Build(std::optional<::NActors::NLog::EComponent> component = {}) {
+            return TLogContextBuilder(component);
+        }
+    };
+
+    class TLogContextGuard: TNonCopyable, public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        std::optional<::NActors::NLog::EComponent> Component;
+        const ui64 Id = 0;
+    public:
+        TLogContextGuard(const TLogContextBuilder& builder);
+
+        ~TLogContextGuard();
+
+        static int GetCurrentComponent(const ::NActors::NLog::EComponent defComponent = 0);
+
+        const std::optional<::NActors::NLog::EComponent>& GetComponent() const {
+            return Component;
+        }
+
+        ui64 GetId() const {
+            return Id;
         }
 
         template <class TKey, class TValue>
+        TLogContextGuard& Write(const TKey& pName, const TValue& pValue) {
+            Write(pName, pValue);
+            return *this;
+        }
+
+    };
+
+    class TFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TActorContext* ActorContext = nullptr;
+        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
+        ::NActors::NLog::EComponent Component = 0;
+    public:
+
+        TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component);
+
+        template <class TKey, class TValue>
         TFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
-            Builder << pName << "=" << pValue << ";";
+            TBase::Write(pName, pValue);
             return *this;
         }
 
         ~TFormattedRecordWriter() {
             if (ActorContext) {
-                ::NActors::MemLogAdapter(*ActorContext, Priority, Component, Builder);
+                ::NActors::MemLogAdapter(*ActorContext, Priority, Component, TBase::GetResult());
             } else {
-                Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << Builder << Endl;
+                Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
             }
         }
     };
@@ -436,42 +507,54 @@ namespace NActors {
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             ) << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__ << " :"
 
-#define ACTORS_LOG_STREAM_TRACE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_TRACE, component)
-#define ACTORS_LOG_STREAM_DEBUG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_DEBUG, component)
-#define ACTORS_LOG_STREAM_INFO(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_INFO, component)
-#define ACTORS_LOG_STREAM_NOTICE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_NOTICE, component)
-#define ACTORS_LOG_STREAM_WARN(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_WARN, component)
-#define ACTORS_LOG_STREAM_ERROR(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ERROR, component)
-#define ACTORS_LOG_STREAM_CRIT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_CRIT, component)
-#define ACTORS_LOG_STREAM_ALERT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ALERT, component)
-#define ACTORS_LOG_STREAM_EMERG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_EMERG, component)
+#define ALS_TRACE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_TRACE, component)
+#define ALS_DEBUG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_DEBUG, component)
+#define ALS_INFO(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_INFO, component)
+#define ALS_NOTICE(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_NOTICE, component)
+#define ALS_WARN(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_WARN, component)
+#define ALS_ERROR(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ERROR, component)
+#define ALS_CRIT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_CRIT, component)
+#define ALS_ALERT(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_ALERT, component)
+#define ALS_EMERG(component) ACTORS_LOG_STREAM(NActors::NLog::PRI_EMERG, component)
 
-#define ALS_TRACE(component) ACTORS_LOG_STREAM_TRACE(component)
-#define ALS_DEBUG(component) ACTORS_LOG_STREAM_DEBUG(component)
-#define ALS_INFO(component) ACTORS_LOG_STREAM_INFO(component)
-#define ALS_NOTICE(component) ACTORS_LOG_STREAM_NOTICE(component)
-#define ALS_WARN(component) ACTORS_LOG_STREAM_WARN(component)
-#define ALS_ERROR(component) ACTORS_LOG_STREAM_ERROR(component)
-#define ALS_CRIT(component) ACTORS_LOG_STREAM_CRIT(component)
-#define ALS_ALERT(component) ACTORS_LOG_STREAM_ALERT(component)
-#define ALS_EMERG(component) ACTORS_LOG_STREAM_EMERG(component)
+#define AFL_TRACE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, component)
+#define AFL_DEBUG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, component)
+#define AFL_INFO(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, component)
+#define AFL_NOTICE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, component)
+#define AFL_WARN(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, component)
+#define AFL_ERROR(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, component)
+#define AFL_CRIT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, component)
+#define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
+#define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
 
-#define ACTORS_FORMATTED_LOG_TRACE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, component)
-#define ACTORS_FORMATTED_LOG_DEBUG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, component)
-#define ACTORS_FORMATTED_LOG_INFO(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, component)
-#define ACTORS_FORMATTED_LOG_NOTICE(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, component)
-#define ACTORS_FORMATTED_LOG_WARN(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, component)
-#define ACTORS_FORMATTED_LOG_ERROR(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, component)
-#define ACTORS_FORMATTED_LOG_CRIT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, component)
-#define ACTORS_FORMATTED_LOG_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
-#define ACTORS_FORMATTED_LOG_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
+#define DETECT_LOG_MACRO(_1, _2, NAME, ...) NAME
 
-#define AFL_TRACE(component) ACTORS_FORMATTED_LOG_TRACE(component)
-#define AFL_DEBUG(component) ACTORS_FORMATTED_LOG_DEBUG(component)
-#define AFL_INFO(component) ACTORS_FORMATTED_LOG_INFO(component)
-#define AFL_NOTICE(component) ACTORS_FORMATTED_LOG_NOTICE(component)
-#define AFL_WARN(component) ACTORS_FORMATTED_LOG_WARN(component)
-#define AFL_ERROR(component) ACTORS_FORMATTED_LOG_ERROR(component)
-#define AFL_CRIT(component) ACTORS_FORMATTED_LOG_CRIT(component)
-#define AFL_ALERT(component) ACTORS_FORMATTED_LOG_ALERT(component)
-#define AFL_EMERG(component) ACTORS_FORMATTED_LOG_EMERG(component)
+#define BASE_CFL_TRACE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_DEBUG2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_INFO2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_NOTICE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_WARN2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_ERROR2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_CRIT2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_ALERT2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+#define BASE_CFL_EMERG2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)
+
+#define BASE_CFL_TRACE1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_DEBUG1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_DEBUG, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_INFO1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_INFO, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_NOTICE1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_NOTICE, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_WARN1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_WARN, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_ERROR1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ERROR, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_CRIT1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_CRIT, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_ALERT1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+#define BASE_CFL_EMERG1(defaultComponent) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, ::NActors::TLogContextGuard::GetCurrentComponent(defaultComponent))
+
+#define ACFL_TRACE(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_TRACE2, BASE_CFL_TRACE1)(__VA_ARGS__)
+#define ACFL_DEBUG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_DEBUG2, BASE_CFL_DEBUG1)(__VA_ARGS__)
+#define ACFL_INFO(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_INFO2, BASE_CFL_INFO1)(__VA_ARGS__)
+#define ACFL_NOTICE(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_NOTICE2, BASE_CFL_NOTICE1)(__VA_ARGS__)
+#define ACFL_WARN(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_WARN2, BASE_CFL_WARN1)(__VA_ARGS__)
+#define ACFL_ERROR(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ERROR2, BASE_CFL_ERROR1)(__VA_ARGS__)
+#define ACFL_CRIT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_CRIT2, BASE_CFL_CRIT1)(__VA_ARGS__)
+#define ACFL_ALERT(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_ALERT2, BASE_CFL_ALERT1)(__VA_ARGS__)
+#define ACFL_EMERG(...) DETECT_LOG_MACRO(__VA_ARGS__, BASE_CFL_EMERG2, BASE_CFL_EMERG1)(__VA_ARGS__)

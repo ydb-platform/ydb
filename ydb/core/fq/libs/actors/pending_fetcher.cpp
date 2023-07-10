@@ -9,7 +9,7 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -22,6 +22,7 @@
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
@@ -120,6 +121,7 @@ public:
         const ::NYql::NCommon::TServiceCounters& serviceCounters,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
+        NYql::NConnector::IClient::TPtr connectorClient,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
@@ -135,6 +137,7 @@ public:
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
+        , ConnectorClient(connectorClient)
         , PqCmConnections(std::move(pqCmConnections))
         , FetcherGuid(CreateGuidAsString())
         , ClientCounters(clientCounters)
@@ -349,8 +352,13 @@ private:
             *resources.mutable_topic_consumers() = task.created_topic_consumers();
         }
 
+        NFq::NConfig::TYdbStorageConfig computeConnection = ComputeConfig.GetConnection(task.scope());
+        computeConnection.set_endpoint(task.compute_connection().endpoint());
+        computeConnection.set_database(task.compute_connection().database());
+        computeConnection.set_usessl(task.compute_connection().usessl());
+
         TRunActorParams params(
-            YqSharedResources, CredentialsProviderFactory, S3Gateway,
+            YqSharedResources, CredentialsProviderFactory, S3Gateway, ConnectorClient,
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,
@@ -386,7 +394,8 @@ private:
             task.job_id().value(),
             resources,
             task.execution_id(),
-            task.operation_id()
+            task.operation_id(),
+            computeConnection
             );
 
         auto runActorId =
@@ -429,6 +438,7 @@ private:
 
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const IHTTPGateway::TPtr S3Gateway;
+    const NYql::NConnector::IClient::TPtr ConnectorClient;
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
 
     const TString FetcherGuid;
@@ -468,6 +478,7 @@ NActors::IActor* CreatePendingFetcher(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
+    NYql::NConnector::IClient::TPtr connectorClient,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
@@ -484,6 +495,7 @@ NActors::IActor* CreatePendingFetcher(
         serviceCounters,
         credentialsFactory,
         s3Gateway,
+        connectorClient,
         std::move(pqCmConnections),
         clientCounters,
         tenantName,

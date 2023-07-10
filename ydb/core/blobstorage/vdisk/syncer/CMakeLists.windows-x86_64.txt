@@ -21,6 +21,7 @@ target_link_libraries(blobstorage-vdisk-syncer PUBLIC
   blobstorage-vdisk-anubis_osiris
   blobstorage-vdisk-common
   vdisk-hulldb-base
+  version
 )
 target_sources(blobstorage-vdisk-syncer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.cpp

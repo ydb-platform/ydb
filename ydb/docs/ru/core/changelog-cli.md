@@ -2,14 +2,32 @@
 
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.5.0 {#2-5-0}
+
+Дата выхода 20 июня 2023. Для обновления до версии **2.5.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+**Функциональность:**
+
+* Для команды `ydb import file` добавлен параметр [--timeout](reference/ydb-cli/export_import/import-file.md#optional), задающий время, в течение которого должна быть выполнена операция на сервере.
+* Добавлен индикатор прогресса в командах [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) и [ydb import file](reference/ydb-cli/export_import/import-file.md).
+* Добавлена команда `ydb workload kv run read-rows`, которая нагружает базу запросами на чтение строк, используя новый экспериментальный API вызов ReadRows (реализован только в ветке [main](https://github.com/ydb-platform/ydb)), выполняющий более быстрое чтение по ключу, чем [select](reference/ydb-cli/workload-kv.md#select-kv).
+* В [ydb workload topic](reference/ydb-cli/workload-topic.md) добавлены новые параметры `--warmup-time`, `--percentile`, `--topic`, задающие время прогрева теста, процентиль в выводе статистики и имя топика соответственно.
+* Добавлена команда [ydb workload tpch](reference/ydb-cli/workload-tpch.md) для запуска нагрузочного теста TPC-H.
+* Добавлен флаг `--ordered` в команде [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md), сохраняющий порядок по первичному ключу в таблицах.
+
+**Производительность:**
+
+* Увеличена скорость загрузки данных в команде `ydb import file` за счет добавления параллельной загрузки. Число потоков задается новым параметром [--threads](reference/ydb-cli/export_import/import-file.md#optional).
+* Увеличена производительность команды [ydb import file json](reference/ydb-cli/export_import/import-file.md), за счет уменьшения числа копирований данных.
+
 ## Версия 2.4.0 {#2-4-0}
 
 Дата выхода 24 мая 2023. Для обновления до версии **2.4.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
 
 **Функциональность:**
 
-* Добавлена возможность загрузки нескольких файлов командой [ydb import file](reference/ydb-cli/export_import/_includes/import-file.md).
-* Добавлена поддержка удаления колоночных таблиц для команды [ydb scheme rmdir --recursive](reference/ydb-cli/commands/_includes/dir.md#rmdir).
+* Добавлена возможность загрузки нескольких файлов командой [ydb import file](reference/ydb-cli/export_import/import-file.md).
+* Добавлена поддержка удаления колоночных таблиц для команды [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir).
 * Повышена стабильность работы команды [ydb workload topic](reference/ydb-cli/workload-topic.md).
 
 ## Версия 2.3.0 {#2-3-0}
@@ -19,13 +37,13 @@
 **Функциональность:**
 
 * Добавлен интерактивный режим выполнения запросов. Для перехода в интерактивный режим выполните команду [ydb yql](reference/ydb-cli/yql.md) без аргументов. Режим экспериментальный, обратная совместимость пока не гарантируется.
-* Добавлена команда [ydb index rename](reference/ydb-cli/commands/_includes/secondary_index.md#rename) для [атомарной замены](best_practices/secondary_indexes.md#atomic-index-replacement) или переименования вторичного индекса.
+* Добавлена команда [ydb index rename](reference/ydb-cli/commands/secondary_index.md#rename) для [атомарной замены](best_practices/secondary_indexes.md#atomic-index-replacement) или переименования вторичного индекса.
 * Добавлена команда `ydb workload topic` для запуска нагрузки, которая читает и записывает сообщения в топики.
-* Для команды `ydb scheme rmdir` добавлен параметр [--recursive](reference/ydb-cli/commands/_includes/dir.md#rmdir-options), который позволяет рекурсивно удалить директорию вместе со всем содержимым.
+* Для команды `ydb scheme rmdir` добавлен параметр [--recursive](reference/ydb-cli/commands/dir.md#rmdir-options), который позволяет рекурсивно удалить директорию вместе со всем содержимым.
 * Для команды [ydb scheme describe](reference/ydb-cli/commands/scheme-describe.md) добавлена поддержка типов `topic` и `coordination node`.
 * Для команды `ydb topic consumer` добавлен параметр [--commit](reference/ydb-cli/topic-read.md#osnovnye-opcionalnye-parametry) для подтверждения прочитанных сообщений.
-* Для команды `ydb import file csv|tsv` добавлен параметр [--columns](reference/ydb-cli/export_import/_includes/import-file.md#optional), с помощью которого можно указать список колонок вместо заголовка в файле.
-* Для команды `ydb import file csv|tsv` добавлен параметр [--newline-delimited](reference/ydb-cli/export_import/_includes/import-file.md#optional), который подтверждает отсутствие символа переноса строки в данных. Использование этого параметра ускоряет импорт за счет параллельного чтения из нескольких секций файла.
+* Для команды `ydb import file csv|tsv` добавлен параметр [--columns](reference/ydb-cli/export_import/import-file.md#optional), с помощью которого можно указать список колонок вместо заголовка в файле.
+* Для команды `ydb import file csv|tsv` добавлен параметр [--newline-delimited](reference/ydb-cli/export_import/import-file.md#optional), который подтверждает отсутствие символа переноса строки в данных. Использование этого параметра ускоряет импорт за счет параллельного чтения из нескольких секций файла.
 
 **Исправления ошибок:**
 
@@ -42,7 +60,7 @@
 * Значения параметров YQL-запросов теперь могут быть [переданы из файла](reference/ydb-cli/parameterized-queries-cli.md).
 * Запрос на ввод пароля теперь выводится в `stderr` вместо `stdout`.
 * Путь к корневому CA сертификату теперь может быть сохранен в [профиле](reference/ydb-cli/profile/index.md).
-* Добавлен глобальный параметр [--profile-file](reference/ydb-cli/commands/_includes/global-options.md#service-options) для использования указанного файла в качестве хранилища для настроек профилей.
+* Добавлен глобальный параметр [--profile-file](reference/ydb-cli/commands/global-options.md#service-options) для использования указанного файла в качестве хранилища для настроек профилей.
 * Добавлен новый тип нагрузочного тестирования [ydb workload clickbench](reference/ydb-cli/workload-click-bench).
 
 ## Версия 2.1.1 {#2-1-1}

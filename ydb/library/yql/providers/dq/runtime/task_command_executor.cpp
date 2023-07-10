@@ -350,8 +350,8 @@ public:
                 Y_ENSURE(taskId == Runner->GetTaskId());
                 auto channel = Runner->GetInputChannel(channelId);
 
-                NDqProto::TData data;
-                data.Load(&input);
+                NDq::TDqSerializedBatch data;
+                data.Proto.Load(&input);
 
                 auto guard = Runner->BindAllocator(0); // Explicitly reset memory limit
                 channel->Push(std::move(data));
@@ -371,7 +371,9 @@ public:
                     NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED);
                 NKikimr::NMiniKQL::TUnboxedValueBatch buffer(source->GetInputType());
                 if (request.GetString().empty() && request.GetChunks() == 0) {
-                    dataSerializer.Deserialize(request.GetData(), source->GetInputType(), buffer);
+                    NDq::TDqSerializedBatch batch;
+                    batch.Proto = std::move(*request.MutableData());
+                    dataSerializer.Deserialize(batch, source->GetInputType(), buffer);
                 } else if (!request.GetString().empty()) {
                     for (auto& row : request.GetString()) {
                         buffer.emplace_back(NKikimr::NMiniKQL::MakeString(row));
@@ -469,7 +471,10 @@ public:
 
                 NDqProto::TPopResponse response;
 
-                response.SetResult(channel->Pop(*response.MutableData()));
+                NDq::TDqSerializedBatch batch;
+                response.SetResult(channel->Pop(batch));
+                YQL_ENSURE(!batch.IsOOB());
+                *response.MutableData() = std::move(batch.Proto);
                 UpdateOutputChannelStats(channelId);
                 QueryStat.FlushCounters(response);
                 response.MutableStats()->PackFrom(GetStats(taskId));
@@ -647,7 +652,9 @@ public:
                         Runner->GetTypeEnv(),
                         Runner->GetHolderFactory(),
                         NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-                    *response.MutableData() = dataSerializer.Serialize(batch, outputType);
+                    NDq::TDqSerializedBatch serialized = dataSerializer.Serialize(batch, outputType);
+                    YQL_ENSURE(!serialized.IsOOB());
+                    *response.MutableData() = std::move(serialized.Proto);
                 }
                 response.SetBytes(bytes);
                 response.Save(&output);

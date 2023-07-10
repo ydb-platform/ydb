@@ -247,7 +247,7 @@ namespace NActors {
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::INTERCONNECT_POLLER;
+            return IActor::EActivityType::INTERCONNECT_POLLER;
         }
 
         void Bootstrap() {

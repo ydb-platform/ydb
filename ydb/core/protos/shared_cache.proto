@@ -5,4 +5,5 @@ message TSharedCacheConfig {
     optional uint64 MemoryLimit = 1 [default = 536870912];
     optional uint64 ScanQueueInFlyLimit = 2 [default = 536870912];
     optional uint64 AsyncQueueInFlyLimit = 3 [default = 536870912];
+    optional uint32 ActivePagesReservationPercent = 4;
 }

@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/driver_lib/version/version.h>
 
 #include <ydb/core/base/appdata.h>
 
@@ -189,6 +190,8 @@ namespace NKikimr {
         TSyncNeighborsPtr Neighbors;
         NSyncer::TLocalSyncerState LocalSyncerState;
         const TActorId NotifyId;
+        std::optional<NKikimrConfig::TStoredCompatibilityInfo> StoredCompatibilityInfo;
+        NKikimrConfig::TStoredCompatibilityInfo CurrentCompatibilityInfo;
 
         TSyncerData(const TString &logPrefix,
                     const TActorId &notifyId,
@@ -208,6 +211,7 @@ namespace NKikimr {
         void PutFromRecoveryLog(const TVDiskIdShort &vdisk, const TSyncState &syncState);
         TString Serialize(const TBlobStorageGroupInfo *info) const;
         void Serialize(TSyncerDataSerializer &s, const TBlobStorageGroupInfo *info) const;
+        bool CheckCompatibility(TString& errorReason);
 
         // check and cut signature
         static TContiguousSpan WithoutSignature(TContiguousSpan entryPoint);
@@ -216,12 +220,14 @@ namespace NKikimr {
                                     const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                    const TString &entryPoint);
+                                    const TString &entryPoint,
+                                    TString& errorReason);
         static bool CheckEntryPoint(const TString &logPrefix,
                                     const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                    const TContiguousSpan &entryPoint);
+                                    const TContiguousSpan &entryPoint,
+                                    TString& errorReason);
 
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format

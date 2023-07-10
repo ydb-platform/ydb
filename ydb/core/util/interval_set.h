@@ -6,7 +6,7 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 #include <util/system/yassert.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {

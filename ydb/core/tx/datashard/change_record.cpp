@@ -8,7 +8,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/protos/change_exchange.pb.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/library/binary_json/read.h>
 
 #include <util/stream/str.h>
@@ -31,6 +31,9 @@ void TChangeRecord::SerializeToProto(NKikimrChangeExchange::TChangeRecord& recor
         }
         case EKind::CdcDataChange: {
             Y_VERIFY(record.MutableCdcDataChange()->ParseFromArray(Body.data(), Body.size()));
+            break;
+        }
+        case EKind::CdcHeartbeat: {
             break;
         }
     }
@@ -347,6 +350,10 @@ TConstArrayRef<TCell> TChangeRecord::GetKey() const {
             Key.ConstructInPlace(key.GetCells());
             break;
         }
+
+        case EKind::CdcHeartbeat: {
+            Y_FAIL("Not supported");
+        }
     }
 
     Y_VERIFY(Key);
@@ -375,7 +382,8 @@ TString TChangeRecord::GetPartitionKey() const {
             break;
         }
 
-        case EKind::AsyncIndex: {
+        case EKind::AsyncIndex:
+        case EKind::CdcHeartbeat: {
             Y_FAIL("Not supported");
         }
     }
@@ -388,6 +396,15 @@ TInstant TChangeRecord::GetApproximateCreationDateTime() const {
     return GetGroup()
         ? TInstant::FromValue(GetGroup())
         : TInstant::MilliSeconds(GetStep());
+}
+
+bool TChangeRecord::IsBroadcast() const {
+    switch (Kind) {
+        case EKind::CdcHeartbeat:
+            return true;
+        default:
+            return false;
+    }
 }
 
 TString TChangeRecord::ToString() const {

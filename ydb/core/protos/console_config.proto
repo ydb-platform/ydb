@@ -275,7 +275,8 @@ message TGetAllConfigsRequest {
 }
 
 message TGetAllConfigsResponse {
-    optional Ydb.DynamicConfig.GetConfigResult Response = 1;
+    reserved 1;
+    optional Ydb.DynamicConfig.GetConfigResult Response = 2;
 }
 
 message TGetNodeLabelsRequest {

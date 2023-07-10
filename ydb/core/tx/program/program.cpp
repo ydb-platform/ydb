@@ -22,7 +22,7 @@ class TProgramBuilder {
     TString Error;
 public:
     mutable THashMap<ui32, TString> Sources;
-    
+
     explicit TProgramBuilder(const IColumnResolver& columnResolver, const TKernelsRegistry& kernelsRegistry)
         : ColumnResolver(columnResolver)
         , KernelsRegistry(kernelsRegistry)
@@ -54,7 +54,7 @@ private:
     }
     TAssign MakeFunction(const std::string& name,
                                 const NKikimrSSA::TProgram::TAssignment::TFunction& func);
-    NSsa::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant); 
+    NSsa::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant);
     NSsa::TAggregateAssign MakeAggregate(const std::string& name, const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func);
     NSsa::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues);
 
@@ -183,6 +183,9 @@ TAssign TProgramBuilder::MakeFunction(const std::string& name,
         case TId::FUNC_CAST_TO_INT8:
             return TAssign(name, EOperation::CastInt8, std::move(arguments),
                         mkCastOptions(std::make_shared<arrow::Int8Type>()));
+        case TId::FUNC_CAST_TO_BOOLEAN:
+            return TAssign(name, EOperation::CastBoolean, std::move(arguments),
+                        mkCastOptions(std::make_shared<arrow::BooleanType>()));
         case TId::FUNC_CAST_TO_INT16:
             return TAssign(name, EOperation::CastInt16, std::move(arguments),
                         mkCastOptions(std::make_shared<arrow::Int16Type>()));
@@ -471,7 +474,7 @@ bool TProgramContainer::Init(const IColumnResolver& columnResolver, NKikimrSchem
         ::google::protobuf::TextFormat::PrintToString(programProto, &out);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", out);
     }
-    
+
     if (olapProgramProto.HasParameters()) {
         Y_VERIFY(olapProgramProto.HasParametersSchema(), "Parameters are present, but there is no schema.");
 

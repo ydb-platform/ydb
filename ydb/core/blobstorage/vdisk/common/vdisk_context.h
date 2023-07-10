@@ -61,6 +61,9 @@ namespace NKikimr {
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
+        // diagnostics
+        TString LocalRecoveryErrorStr;
+
     private:
         // Managing disk space
         TOutOfSpaceState OutOfSpaceState;

@@ -6,12 +6,12 @@
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -34,7 +34,7 @@ using namespace NFq;
 
 class TStatusTrackerActor : public TBaseComputeActor<TStatusTrackerActor> {
 public:
-    using IRetryPolicy = IRetryPolicy<const TEvPrivate::TEvGetOperationResponse::TPtr&>;
+    using IRetryPolicy = IRetryPolicy<const TEvYdbCompute::TEvGetOperationResponse::TPtr&>;
 
     enum ERequestType {
         RT_GET_OPERATION,
@@ -83,7 +83,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvGetOperationResponse, Handle);
+        hFunc(TEvYdbCompute::TEvGetOperationResponse, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
     )
 
@@ -94,21 +94,21 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             LOG_I("Information about the status of operation is stored");
-            Send(Parent, new TEvPrivate::TEvStatusTrackerResponse(Issues, Status, ExecStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(Issues, Status, ExecStatus));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             LOG_E("Error saving information about the status of operation");
-            Send(Parent, new TEvPrivate::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus));
             FailedAndPassAway();
         }
     }
 
-    void Handle(const TEvPrivate::TEvGetOperationResponse::TPtr& ev) {
+    void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't get operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvPrivate::TEvStatusTrackerResponse(ev->Get()->Issues, ev->Get()->Status, ExecStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(ev->Get()->Issues, ev->Get()->Status, ExecStatus));
             FailedAndPassAway();
             return;
         }
@@ -138,7 +138,7 @@ public:
     }
 
     void SendGetOperation(const TDuration& delay = TDuration::Zero()) {
-        Register(new TRetryActor<TEvPrivate::TEvGetOperationRequest, TEvPrivate::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
+        Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), delay, SelfId(), Connector, OperationId));
     }
 
     void Failed() {

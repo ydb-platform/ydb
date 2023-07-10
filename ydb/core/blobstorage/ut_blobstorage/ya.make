@@ -38,6 +38,7 @@ IF (BUILD_TYPE == "RELEASE")
         discover.cpp
         multiget.cpp
         patch.cpp
+        recovery.cpp
     )
 ELSE ()
     MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")

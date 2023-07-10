@@ -2010,6 +2010,48 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["MrTableConcat"]);
+
+        settings.DefaultCluster = "plato";
+        settings.BindingsMode = NSQLTranslation::EBindingsMode::DISABLED;
+        res = SqlToYqlWithSettings(
+            "select * from bindings.foo",
+            settings
+        );
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:1:15: Error: Please remove 'bindings.' from your query, the support for this syntax has ended, code: 4601\n");
+        UNIT_ASSERT(!res.Root);
+
+        settings.BindingsMode = NSQLTranslation::EBindingsMode::DROP;
+        res = SqlToYqlWithSettings(
+            "select * from bindings.foo",
+            settings
+        );
+
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine2 = [](const TString& word, const TString& line) {
+            if (word == "MrTableConcat") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((MrTableConcat (Key '('table (String '"foo")))) (Void) '())))__"));
+            }
+        };
+
+        TWordCountHive elementStat2 = {{TString("MrTableConcat"), 0}};
+        VerifyProgram(res, elementStat2, verifyLine2);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat2["MrTableConcat"]);
+
+        settings.BindingsMode = NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
+        res = SqlToYqlWithSettings(
+            "select * from bindings.foo",
+            settings
+        );
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:1:15: Warning: Please remove 'bindings.' from your query, the support for this syntax will be dropped soon, code: 4538\n");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat3 = {{TString("MrTableConcat"), 0}};
+        VerifyProgram(res, elementStat3, verifyLine2);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat3["MrTableConcat"]);
     }
 
     Y_UNIT_TEST(TableBindingsWithInsert) {
@@ -2031,6 +2073,49 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+
+        settings.DefaultCluster = "plato";
+        settings.BindingsMode = NSQLTranslation::EBindingsMode::DISABLED;
+        res = SqlToYqlWithSettings(
+            "insert into bindings.foo with truncate (x, y) values (1, 2);",
+            settings
+        );
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:1:13: Error: Please remove 'bindings.' from your query, the support for this syntax has ended, code: 4601\n");
+        UNIT_ASSERT(!res.Root);
+
+        settings.BindingsMode = NSQLTranslation::EBindingsMode::DROP;
+        res = SqlToYqlWithSettings(
+            "insert into bindings.foo with truncate (x, y) values (1, 2);",
+            settings
+        );
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine2 = [](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                //UNIT_ASSERT_VALUES_EQUAL(line, "");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                           line.find(R"__((Write! world sink (Key '('table (String '"foo"))) values '('('mode 'renew)))__"));
+            }
+        };
+
+        TWordCountHive elementStat2 = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat2, verifyLine2);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat2["Write!"]);
+
+        settings.BindingsMode = NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
+        res = SqlToYqlWithSettings(
+            "insert into bindings.foo with truncate (x, y) values (1, 2);",
+            settings
+        );
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:1:13: Warning: Please remove 'bindings.' from your query, the support for this syntax will be dropped soon, code: 4538\n");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat3 = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat3, verifyLine2);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat3["Write!"]);
     }
 
     Y_UNIT_TEST(TrailingCommaInWithout) {

@@ -1,6 +1,6 @@
 #include "task_runner_actor.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
@@ -257,7 +257,6 @@ private:
         auto hasData = ev->Get()->HasData;
         auto finish = ev->Get()->Finish;
         auto channelId = ev->Get()->ChannelId;
-        auto data = ev->Get()->Data;
         if (ev->Get()->IsOut) {
             Y_VERIFY(ev->Get()->Finish, "dont know what to do with the output channel");
             TaskRunner->GetOutputChannel(channelId)->Finish();
@@ -265,7 +264,7 @@ private:
         }
         auto inputChannel = TaskRunner->GetInputChannel(channelId);
         if (hasData) {
-            inputChannel->Push(std::move(data));
+            inputChannel->Push(std::move(ev->Get()->Data));
         }
         const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
@@ -325,11 +324,11 @@ private:
             maxChunks = 1;
         }
 
-        TVector<NDqProto::TData> chunks;
+        TVector<TDqSerializedBatch> chunks;
         TMaybe<NDqProto::TWatermark> watermark = Nothing();
         TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing();
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
-            NDqProto::TData data;
+            TDqSerializedBatch data;
             hasData = channel->Pop(data);
 
             NDqProto::TWatermark poppedWatermark;
@@ -338,7 +337,7 @@ private:
             NDqProto::TCheckpoint poppedCheckpoint;
             bool hasCheckpoint = channel->Pop(poppedCheckpoint);
 
-            dataSize = data.GetRaw().size();
+            dataSize = data.Size();
             isFinished = !hasData && channel->IsFinished();
 
             changed = changed || hasData || hasWatermark || hasCheckpoint || (isFinished != wasFinished);

@@ -21,9 +21,14 @@ public:
 class IDeserializer {
 protected:
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const = 0;
+    virtual TString DoDebugString() const = 0;
 public:
     using TPtr = std::shared_ptr<IDeserializer>;
     virtual ~IDeserializer() = default;
+
+    TString DebugString() const {
+        return DoDebugString();
+    }
 
     arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data) const {
         return DoDeserialize(data);

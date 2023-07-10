@@ -12,7 +12,7 @@ import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
-import "ydb/public/api/protos/draft/ydb_query.proto";
+import "ydb/public/api/protos/ydb_query.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
@@ -40,6 +40,7 @@ enum EQueryType {
 
     QUERY_TYPE_SQL_GENERIC_QUERY = 12;
     QUERY_TYPE_SQL_GENERIC_SCRIPT = 13;
+    QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY = 14;
 };
 
 enum EQueryAction {
@@ -127,6 +128,7 @@ message TKqpColumnMetadataProto {
     optional NKikimrProto.TTypeInfo TypeInfo = 7;
     repeated string Family = 5;
     optional bool NotNull = 6 [default = false];
+    optional string DefaultFromSequence = 8;
 };
 
 message TKqpTableMetadataProto {
@@ -584,6 +586,7 @@ message TEvRemoteScanData {
     optional TArrowBatch ArrowBatch = 10;
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
+    optional uint32 AvailablePacks = 12;
 }
 
 message TEvRemoteScanDataAck {
@@ -621,6 +624,12 @@ message TKqpStreamLookupSettings {
      optional uint64 LockTxId = 5;
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
+}
+
+message TKqpSequencerSettings {
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    repeated TKqpColumnMetadataProto Columns = 2;
+    optional string Database = 3;
 }
 
 message TEvFetchScriptResultsRequest {

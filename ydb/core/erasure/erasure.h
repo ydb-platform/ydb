@@ -4,7 +4,7 @@
 #include <span>
 
 #include <ydb/core/debug/valgrind_check.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/stream/str.h>
 #include <util/generic/string.h>
@@ -380,9 +380,17 @@ protected:
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf);
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope);
 
-void ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, TRope&& whole, std::span<TRope> parts);
+struct TErasureSplitContext {
+    ui32 MaxSizeAtOnce = 0;
+    ui32 Offset = 0;
+
+    static TErasureSplitContext Init(ui32 maxSizeAtOnce) { return {maxSizeAtOnce, 0}; }
+};
+
+bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
+    TErasureSplitContext *context = nullptr);
+
 void ErasureRestore(TErasureType::ECrcMode crcMode, TErasureType erasure, ui32 fullSize, TRope *whole,
-    std::span<TRope> parts, ui32 restoreMask);
+    std::span<TRope> parts, ui32 restoreMask, ui32 offset = 0, bool isFragment = false);
 
 }
-

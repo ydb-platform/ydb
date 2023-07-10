@@ -43,3 +43,9 @@ CHECK_DEPENDENT_DIRS(
 )
 
 END()
+
+IF (OS_LINUX)
+    RECURSE_FOR_TESTS(
+        ut
+    )
+ENDIF()

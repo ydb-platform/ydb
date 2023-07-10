@@ -620,8 +620,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         TestAllocatePQ(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_2", allocate.DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        // It doesn't work without reboot. We need to figure out why.
-        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        // It doesn't work without sleep (previously reboot tablet was incidentally sleeping). We need to figure out why.
+        runtime.SimulateSleep(TDuration::Seconds(1));
 
         Cerr << "Describe: " << Endl;
         auto allocatedTopic = DescribeTopic(runtime, "/MyRoot/USER_2/Topic1", tenantSchemeShard);

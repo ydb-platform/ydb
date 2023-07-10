@@ -17,7 +17,7 @@ namespace NYql {
 
         class TGenericDataSource: public TDataProviderBase {
         public:
-            TGenericDataSource(TGenericState::TPtr state, Connector::IClient::TPtr client)
+            TGenericDataSource(TGenericState::TPtr state, NConnector::IClient::TPtr client)
                 : State_(state)
                 , IODiscoveryTransformer_(CreateGenericIODiscoveryTransformer(State_))
                 , LoadMetaDataTransformer_(CreateGenericLoadTableMetadataTransformer(State_, std::move(client)))
@@ -119,7 +119,7 @@ namespace NYql {
 
     }
 
-    TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state, Connector::IClient::TPtr client) {
+    TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state, NConnector::IClient::TPtr client) {
         return new TGenericDataSource(std::move(state), std::move(client));
     }
 

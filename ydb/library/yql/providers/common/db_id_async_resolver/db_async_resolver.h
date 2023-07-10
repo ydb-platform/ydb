@@ -1,7 +1,8 @@
 #pragma once
-#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/threading/future/future.h>
+#include <util/string/builder.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NYql {
 
@@ -27,32 +28,47 @@ struct TDatabaseAuth {
 };
 
 struct TDbResolverResponse {
+
     struct TEndpoint {
+        std::tuple<TString, ui32> ParseHostPort() const {
+            size_t pos = Endpoint.find(':');
+            if (pos == TString::npos) {
+                ythrow yexception() << TStringBuilder() << "Endpoint '" << Endpoint << "' contains no ':' separator";
+            }
+
+            auto host = Endpoint.substr(0, pos);
+            auto port = static_cast<ui32>(std::stoi(Endpoint.substr(pos + 1)));
+        
+            return std::make_tuple(std::move(host), port);
+        }
+
         TString Endpoint;
         TString Database;
         bool Secure = false;
     };
 
+    using TDatabaseEndpointsMap = THashMap<std::pair<TString, DatabaseType>, TEndpoint>;
+
     TDbResolverResponse() = default;
 
     TDbResolverResponse(
-        THashMap<std::pair<TString, DatabaseType>, TEndpoint>&& databaseId2Endpoint,
+        TDatabaseEndpointsMap&& databaseId2Endpoint,
         bool success = false,
         const NYql::TIssues& issues = {})
         : DatabaseId2Endpoint(std::move(databaseId2Endpoint))
         , Success(success)
         , Issues(issues) {}
 
-    THashMap<std::pair<TString, DatabaseType>, TEndpoint> DatabaseId2Endpoint;
+    TDatabaseEndpointsMap DatabaseId2Endpoint;
     bool Success = false;
     NYql::TIssues Issues;
 };
 
 class IDatabaseAsyncResolver {
 public:
-    using DatabaseIds = THashMap<std::pair<TString, DatabaseType>, NYql::TDatabaseAuth>;
+    using TDatabaseAuthMap = THashMap<std::pair<TString, DatabaseType>, NYql::TDatabaseAuth>;
 
-    virtual NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(const DatabaseIds& ids) const = 0;
+    virtual NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const = 0;
 
     virtual ~IDatabaseAsyncResolver() = default;
 };

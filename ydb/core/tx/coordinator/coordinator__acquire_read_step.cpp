@@ -48,6 +48,7 @@ struct TTxCoordinator::TTxAcquireReadStep : public TTransactionBase<TTxCoordinat
         db.Table<Schema::State>().Key(Schema::State::AcquireReadStepLast).Update(
             NIceDb::TUpdate<Schema::State::StateValue>(Step));
 
+        Self->SchedulePlanTickAligned(Step + 1);
         return true;
     }
 
@@ -114,6 +115,7 @@ void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TAct
         Executor()->ConfirmReadOnlyLease([this, sender, cookie, step]() {
             Send(sender, new TEvTxProxy::TEvAcquireReadStepResult(TabletID(), step), 0, cookie);
         });
+        SchedulePlanTickAligned(step + 1);
         return;
     }
 

@@ -94,4 +94,6 @@ protected:
     TTrackableNodeProcessorBase NullTrackableNodeProcessor_;
 };
 
+TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx);
+
 } // namespace NYql

@@ -9,47 +9,56 @@
 
 #define REQUEST_START() ({ YQL_LOG(INFO) << __func__ << ": request handling started"; })
 
-#define REQUEST_END(status, err)                                                                           \
-    ({                                                                                                     \
-        if (!status.ok()) {                                                                                \
-            YQL_LOG(ERROR) << __func__ << ": request handling failed: " << int(status.error_code()) << " " \
-                           << status.error_message();                                                      \
-            /* do not overwrite logical error with transport error */                                      \
-            if (ErrorIsSuccess(err)) {                                                                     \
-                err = ErrorFromGRPCStatus(status);                                                         \
-            }                                                                                              \
-        } else {                                                                                           \
-            YQL_LOG(INFO) << __func__ << ": request handling finished";                                    \
-        }                                                                                                  \
+#define REQUEST_END(status, err)                                        \
+    ({                                                                  \
+        if (!status.ok()) {                                             \
+            YQL_LOG(ERROR) << __func__ << ": request handling failed: " \
+                           << "code=" << int(status.error_code())       \
+                           << ", msg=" << status.error_message();       \
+            err = ErrorFromGRPCStatus(status);                          \
+        } else {                                                        \
+            YQL_LOG(INFO) << __func__ << ": request handling finished"; \
+        }                                                               \
     })
 
-namespace NYql::Connector {
-    ClientGRPC::ClientGRPC(const TString& endpoint)
-        : Stub_(API::Connector::NewStub(grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials())))
-              {};
+namespace NYql::NConnector {
+    TClientGRPC::TClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
+        std::shared_ptr<grpc::ChannelCredentials> credentials;
+        auto networkEndpoint = cfg.GetEndpoint().host() + ":" + std::to_string(cfg.GetEndpoint().port());
 
-    std::shared_ptr<DescribeTableResult> ClientGRPC::DescribeTable(const API::DescribeTableRequest& request) {
+        if (cfg.GetUseTLS()) {
+            // Hopefully GRPC will find appropriate CA cert in system folders
+            credentials = grpc::SslCredentials(grpc::SslCredentialsOptions());
+        } else {
+            credentials = grpc::InsecureChannelCredentials();
+        }
+
+        auto channel = grpc::CreateChannel(networkEndpoint, credentials);
+        Stub_ = NApi::Connector::NewStub(channel);
+    };
+
+    std::shared_ptr<TDescribeTableResult> TClientGRPC::DescribeTable(const NApi::TDescribeTableRequest& request) {
         grpc::ClientContext ctx;
-        API::DescribeTableResponse response;
-        auto out = std::make_shared<Connector::DescribeTableResult>();
+        NApi::TDescribeTableResponse response;
+        auto out = std::make_shared<TDescribeTableResult>();
 
         REQUEST_START();
         grpc::Status status = Stub_->DescribeTable(&ctx, request, &response);
+        out->Error = response.error();
         REQUEST_END(status, out->Error);
 
         out->Schema = response.schema();
-        out->Error = response.error();
 
         return out;
     };
 
-    std::shared_ptr<ListSplitsResult> ClientGRPC::ListSplits(const API::ListSplitsRequest& request) {
+    std::shared_ptr<TListSplitsResult> TClientGRPC::ListSplits(const NApi::TListSplitsRequest& request) {
         REQUEST_START();
         grpc::ClientContext ctx;
-        std::unique_ptr<grpc::ClientReader<API::ListSplitsResponse>> reader(Stub_->ListSplits(&ctx, request));
+        std::unique_ptr<grpc::ClientReader<NApi::TListSplitsResponse>> reader(Stub_->ListSplits(&ctx, request));
 
-        API::ListSplitsResponse response;
-        auto out = std::make_shared<ListSplitsResult>();
+        NApi::TListSplitsResponse response;
+        auto out = std::make_shared<TListSplitsResult>();
         out->Error.Clear();
 
         while (reader->Read(&response)) {
@@ -69,13 +78,13 @@ namespace NYql::Connector {
         return out;
     };
 
-    std::shared_ptr<ReadSplitsResult> ClientGRPC::ReadSplits(const API::ReadSplitsRequest& request) {
+    std::shared_ptr<TReadSplitsResult> TClientGRPC::ReadSplits(const NApi::TReadSplitsRequest& request) {
         REQUEST_START();
         grpc::ClientContext ctx;
-        std::unique_ptr<grpc::ClientReader<API::ReadSplitsResponse>> reader(Stub_->ReadSplits(&ctx, request));
+        std::unique_ptr<grpc::ClientReader<NApi::TReadSplitsResponse>> reader(Stub_->ReadSplits(&ctx, request));
 
-        API::ReadSplitsResponse response;
-        auto out = std::make_shared<ReadSplitsResult>();
+        NApi::TReadSplitsResponse response;
+        auto out = std::make_shared<TReadSplitsResult>();
         out->Error.Clear();
 
         while (reader->Read(&response)) {
@@ -92,8 +101,8 @@ namespace NYql::Connector {
         return out;
     };
 
-    IClient::TPtr MakeClientGRPC(const TString& endpoint) {
-        std::shared_ptr<IClient> out = std::make_shared<ClientGRPC>(endpoint);
+    IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
+        std::shared_ptr<IClient> out = std::make_shared<TClientGRPC>(cfg);
         return out;
     }
 }

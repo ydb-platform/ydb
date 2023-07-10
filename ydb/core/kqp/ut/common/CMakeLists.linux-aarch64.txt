@@ -20,7 +20,7 @@ target_link_libraries(kqp-ut-common PUBLIC
   yql-utils-backtrace
   public-lib-yson_value
   cpp-client-draft
-  client-draft-ydb_query
+  cpp-client-ydb_query
   cpp-client-ydb_proto
   cpp-client-ydb_scheme
   cpp-client-ydb_table
@@ -30,4 +30,5 @@ target_sources(kqp-ut-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/common/json2_udf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/common/re2_udf.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/common/string_udf.cpp
 )

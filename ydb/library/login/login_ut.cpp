@@ -199,4 +199,42 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(response2.Groups.value()[0] == "group1");
         }
     }
+
+    Y_UNIT_TEST(TestCreateTokenForExternalAuth) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user1";
+        request1.Password = "password1";
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+        {
+            TLoginProvider::TLoginUserRequest request2;
+            request2.User = "external_user";
+            request2.ExternalAuth = "ldap";
+            auto response2 = provider.LoginUser(request2);
+            UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+            TLoginProvider::TValidateTokenRequest request3;
+            request3.Token = response2.Token;
+            auto response3 = provider.ValidateToken(request3);
+            UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
+            UNIT_ASSERT(response3.User == request2.User);
+            UNIT_ASSERT(response3.ExternalAuth.has_value());
+            UNIT_ASSERT(response3.ExternalAuth == request2.ExternalAuth);
+        }
+        {
+            TLoginProvider::TLoginUserRequest request2;
+            request2.User = request1.User;
+            request2.Password = request1.Password;
+            auto response2 = provider.LoginUser(request2);
+            UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+            TLoginProvider::TValidateTokenRequest request3;
+            request3.Token = response2.Token;
+            auto response3 = provider.ValidateToken(request3);
+            UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
+            UNIT_ASSERT(response3.User == request1.User);
+            UNIT_ASSERT(!response3.ExternalAuth.has_value());
+        }
+    }
 }

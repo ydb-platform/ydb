@@ -3,6 +3,7 @@
 #include "granule.h"
 #include "processing_context.h"
 #include "order_control/abstract.h"
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap {
@@ -11,7 +12,7 @@ class TIndexedReadData;
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-class TGranulesFillingContext {
+class TGranulesFillingContext: TNonCopyable, public NColumnShard::TMonitoringObjectsCounter<TGranulesFillingContext, true, false> {
 private:
     YDB_READONLY_DEF(std::vector<std::string>, PKColumnNames);
     TReadMetadata::TConstPtr ReadMetadata;
@@ -19,6 +20,7 @@ private:
     const bool InternalReading = false;
     TProcessingController Processing;
     TResultController Result;
+    std::shared_ptr<TGranulesLiveControl> GranulesLiveContext;
     TIndexedReadData& Owner;
     std::set<ui32> EarlyFilterColumns;
     std::set<ui32> PostFilterColumns;
@@ -28,13 +30,27 @@ private:
     NColumnShard::TConcreteScanCounters Counters;
     bool PredictEmptyAfterFilter(const TPortionInfo& portionInfo) const;
 
-    static constexpr ui32 GranulesCountProcessingLimit = 16;
-    static constexpr ui64 ExpectedBytesForGranule = 50 * 1024 * 1024;
-    static constexpr i64 ProcessingBytesLimit = GranulesCountProcessingLimit * ExpectedBytesForGranule;
     bool CheckBufferAvailable() const;
 public:
-    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
-    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData & owner, const bool internalReading);
+    std::shared_ptr<TGranulesLiveControl> GetGranulesLiveContext() const {
+        return GranulesLiveContext;
+    }
+    bool IsGranuleActualForProcessing(const ui64 granuleId) const {
+        return Processing.IsGranuleActualForProcessing(granuleId);
+    }
+    bool ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range);
+    bool TryStartProcessGranule(const ui64 granuleId, const TBlobRange & range, const bool hasReadyResults);
+    TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading);
+
+    const std::shared_ptr<TActorBasedMemoryAccesor>& GetMemoryAccessor() const;
+
+    TString DebugString() const {
+        return TStringBuilder()
+            << "processing:(" << Processing.DebugString() << ");"
+            << "result:(" << Result.DebugString() << ");"
+            << "sorting_policy:(" << SortingPolicy->DebugString() << ");"
+            ;
+    }
 
     void OnBlobReady(const ui64 /*granuleId*/, const TBlobRange& /*range*/) noexcept {
     }
@@ -55,7 +71,7 @@ public:
         return SortingPolicy;
     }
 
-    NColumnShard::TScanCounters GetCounters() const noexcept {
+    const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
         return Counters;
     }
 
@@ -63,6 +79,7 @@ public:
 
     void DrainNotIndexedBatches(THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>* batches);
     NIndexedReader::TBatch* GetBatchInfo(const TBatchAddress& address);
+    NIndexedReader::TBatch& GetBatchInfoVerified(const TBatchAddress& address);
 
     void AddBlobForFetch(const TBlobRange& range, NIndexedReader::TBatch& batch);
     void OnBatchReady(const NIndexedReader::TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);

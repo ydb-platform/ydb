@@ -15,7 +15,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/wilson.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
@@ -122,6 +122,7 @@ public:
     {
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
+        TasksGraph.GetMeta().Database = Database;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
@@ -991,9 +992,9 @@ protected:
         IActor* proxy;
         if (txResult.IsStream) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats.get(), this->SelfId());
+                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats, this->SelfId());
         } else {
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), this->SelfId(),
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
         }
 
@@ -1010,6 +1011,11 @@ protected:
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
         }
+
+        if (Planner) {
+            Planner->Unsubscribe();
+        }
+
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
             this->Send(this->SelfId(), new TEvents::TEvPoison);
@@ -1070,7 +1076,7 @@ protected:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
-    std::unique_ptr<TQueryExecutionStats> Stats;
+    std::shared_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TMaybe<TInstant> CancelAt;

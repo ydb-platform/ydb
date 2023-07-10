@@ -19,7 +19,6 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/yson
-    ydb/core/base
     ydb/library/mkql_proto
     ydb/library/yql/core/services
     ydb/library/yql/core/services/mounts

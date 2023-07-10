@@ -1,7 +1,7 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_actors_util.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>

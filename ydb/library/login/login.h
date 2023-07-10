@@ -23,6 +23,7 @@ public:
     static constexpr size_t HASH_SIZE = 32;
 
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
+    static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
     static constexpr auto MAX_TOKEN_EXPIRE_TIME = std::chrono::hours(12);
 
     struct TBasicRequest {};
@@ -40,6 +41,7 @@ public:
         TString User;
         TString Password;
         TOptions Options;
+        std::optional<TString> ExternalAuth;
     };
 
     struct TLoginUserResponse : TBasicResponse {
@@ -56,6 +58,7 @@ public:
         TString User;
         std::optional<std::vector<TString>> Groups;
         std::chrono::system_clock::time_point ExpiresAt;
+        std::optional<TString> ExternalAuth;
     };
 
     struct TCreateUserRequest : TBasicRequest {

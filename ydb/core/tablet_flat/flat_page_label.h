@@ -23,11 +23,47 @@ namespace NPage {
         ui16 Format; // most significant bit is format indicator, the rest is version
         TSize Size;
 
-        void Init(EPage type, ui16 format, ui64 size) noexcept;
-        void SetSize(ui64 size) noexcept;
+        bool IsExtended() const noexcept {
+            return Format & 0x8000;
+        }
+
+        bool IsHuge() const noexcept {
+            return Size == Max<ui32>();
+        }
+
+        static TLabel Encode(EPage type, ui16 format, ui64 size) noexcept {
+            TSize lsize;
+
+            if (Y_UNLIKELY(size >> 32)) {
+                // This size is used as a huge page marker
+                lsize = Max<ui32>();
+            } else {
+                lsize = TSize(size);
+            }
+
+            return TLabel{
+                .Type = type,
+                .Format = format,
+                .Size = lsize,
+            };
+        }
     };
 
     static_assert(sizeof(TLabel) == 8, "Invalid page TLabel unit");
+
+    struct TLabelExt {
+        ECodec Codec;
+        char Reserved[7];
+
+        static TLabelExt Encode(ECodec codec) noexcept {
+            return TLabelExt{
+                .Codec = codec,
+                .Reserved = {},
+            };
+        }
+    };
+
+    static_assert(sizeof(TLabelExt) == 8, "Invalid page TLabelExt size");
 
     struct TLabelWrapper {
         struct TResult {

@@ -1,7 +1,7 @@
 #include "helpers.h"
 
 #include <ydb/public/api//protos/annotations/validation.pb.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <google/protobuf/compiler/code_generator.h>
 #include <google/protobuf/compiler/plugin.h>

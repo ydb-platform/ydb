@@ -18,12 +18,15 @@ target_link_libraries(yql-dq-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  cpp-actors-util
   library-mkql_proto-protos
+  yql-dq-proto
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-dq-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_value.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_serialized_batch.cpp
 )
 generate_enum_serilization(yql-dq-common
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/common/dq_common.h

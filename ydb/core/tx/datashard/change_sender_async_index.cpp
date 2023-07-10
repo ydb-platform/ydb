@@ -4,7 +4,7 @@
 #include "change_sender_monitoring.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>

@@ -68,27 +68,45 @@ public:
         return *ConfigurationTransformer_;
     }
 
+    bool CanBuildResultImpl(const TExprNode& node, TNodeSet& visited) {
+        if (!visited.emplace(&node).second) {
+            return true;
+        }
+
+        if (TDqConnection::Match(&node) || TDqPhyPrecompute::Match(&node)) {
+            // Don't go deeper
+            return true;
+        }
+
+        if (auto right = TMaybeNode<TCoRight>(&node)) {
+            auto cons = right.Cast().Input().Maybe<TCoCons>();
+            if (!cons) {
+                return false;
+            }
+
+            return CanBuildResultImpl(cons.Cast().Input().Ref(), visited);
+        }
+
+        if (!node.IsComposable()) {
+            return false;
+        }
+
+        for (const auto& child : node.Children()) {
+            if (!CanBuildResultImpl(*child, visited)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
         if (!node.IsComplete()) {
             return false;
         }
 
-        bool canBuild = true;
-        VisitExpr(node, [&canBuild] (const TExprNode& n) {
-            if (!canBuild) {
-                return false;
-            }
-            if (TDqConnection::Match(&n) || TDqPhyPrecompute::Match(&n)) {
-                // Don't go deeper
-                return false;
-            }
-            if (!n.IsComposable()) {
-                canBuild = false;
-                return false;
-            }
-            return true;
-        });
-
+        TNodeSet visited;
+        bool canBuild = CanBuildResultImpl(node, visited);
         if (canBuild) {
             for (const auto& child : node.ChildrenList()) {
                 VisitExpr(child, [&syncList] (const TExprNode::TPtr& item) {

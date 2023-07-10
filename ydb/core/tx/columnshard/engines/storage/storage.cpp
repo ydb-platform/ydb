@@ -41,7 +41,7 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
     } else if (auto pi = PathsGranulesOverloaded.find(pathId); pi != PathsGranulesOverloaded.end()) {
         // Size is under limit. Remove granule from the overloaded set.
         if (pi->second.erase(granule.GetGranuleId())) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "unoverloaded")("path_id", pathId)("granule", granule.GetGranuleId())("remained", pi->second.size());
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "reset_overload")("path_id", pathId)("granule", granule.GetGranuleId())("remained", pi->second.size());
         }
         // Remove entry for the pathId if there it has no overloaded granules any more.
         if (pi->second.empty()) {
@@ -49,7 +49,7 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
         }
     }
     Counters.OverloadGranules->Set(PathsGranulesOverloaded.size());
-    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD) && PathsGranulesOverloaded.size()) {
         TStringBuilder sb;
         for (auto&& i : PathsGranulesOverloaded) {
             sb << i.first << ":";

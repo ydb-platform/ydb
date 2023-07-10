@@ -411,97 +411,6 @@ TExprNode::TPtr HandleEmptyListInJoin(const TExprNode::TPtr& node, TExprContext&
     return node;
 }
 
-TExprNode::TPtr UpdateJoinTreeUniqueRecursive(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, const TVector<const TDistinctConstraintNode*>& unique, TExprContext& ctx) {
-    TExprNode::TPtr res = joinTree;
-
-    TEquiJoinLinkSettings linkSettings = GetEquiJoinLinkSettings(*joinTree->Child(5));
-    bool updateSettings = false;
-    if (auto left = joinTree->ChildPtr(1); !left->IsAtom()) {
-        left = UpdateJoinTreeUniqueRecursive(left, labels, unique, ctx);
-        if (left != joinTree->ChildPtr(1)) {
-            res = ctx.ChangeChild(*res, 1, std::move(left));
-        }
-    } else if (linkSettings.LeftHints.find("unique") == linkSettings.LeftHints.end()) {
-        if (auto label = labels.FindInput(left->Content())) {
-            if (auto ndx = labels.FindInputIndex(left->Content())) {
-                if (auto u = unique[*ndx]) {
-                    auto keys = joinTree->Child(3);
-                    std::unordered_set<std::string_view> keySet;
-                    for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
-                        keySet.insert((*label)->MemberName(keys->Child(i)->Content(), keys->Child(i + 1)->Content()));
-                    }
-                    for (const auto& set : u->GetAllSets()) {
-                        if (std::all_of(set.cbegin(), set.cend(), [&keySet](const TConstraintNode::TPathType& path) { return !path.empty() && keySet.contains(path.front()); })) {
-                            linkSettings.LeftHints.insert("unique");
-                            updateSettings = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (auto right = joinTree->ChildPtr(2); !right->IsAtom()) {
-        right = UpdateJoinTreeUniqueRecursive(right, labels, unique, ctx);
-        if (right != joinTree->ChildPtr(2)) {
-            res = ctx.ChangeChild(*res, 2, std::move(right));
-        }
-    } else if (linkSettings.RightHints.find("unique") == linkSettings.RightHints.end()) {
-        if (auto label = labels.FindInput(right->Content())) {
-            if (auto ndx = labels.FindInputIndex(right->Content())) {
-                if (auto u = unique[*ndx]) {
-                    auto keys = joinTree->Child(4);
-                    std::unordered_set<std::string_view> keySet;
-                    for (ui32 i = 0; i < keys->ChildrenSize(); i += 2) {
-                        keySet.insert((*label)->MemberName(keys->Child(i)->Content(), keys->Child(i + 1)->Content()));
-                    }
-                    for (const auto& set : u->GetAllSets()) {
-                        if (std::all_of(set.cbegin(), set.cend(), [&keySet](const TConstraintNode::TPathType& path) { return !path.empty() && keySet.contains(path.front()); })) {
-                            linkSettings.RightHints.insert("unique");
-                            updateSettings = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (updateSettings) {
-        res = ctx.ChangeChild(*res, 5, BuildEquiJoinLinkSettings(linkSettings, ctx));
-    }
-
-    return res;
-}
-
-
-TExprNode::TPtr HandleUniqueListInJoin(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-    if (!typeCtx.IsConstraintCheckEnabled<TDistinctConstraintNode>()) {
-        return node;
-    }
-
-    TJoinLabels labels;
-    TVector<const TDistinctConstraintNode*> unique;
-    unique.reserve(node->ChildrenSize() - 2);
-    for (ui32 i = 0; i < node->ChildrenSize() - 2; ++i) {
-        auto err = labels.Add(ctx, *node->Child(i)->Child(1),
-            node->Child(i)->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
-        if (err) {
-            ctx.AddError(*err);
-            return nullptr;
-        }
-        unique.push_back(node->Child(i)->Head().GetConstraint<TDistinctConstraintNode>());
-    }
-
-    auto joinTree = UpdateJoinTreeUniqueRecursive(node->ChildPtr(node->ChildrenSize() - 2), labels, unique, ctx);
-    if (joinTree != node->ChildPtr(node->ChildrenSize() - 2)) {
-        return ctx.ChangeChild(*node, node->ChildrenSize() - 2, std::move(joinTree));
-    }
-
-    return node;
-}
-
 bool IsDataType(const TTypeAnnotationNode& type) {
     return type.GetKind() == ETypeAnnotationKind::Data;
 }
@@ -1143,11 +1052,26 @@ TExprNode::TPtr ExtractMember(const TExprNode& node) {
 }
 
 template <bool RightOrLeft>
-TExprNode::TPtr OptimizeDirection(const TExprNode::TPtr& node) {
+TExprNode::TPtr OptimizeDirection(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().IsCallable(ConsName)) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return RightOrLeft ? node->Head().TailPtr() : node->Head().HeadPtr();
+        if (!RightOrLeft || node->Head().Head().Type() == TExprNode::World) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return RightOrLeft ? node->Head().TailPtr() : node->Head().HeadPtr();
+        }
+
+        if (RightOrLeft && node->Head().Tail().IsCallable(RightName)) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            const auto& right = node->Head().Tail();
+            const auto& read = right.Head();
+            auto sync = ctx.NewCallable(node->Pos(), "Sync!", {
+                node->Head().HeadPtr(),
+                read.HeadPtr(),
+            });
+
+            return ctx.ChangeChild(*node, 0, ctx.ChangeChild(read, 0, std::move(sync)));
+        }
     }
+
     return node;
 }
 
@@ -4617,12 +4541,6 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ret;
         }
 
-        ret = HandleUniqueListInJoin(node, ctx, *optCtx.Types);
-        if (ret != node) {
-            YQL_CLOG(DEBUG, Core) << "HandleUniqueListInJoin";
-            return ret;
-        }
-
         if (const auto indexes = GetUselessSortedJoinInputs(TCoEquiJoin(node)); !indexes.empty()) {
             YQL_CLOG(DEBUG, Core) << "Suppress order on " << indexes.size() << ' ' << node->Content() << " inputs.";
             auto children = node->ChildrenList();
@@ -4874,8 +4792,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map[LeftName] = std::bind(&OptimizeDirection<false>, _1);
-    map[RightName] = std::bind(&OptimizeDirection<true>, _1);
+    map[LeftName] = std::bind(&OptimizeDirection<false>, _1, _2);
+    map[RightName] = std::bind(&OptimizeDirection<true>, _1, _2);
 
     map["Apply"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
         auto ret = FoldYsonParseAfterSerialize(node);
@@ -5867,7 +5785,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["MapJoinCore"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (const auto& inputToCheck = SkipCallables(node->Head(), SkippableCallables); IsEmptyContainer(inputToCheck) || IsEmpty(inputToCheck, *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << "Empty " << node->Content();
-            return ctx.NewCallable(inputToCheck.Pos(), "EmptyIterator", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+            return KeepConstraints(ctx.NewCallable(inputToCheck.Pos(), "EmptyIterator", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)}), *node, ctx);
         }
 
         if (const TCoMapJoinCore mapJoin(node); IsEmptyContainer(mapJoin.RightDict().Ref())) {

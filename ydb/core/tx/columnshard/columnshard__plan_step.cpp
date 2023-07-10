@@ -13,6 +13,7 @@ public:
     TTxPlanStep(TColumnShard* self, TEvTxProcessing::TEvPlanStep::TPtr& ev)
         : TBase(self)
         , Ev(ev)
+        , TabletTxNo(++Self->TabletTxCounter)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
@@ -21,14 +22,23 @@ public:
 
 private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
+    const ui32 TabletTxNo;
     THashMap<TActorId, std::vector<ui64>> TxAcks;
     std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result;
+
+    TStringBuilder TxPrefix() const {
+        return TStringBuilder() << "TxPlanStep[" << ToString(TabletTxNo) << "] ";
+    }
+
+    TString TxSuffix() const {
+        return TStringBuilder() << " at tablet " << Self->TabletID();
+    }
 };
 
 
 bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxPlanStep.Execute at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
     txc.DB.NoMoreReadsForTx();
     NIceDb::TNiceDb db(txc.DB);
@@ -63,15 +73,15 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
                     }
                     ++plannedCount;
                 } else {
-                    LOG_S_WARN("Ignoring step " << step
+                    LOG_S_WARN(TxPrefix() << "Ignoring step " << step
                         << " for txId " << txId
                         << " which is already planned for step " << step
-                        << " at tablet " << Self->TabletID());
+                        << TxSuffix());
                 }
             } else {
-                LOG_S_WARN("Ignoring step " << step
+                LOG_S_WARN(TxPrefix() << "Ignoring step " << step
                     << " for unknown txId " << txId
-                    << " at tablet " << Self->TabletID());
+                    << TxSuffix());
             }
             lastTxId = txId;
         }
@@ -81,11 +91,11 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
         Self->RescheduleWaitingReads();
     } else {
-        LOG_S_ERROR("Ignore old txIds ["
+        LOG_S_ERROR(TxPrefix() << "Ignore old txIds ["
             << JoinStrings(txIds.begin(), txIds.end(), ", ")
             << "] for step " << step
             << " last planned step " << Self->LastPlannedStep
-            << " at tablet " << Self->TabletID());
+            << TxSuffix());
     }
 
     Result = std::make_unique<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
@@ -101,7 +111,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 void TTxPlanStep::Complete(const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Result);
-    LOG_S_DEBUG("TTxPlanStep.Complete at tablet " << Self->TabletID());
+    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
     ui64 step = Ev->Get()->Record.GetStep();
     for (auto& kv : TxAcks) {

@@ -9,7 +9,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>

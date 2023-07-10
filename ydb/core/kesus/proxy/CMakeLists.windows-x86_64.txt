@@ -17,6 +17,7 @@ target_link_libraries(core-kesus-proxy PUBLIC
   core-kesus-tablet
   ydb-core-scheme
   core-tx-scheme_cache
+  ydb-library-services
   api-protos
 )
 target_sources(core-kesus-proxy PRIVATE

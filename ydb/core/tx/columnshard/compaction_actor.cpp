@@ -166,10 +166,6 @@ private:
 
 class TCompactionGroupActor: public TActorBootstrapped<TCompactionGroupActor> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
-    }
-
     TCompactionGroupActor(ui64 tabletId, const TActorId& parent, const ui64 size)
         : TabletId(tabletId)
         , Parent(parent)

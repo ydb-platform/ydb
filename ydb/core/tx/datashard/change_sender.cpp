@@ -3,7 +3,7 @@
 #include "change_sender_monitoring.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -160,7 +160,7 @@ class TChangeSender: public TActor<TChangeSender> {
         }
 
         if (Enqueued) {
-            Handle(std::move(Enqueued));
+            Handle(std::exchange(Enqueued, {}));
         }
     }
 

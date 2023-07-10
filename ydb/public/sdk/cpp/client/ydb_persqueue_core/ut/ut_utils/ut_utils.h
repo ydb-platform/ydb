@@ -16,9 +16,11 @@ class TPersQueueYdbSdkTestSetup : public ::NPersQueue::SDKTestSetup {
 
     TAdaptiveLock Lock;
 public:
-    TPersQueueYdbSdkTestSetup(const TString& testCaseName, bool start = true)
-        : SDKTestSetup(testCaseName, start)
-    {}
+    TPersQueueYdbSdkTestSetup(const TString& testCaseName, bool start = true,
+                              const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG)
+        : SDKTestSetup(testCaseName, start, logServices, logPriority)
+    {
+    }
 
     ~TPersQueueYdbSdkTestSetup() {
         if (PersQueueClient) {

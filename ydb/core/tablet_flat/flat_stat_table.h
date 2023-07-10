@@ -26,7 +26,7 @@ public:
     }
 
     /**
-     * @return true when we haven't reached the end and have current key 
+     * @return true when we haven't reached the end and have current key
      * @return false when we have reached the end and don't have current key
      */
     bool Next(TPartDataStats& stats) {
@@ -140,40 +140,32 @@ public:
         ui64 idx = TotalCount;
         ++TotalCount;
         if (idx >= SampleCount) {
-            idx = RandomNumber<ui64>(TotalCount) ;
+            idx = RandomNumber<ui64>(TotalCount);
         }
 
         if (idx >= SampleCount) {
             return;
         }
 
-        TSerializedCellVec saved(TSerializedCellVec::Serialize(key));
-
-        auto it = KeyRefCount.find(saved.GetBuffer());
-        if (it != KeyRefCount.end()) {
-            // Add a reference for existing key
-            saved = it->second.first;
-            ++it->second.second;
-        } else {
-            KeyRefCount[saved.GetBuffer()] = std::make_pair(saved, 1);
-        }
+        TString serializedKey = TSerializedCellVec::Serialize(key);
+        ++KeyRefCount[serializedKey];
 
         if (Sample.size() < SampleCount) {
-            Sample.emplace_back(std::make_pair(saved.GetBuffer(), accessKind));
-        } else {
-            TString old = Sample[idx].first;
-            auto oit = KeyRefCount.find(old);
-            Y_VERIFY(oit != KeyRefCount.end());
-
-            // Delete the key if this was the last reference
-            if (oit->second.second == 1) {
-                KeyRefCount.erase(oit);
-            } else {
-                --oit->second.second;
-            }
-
-            Sample[idx] = std::make_pair(saved.GetBuffer(), accessKind);
+            Sample.emplace_back(std::make_pair(serializedKey, accessKind));
+            return;
         }
+
+        TString old = Sample[idx].first;
+        auto oit = KeyRefCount.find(old);
+        Y_VERIFY(oit != KeyRefCount.end());
+        --oit->second;
+
+        // Delete the key if this was the last reference
+        if (oit->second == 0) {
+            KeyRefCount.erase(oit);
+        }
+
+        Sample[idx] = std::make_pair(serializedKey, accessKind);
     }
 
     const TSample& GetSample() const {
@@ -191,7 +183,7 @@ private:
     const ui64 SampleCount;
     ui64 TotalCount;
     // Store only unique keys and their ref counts to save memory
-    THashMap<TString, std::pair<TSerializedCellVec, ui64>> KeyRefCount;
+    THashMap<TString, ui64> KeyRefCount;
 };
 
 void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, const IPages* env);

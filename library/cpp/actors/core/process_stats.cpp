@@ -146,7 +146,7 @@ namespace {
     class TProcStatCollectingActor: public TActorBootstrapped<TProcStatCollectingActor<TDerived>> {
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::ACTORLIB_STATS;
+            return IActor::EActivityType::ACTORLIB_STATS;
         }
 
         TProcStatCollectingActor(TDuration interval)

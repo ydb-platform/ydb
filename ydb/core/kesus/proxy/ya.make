@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/scheme
     ydb/core/tx/scheme_cache
+    ydb/library/services
     ydb/public/api/protos
 )
 

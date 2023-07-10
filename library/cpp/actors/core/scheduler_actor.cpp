@@ -61,7 +61,7 @@ namespace NActors {
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::ACTOR_SYSTEM_SCHEDULER_ACTOR;
+            return IActor::EActivityType::ACTOR_SYSTEM_SCHEDULER_ACTOR;
         }
 
         TSchedulerActor(const TSchedulerConfig& cfg)

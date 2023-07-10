@@ -5,6 +5,7 @@ SRCS(
     kqp_ut_common.cpp
     kqp_ut_common.h
     re2_udf.cpp
+    string_udf.cpp
 )
 
 PEERDIR(
@@ -13,7 +14,7 @@ PEERDIR(
     ydb/library/yql/utils/backtrace
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/draft/ydb_query
+    ydb/public/sdk/cpp/client/ydb_query
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table

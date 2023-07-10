@@ -783,7 +783,7 @@ message TFeatureFlags {
     // enable http handle for self termination
     optional bool EnableFailureInjectionTermination = 71 [default = false];
     optional bool EnableChunkLocking = 72 [default = false];
-    optional bool EnableNotNullDataColumns = 73 [default = false];
+    optional bool EnableNotNullDataColumns = 73 [default = true];
     optional bool EnableGrpcAudit = 74 [default = false];
     reserved 75; // EnableKqpDataQueryStreamLookup
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
@@ -1127,7 +1127,7 @@ message TTableServiceConfig {
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
         optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
-        optional bool EnablePublishResourcesByExchanger = 18 [default = false];
+        optional bool EnablePublishResourcesByExchanger = 18 [default = true];
     }
 
     message TSpillingServiceConfig {
@@ -1256,6 +1256,18 @@ message TTableServiceConfig {
         optional uint32 MaxRetryNumber = 3 [default = 10];
     }
 
+    message TIteratorReadsRetrySettings {
+        optional uint32 StartDelayMs = 1;
+        optional uint32 MaxDelayMs = 8;
+
+        optional uint32 MaxShardRetries = 2;
+        optional uint32 MaxShardResolves = 3;
+        optional double UnsertaintyRatio = 4;
+        optional double Multiplier = 5;
+        optional uint32 IteratorResponseTimeoutMs = 6;
+        optional uint32 MaxTotalRetries = 7;
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1296,6 +1308,17 @@ message TTableServiceConfig {
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     optional bool EnableSequentialReads = 38 [default = false];
     optional bool EnableKqpImmediateEffects = 39 [default = true];
+    optional bool EnablePreparedDdl = 42 [default = false];
+
+    enum EBindingsMode {
+        BM_ENABLED = 0;
+        BM_DISABLED = 1;
+        BM_DROP_WITH_WARNING = 2;
+        BM_DROP = 3;
+    }
+
+    optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
+    optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
 };
 
 // Config describes immediate controls and allows
@@ -1467,10 +1490,39 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTCMallocControls {
+        optional uint64 ProfileSamplingRate = 1 [(ControlOptions) = {
+            Description: "Sets the sampling rate for heap profiles. TCMalloc samples approximately every rate bytes allocated.",
+            MinValue: 65536,
+            MaxValue: 4294967296,
+            DefaultValue: 2097152 }];
+        optional uint64 GuardedSamplingRate = 2 [(ControlOptions) = {
+            Description: "Sets the guarded sampling rate for sampled allocations. TCMalloc samples approximately every rate bytes allocated, subject to implementation limitations in GWP-ASan.",
+            MinValue: 65536,
+            MaxValue: 4294967296,
+            DefaultValue: 4294967296 }];
+        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
+            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
+            MinValue: 0,
+            MaxValue: 9223372036854775807,
+            DefaultValue: 0 }];
+        optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
+            Description: "Page Cache Target Size.",
+            MinValue: 0,
+            MaxValue: 137438953472,
+            DefaultValue: 536870912 }];
+        optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
+            Description: "Page Cache Release Rate.",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 8388608 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
+    optional TTCMallocControls TCMallocControls = 5;
 };
 
 message TMeteringConfig {
@@ -1897,6 +1949,9 @@ message TCompatibilityRule {
         Test1 = 1;
         Test2 = 2;
         Interconnect = 3;
+        PDisk = 4;
+        VDisk = 5;
+        BlobStorageController = 6;
     }
 
     optional string Build = 1;

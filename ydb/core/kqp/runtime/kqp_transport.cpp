@@ -47,7 +47,7 @@ TKqpProtoBuilder::~TKqpProtoBuilder() {
 }
 
 Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
-    const TVector<NDqProto::TData>& data,
+    const TVector<NYql::NDq::TDqSerializedBatch>& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
     const TVector<ui32>* columnOrder)
 {
@@ -70,11 +70,11 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
 
     auto transportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
     if (!data.empty()) {
-        transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().GetTransportVersion());
+        transportVersion = static_cast<NDqProto::EDataTransportVersion>(data.front().Proto.GetTransportVersion());
     }
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
     for (auto& part : data) {
-        if (part.GetRows()) {
+        if (part.RowCount()) {
             TUnboxedValueBatch rows(mkqlSrcRowType);
             dataSerializer.Deserialize(part, mkqlSrcRowType, rows);
             rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {

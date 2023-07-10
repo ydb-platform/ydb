@@ -338,7 +338,7 @@ private:
 
 public:
     static constexpr IActor::EActivityType ActorActivityType() {
-        return IActor::ACTORLIB_STATS;
+        return IActor::EActivityType::ACTORLIB_STATS;
     }
 
     TStatsCollectingActor(

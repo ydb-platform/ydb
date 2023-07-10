@@ -14,6 +14,7 @@ void DoExecuteQuery(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&
 void DoExecuteScript(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 void DoFetchScriptResults(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&);
 void DoCreateSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
+void DoAttachSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f);
 
 } // namespace NQuery
 

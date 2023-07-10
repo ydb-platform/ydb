@@ -1,6 +1,6 @@
 #include <ydb/core/pgproxy/pg_listener.h>
 #include <ydb/core/pgproxy/pg_log.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <util/system/mlock.h>
 #include <util/stream/file.h>
 #include <library/cpp/getopt/last_getopt.h>
@@ -112,7 +112,7 @@ TPgWire::TPgWire(int argc, char** argv) {
 
 TIntrusivePtr<NActors::NLog::TSettings> TPgWire::BuildLoggerSettings() {
     const NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
-    TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER, NActors::NLog::PRI_WARN);
+    TIntrusivePtr<NActors::NLog::TSettings> loggerSettings = new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER, NActors::NLog::PRI_WARN);
     loggerSettings->Append(
         NActorsServices::EServiceCommon_MIN,
         NActorsServices::EServiceCommon_MAX,

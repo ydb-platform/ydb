@@ -1,10 +1,8 @@
 #pragma once
 
 /// @note It must not depend on anything except util, library and propobufs
-#include <library/cpp/actors/core/actorid.h>
-#include <library/cpp/actors/core/actor.h>
-
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <util/stream/output.h>
 
 namespace NKikimr {
 

@@ -34,6 +34,7 @@ public:
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlLookupTable::Match, HNDL(BuildLookupTableStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
+        AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
         AddHandler(0, [](auto) { return true; }, HNDL(RemoveRedundantSortByPk));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
@@ -145,6 +146,12 @@ protected:
     TMaybeNode<TExprBase> BuildStreamLookupTableStages(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildStreamLookupTableStages(node, ctx);
         DumpAppliedRule("BuildStreamLookupTableStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildSequencerStages(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildSequencerStages(node, ctx);
+        DumpAppliedRule("BuildSequencerStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -40,7 +40,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NSsa {
 
@@ -57,7 +57,7 @@ public:
         auto funcNames = GetRegistryFunctionNames(assign.GetOperation());
 
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
-        for (const auto& funcName : funcNames) {    
+        for (const auto& funcName : funcNames) {
             if (TBase::Ctx && TBase::Ctx->func_registry()->GetFunction(funcName).ok()) {
                 result = arrow::compute::CallFunction(funcName, *arguments, assign.GetOptions(), TBase::Ctx);
             } else {
@@ -131,7 +131,7 @@ template <class TAssignObject>
 class TKernelFunction : public IStepFunction<TAssignObject> {
     using TBase = IStepFunction<TAssignObject>;
     const TFunctionPtr Function;
-    
+
 public:
     TKernelFunction(const TFunctionPtr kernelsFunction, arrow::compute::ExecContext* ctx)
         : TBase(ctx)

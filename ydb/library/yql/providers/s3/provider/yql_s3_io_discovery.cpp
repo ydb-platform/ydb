@@ -184,13 +184,13 @@ private:
 
                 const auto& listResult = it->second.GetValue();
                 if (listResult.index() == 1) {
-                    const auto& issues = std::get<TIssues>(listResult);
+                    const auto& error = std::get<NS3Lister::TListError>(listResult);
                     YQL_CLOG(INFO, ProviderS3)
                         << "Discovery " << req.S3Request.Url << req.S3Request.Pattern
-                        << " error " << issues.ToString();
+                        << " error " << error.Issues.ToString();
                     std::for_each(
-                        issues.begin(),
-                        issues.end(),
+                        error.Issues.begin(),
+                        error.Issues.end(),
                         std::bind(
                             &TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
                     return TStatus::Error;
@@ -326,9 +326,15 @@ private:
 
                 const NS3Lister::TListResult& listResult = it->second.GetValue();
                 if (listResult.index() == 1) {
-                    const auto& issues = std::get<TIssues>(listResult);
-                    YQL_CLOG(INFO, ProviderS3) << "Discovery " << req.S3Request.Url << req.S3Request.Pattern << " error " << issues.ToString();
-                    std::for_each(issues.begin(), issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
+                    const auto& error = std::get<NS3Lister::TListError>(listResult);
+                    YQL_CLOG(INFO, ProviderS3)
+                        << "Discovery " << req.S3Request.Url << req.S3Request.Pattern
+                        << " error " << error.Issues.ToString();
+                    std::for_each(
+                        error.Issues.begin(),
+                        error.Issues.end(),
+                        std::bind(
+                            &TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
                     return TStatus::Error;
                 }
 

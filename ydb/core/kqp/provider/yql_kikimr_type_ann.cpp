@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
 
 namespace NYql {
@@ -375,13 +376,21 @@ private:
             return TStatus::Error;
         }
 
+        THashSet<TString> autoincrementColumns;
         for (auto& keyColumnName : table->Metadata->KeyColumnNames) {
-            if (!rowType->FindItem(keyColumnName)) {
+            const auto& columnInfo = table->Metadata->Columns.at(keyColumnName);
+            if (rowType->FindItem(keyColumnName)) {
+                continue;
+            }
+            
+            if (!columnInfo.IsAutoIncrement())  {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Missing key column in input: " << keyColumnName
                     << " for table: " << table->Metadata->Name));
                 return TStatus::Error;
             }
+
+            autoincrementColumns.emplace(keyColumnName);
         }
 
         auto op = GetTableOp(node);
@@ -428,12 +437,23 @@ private:
                 columns.push_back(ctx.NewAtom(node.Pos(), item->GetName()));
             }
 
+            TExprNode::TListType autoincrementColumnsList;
+            for(auto& autoincrement: autoincrementColumns) {
+                autoincrementColumnsList.push_back(ctx.NewAtom(node.Pos(), autoincrement));
+            }
+
             node.Ptr()->ChildRef(TKiWriteTable::idx_Settings) = Build<TCoNameValueTupleList>(ctx, node.Pos())
                 .Add(node.Settings())
                 .Add()
                     .Name().Build("input_columns")
                     .Value<TCoAtomList>()
                         .Add(columns)
+                        .Build()
+                    .Build()
+                .Add()
+                    .Name().Build("autoincrement_columns")
+                    .Value<TCoAtomList>()
+                        .Add(autoincrementColumnsList)
                         .Build()
                     .Build()
                 .Done()

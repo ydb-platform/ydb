@@ -1151,13 +1151,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse,
                               resp);
                 UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
-                UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
-                int got = resp.read_response().partition_data(0).batches(0).message_data_size();
-                Cerr << "TAGX got response with size " << resp.read_response().bytes_size() << " with " << got << ", awaited for " << count << " more\n";
+
+                for (int i = 0; i < resp.read_response().partition_data(0).batches_size(); ++i) {
+                    int got = resp.read_response().partition_data(0).batches(i).message_data_size();
+                    Cerr << "TAGX got response batch " << i << " with " << got << " messages, awaited for " << count << " more\n";
+                    UNIT_ASSERT(got >= 1 && got <= count);
+                    count -= got;
+                }
                 budget -= resp.read_response().bytes_size();
                 Cerr << "TAGX Budget deced, now " << budget << "\n";
-                UNIT_ASSERT(got >= 1 && got <= count);
-                count -= got;
             }
         };
 
@@ -5927,57 +5929,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(TClusterTrackerTest) {
         APITestSetup setup{TEST_CASE_NAME};
         setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
-        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor();
         THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST;
 
-        auto compareInfo = [](const TString& name, const TPQTestClusterInfo& info, const NPQ::NClusterTracker::TClustersList::TCluster& trackerInfo) {
-            UNIT_ASSERT_EQUAL(name, trackerInfo.Name);
-            UNIT_ASSERT_EQUAL(name, trackerInfo.Datacenter);
-            UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer);
-            UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled);
-            UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight);
-        };
-
-        auto getClustersFromTracker = [&]() {
-            setup.GetServer().GetRuntime()->Send(new IEventHandle(
-                NPQ::NClusterTracker::MakeClusterTrackerID(),
-                edgeActorID,
-                new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe
-            ));
-            return setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
-        };
-
-
-        {
-            auto trackerResponce = getClustersFromTracker();
-            for (auto& clusterInfo : trackerResponce->ClustersList->Clusters) {
-                auto it = clusters.find(clusterInfo.Name);
-                UNIT_ASSERT(it != clusters.end());
-                compareInfo(it->first, it->second, clusterInfo);
-            }
-        }
+        auto runtime = setup.GetServer().GetRuntime();
+        setup.GetFlatMsgBusPQClient().CheckClustersList(runtime, false, clusters);
 
         UNIT_ASSERT_EQUAL(clusters.count("dc1"), 1);
         UNIT_ASSERT_EQUAL(clusters.count("dc2"), 1);
         clusters["dc1"].Weight = 666;
         clusters["dc2"].Balancer = "newbalancer.net";
         setup.GetFlatMsgBusPQClient().InitDCs(clusters);
-        TInstant updateTime = TInstant::Now();
-
-        while (true) {
-            auto trackerResponce = getClustersFromTracker();
-            if (trackerResponce->ClustersListUpdateTimestamp) {
-                if (trackerResponce->ClustersListUpdateTimestamp.GetRef() >= updateTime + TDuration::Seconds(5)) {
-                    for (auto& clusterInfo : trackerResponce->ClustersList->Clusters) {
-                        auto it = clusters.find(clusterInfo.Name);
-                        UNIT_ASSERT(it != clusters.end());
-                        compareInfo(it->first, it->second, clusterInfo);
-                    }
-                    break;
-                }
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
+        setup.GetFlatMsgBusPQClient().CheckClustersList(runtime, true, clusters);
     }
 
     Y_UNIT_TEST(TestReadPartitionByGroupId) {

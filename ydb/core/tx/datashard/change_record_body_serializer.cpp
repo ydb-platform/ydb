@@ -1,6 +1,6 @@
 #include "change_record_body_serializer.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NDataShard {
 

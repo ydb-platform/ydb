@@ -89,7 +89,7 @@ Run cmake to generate build configuration:
 
 ```bash
 cd build
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG" -DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG" -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
 
 ```
 
@@ -108,7 +108,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
 
 2. Configure `Ccache` to use remote storage using environment variables
     ```bash
-    export CCACHE_REMOTE_STORAGE="http://158.160.20.102:8080|read-only|layout=bazel"
+    export CCACHE_REMOTE_STORAGE="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
     export CCACHE_SLOPPINESS=locale
     export CCACHE_BASEDIR=~/ydbwork/
    
@@ -117,7 +117,7 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     <summary>or using Ccache config file</summary>
 
     ```bash
-    ccache -o remote_storage="http://158.160.20.102:8080|read-only|layout=bazel"
+    ccache -o remote_storage="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
     ccache -o sloppiness=locale 
     ccache -o base_dir=~/ydbwork/
    
@@ -134,28 +134,51 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
     -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+    -DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG" \
+    -DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG" \
     ../ydb
    
     ```
 
 ## Build
 
-To build both YDB server (ydbd) and YDB CLI (ydb) run:
+To build all binary artifacts (server YDBD, client YDB, unittest binaries) run:
 ```bash
 ninja
-```
-
-To build only YDB CLI (ydb) run:
-```bash
-ninja ydb/apps/ydb/all
 ```
 
 A YDB server binary can be found at:
 ```
 ydb/apps/ydbd/ydbd
 ```
+
+## Build and Test YDB CLI
+
+To build YDB CLI (ydb):
+```bash
+ninja ydb/apps/ydb/all
+```
+
 A YDB CLI binary can be found at:
 ```
 ydb/apps/ydb/ydb
 ```
 
+### Unit tests
+
+To build YDB CLI unit tests:
+```bash
+ninja ydb/public/lib/ydb_cli/all
+```
+
+To run tests execute:
+```bash
+cd ydb/public/lib/ydb_cli/
+ctest
+```
+
+### Functional tests
+
+Before launch tests you need to build YDB CLI and YDB server binaries. 
+Also you can load [ydbd](https://ydb.tech/en/docs/downloads/#ydb-server) binary file and use it.
+To launch YDB CLI python tests run `ydb_cli` test suite via pytest according to this [instruction](ydb/tests/functional/README.md).

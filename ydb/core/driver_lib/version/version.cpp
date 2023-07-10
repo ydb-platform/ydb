@@ -1,5 +1,5 @@
 #include <library/cpp/svnversion/svnversion.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include "version.h"
 
 using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;

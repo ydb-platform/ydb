@@ -39,15 +39,16 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
 };
 
-struct TSharedPageCacheConfig final : public TAtomicRefCount<TSharedPageCacheConfig> {
+struct TSharedPageCacheConfig {
     TIntrusivePtr<TCacheCacheConfig> CacheConfig;
     ui64 TotalScanQueueInFlyLimit = 512 * 1024 * 1024;
     ui64 TotalAsyncQueueInFlyLimit = 512 * 1024 * 1024;
     TString CacheName = "SharedPageCache";
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
+    ui32 ActivePagesReservationPercent = 50;
 };
 
-IActor* CreateSharedPageCache(TSharedPageCacheConfig *config);
+IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config);
 
 inline TActorId MakeSharedPageCacheId(ui64 id = 0) {
     char x[12] = { 's', 'h', 's', 'c' };

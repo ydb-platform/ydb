@@ -122,7 +122,7 @@ private:
 
 public:
     static constexpr auto ActorActivityType() {
-        return SELF_PING_ACTOR;
+        return EActivityType::SELF_PING_ACTOR;
     }
 
     TSelfPingActor(TDuration sendInterval,

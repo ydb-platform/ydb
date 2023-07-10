@@ -137,6 +137,7 @@ NJson::TJsonValue GetSsaProgramInJsonByTable(const TString& tablePath, const NKq
         }
         NJson::TJsonValue jsonData;
         NProtobufJson::Proto2Json(program, jsonData);
+        jsonData.EraseValue("Kernels");
         return jsonData;
     }
     return NJson::TJsonValue();

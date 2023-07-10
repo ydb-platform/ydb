@@ -978,12 +978,13 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
     return rowsBytes;
 }
 
-void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None) {
+void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None,
+                    bool revCompaction = false) {
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
-    spec.Tiers.back().SetCodec("zstd");
+    spec.Tiers[(revCompaction ? 0 : 1)].SetCodec("zstd");
 
     auto rowsBytes = TestTiersAndTtl(spec, reboot, initial, changeTtl);
     if (changeTtl) {
@@ -1004,7 +1005,12 @@ void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial
         UNIT_ASSERT_VALUES_EQUAL(rowsBytes[3].first, PORTION_ROWS);
         UNIT_ASSERT_VALUES_EQUAL(rowsBytes[4].first, 0);
 
-        UNIT_ASSERT(rowsBytes[1].second > rowsBytes[2].second); // compression works
+        // compression works
+        if (revCompaction) {
+            UNIT_ASSERT(rowsBytes[1].second < rowsBytes[2].second);
+        } else {
+            UNIT_ASSERT(rowsBytes[1].second > rowsBytes[2].second);
+        }
     }
 }
 
@@ -1394,6 +1400,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
 
     Y_UNIT_TEST(RebootHotTiers) {
         TestTwoHotTiers(true, false);
+    }
+
+    Y_UNIT_TEST(HotTiersRevCompression) {
+        TestTwoHotTiers(false, false, EInitialEviction::None, true);
+    }
+
+    Y_UNIT_TEST(RebootHotTiersRevCompression) {
+        TestTwoHotTiers(true, false, EInitialEviction::None, true);
     }
 
     Y_UNIT_TEST(HotTiersTtl) {

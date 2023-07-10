@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package NYql.Connector.API;
+package NYql.NConnector.NApi;
 
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
@@ -12,10 +12,10 @@ option go_package = "a.yandex-team.ru/yql/providers/connector/libgo/gen/protos";
 
 // ---------- API Requests ----------
 
-// ListTablesRequest requests the list of tables in a particular database of the data source
-message ListTablesRequest {
+// TListTablesRequest requests the list of tables in a particular database of the data source
+message TListTablesRequest {
     // Data source instance to connect
-    DataSourceInstance data_source_instance = 1;
+    TDataSourceInstance data_source_instance = 1;
 
     // There may be a huge number of tables in the data source,
     // and here are ways to extract only necessary ones:
@@ -25,46 +25,46 @@ message ListTablesRequest {
     }
 }
 
-// ListTablesResponse returns the list of tables in a particular database of the data source
-message ListTablesResponse {
+// TListTablesResponse returns the list of tables in a particular database of the data source
+message TListTablesResponse {
     // Table names list
     repeated string tables = 1;
 
     // Call result
-    Error error = 100;
+    TError error = 100;
 }
 
-// DescribeTableRequest requests table metadata
-message DescribeTableRequest {
+// TDescribeTableRequest requests table metadata
+message TDescribeTableRequest {
     // Data source instance to connect
-    DataSourceInstance data_source_instance = 1;
+    TDataSourceInstance data_source_instance = 1;
     // Table to describe
     string table = 2;
 }
 
-// DescribeTableResponse returns table metadata
-message DescribeTableResponse {
+// TDescribeTableResponse returns table metadata
+message TDescribeTableResponse {
     // The whole schema of a table
-    Schema schema = 1;
+    TSchema schema = 1;
     // Call result
-    Error error = 100;
+    TError error = 100;
 }
 
-// Schema represents the schema of the table
-message Schema {
+// TSchema represents the schema of the table
+message TSchema {
     // Columns with YQL types
     repeated Ydb.Column columns = 1;
     // TODO: optional metadata?
 }
 
-// ListSplitRequests asks Connector to split the requested data into elementary parts.
-message ListSplitsRequest {
+// TListSplitRequest asks Connector to split the requested data into elementary parts.
+message TListSplitsRequest {
     // Data source instance to connect
-    DataSourceInstance data_source_instance = 1;
+    TDataSourceInstance data_source_instance = 1;
 
     // YQ engine may want to read data from different tables simultaneously.
     // Perhaps Connector will provide consistency guarantees across the tables some day.
-    repeated Select selects = 2;
+    repeated TSelect selects = 2;
 
     // Defines the number of splits (and, as a consequence, affects the size of the split).
     // If you don't want splitting, set 1.
@@ -84,13 +84,13 @@ message ListSplitsRequest {
     uint64 split_number_limit = 5;
 }
 
-// ListTableSplitsResponse returns the list of splits for a particular set of table partitions
-message ListSplitsResponse {
+// TListSplitResponse returns the list of splits for a particular set of table partitions
+message TListSplitsResponse {
     // the list of splits for concurrent reading
-    repeated Split splits = 1;
+    repeated TSplit splits = 1;
 
     // Call result
-    Error error = 100;
+    TError error = 100;
 }
 
 // Select describes what to read from the data source.
@@ -101,13 +101,13 @@ message ListSplitsResponse {
 // WHERE $filter
 // LIMIT $limit [OFFSET $offset]
 // TODO: support JOIN, ORDER BY, GROUP BY
-message Select {
+message TSelect {
     // Data source instance to connect
-    DataSourceInstance data_source_instance = 1;
+    TDataSourceInstance data_source_instance = 1;
 
     // Describes what particularly to get from the data source
-    message What {
-        message Item {
+    message TWhat {
+        message TItem {
             // TODO: support aggregate functions
             // TODO: support subqueries?
             // TODO: support aggregates?
@@ -125,48 +125,48 @@ message Select {
         // Еmpty list means that YQ wants to get empty tuples in the response.
         // On the connector's side this request will be transformed into something like
         // SELECT 1 FROM $table (...)
-        repeated Item items = 1;
+        repeated TItem items = 1;
     }
 
     // Transforms into SELECT $what.
-    What what = 2;
+    TWhat what = 2;
 
-    message From {
+    message TFrom {
         // TODO: for some of RDBMS the table name may be not enough
         string table = 1;
     }
 
     // Transforms into FROM $from
-    From from = 3;
+    TFrom from = 3;
 
-    message Where {
+    message TWhere {
         // Strongly typed tree of predicates
-        Filter filter_typed = 1;
+        TFilter filter_typed = 1;
 
         // An internal representation of YQL request part describing filters.
         // Advanced connectors may use it for the full-fledged implementations of the push down.
-        AST filter_raw = 2;
+        TAst filter_raw = 2;
     }
 
     // Transforms into WHERE $filter.
     // Optional field.
-    Where where = 4;
+    TWhere where = 4;
 
-    message Limit {
+    message TLimit {
         uint64 limit = 1;
         uint64 offset = 2;
     }
 
     // Transforms into LIMIT $limit [OFFSET $offset].
     // Optional field.
-    Limit limit = 5;
+    TLimit limit = 5;
 }
 
 // Split is a certain part of a table. In general, it should be much smaller than a partition.
 // It also represents a unit of a parallel work for YQ engine.
-message Split {
+message TSplit {
     // Every split contains the description of SELECT it was generated for.
-    Select select = 1;
+    TSelect select = 1;
 
     oneof payload {
         // Different data sources may use different ways to describe a split,
@@ -177,14 +177,14 @@ message Split {
 }
 
 // ReadDataRequest reads the data associated with a particular table split.
-message ReadSplitsRequest {
+message TReadSplitsRequest {
     // Data source instance to connect
-    DataSourceInstance data_source_instance = 1;
+    TDataSourceInstance data_source_instance = 1;
 
     // Splits that YQ engine would like to read.
-    repeated Split splits = 2;
+    repeated TSplit splits = 2;
 
-    enum Mode {
+    enum EMode {
         MODE_RESERVED = 0;
         // Connector will read splits in a single thread one by one.
         // The data will be returned in the order corresponding to the order of requested splits.
@@ -195,9 +195,9 @@ message ReadSplitsRequest {
     }
 
     // Determines the mode of data extraction
-    Mode mode = 3;
+    EMode mode = 3;
 
-    enum Format {
+    enum EFormat {
         FORMAT_RESERVED = 0;
         // ColumnSet is a simple representation of columnar data.
         // Do not use in production.
@@ -208,38 +208,38 @@ message ReadSplitsRequest {
     }
 
     // Determines the format of data representation
-    Format format = 4;
+    EFormat format = 4;
 
     // Pagination helps to manage the process of fragmentation data stream from the data source into the fragments.
     // If empty, the whole result will be sent back in a single message.
-    Pagination pagination = 5;
+    TPagination pagination = 5;
 
     // Specifies the location of split from where to start reading.
     // If stream has been recently interrupted, YQ may retry reading the split from the interrupted block
     // instead of reading the split from scratch.
     // If empty, the connector will return the split data from the very beginning.
-    Continuation continuation = 6;
+    TContinuation continuation = 6;
 }
 
 
 // ReadDataResponse returns the data corresponding to a particular split
-message ReadSplitsResponse {
+message TReadSplitsResponse {
     // Protobuf columnar representation of data.
     // Use it only for debugging, don't use in production.
-    message ColumnSet {
-        message Column {
+    message TColumnSet {
+        message TColumn {
             repeated Ydb.Value data = 1;
         }
 
         repeated Ydb.Column meta = 1;
-        repeated Column data = 2;
+        repeated TColumn data = 2;
     }
 
     // There may be various formats to represent data
     oneof payload {
         // Columnar data in protobuf format with YDB types.
         // Use it only for debugging, don't use in production.
-        ColumnSet column_set = 1;
+        TColumnSet column_set = 1;
 
         // Data in Arrow IPC streaming format.
         bytes arrow_ipc_streaming = 2;
@@ -252,15 +252,15 @@ message ReadSplitsResponse {
     // Specifies the location where the next block starts.
     // If stream has been interrupted, YQ may retry reading using the Continuation message
     // received for the last time.
-    Continuation continuation = 4;
+    TContinuation continuation = 4;
 
     // Call result
-    Error error = 100;
+    TError error = 100;
 }
 
 // Pagination describes how to split data stream from data source into fragments
 // in order to return them as separate GRPC messages to YQ.
-message Pagination {
+message TPagination {
     // In the RDBMS the default pagination method is LIMIT/OFFSET.
     // Instead of full table scan:
     //
@@ -297,7 +297,7 @@ message Pagination {
 // In case if split reading was interrupted,
 // the engine does not have to read all the split data from the very beginning,
 // it can specify the location from where it wants to reread the data instead.
-message Continuation {
+message TContinuation {
     oneof payload {
         // In general description should be opaque to YQ.
         bytes description = 1;
@@ -309,15 +309,15 @@ message Continuation {
 // Filter - a special type to describe a constraint (or a set of constraints) applied to SQL expression:
 // SELECT $columns FROM $table WHERE $filter.
 // It can be also used for the purpose of split pruning.
-message Filter {
+message TFilter {
     // Represents an elementary comparison between a column and some value
-    message Comparison {
+    message TComparison {
 
         // A subset of comparators corresponding to the binary logical operators
-        message Binary {
+        message TBinary {
 
             // An operation code.
-            enum Operation {
+            enum EOperation {
                 RESERVED = 0;
                 L = 1;  // renders to "col < value"
                 LE = 2; // renders to "col <= value"
@@ -336,71 +336,71 @@ message Filter {
         }
 
         // Renders to "$column IS NULL"
-        message IsNull {
+        message TIsNull {
             string column = 1;
         }
 
         // Renders to "$column IS NOT NULL"
-        message IsNotNull {
+        message TIsNotNull {
             string column = 1;
         }
 
         // Renders to "$column IN $(values)"
-        message In {
+        message TIn {
             repeated Ydb.TypedValue values = 1;
         }
 
         // Renders to "$column BETWEEN $least AND $greatest"
-        message Between {
+        message TBetween {
             Ydb.TypedValue least = 1;
             Ydb.TypedValue greatest = 2;
         }
 
         oneof payload {
-            Binary binary = 1;
-            IsNull is_null = 2;
-            IsNotNull is_not_null = 3;
-            In in = 4;
-            Between between = 5;
+            TBinary binary = 1;
+            TIsNull is_null = 2;
+            TIsNotNull is_not_null = 3;
+            TIn in = 4;
+            TBetween between = 5;
         }
     }
 
     // transforms into "AND"
-    message Conjunction {
-        repeated Filter operands = 1;
+    message TConjunction {
+        repeated TFilter operands = 1;
     }
 
     // transforms into "OR"
-    message Disjunction {
-        repeated Filter operands = 1;
+    message TDisjunction {
+        repeated TFilter operands = 1;
     }
 
     // transforms into "NOT"
-    message Negation {
-        Filter operand = 1;
+    message TNegation {
+        TFilter operand = 1;
     }
 
     // SubExpr transformation rules:
     // 1. top-level:      $children
     // 2. other levels:  ($children)
-    message SubExpr {
+    message TSubExpr {
         // Next level expression
-        Filter operand = 1;
+        TFilter operand = 1;
     }
 
     oneof payload {
-        Comparison comparison = 1;
-        Conjunction conjunction = 2;
-        Disjunction disjunction = 3;
-        Negation negation = 4;
-        SubExpr sub_expr = 5;
+        TComparison comparison = 1;
+        TConjunction conjunction = 2;
+        TDisjunction disjunction = 3;
+        TNegation negation = 4;
+        TSubExpr sub_expr = 5;
     }
 }
 
 // ---------- Utils ----------
 
 // Special type to describe the result of any operation
-message Error {
+message TError {
     // High-level code
     Ydb.StatusIds.StatusCode status = 1;
 
@@ -412,15 +412,15 @@ message Error {
     repeated Ydb.Issue.IssueMessage issues = 3;
 }
 
-// AST is an internal representation of an YQL request.
+// TAst is an internal representation of an YQL request.
 // Advanced connectors may use it for the full-fledged implementations of the push down.
-message AST {
-    message List {
-        repeated AST children = 1;
+message TAst {
+    message TList {
+        repeated TAst children = 1;
     }
 
     oneof payload {
         bytes atom = 1;
-        List list = 2;
+        TList list = 2;
     }
 }

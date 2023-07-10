@@ -34,6 +34,7 @@
 #include <ydb/services/monitoring/grpc_service.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/client/metadata/types_metadata.h>
 #include <ydb/core/client/metadata/functions_metadata.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -48,7 +49,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/metering/metering.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
@@ -76,6 +77,7 @@
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/driver_lib/run/cert_auth_props.h>
 
@@ -787,6 +789,12 @@ namespace Tests {
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 
+            if (!KqpLoggerScope) {
+                // We need to keep YqlLoggerScope alive longer than the actor system
+                KqpLoggerScope = std::make_shared<NYql::NLog::YqlLoggerScope>(
+                    new NYql::NLog::TTlsLogBackend(new TNullLogBackend()));
+            }
+
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
                                                                   Settings->AppConfig.GetTableServiceConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
@@ -1235,9 +1243,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         SendAndWaitCompletion(request, reply);
 
-#ifndef NDEBUG
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
         return reply;
     }
 
@@ -1298,9 +1304,7 @@ namespace Tests {
             msg->Record.MutableFlatTxId()->SetSchemeShardTabletId(schemeshard);
             msg->Record.MutableFlatTxId()->SetPathId(pathId);
             msg->Record.MutablePollOptions()->SetTimeout(timeout.MilliSeconds());
-#ifndef NDEBUG
             Cerr << "waiting..." << Endl;
-#endif
             status = SyncCall(msg, reply);
             if (status != NBus::MESSAGE_OK) {
                 const char *description = NBus::MessageStatusDescription(status);
@@ -1352,9 +1356,7 @@ namespace Tests {
         SetApplyIf(*mkDirTx, applyIf);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-#ifndef NDEBUG
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
@@ -1369,9 +1371,7 @@ namespace Tests {
         SetApplyIf(*mkDirTx, applyIf);
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
-#ifndef NDEBUG
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
@@ -1835,9 +1835,7 @@ namespace Tests {
         auto& descr = record.GetPathDescription().GetSelf();
         TAutoPtr<NBus::TBusMessage> reply;
         auto msgStatus = WaitCompletion(descr.GetCreateTxId(), descr.GetSchemeshardId(), descr.GetPathId(), reply, timeout);
-#ifndef NDEBUG
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
@@ -2007,9 +2005,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> reply;
         NBus::EMessageStatus msgStatus = SendWhenReady(readRequest, reply);
 
-#ifndef NDEBUG
         Cerr << PrintToString<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
-#endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
         UNIT_ASSERT(response.HasBlobStorageConfigResponse() && response.GetBlobStorageConfigResponse().GetSuccess());
@@ -2038,9 +2034,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> replyDelete;
         NBus::EMessageStatus msgStatus = SendWhenReady(deleteRequest, replyDelete);
 
-#ifndef NDEBUG
         Cout << PrintToString<NMsgBusProxy::TBusResponse>(replyDelete.Get()) << Endl;
-#endif
         UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
         const NKikimrClient::TResponse &responseDelete = dynamic_cast<NMsgBusProxy::TBusResponse *>(replyDelete.Get())->Record;
         UNIT_ASSERT(responseDelete.HasBlobStorageConfigResponse() && responseDelete.GetBlobStorageConfigResponse().GetSuccess());
@@ -2263,9 +2257,7 @@ namespace Tests {
         // Timeout for DEBUG purposes only
         runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
         TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
-#ifndef NDEBUG
         Cerr << res << Endl;
-#endif
         return res;
     }
 
@@ -2413,9 +2405,7 @@ namespace Tests {
         TEvHive::TEvGetTabletStorageInfoResult* response = runtime->GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
 
         res.Swap(&response->Record);
-#ifndef NDEBUG
         Cerr << response->Record.DebugString() << "\n";
-#endif
 
         if (res.GetStatus() == NKikimrProto::OK) {
             auto& info = res.GetInfo();
@@ -2567,13 +2557,11 @@ namespace Tests {
 
     bool TTenants::IsActive(const TString &name, ui32 nodeIdx) const {
         const TVector<ui32>& nodes = List(name);
-#ifndef NDEBUG
         Cerr << "IsActive: " << name << " -- " << nodeIdx << Endl;
         for (auto& x: nodes) {
             Cerr << " -- " << x;
         }
         Cerr << Endl;
-#endif
         return std::find(nodes.begin(), nodes.end(), nodeIdx) != nodes.end();
     }
 

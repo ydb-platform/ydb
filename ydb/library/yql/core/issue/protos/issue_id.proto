@@ -139,9 +139,11 @@ message TIssuesIds {
         YQL_DEPRECATED_POSITIONAL_SCHEMA = 4535;
         YQL_DUPLICATE_DECLARE = 4536;
         YQL_OFFSET_WITHOUT_SORT = 4537;
+        YQL_DEPRECATED_BINDINGS = 4538;
 
 // yql parser errors
         YQL_NOT_ALLOWED_IN_DISCOVERY = 4600;
+        YQL_DISABLED_BINDINGS = 4601;
 
 // jsonpath errors
         JSONPATH_PARSE_ERROR = 4700;

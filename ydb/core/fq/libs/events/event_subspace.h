@@ -30,6 +30,7 @@ struct TYqEventSubspace {
         QuotaService,
         RateLimiter,
         ControlPlaneConfig,
+        YdbCompute,
 
         SubspacesEnd,
     };

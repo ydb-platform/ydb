@@ -27,19 +27,73 @@ public:
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
 
+class TReadyResults {
+private:
+    const NColumnShard::TConcreteScanCounters Counters;
+    std::deque<NOlap::TPartialReadResult> Data;
+    i64 RecordsCount = 0;
+public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb
+            << "count:" << Data.size() << ";"
+            << "records_count:" << RecordsCount << ";"
+            ;
+        if (Data.size()) {
+            sb << "schema=" << Data.front().GetResultBatch()->schema()->ToString() << ";";
+        }
+        return sb;
+    }
+    TReadyResults(const NColumnShard::TConcreteScanCounters& counters)
+        : Counters(counters)
+    {
+
+    }
+    NOlap::TPartialReadResult& emplace_back(NOlap::TPartialReadResult&& v) {
+        RecordsCount += v.GetResultBatch()->num_rows();
+        Data.emplace_back(std::move(v));
+        return Data.back();
+    }
+    NOlap::TPartialReadResult pop_front() {
+        if (Data.empty()) {
+            return NOlap::TPartialReadResult();
+        }
+        auto result = std::move(Data.front());
+        RecordsCount -= result.GetResultBatch()->num_rows();
+        Data.pop_front();
+        return result;
+    }
+    bool empty() const {
+        return Data.empty();
+    }
+    size_t size() const {
+        return Data.size();
+    }
+};
+
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
+    NOlap::TReadContext Context;
+    TReadyResults ReadyResults;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     NOlap::TIndexedReadData IndexedData;
-    std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
-    TDeque<NOlap::TPartialReadResult> ReadyResults;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
-    NColumnShard::TDataTasksProcessorContainer DataTasksProcessor;
-    NColumnShard::TConcreteScanCounters ScanCounters;
 public:
-    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, NColumnShard::TDataTasksProcessorContainer processor, const NColumnShard::TConcreteScanCounters& scanCounters);
+    TColumnShardScanIterator(NOlap::TReadMetadata::TConstPtr readMetadata, const NOlap::TReadContext& context);
     ~TColumnShardScanIterator();
+
+    virtual std::optional<ui32> GetAvailableResultsCount() const override {
+        return ReadyResults.size();
+    }
+
+    virtual TString DebugString() const override {
+        return TStringBuilder()
+            << "ready_results:(" << ReadyResults.DebugString() << ");"
+            << "has_buffer:" << IndexedData.GetMemoryAccessor()->HasBuffer() << ";"
+            << "indexed_data:(" << IndexedData.DebugString() << ")"
+            ;
+    }
 
     virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
 
@@ -54,10 +108,6 @@ public:
     NOlap::TPartialReadResult GetBatch() override;
 
     TBlobRange GetNextBlobToRead() override;
-
-    size_t ReadyResultsCount() const override {
-        return ReadyResults.size();
-    }
 
 private:
     void FillReadyResults();

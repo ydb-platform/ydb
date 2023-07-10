@@ -196,7 +196,7 @@ struct TPDiskFailureInjectionTest {
         // initialize logger settings
         const TActorId loggerId(setup->NodeId, "logger");
 
-        TIntrusivePtr<NLog::TSettings> loggerSettings = new NLog::TSettings(loggerId, NKikimrServices::LOGGER,
+        TIntrusivePtr<NLog::TSettings> loggerSettings = new NLog::TSettings(loggerId, NActorsServices::LOGGER,
                 NActors::NLog::PRI_NOTICE, NActors::NLog::PRI_DEBUG, 0);
 
         loggerSettings->Append(

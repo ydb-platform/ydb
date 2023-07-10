@@ -5,6 +5,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <ydb/core/base/events.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 
 namespace NYql::NDq {
@@ -21,7 +22,7 @@ public:
 
     struct ICallbacks {
         virtual i64 GetInputChannelFreeSpace(ui64 channelId) const = 0;
-        virtual void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) = 0;
+        virtual void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) = 0;
         virtual void PeerFinished(ui64 channelId) = 0;
         virtual void ResumeExecution() = 0;
 
@@ -75,7 +76,7 @@ public:
     void SetInputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     bool CanSendChannelData(ui64 channelId);
-    void SendChannelData(NDqProto::TChannelData&& channelData);
+    void SendChannelData(TChannelDataOOB&& channelData);
     void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);
@@ -153,13 +154,13 @@ private:
         bool EarlyFinish = false;
 
         struct TInFlightMessage {
-            TInFlightMessage(ui64 seqNo, NYql::NDqProto::TChannelData&& data, bool finished)
+            TInFlightMessage(ui64 seqNo, TChannelDataOOB&& data, bool finished)
                 : SeqNo(seqNo)
                 , Data(std::move(data))
                 , Finished(finished) {}
 
             const ui64 SeqNo;
-            const NYql::NDqProto::TChannelData Data;
+            const TChannelDataOOB Data;
             const bool Finished;
         };
         TMap<ui64, TInFlightMessage> InFlight;

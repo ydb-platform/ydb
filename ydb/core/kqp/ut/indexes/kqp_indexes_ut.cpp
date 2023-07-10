@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
-#include <ydb/core/kqp/host/kqp_host.h>
+#include <ydb/core/kqp/host/kqp_host_impl.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -94,7 +94,8 @@ void CreateTableWithIndexWithState(
     metadata->KeyColumnNames.push_back("key");
 
     {
-        auto result = gateway->CreateTable(metadata, true).ExtractValueSync();
+        auto gatewayProxy = CreateKqpGatewayProxy(gateway, nullptr);
+        auto result = gatewayProxy->CreateTable(metadata, true).ExtractValueSync();
         UNIT_ASSERT(result.Success());
     }
 }

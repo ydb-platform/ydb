@@ -52,7 +52,6 @@ target_link_libraries(fq-libs-actors PUBLIC
   core-services-mounts
   dq-integration-transform
   minikql-comp_nodes-llvm
-  providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes
   providers-common-db_id_async_resolver
@@ -67,6 +66,9 @@ target_link_libraries(fq-libs-actors PUBLIC
   providers-dq-provider
   dq-provider-exec
   dq-worker_manager-interface
+  connector-api-common
+  generic-connector-libcpp
+  providers-generic-provider
   providers-pq-cm_client
   providers-pq-provider
   providers-pq-task_meta
@@ -79,7 +81,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   yql-utils-actor_log
   api-protos
   public-lib-fq
-  client-draft-ydb_query
+  cpp-client-ydb_query
   cpp-client-ydb_operation
   cpp-client-ydb_table
 )

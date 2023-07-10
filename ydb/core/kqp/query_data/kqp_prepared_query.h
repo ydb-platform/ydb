@@ -85,6 +85,10 @@ public:
         return Proto->GetTables();
     }
 
+    const NKqpProto::TKqpSchemeOperation& GetSchemeOperation() const {
+        return Proto->GetSchemeOperation();
+    }
+
     TProtoStringType DebugString() const {
         return Proto->ShortDebugString();
     }

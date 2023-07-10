@@ -66,7 +66,7 @@ items:
     - name: Запись в топик
       href: topic-write.md
     - name: Конвейерная обработка сообщений
-      href: topic-pipeline.md    
+      href: topic-pipeline.md
   - name: Выполнение YQL
     items:
     - name: Обзор
@@ -117,3 +117,5 @@ items:
       href: workload-kv.md
     - name: Topic нагрузка
       href: workload-topic.md
+    - name: TPC-H нагрузка
+      href: workload-tpch.md

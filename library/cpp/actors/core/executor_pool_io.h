@@ -4,6 +4,7 @@
 #include "executor_thread.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
+#include "indexes.h"
 #include <library/cpp/actors/util/ticket_lock.h>
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
@@ -23,10 +24,9 @@ namespace NActors {
         TTicketLock ScheduleLock;
 
         const TString PoolName;
-
+        const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
-        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr,
-                        ui32 maxActivityType = 1);
+        TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr);
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg);
         ~TIOExecutorPool();
 

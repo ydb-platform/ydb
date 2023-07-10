@@ -12,7 +12,7 @@ struct TActorFutureCallback : TActor<TActorFutureCallback<EventType>> {
     TCallback Callback;
 
     static constexpr IActor::EActivityType ActorActivityType() {
-        return IActor::ACTOR_FUTURE_CALLBACK;
+        return IActor::EActivityType::ACTOR_FUTURE_CALLBACK;
     }
 
     TActorFutureCallback(TCallback&& callback)

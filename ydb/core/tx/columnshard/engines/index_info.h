@@ -59,6 +59,10 @@ public:
     /// Matches name of the filed with names of the special columns.
     static bool IsSpecialColumn(const arrow::Field& field);
     static bool IsSpecialColumn(const ui32 field);
+    static ui32 GetSpecialColumnByteWidth(const ui32 field) {
+        Y_VERIFY(IsSpecialColumn(field));
+        return 8;
+    }
     static bool IsSpecialColumn(const std::string& fieldName);
     template <class TContainer>
     static bool IsSpecialColumns(const TContainer& c) {

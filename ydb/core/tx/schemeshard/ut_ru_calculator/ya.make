@@ -5,6 +5,7 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/library/yql/public/udf/service/stub
     ydb/library/yql/sql/pg_dummy
+    ydb/services/ydb
 )
 
 SRCS(

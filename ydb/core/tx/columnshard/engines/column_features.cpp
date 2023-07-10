@@ -2,6 +2,7 @@
 #include "index_info.h"
 #include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/formats/arrow/serializer/batch_only.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NOlap {
 
@@ -59,6 +60,20 @@ std::unique_ptr<arrow::util::Codec> TColumnFeatures::GetCompressionCodec() const
     } else {
         return nullptr;
     }
+}
+
+TString TColumnLoader::DebugString() const {
+    TStringBuilder result;
+    if (ExpectedSchema) {
+        result << "schema:" << ExpectedSchema->ToString() << ";";
+    }
+    if (Transformer) {
+        result << "transformer:" << Transformer->DebugString() << ";";
+    }
+    if (Deserializer) {
+        result << "deserializer:" << Deserializer->DebugString() << ";";
+    }
+    return result;
 }
 
 } // namespace NKikimr::NOlap

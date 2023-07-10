@@ -286,7 +286,7 @@ TSerializedCellVec ExtendWithNulls(
     }
 
     extendedCells.resize(columnCount, TCell());
-    return TSerializedCellVec(TSerializedCellVec::Serialize(extendedCells));
+    return TSerializedCellVec(extendedCells);
 }
 
 ui64 ResetRowStats(NTable::TIteratorStats& stats)

@@ -27,14 +27,9 @@ bool ExprHasUtf8Type(const TExprBase& expr) {
 }
 
 bool IsLikeOperator(const TCoCompare& predicate) {
-    if (predicate.Maybe<TCoCmpStringContains>()) {
-        return true;
-    } else if (predicate.Maybe<TCoCmpStartsWith>()) {
-        return true;
-    } else if (predicate.Maybe<TCoCmpEndsWith>()) {
-        return true;
-    }
-    return false;
+    return predicate.Maybe<TCoCmpStringContains>()
+        || predicate.Maybe<TCoCmpStartsWith>()
+        || predicate.Maybe<TCoCmpEndsWith>();
 }
 
 bool IsSupportedLike(const TExprBase& left, const TExprBase& right) {
@@ -308,8 +303,8 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         if (!IsComparableTypes(leftList[i], rightList[i], equality, inputType)) {
             return false;
         }
-        if (IsLikeOperator(compare) && !IsSupportedLike(leftList[i], rightList[i])) {
-            // Currently Column Shard doesn't have LIKE kernel for binary strings
+        if (IsLikeOperator(compare) && NKikimr::NSsa::RuntimeVersion < 3U && !IsSupportedLike(leftList[i], rightList[i])) {
+            // In SSA_RUNTIME_VERSION == 2 Column Shard doesn't have LIKE kernel for binary strings
             return false;
         }
     }

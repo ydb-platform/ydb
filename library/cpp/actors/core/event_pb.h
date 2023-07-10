@@ -448,6 +448,11 @@ namespace NActors {
         TIntrusivePtr<TProtoArenaHolder> Arena;
         TRecord& Record;
 
+        // Arena depends on block size to be a multiple of 8 for correctness
+        // FIXME: uncomment these asserts when code is synchronized between repositories
+        // static_assert((InitialBlockSize & 7) == 0, "Misaligned InitialBlockSize");
+        // static_assert((MaxBlockSize & 7) == 0, "Misaligned MaxBlockSize");
+
         static const google::protobuf::ArenaOptions GetArenaOptions() {
             google::protobuf::ArenaOptions opts;
             opts.initial_block_size = InitialBlockSize;

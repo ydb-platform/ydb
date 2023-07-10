@@ -8,7 +8,7 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
     :TClientCommand(name, aliases, description)
 {}
 
-TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
+TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)
@@ -22,11 +22,11 @@ TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
     return driverConfig;
 }
 
-TDriver TYdbCommand::CreateDriver(TConfig& config) {
+TDriver TYdbCommand::CreateDriver(const TConfig& config) {
     return TDriver(CreateDriverConfig(config));
 }
 
-TDriver TYdbCommand::CreateDriver(TConfig& config, THolder<TLogBackend>&& loggingBackend) {
+TDriver TYdbCommand::CreateDriver(const TConfig& config, THolder<TLogBackend>&& loggingBackend) {
     auto driverConfig = CreateDriverConfig(config);
     driverConfig.SetLog(std::move(loggingBackend));
 

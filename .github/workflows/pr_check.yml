@@ -13,8 +13,10 @@ on:
       - 'synchronize'
       - 'reopened'
       - 'labeled'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
-
   check-running-allowed:
     runs-on: ubuntu-latest
     outputs:
@@ -24,7 +26,7 @@ jobs:
         id: check-ownership-membership
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.YDB_PLATFORM_BOT_TOKEN_REPO }}
           script: |
             // This is used primarily in forks. Repository owner
             // should be allowed to run anything.
@@ -65,7 +67,6 @@ jobs:
             github.event.action == 'opened'
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -76,7 +77,6 @@ jobs:
       - name: cleanup-test-label
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;

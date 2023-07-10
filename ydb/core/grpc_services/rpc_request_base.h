@@ -3,8 +3,8 @@
 #include "grpc_request_proxy.h"
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/kikimr_issue.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>

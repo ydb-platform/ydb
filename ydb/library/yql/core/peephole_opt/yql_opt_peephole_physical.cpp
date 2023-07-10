@@ -395,6 +395,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
 
     auto keyMembers1 = GetKeys(node.Head().Tail(), *node.Child(2)->Child(3), ctx);
     auto keyMembers2 = GetKeys(node.Child(1)->Tail(), *node.Child(2)->Child(4), ctx);
+    std::vector<std::string_view> lKeys(keyMembers1.size()), rKeys(keyMembers2.size());
 
     MKQL_ENSURE(keyMembers1.size() == keyMembers2.size(), "Expected same key sizes.");
 
@@ -405,8 +406,8 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     TTypeAnnotationNode::TListType keyTypeItems;
     keyTypeItems.reserve(keyMembers1.size());
     for (auto i = 0U; i < keyMembers2.size() && !badKey; ++i) {
-        const auto keyType1 = list1type->FindItemType(keyMembers1[i]->Content());
-        const auto keyType2 = list2type->FindItemType(keyMembers2[i]->Content());
+        const auto keyType1 = list1type->FindItemType(lKeys[i] = keyMembers1[i]->Content());
+        const auto keyType2 = list2type->FindItemType(rKeys[i] = keyMembers2[i]->Content());
         if (leftKind) {
             keyTypeItems.emplace_back(JoinDryKeyType(keyType1, keyType2, optKey, ctx));
         } else if (rightKind){
@@ -422,6 +423,8 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
         if (filter)
             return ctx.NewCallable(node.Pos(), "List", {ExpandType(node.Pos(), *node.GetTypeAnn(), ctx)});
 
+        lKeys.clear();
+        rKeys.clear();
         keyTypeItems.clear();
         keyMembers1.clear();
         keyMembers2.clear();
@@ -433,8 +436,12 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const bool filter2 = filter || leftKind;
 
     const auto linkSettings = GetEquiJoinLinkSettings(*node.Child(2)->Child(5));
-    const bool uniqueLeft  = linkSettings.LeftHints.contains("unique") || linkSettings.LeftHints.contains("any");
-    const bool uniqueRight = linkSettings.RightHints.contains("unique") || linkSettings.RightHints.contains("any");
+
+    const auto lUnique = list1->GetConstraint<TUniqueConstraintNode>();
+    const auto rUnique = list2->GetConstraint<TUniqueConstraintNode>();
+
+    const bool uniqueLeft  = lUnique && lUnique->ContainsCompleteSet(lKeys) || linkSettings.LeftHints.contains("unique") || linkSettings.LeftHints.contains("any");
+    const bool uniqueRight = rUnique && rUnique->ContainsCompleteSet(rKeys) || linkSettings.RightHints.contains("unique") || linkSettings.RightHints.contains("any");
 
     TExprNode::TListType flags;
     if (uniqueLeft)

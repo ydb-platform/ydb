@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include "layout_helpers.h"
 #include "group_geometry_info.h"
 #include "group_mapper.h"
 #include "group_layout_checker.h"
@@ -529,65 +530,21 @@ public:
 
     bool CheckGroupPlacement(const TGroupMapper::TGroupDefinition& group, TGroupGeometryInfo geom, TString& error) {
         NLayoutChecker::TDomainMapper domainMapper;
-        if (group.size() != geom.GetNumFailRealms()) {
-            error = "Wrong fail realms number";
-            return false;
-        }
-
+        std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
         for (ui32 failRealm = 0; failRealm < geom.GetNumFailRealms(); ++failRealm) {
-            if (group[failRealm].size() != geom.GetNumFailDomainsPerFailRealm()) {
-                error = TStringBuilder() << "Wrong fail domains number in failRealm# " << failRealm;
-                return false;
-            }
             for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
-                if (group[failRealm][failDomain].size() != geom.GetNumVDisksPerFailDomain()) {
-                    error = TStringBuilder() << "Wrong vdisks number in failRealm# " << failRealm << ", failDomain# " << failDomain;
-                    return false;
-                }
-            }
-        }
-
-        std::unordered_set<ui32> usedPRealms;
-        for (ui32 failRealm = 0; failRealm < geom.GetNumFailRealms(); ++failRealm) {
-            const NLayoutChecker::TPDiskLayoutPosition pdisk0(domainMapper, PDisks.at(group[failRealm][0][0]).GetLocation(), group[failRealm][0][0], geom);
-            ui32 pRealm = pdisk0.Realm.Index();
-            if (usedPRealms.count(pRealm)) {
-                error = "same pRealm in different fail realms detected";
-                return false;
-            }
-            usedPRealms.insert(pRealm);
-            std::unordered_set<ui32> usedPDomains;
-            for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
-                const NLayoutChecker::TPDiskLayoutPosition pdisk1(domainMapper, PDisks.at(group[failRealm][failDomain][0]).GetLocation(), 
-                    group[failRealm][failDomain][0], geom);
-                ui32 pDomain = pdisk1.Domain.Index();
-                if (usedPDomains.count(pDomain)) {
-                    error = "same pDomain in different fail domains detected";
-                    return false;
-                }
-                usedPDomains.insert(pDomain);
-                std::set<TPDiskId> usedPDisks;
                 for (ui32 vdisk = 0; vdisk < geom.GetNumVDisksPerFailDomain(); ++vdisk) {
-                    auto pdiskId = group[failRealm][failDomain][vdisk];
-                    auto pdisk = NLayoutChecker::TPDiskLayoutPosition(domainMapper, PDisks.at(pdiskId).GetLocation(), pdiskId, geom);
-                    if (pdisk.Realm.Index() != pRealm) {
-                        error = TStringBuilder() << "different pRealms within one failRealm, vdisk# " << failRealm << ":" << failDomain <<
-                            ":" << vdisk << ", expected pRealm " << pRealm << ", got " << pdisk.Realm.Index();
-                        return false;
-                    }
-                    if (pdisk.Domain.Index() != pDomain) {
-                        error = "different pDomains within one failDomain";
-                        return false;
-                    }
-                    if (usedPDisks.count(pdiskId)) {
-                        error = "same PDisk in different VDisks";
-                        return false;
-                    }
+                    const auto pdiskId = group[failRealm][failDomain][vdisk];
+                    pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
+                            PDisks.at(pdiskId).GetLocation(),
+                            pdiskId,
+                            geom
+                    );
                 }
             }
         }
 
-        return true;
+        return CheckLayoutByGroupDefinition(group, pdisks, geom, true, error);
     }
 };
 

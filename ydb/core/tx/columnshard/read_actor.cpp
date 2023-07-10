@@ -14,8 +14,8 @@ private:
 
         size_t next = 1;
         for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
-            bool lastOne = Finished() && (next == ready.size());
-            SendResult(ctx, it->ResultBatch, lastOne);
+            const bool lastOne = IndexedData.IsFinished() && (next == ready.size());
+            SendResult(ctx, it->GetResultBatch(), lastOne);
         }
     }
 public:
@@ -35,7 +35,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata, true, counters, TDataTasksProcessorContainer())
+        , IndexedData(ReadMetadata, true, NOlap::TReadContext(counters))
         , Deadline(deadline)
         , ColumnShardActorId(columnShardActorId)
         , RequestCookie(requestCookie)
@@ -58,25 +58,7 @@ public:
 
         Y_VERIFY(event.Data.size() == event.BlobRange.Size, "%zu, %d", event.Data.size(), event.BlobRange.Size);
 
-        if (IndexedBlobs.contains(event.BlobRange)) {
-            if (!WaitIndexed.contains(event.BlobRange)) {
-                return; // ignore duplicate parts
-            }
-            WaitIndexed.erase(event.BlobRange);
-            IndexedData.AddIndexed(event.BlobRange, event.Data);
-        } else if (CommittedBlobs.contains(blobId)) {
-            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob::BuildKeyBlob(blobId));
-            if (cmt.empty()) {
-                return; // ignore duplicates
-            }
-            const NOlap::TCommittedBlob& cmtBlob = cmt.key();
-            ui32 batchNo = cmt.mapped();
-            IndexedData.AddNotIndexed(batchNo, event.Data, cmtBlob);
-        } else {
-            LOG_S_ERROR("TEvReadBlobRangeResult returned unexpected blob at tablet "
-                << TabletId << " (read)");
-            return;
-        }
+        IndexedData.AddData(event.BlobRange, event.Data);
 
         BuildResult(ctx);
         DieFinished(ctx);
@@ -93,9 +75,7 @@ public:
     void SendErrorResult(const TActorContext& ctx, NKikimrTxColumnShard::EResultStatus status) {
         Y_VERIFY(status != NKikimrTxColumnShard::EResultStatus::SUCCESS);
         SendResult(ctx, {}, true, status);
-
-        WaitIndexed.clear();
-        WaitCommitted.clear();
+        IndexedData.Abort();
     }
 
     void SendResult(const TActorContext& ctx, const std::shared_ptr<arrow::RecordBatch>& batch, bool finished = false,
@@ -151,12 +131,8 @@ public:
         ctx.Send(DstActor, chunkEvent.release());
     }
 
-    bool Finished() const {
-        return WaitCommitted.empty() && WaitIndexed.empty();
-    }
-
     void DieFinished(const TActorContext& ctx) {
-        if (Finished()) {
+        if (IndexedData.IsFinished()) {
             LOG_S_DEBUG("Finished read (with " << ReturnedBatchNo << " batches sent) at tablet " << TabletId);
             Send(ColumnShardActorId, new TEvPrivate::TEvReadFinished(RequestCookie));
             Die(ctx);
@@ -164,34 +140,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        ui32 notIndexed = 0;
-        for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++notIndexed) {
-            const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
+        IndexedData.InitRead();
 
-            CommittedBlobs.emplace(cmtBlob.GetBlobId());
-            WaitCommitted.emplace(cmtBlob, notIndexed);
-        }
-
-        IndexedData.InitRead(notIndexed);
-        while (IndexedData.HasMoreBlobs()) {
-            const auto blobRange = IndexedData.ExtractNextBlob();
-            WaitIndexed.insert(blobRange);
-            IndexedBlobs.emplace(blobRange);
-        }
-
-        // Add cached batches without read
-        for (auto& [blobId, batch] : ReadMetadata->CommittedBatches) {
-            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob::BuildKeyBlob(blobId));
-            Y_VERIFY(!cmt.empty());
-
-            const NOlap::TCommittedBlob& cmtBlob = cmt.key();
-            ui32 batchNo = cmt.mapped();
-            IndexedData.AddNotIndexed(batchNo, batch, cmtBlob);
-        }
-
-        LOG_S_DEBUG("Starting read (" << WaitIndexed.size() << " indexed, "
-            << ReadMetadata->CommittedBlobs.size() << " committed, "
-            << WaitCommitted.size() << " not cached committed) at tablet " << TabletId);
+        LOG_S_DEBUG("Starting read (" << IndexedData.DebugString() << ") at tablet " << TabletId);
 
         bool earlyExit = false;
         if (Deadline != TInstant::Max()) {
@@ -208,17 +159,11 @@ public:
             SendTimeouts(ctx);
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
-            // TODO: Keep inflight
-            for (auto& [cmtBlob, batchNo] : WaitCommitted) {
-                auto& blobId = cmtBlob.GetBlobId();
-                SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
-            }
-            for (auto&& blobRange : IndexedBlobs) {
+            while (IndexedData.HasMoreBlobs()) {
+                const auto blobRange = IndexedData.ExtractNextBlob(false);
                 SendReadRequest(ctx, blobRange);
             }
-            if (WaitCommitted.empty() && IndexedBlobs.empty()) {
-                BuildResult(ctx);
-            }
+            BuildResult(ctx);
         }
 
         Become(&TThis::StateWait);
@@ -262,10 +207,6 @@ private:
     TInstant Deadline;
     TActorId ColumnShardActorId;
     const ui64 RequestCookie;
-    THashSet<NBlobCache::TBlobRange> IndexedBlobs;
-    THashSet<TUnifiedBlobId> CommittedBlobs;
-    THashSet<NBlobCache::TBlobRange> WaitIndexed;
-    std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     ui32 ReturnedBatchNo;
     mutable TString SerializedSchema;
 

@@ -148,18 +148,28 @@ Y_UNIT_TEST_SUITE(Scheme) {
         const int ITERATIONS = 1000;//10000000;
 
         {
+            TString res;
             TInstant start = TInstant::Now();
             for (int i = 0; i < ITERATIONS; ++i) {
-                TSerializedCellVec::Serialize(cells);
+                TSerializedCellVec::Serialize(res, cells);
             }
             TInstant finish = TInstant::Now();
             Cerr << "Serialize: " << finish - start << Endl;
         }
 
         {
+            TInstant start = TInstant::Now();
+            for (int i = 0; i < ITERATIONS; ++i) {
+                TSerializedCellVec vec4(vec.GetCells());
+            }
+            TInstant finish = TInstant::Now();
+            Cerr << "Cells constructor: " << finish - start << Endl;
+        }
+
+        {
             TString buf = vec.GetBuffer();
             TInstant start = TInstant::Now();
-                for (int i = 0; i < ITERATIONS; ++i) {
+            for (int i = 0; i < ITERATIONS; ++i) {
                 vec3.Parse(buf);
             }
             TInstant finish = TInstant::Now();
@@ -199,7 +209,7 @@ Y_UNIT_TEST_SUITE(Scheme) {
         UNIT_ASSERT(!TSerializedCellVec::TryParse("\1\1", vec));
 
         const TString buf = TSerializedCellVec::Serialize({TCell(), TCell()});
-        UNIT_ASSERT_VALUES_EQUAL(buf.size(), 2 + 2*4);
+        UNIT_ASSERT_VALUES_EQUAL(buf.size(), sizeof(ui16) + 2 * 4);
 
         {
             for (size_t i = 0; i < buf.size(); ++i) {

@@ -620,14 +620,15 @@ namespace NKikimr::NBsController {
 
                 for (const auto& [_, failRealm] : realmFilling) {
                     ui32 bestRealm = ::Max<ui32>();
-                    ui32 movesRequired = ::Max<ui32>();
+                    std::pair<ui32, ui32> movesRequired = {::Max<ui32>(), ::Max<ui32>()};
+                    // {toMoveIn, toMoveOut}. Latter parameter is less important
                     for (auto it = realmCandidates.begin(); it != realmCandidates.end(); ++it) {
                         ui32 pRealm = *it;
                         ui32 correctAlready = disksInPRealmByFailRealm[failRealm][pRealm];
                         ui32 toMoveIn = numDisksPerFailRealm - correctAlready;
                         ui32 toMoveOut = disksInPRealm[pRealm] - correctAlready;
                         ui32 freeDomains = pDomainsInPRealm[pRealm].size();
-                        ui32 newMovesRequired = toMoveIn;
+                        std::pair<ui32, ui32> newMovesRequired = {toMoveIn, toMoveOut};
                         if (toMoveOut + freeDomains < toMoveIn) {
                             continue; // not enough free domains to place all the disks
                         }
@@ -721,8 +722,18 @@ namespace NKikimr::NBsController {
 
                 EFailLevel failLevel = EFailLevel::ALL_OK;
                 std::vector<ui32> misplacedVDisks;
+                std::unordered_map<ui32, std::unordered_set<ui32>> realmOccupation;
                 std::unordered_map<ui32, std::unordered_map<ui32, ui32>> domainInterlace;
                 std::map<TPDiskId, ui32> diskInterlace;
+
+                auto failDetected = [&](EFailLevel diskFailLevel, ui32 diskOrderNum) {
+                    if ((ui32)failLevel == (ui32)diskFailLevel) {
+                        misplacedVDisks.push_back(diskOrderNum);
+                    } else if ((ui32)failLevel < (ui32)diskFailLevel) {
+                        failLevel = diskFailLevel;
+                        misplacedVDisks = { diskOrderNum };
+                    }
+                };
 
                 for (ui32 orderNum = 0; orderNum < group.size(); ++orderNum) {
                     if (group[orderNum]) {
@@ -740,30 +751,33 @@ namespace NKikimr::NBsController {
                         ui32 pRealm = group[orderNum]->Position.Realm.Index();
                         ui32 pDomain = group[orderNum]->Position.Domain.Index();
                         TPDiskId pdisk = group[orderNum]->PDiskId;
-                        ui32 desiredPRealm = RealmNavigator[vdisk.FailRealm];
-                        if (desiredPRealm != pRealm && (ui32)failLevel <= (ui32)EFailLevel::REALM_FAIL) {
-                            if ((ui32)failLevel < (ui32)EFailLevel::REALM_FAIL) {
-                                misplacedVDisks.clear();
-                            }
-                            failLevel = EFailLevel::REALM_FAIL;
-                            misplacedVDisks.push_back(orderNum);
-                        } else if (domainInterlace[pRealm][pDomain] > 1 && (ui32)failLevel <= (ui32)EFailLevel::DOMAIN_FAIL) {
-                            if ((ui32)failLevel < (ui32)EFailLevel::DOMAIN_FAIL) {
-                                misplacedVDisks.clear();
-                            }
-                            failLevel = EFailLevel::DOMAIN_FAIL;
-                            misplacedVDisks.push_back(orderNum);
-                        } else if (diskInterlace[pdisk] > 1 && (ui32)failLevel <= (ui32)EFailLevel::DISK_FAIL) {
-                            failLevel = EFailLevel::DISK_FAIL;
-                            misplacedVDisks.push_back(orderNum);
+                        realmOccupation[pRealm].insert(vdisk.FailRealm);
+
+                        if (domainInterlace[pRealm][pDomain] > 1) {
+                            failDetected(EFailLevel::DOMAIN_FAIL, orderNum);
+                        } else if (diskInterlace[pdisk] > 1) {
+                            failDetected(EFailLevel::PDISK_FAIL, orderNum);
                         }
                     } else {
                         if (failLevel == EFailLevel::EMPTY_SLOT) {
                             misplacedVDisks.clear();
                             failLevel = EFailLevel::INCORRECT_LAYOUT;
-                        } else if ((ui32)failLevel < (ui32)EFailLevel::EMPTY_SLOT) {
-                            misplacedVDisks = {orderNum};
-                            failLevel = EFailLevel::EMPTY_SLOT;
+                        } else {
+                            failDetected(EFailLevel::EMPTY_SLOT, orderNum);
+                        }
+                    }
+                }
+
+                for (ui32 orderNum = 0; orderNum < group.size(); ++orderNum) {
+                    const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNum);
+                    ui32 pRealm = group[orderNum]->Position.Realm.Index();
+                    ui32 desiredPRealm = RealmNavigator[vdisk.FailRealm];
+                    if (pRealm != desiredPRealm) {
+                        if (realmOccupation[pRealm].size() > 1) {
+                            // disks from different fail realms in one Realm present
+                            failDetected(EFailLevel::REALM_FAIL, orderNum);
+                        } else {
+                            failDetected(EFailLevel::MULTIPLE_REALM_OCCUPATION, orderNum);
                         }
                     }
                 }

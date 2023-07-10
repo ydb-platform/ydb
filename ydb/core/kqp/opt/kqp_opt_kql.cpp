@@ -6,6 +6,8 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -95,6 +97,10 @@ bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusi
     }
 
     if (kqpCtx->IsDataQuery() && kqpCtx->Config->EnablePredicateExtractForDataQuery) {
+        return true;
+    }
+
+    if (kqpCtx->IsGenericQuery()) {
         return true;
     }
 
@@ -208,25 +214,69 @@ TExprNode::TPtr GetPgNotNullColumns(
     return pgNotNullColumns.Done().Ptr();
 }
 
+TExprBase BuildKqlSequencer(TExprBase& input, const TKikimrTableDescription& table,
+    const TCoAtomList& outputCols, const TCoAtomList& autoIncrement,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    return Build<TKqlSequencer>(ctx, pos)
+        .Input(input.Ptr())
+        .Table(BuildTableMeta(table, pos, ctx))
+        .Columns(outputCols.Ptr())
+        .AutoIncrementColumns(autoIncrement.Ptr())
+        .InputItemType(ExpandType(pos, *input.Ref().GetTypeAnn(), ctx))
+        .Done();
+}
+
+TCoAtomList BuildUpsertInputColumns(const TCoAtomList& inputColumns,
+    const TCoAtomList& autoincrement, TPositionHandle pos, TExprContext& ctx)
+{
+    TVector<TExprNode::TPtr> result;
+    result.reserve(inputColumns.Ref().ChildrenSize() + autoincrement.Ref().ChildrenSize());
+    for(const auto& item: inputColumns) {
+        result.push_back(item.Ptr());
+    }
+    
+    for(const auto& item: autoincrement) {
+        result.push_back(item.Ptr());
+    }
+
+    return Build<TCoAtomList>(ctx, pos)
+        .Add(result)
+        .Done();
+}
 
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
+    const TCoAtomList& autoincrement,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
+    auto input = write.Input();
+
+    TCoAtomList inputCols = BuildUpsertInputColumns(inputColumns, autoincrement, write.Pos(), ctx);
+
+    if (autoincrement.Ref().ChildrenSize() > 0) {
+        input = BuildKqlSequencer(input, tableData, inputCols, autoincrement, write.Pos(), ctx);
+    }
+
+    auto baseInput = Build<TKqpWriteConstraint>(ctx, write.Pos())
+        .Input(input)
+        .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
+        .Done();
+
     auto effect = Build<TKqlUpsertRows>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
-        .Input<TKqpWriteConstraint>()
-            .Input(write.Input())
-            .Columns(GetPgNotNullColumns(tableData, write.Pos(), ctx))
-        .Build()
-        .Columns(inputColumns)
+        .Input(baseInput.Ptr())
+        .Columns(inputCols.Ptr())
         .Done();
 
     return effect;
 }
 
 TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomList& inputColumns,
+    const TCoAtomList& autoincrement,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
+    // todo: support later.
+    Y_UNUSED(autoincrement);
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(tableData, write.Pos(), ctx))
         .Input<TKqpWriteConstraint>()
@@ -661,12 +711,13 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
 }
 
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,
+    const TCoAtomList& autoincrement,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     auto op = GetTableOp(write);
     switch (op) {
         case TYdbOperation::Upsert:
-            return BuildUpsertTable(write, inputColumns, tableData, ctx);
+            return BuildUpsertTable(write, inputColumns, autoincrement, tableData, ctx);
         case TYdbOperation::Replace:
             return BuildReplaceTable(write, inputColumns, tableData, ctx);
         case TYdbOperation::InsertAbort:
@@ -684,12 +735,13 @@ TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputC
 }
 
 TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomList& inputColumns,
+    const TCoAtomList& autoincrement,
     const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     auto op = GetTableOp(write);
     switch (op) {
         case TYdbOperation::Upsert:
-            return BuildUpsertTableWithIndex(write, inputColumns, tableData, ctx);
+            return BuildUpsertTableWithIndex(write, inputColumns, autoincrement, tableData, ctx);
         case TYdbOperation::Replace:
             return BuildReplaceTableWithIndex(write, inputColumns, tableData, ctx);
         case TYdbOperation::InsertAbort:
@@ -713,10 +765,14 @@ TExprBase HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, const 
     YQL_ENSURE(inputColumnsSetting);
     auto inputColumns = TCoNameValueTuple(inputColumnsSetting).Value().Cast<TCoAtomList>();
 
+    auto autoincrementColumnsSetting = GetSetting(write.Settings().Ref(), "autoincrement_columns");
+    YQL_ENSURE(autoincrementColumnsSetting);
+    auto autoincrementColumns = TCoNameValueTuple(autoincrementColumnsSetting).Value().Cast<TCoAtomList>();
+
     if (HasIndexesToWrite(tableData)) {
-        return WriteTableWithIndexUpdate(write, inputColumns, tableData, ctx);
+        return WriteTableWithIndexUpdate(write, inputColumns, autoincrementColumns, tableData, ctx);
     } else {
-        return WriteTableSimple(write, inputColumns, tableData, ctx);
+        return WriteTableSimple(write, inputColumns, autoincrementColumns, tableData, ctx);
     }
 }
 

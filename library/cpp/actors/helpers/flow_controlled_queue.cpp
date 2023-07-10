@@ -153,7 +153,8 @@ class TFlowControlledRequestQueue : public IActorCallback {
         PassAway();
     }
 public:
-    TFlowControlledRequestQueue(TActorId target, ui32 activity, const TFlowControlledQueueConfig &config)
+    template <class TEnum>
+    TFlowControlledRequestQueue(TActorId target, const TEnum activity, const TFlowControlledQueueConfig &config)
         : IActorCallback(static_cast<TReceiveFunc>(&TFlowControlledRequestQueue::StateWork), activity)
         , Target(target)
         , Config(config)
@@ -206,8 +207,8 @@ void TFlowControlledRequestActor::HandleUndelivered(TEvents::TEvUndelivered::TPt
     PassAway();
 }
 
-
-IActor* CreateFlowControlledRequestQueue(TActorId targetId, ui32 activity, const TFlowControlledQueueConfig &config) {
+template <class TEnum>
+IActor* CreateFlowControlledRequestQueue(TActorId targetId, const TEnum activity, const TFlowControlledQueueConfig &config) {
     return new TFlowControlledRequestQueue(targetId, activity, config);
 }
 

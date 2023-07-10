@@ -39,17 +39,18 @@ PY3_HANDLERS = {
     "krevedko",
     "curl", "nvim", "gdb", "emacs", "grep", "jstyle", "nile", "sed", "vim",
     "py23_utils",
+    'ydb',
 }
 
 PY2_HANDLERS = {
     "ya2bin0", "ya2bin2",
 }
 
-EXPERIMENTAL_PY3_HANDLERS = {
-    'ydb', 'upload', 'download', 'paste', 'whoami',
-}
+EXPERIMENTAL_PY3_HANDLERS = set()
 
-DEVTOOLS_PY3_HANDLERS = set()
+DEVTOOLS_PY3_HANDLERS = {
+    'upload', 'download', 'paste', 'whoami',
+}
 
 
 def is_devtools():

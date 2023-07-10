@@ -125,6 +125,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/datashard
     ydb/library/aclib
+    ydb/library/services
 )
 
 GENERATE_ENUM_SERIALIZATION(services.h)

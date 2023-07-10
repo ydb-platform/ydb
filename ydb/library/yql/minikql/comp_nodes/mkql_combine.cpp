@@ -976,7 +976,7 @@ IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFac
     bool encoded;
     bool useIHash;
     GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
-    Y_VERIFY(!encoded, "TODO");
+    Y_ENSURE(!encoded, "TODO");
     const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui64>();
     const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
 

@@ -46,10 +46,10 @@ protected:
             }
         }
         const TIntervalVec<i32> interval(0, state.Id.BlobSize());
-        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here), "missing blob data State# %s", state.ToString().data());
-        TRope whole = state.Whole.Data.Read(0, state.Id.BlobSize());
+        Y_VERIFY(interval.IsSubsetOf(state.Whole.Here()), "missing blob data State# %s", state.ToString().data());
         std::array<TRope, 3> parts;
-        ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type, std::move(whole), parts);
+        ErasureSplit((TErasureType::ECrcMode)state.Id.CrcMode(), info.Type,
+            state.Whole.Data.Read(0, state.Id.BlobSize()), parts);
         state.Parts[0].Data.SetMonolith(std::move(parts[0]));
         return parts[1]; // must be the same as parts[0]
     }

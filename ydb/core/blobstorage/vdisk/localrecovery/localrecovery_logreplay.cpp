@@ -149,6 +149,7 @@ namespace NKikimr {
                 LocRecCtx->RepairedHuge->FinishRecovery(ctx);
                 VerifyOwnedChunks(ctx);
 
+                LocRecCtx->VCtx->LocalRecoveryErrorStr = "";
                 Finish(ctx, NKikimrProto::OK, {});
             }
         }

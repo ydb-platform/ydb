@@ -178,10 +178,10 @@ Y_UNIT_TEST_SUITE(UnitedExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventDeliveryTimeHistogram.TotalSamples, msgCount);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].EventProcessingCountHistogram.TotalSamples, msgCount);
         UNIT_ASSERT(stats[0].EventProcessingTimeHistogram.TotalSamples > 0);
-        UNIT_ASSERT(stats[0].ElapsedTicksByActivity[0] > 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEventsByActivity[0], msgCount);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ActorsAliveByActivity[0], 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats[0].ScheduledEventsByActivity[0], 0);
+        UNIT_ASSERT(stats[0].ElapsedTicksByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()] > 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ReceivedEventsByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], msgCount);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ActorsAliveByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats[0].ScheduledEventsByActivity[NActors::TActorTypeOperator::GetOtherActivityIndex()], 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolActorRegistrations, 1);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolDestroyedActors, 0);
         UNIT_ASSERT_VALUES_EQUAL(stats[0].PoolAllocatedMailboxes, 4095); // one line

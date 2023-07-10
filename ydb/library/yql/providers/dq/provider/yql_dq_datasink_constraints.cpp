@@ -139,6 +139,18 @@ public:
             input.Ptr()->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
+        bool leftAny = false, rightAny = false;
+        if (const auto maybeJoin = join.Maybe<TDqJoin>()) {
+            if (const auto maybeFlags = maybeJoin.Cast().Flags()) {
+                maybeFlags.Cast().Ref().ForEachChild([&](const TExprNode& flag) {
+                    if (flag.IsAtom("LeftAny"))
+                        leftAny = true;
+                    else if (flag.IsAtom("RightAny"))
+                        rightAny = true;
+                });
+            }
+        }
+
         const auto lUnique = join.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
         const auto rUnique = join.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
 
@@ -173,8 +185,8 @@ public:
             const bool leftSide = joinType.Content().starts_with("Left");
             const bool rightSide = joinType.Content().starts_with("Right");
 
-            const bool lOneRow = lUnique && lUnique->HasEqualColumns(leftJoinKeys);
-            const bool rOneRow = rUnique && rUnique->HasEqualColumns(rightJoinKeys);
+            const bool lOneRow = leftAny || lUnique && lUnique->ContainsCompleteSet(leftJoinKeys);
+            const bool rOneRow = rightAny || rUnique && rUnique->ContainsCompleteSet(rightJoinKeys);
 
             const auto makeRename = [&ctx](const TExprBase& label) -> TConstraintNode::TPathReduce {
                 if (label.Ref().IsAtom()) {

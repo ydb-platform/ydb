@@ -14,7 +14,7 @@ namespace NActors {
 
     public:
         static constexpr EActivityType ActorActivityType() {
-            return NAMESERVICE;
+            return EActivityType::NAMESERVICE;
         }
 
         TInterconnectNameserverTable(const TIntrusivePtr<TTableNameserverSetup>& setup, ui32 /*resolvePoolId*/)

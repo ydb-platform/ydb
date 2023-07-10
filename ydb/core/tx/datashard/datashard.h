@@ -865,7 +865,7 @@ struct TEvDataShard {
     struct TEvUploadRowsRequest : public TEventPBWithArena<TEvUploadRowsRequest,
                                                         NKikimrTxDataShard::TEvUploadRowsRequest,
                                                         TEvDataShard::EvUploadRowsRequest,
-                                                        16200, 32500> {
+                                                        16*1024, 32*1024> {
         TEvUploadRowsRequest() = default;
     };
 

@@ -12,11 +12,6 @@ NKikimr::NOlap::TBlobRange TFetchBlobsQueue::pop_front() {
     }
 }
 
-void TFetchBlobsQueue::emplace_front(const ui64 granuleId, const TBlobRange& range) {
-    Y_VERIFY(!StoppedFlag);
-    IteratorBlobsSequential.emplace_front(granuleId, range);
-}
-
 void TFetchBlobsQueue::emplace_back(const ui64 granuleId, const TBlobRange& range) {
     Y_VERIFY(!StoppedFlag);
     IteratorBlobsSequential.emplace_back(granuleId, range);

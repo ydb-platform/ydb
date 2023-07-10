@@ -367,16 +367,16 @@ namespace NCompShard {
                     if (viable) {
                         if (reuseActive && lastItem == item && results.Reusable.back().Slice.EndRowId() == start.BeginRowId()) {
                             // Merge adjacent pages as long as it's from the same item
-                            results.Reusable.back().Slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(end.Key));
+                            results.Reusable.back().Slice.LastKey = TSerializedCellVec(end.Key);
                             results.Reusable.back().Slice.LastRowId = end.RowId;
                             results.Reusable.back().Slice.LastInclusive = end.Inclusive;
                         } else {
                             auto& result = results.Reusable.emplace_back();
                             result.Part = item->Part;
-                            result.Slice.FirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(start.Key));
+                            result.Slice.FirstKey = TSerializedCellVec(start.Key);
                             result.Slice.FirstRowId = start.RowId;
                             result.Slice.FirstInclusive = start.Inclusive;
-                            result.Slice.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(end.Key));
+                            result.Slice.LastKey = TSerializedCellVec(end.Key);
                             result.Slice.LastRowId = end.RowId;
                             result.Slice.LastInclusive = end.Inclusive;
                             ++results.ExpectedSlices;
@@ -495,7 +495,7 @@ namespace NCompShard {
         if (bestLeftSize < Stats.Size && bestRightSize < Stats.Size) {
             // We found a key that splits current shard somewhat evenly and
             // the size estimate of individual subshards actually decreses
-            foundKey = TSerializedCellVec(TSerializedCellVec::Serialize(bestSplitKey));
+            foundKey = TSerializedCellVec(bestSplitKey);
             return true;
         }
 
@@ -565,7 +565,7 @@ namespace NCompShard {
             // This is the first key >= split key
             TSerializedCellVec rowKey;
             if (rowId != currentEnd) {
-                rowKey = TSerializedCellVec(TSerializedCellVec::Serialize(it.GetRawKey()));
+                rowKey = TSerializedCellVec(it.GetRawKey());
             } else if (Y_UNLIKELY(ComparePartKeys(current.LastKey.GetCells(), keyCells, *keyDefaults) < 0)) {
                 // This shouldn't normally happen, but better safe than sorry
                 // Current split key is actually out of bounds for the slice
@@ -588,7 +588,7 @@ namespace NCompShard {
                     // Seek to previous row
                     ready = it.Seek(rowId - 1);
                     Y_VERIFY(ready == EReady::Data, "Unexpected failure, precharge logic may be faulty");
-                    left.LastKey = TSerializedCellVec(TSerializedCellVec::Serialize(it.GetRawKey()));
+                    left.LastKey = TSerializedCellVec(it.GetRawKey());
                     left.LastRowId = it.GetRowId();
                     left.LastInclusive = true;
                     if ((rowId - currentBegin) == 1) {

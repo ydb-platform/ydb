@@ -1134,7 +1134,7 @@ namespace NActors {
             // Reinitialize per cpu pool stats with right MaxActivityType
             for (const TCpuAllocation& cpuAlloc : allocation.Items) {
                 TCpu& cpu = Cpus[cpuAlloc.CpuId];
-                cpu.PoolStats[cfg.PoolId] = TExecutorThreadStats(cfg.MaxActivityType);
+                cpu.PoolStats[cfg.PoolId] = TExecutorThreadStats();
             }
 
             // Setup WakeOrderCpus: left to right exclusive cpus, then left to right shared cpus.
@@ -1338,21 +1338,21 @@ namespace NActors {
             }
         }
 
-        wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+        wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
         return result;
     }
 
     TPoolId TUnitedWorkers::WaitSequence(TCpu& cpu, TWorkerContext& wctx, TTimeTracker& timeTracker) {
         TPoolId result;
         if (cpu.ActiveWait(Us2Ts(Config.SpinThresholdUs), result)) {
-            wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+            wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
             return result;
         }
         if (cpu.StartBlocking(result)) {
-            wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+            wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
             return result;
         }
-        wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
+        wctx.AddElapsedCycles(ActorSystemIndex, timeTracker.Elapsed());
         cpu.LoadLog.RegisterBusyPeriod(GetCycleCountFast());
         bool wakeup;
         do {
@@ -1374,7 +1374,7 @@ namespace NActors {
     }
 
     TUnitedExecutorPool::TUnitedExecutorPool(const TUnitedExecutorPoolConfig& cfg, TUnitedWorkers* united)
-        : TExecutorPoolBaseMailboxed(cfg.PoolId, cfg.MaxActivityType)
+        : TExecutorPoolBaseMailboxed(cfg.PoolId)
         , United(united)
         , PoolName(cfg.PoolName)
     {

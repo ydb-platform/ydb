@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package NYql.Connector.API;
+package NYql.NConnector.NApi;
 
 import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
 
@@ -11,12 +11,12 @@ option go_package = "a.yandex-team.ru/yql/providers/connector/libgo/gen";
 // of YQ and YQL services.
 service Connector {
     // ListTables returns the list of tables existing in a particular database.
-    rpc ListTables(ListTablesRequest) returns (stream ListTablesResponse);
+    rpc ListTables(TListTablesRequest) returns (stream TListTablesResponse);
     // DescribeTable returns table's schema.
-    rpc DescribeTable(DescribeTableRequest) returns (DescribeTableResponse);
+    rpc DescribeTable(TDescribeTableRequest) returns (TDescribeTableResponse);
     // ListSplits asks Connector to partition the data that are going to be read
     // into elementary parts suitable for parallel reading.
-    rpc ListSplits(ListSplitsRequest) returns (stream ListSplitsResponse);
+    rpc ListSplits(TListSplitsRequest) returns (stream TListSplitsResponse);
     // ReadSplits reads data associated with splits.
-    rpc ReadSplits(ReadSplitsRequest) returns (stream ReadSplitsResponse);
+    rpc ReadSplits(TReadSplitsRequest) returns (stream TReadSplitsResponse);
 }

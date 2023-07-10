@@ -104,7 +104,7 @@ int NewYCloudClient(int argc, char** argv) {
     settings.YdbDir = "ydb";
 
     auto commandsRoot = MakeHolder<TYCloudClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), settings);
-    commandsRoot->Opts.SetTitle("YDB client for Yandex.Cloud");
+    commandsRoot->Opts.SetTitle("YDB client");
     TClientCommand::TConfig config(argc, argv);
     return commandsRoot->Process(config);
 }

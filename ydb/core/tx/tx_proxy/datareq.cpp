@@ -13,7 +13,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
@@ -588,9 +588,9 @@ void TKeySpace::Initialize(bool ordered,
                            TConstArrayRef<NScheme::TTypeInfo> keyTypes,
                            const TTableRange &range)
 {
-    SpaceRange.From.Parse(TSerializedCellVec::Serialize(range.From));
+    SpaceRange.From = TSerializedCellVec(range.From);
     SpaceRange.FromInclusive = range.InclusiveFrom;
-    SpaceRange.To.Parse(TSerializedCellVec::Serialize(range.To));
+    SpaceRange.To = TSerializedCellVec(range.To);
     SpaceRange.ToInclusive = range.InclusiveTo;
 
     // +INF should not be included
@@ -3047,7 +3047,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
         break;
     }
 
-    buf.Parse(TSerializedCellVec::Serialize(key));
+    buf = TSerializedCellVec(key);
     return true;
 }
 

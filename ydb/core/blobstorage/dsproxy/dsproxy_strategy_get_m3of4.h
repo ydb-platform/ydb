@@ -15,7 +15,7 @@ namespace NKikimr {
             }
 
             // check if the blob is already restored and can be returned to caller
-            if (state.WholeSituation == TBlobState::ESituation::Present || Restore(state, info)) {
+            if (state.WholeSituation == TBlobState::ESituation::Present || RestoreWholeFromMirror(state)) {
                 state.WholeSituation = TBlobState::ESituation::Present;
                 Y_VERIFY(state.Whole.Data && state.Whole.Data.GetTotalSize(), "%s", state.ToString().data());
                 return EStrategyOutcome::DONE;
@@ -105,8 +105,8 @@ namespace NKikimr {
                     auto& part = disk.DiskParts[group.PartIdx];
                     Y_VERIFY(part.Requested.IsEmpty()); // ensure we haven't requested any data yet
                     const TLogoBlobID id(state.Id, group.PartIdx + 1);
-                    groupDiskRequests.AddGet(disk.OrderNumber, id, state.Whole.NotHere);
-                    part.Requested.Add(state.Whole.NotHere);
+                    groupDiskRequests.AddGet(disk.OrderNumber, id, state.Whole.NotHere());
+                    part.Requested.Add(state.Whole.NotHere());
                 }
             } else if (!numRequestedMetadata) { // no metadata was requested, but we need it to make decision -- issue queries to all disks
                 for (auto& disk : state.Disks) {
@@ -123,21 +123,6 @@ namespace NKikimr {
         }
 
     private:
-        bool Restore(TBlobState& state, const TBlobStorageGroupInfo& info) {
-            const ui32 totalParts = info.Type.TotalPartCount();
-            for (ui32 i = 0; i < totalParts; ++i) {
-                if (const ui32 partSize = info.Type.PartSize(TLogoBlobID(state.Id, i + 1))) {
-                    TBlobState::TState& part = state.Parts[i];
-                    if (const TIntervalSet<i32> pending = part.Here & state.Whole.NotHere) {
-                        state.Whole.Data.CopyFrom(part.Data, pending);
-                        state.Whole.Here |= pending;
-                        state.Whole.NotHere -= pending;
-                    }
-                }
-            }
-            return !state.Whole.NotHere;
-        }
-
         bool CouldHaveBeenWritten(TBlobState& state, const TBlobStorageGroupInfo& info) {
             TBlobStorageGroupInfo::TSubgroupVDisks data(&info.GetTopology());
             TBlobStorageGroupInfo::TSubgroupVDisks any(&info.GetTopology());

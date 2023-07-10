@@ -4,6 +4,7 @@
 #include "executor_thread.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
+#include "indexes.h"
 #include "harmonizer.h"
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
@@ -82,7 +83,7 @@ namespace NActors {
         IHarmonizer *Harmonizer;
 
         const i16 Priority = 0;
-
+        const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
         struct TSemaphore {
             i64 OldSemaphore = 0; // 34 bits
@@ -119,7 +120,7 @@ namespace NActors {
                            TDuration timePerMailbox = DEFAULT_TIME_PER_MAILBOX,
                            ui32 eventsPerMailbox = DEFAULT_EVENTS_PER_MAILBOX,
                            int realtimePriority = 0,
-                           ui32 maxActivityType = 1,
+                           ui32 maxActivityType = 0 /* deprecated */,
                            i16 minThreadCount = 0,
                            i16 maxThreadCount = 0,
                            i16 defaultThreadCount = 0,

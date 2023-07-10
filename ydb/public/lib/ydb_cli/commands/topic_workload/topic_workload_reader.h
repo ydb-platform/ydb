@@ -12,7 +12,7 @@ namespace NYdb {
     namespace NConsoleClient {
         struct TTopicWorkloadReaderParams {
             size_t TotalSec;
-            NYdb::TDriver* Driver;
+            const NYdb::TDriver& Driver;
             std::shared_ptr<TLog> Log;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
             std::shared_ptr<std::atomic_bool> ErrorFlag;
@@ -25,7 +25,7 @@ namespace NYdb {
 
         class TTopicWorkloadReader {
         public:
-            static void ReaderLoop(TTopicWorkloadReaderParams&& params);
+            static void ReaderLoop(TTopicWorkloadReaderParams& params);
         };
     }
 }

@@ -1,6 +1,6 @@
 #include "statestorage_impl.h"
 #include "tabletid.h"
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/mon.h>

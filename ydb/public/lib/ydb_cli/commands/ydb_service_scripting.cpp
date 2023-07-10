@@ -152,6 +152,14 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
     const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
     if (stats.Defined()) {
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
+
+        auto fullStats = stats->GetPlan();
+        if (fullStats) {
+            Cout << Endl << "Full statistics:" << Endl;
+
+            TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
+            queryPlanPrinter.Print(*fullStats);
+        }
     }
 }
 

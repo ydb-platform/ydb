@@ -568,19 +568,24 @@ private:
             return false;
         };
 
-        const auto filterForUnique = Strict ? [outItemType](const TConstraintNode::TPathType& path) {
-            return bool(TConstraintNode::GetSubTypeByPath(path, *outItemType));
-        } : TConstraintNode::TPathFilter(filter);
+        const auto filterForUnique = [inItemType, outItemType](const TConstraintNode::TPathType& path) {
+            const auto castResult = CastResult<Strict>(TConstraintNode::GetSubTypeByPath(path, *inItemType), TConstraintNode::GetSubTypeByPath(path, *outItemType));
+            return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+        };
+
+        const auto filterForDistinct = [inItemType, outItemType](const TConstraintNode::TPathType& path) {
+            return NUdf::ECastOptions::Complete == CastResult<Strict>(TConstraintNode::GetSubTypeByPath(path, *inItemType), TConstraintNode::GetSubTypeByPath(path, *outItemType));
+        };
 
         FilterFromHead<TPassthroughConstraintNode>(input, filter, ctx);
         FilterFromHead<TSortedConstraintNode>(input, filter, ctx);
         FilterFromHead<TChoppedConstraintNode>(input, filter, ctx);
-        FilterFromHead<TUniqueConstraintNode>(input, filter, ctx);
-        FilterFromHead<TDistinctConstraintNode>(input, filter, ctx);
+        FilterFromHead<TUniqueConstraintNode>(input, filterForUnique, ctx);
+        FilterFromHead<TDistinctConstraintNode>(input, filterForDistinct, ctx);
         FilterFromHead<TPartOfSortedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filterForUnique, ctx);
-        FilterFromHead<TPartOfDistinctConstraintNode>(input, filterForUnique, ctx);
+        FilterFromHead<TPartOfDistinctConstraintNode>(input, filterForDistinct, ctx);
         return TStatus::Ok;
     }
 
@@ -2366,7 +2371,7 @@ private:
                     input->AddConstraint(renamed);
         } else {
             if (const auto unique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>()) {
-                if (unique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref())) && core.RightDict().Ref().GetTypeAnn()->Cast<TDictExprType>()->GetPayloadType()->GetKind() != ETypeAnnotationKind::List) {
+                if (unique->ContainsCompleteSet(GetKeys(core.LeftKeysColumns().Ref())) && core.RightDict().Ref().GetTypeAnn()->Cast<TDictExprType>()->GetPayloadType()->GetKind() != ETypeAnnotationKind::List) {
                     const auto rename = GetRenames(core.LeftRenames().Ref());
                     const auto rightRename = GetRenames<true>(core.RightRenames().Ref());
                     auto commonUnique = unique->RenameFields(ctx, rename);
@@ -2425,8 +2430,8 @@ private:
         const auto lUnique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
         const auto rUnique = core.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
 
-        const bool lOneRow = lUnique && (leftAny || lUnique->HasEqualColumns(GetKeys(core.LeftKeysColumns().Ref())));
-        const bool rOneRow = rUnique && (rigthAny || rUnique->HasEqualColumns(GetKeys(core.RightKeysColumns().Ref())));
+        const bool lOneRow = lUnique && (leftAny || lUnique->ContainsCompleteSet(GetKeys(core.LeftKeysColumns().Ref())));
+        const bool rOneRow = rUnique && (rigthAny || rUnique->ContainsCompleteSet(GetKeys(core.RightKeysColumns().Ref())));
 
         const bool singleSide = joinType.Content().ends_with("Semi") || joinType.Content().ends_with("Only");
 
@@ -3072,6 +3077,9 @@ private:
     }
 
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        if (HasSetting(input->Tail(), "session"))
+            return TStatus::Ok;
+
         if (const auto size = input->Child(1)->ChildrenSize()) {
             std::vector<std::string_view> columns;
             columns.reserve(size);

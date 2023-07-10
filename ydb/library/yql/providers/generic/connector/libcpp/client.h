@@ -2,29 +2,30 @@
 
 #include <arrow/api.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/connector.grpc.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
-namespace NYql::Connector {
-    struct DescribeTableResult {
-        API::Schema Schema;
-        API::Error Error;
+namespace NYql::NConnector {
+    struct TDescribeTableResult {
+        NApi::TSchema Schema;
+        NApi::TError Error;
 
-        using TPtr = std::shared_ptr<DescribeTableResult>;
+        using TPtr = std::shared_ptr<TDescribeTableResult>;
     };
 
-    struct ListSplitsResult {
-        std::vector<API::Split> Splits;
-        API::Error Error;
+    struct TListSplitsResult {
+        std::vector<NApi::TSplit> Splits;
+        NApi::TError Error;
 
-        using TPtr = std::shared_ptr<ListSplitsResult>;
+        using TPtr = std::shared_ptr<TListSplitsResult>;
     };
 
-    struct ReadSplitsResult {
+    struct TReadSplitsResult {
         std::vector<std::shared_ptr<arrow::RecordBatch>> RecordBatches;
-        API::Error Error;
+        NApi::TError Error;
 
-        using TPtr = std::shared_ptr<ReadSplitsResult>;
+        using TPtr = std::shared_ptr<TReadSplitsResult>;
     };
 
     // IClient is an abstraction that hides some parts of GRPC interface.
@@ -33,36 +34,37 @@ namespace NYql::Connector {
     public:
         using TPtr = std::shared_ptr<IClient>;
 
-        virtual DescribeTableResult::TPtr DescribeTable(const API::DescribeTableRequest& request) = 0;
-        virtual ListSplitsResult::TPtr ListSplits(const API::ListSplitsRequest& request) = 0;
-        virtual ReadSplitsResult::TPtr ReadSplits(const API::ReadSplitsRequest& request) = 0;
+        virtual TDescribeTableResult::TPtr DescribeTable(const NApi::TDescribeTableRequest& request) = 0;
+        virtual TListSplitsResult::TPtr ListSplits(const NApi::TListSplitsRequest& request) = 0;
+        virtual TReadSplitsResult::TPtr ReadSplits(const NApi::TReadSplitsRequest& request) = 0;
         virtual ~IClient() {
         }
     };
 
     // ClientGRPC - client interacting with Connector server via network
-    class ClientGRPC: public IClient {
+    class TClientGRPC: public IClient {
     public:
-        ClientGRPC(const TString& endpoint);
-        virtual DescribeTableResult::TPtr DescribeTable(const API::DescribeTableRequest& request) override;
-        virtual ListSplitsResult::TPtr ListSplits(const API::ListSplitsRequest& request) override;
-        virtual ReadSplitsResult::TPtr ReadSplits(const API::ReadSplitsRequest& request) override;
-        ~ClientGRPC() {
+        TClientGRPC() = delete;
+        TClientGRPC(const TGenericConnectorConfig& config);
+        virtual TDescribeTableResult::TPtr DescribeTable(const NApi::TDescribeTableRequest& request) override;
+        virtual TListSplitsResult::TPtr ListSplits(const NApi::TListSplitsRequest& request) override;
+        virtual TReadSplitsResult::TPtr ReadSplits(const NApi::TReadSplitsRequest& request) override;
+        ~TClientGRPC() {
         }
 
     private:
-        std::unique_ptr<API::Connector::Stub> Stub_;
+        std::unique_ptr<NApi::Connector::Stub> Stub_;
     };
 
-    IClient::TPtr MakeClientGRPC(const TString& endpoint);
+    IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& config);
 
     // ClientMock is a stub client that returns predefined data.
-    class ClientMock: public IClient {
+    class TClientMock: public IClient {
     public:
-        virtual DescribeTableResult::TPtr DescribeTable(const API::DescribeTableRequest& request) override;
-        virtual ListSplitsResult::TPtr ListSplits(const API::ListSplitsRequest& request) override;
-        virtual ReadSplitsResult::TPtr ReadSplits(const API::ReadSplitsRequest& request) override;
-        ~ClientMock() {
+        virtual TDescribeTableResult::TPtr DescribeTable(const NApi::TDescribeTableRequest& request) override;
+        virtual TListSplitsResult::TPtr ListSplits(const NApi::TListSplitsRequest& request) override;
+        virtual TReadSplitsResult::TPtr ReadSplits(const NApi::TReadSplitsRequest& request) override;
+        ~TClientMock() {
         }
 
     private:
@@ -71,4 +73,4 @@ namespace NYql::Connector {
 
     IClient::TPtr MakeClientMock();
 
-} // namespace NYql::Connector
+} // namespace NYql::NConnector

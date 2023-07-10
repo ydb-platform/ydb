@@ -323,8 +323,8 @@ public:
 
         const TConstArrayRef<TCell> rowCells = *row;
 
-        ReadBuf.AddRow(TSerializedCellVec(TSerializedCellVec::Serialize(key)),
-                       TSerializedCellVec(TSerializedCellVec::Serialize(rowCells.Slice(0, TargetDataColumnPos))),
+        ReadBuf.AddRow(TSerializedCellVec(key),
+                       TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
                        TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)));
 
         if (!ReadBuf.IsReachLimits(Limits)) {

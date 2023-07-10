@@ -32,7 +32,7 @@
 #include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/hfunc.h>

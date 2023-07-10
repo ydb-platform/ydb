@@ -1,6 +1,7 @@
 #include "filling_context.h"
 #include "order_control/not_sorted.h"
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/tx/columnshard/resources/memory.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
@@ -8,8 +9,9 @@ namespace NKikimr::NOlap::NIndexedReader {
 TGranulesFillingContext::TGranulesFillingContext(TReadMetadata::TConstPtr readMetadata, TIndexedReadData& owner, const bool internalReading)
     : ReadMetadata(readMetadata)
     , InternalReading(internalReading)
-    , Processing(owner.GetCounters())
+    , Processing(owner.GetMemoryAccessor(), owner.GetCounters())
     , Result(owner.GetCounters())
+    , GranulesLiveContext(std::make_shared<TGranulesLiveControl>())
     , Owner(owner)
     , Counters(owner.GetCounters())
 {
@@ -52,6 +54,10 @@ NIndexedReader::TBatch* TGranulesFillingContext::GetBatchInfo(const TBatchAddres
     return Processing.GetBatchInfo(address);
 }
 
+NIndexedReader::TBatch& TGranulesFillingContext::GetBatchInfoVerified(const TBatchAddress& address) {
+    return Processing.GetBatchInfoVerified(address);
+}
+
 NKikimr::NColumnShard::TDataTasksProcessorContainer TGranulesFillingContext::GetTasksProcessor() const {
     return Owner.GetTasksProcessor();
 }
@@ -60,12 +66,13 @@ void TGranulesFillingContext::DrainNotIndexedBatches(THashMap<ui64, std::shared_
     Processing.DrainNotIndexedBatches(batches);
 }
 
-bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range) {
+bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const TBlobRange& range, const bool hasReadyResults) {
     Y_VERIFY_DEBUG(!Result.IsReady(granuleId));
-    if (InternalReading || Processing.IsInProgress(granuleId)) {
-        Processing.StartBlobProcessing(granuleId, range);
-        return true;
-    } else if (CheckBufferAvailable()) {
+    if (InternalReading || Processing.IsInProgress(granuleId)
+        || (!GranulesLiveContext->GetCount() && !hasReadyResults)
+        || GetMemoryAccessor()->GetLimiter().HasBufferOrSubscribe(GetMemoryAccessor())
+        )
+    {
         Processing.StartBlobProcessing(granuleId, range);
         return true;
     } else {
@@ -73,9 +80,10 @@ bool TGranulesFillingContext::TryStartProcessGranule(const ui64 granuleId, const
     }
 }
 
-bool TGranulesFillingContext::CheckBufferAvailable() const {
-    return Result.GetCount() + Processing.GetCount() < GranulesCountProcessingLimit ||
-        Result.GetBlobsSize() + Processing.GetBlobsSize() < ProcessingBytesLimit;
+bool TGranulesFillingContext::ForceStartProcessGranule(const ui64 granuleId, const TBlobRange& range) {
+    Y_VERIFY_DEBUG(!Result.IsReady(granuleId));
+    Processing.StartBlobProcessing(granuleId, range);
+    return true;
 }
 
 void TGranulesFillingContext::OnGranuleReady(const ui64 granuleId) {
@@ -84,12 +92,11 @@ void TGranulesFillingContext::OnGranuleReady(const ui64 granuleId) {
 
 std::vector<NKikimr::NOlap::NIndexedReader::TGranule::TPtr> TGranulesFillingContext::DetachReadyInOrder() {
     Y_VERIFY(SortingPolicy);
-    const ui32 sizeBefore = Result.GetCount();
-    auto result = SortingPolicy->DetachReadyGranules(Result);
-    if (sizeBefore == Result.GetCount()) {
-        Y_VERIFY(InternalReading || CheckBufferAvailable() || Processing.GetProcessingGranulesCount());
-    }
-    return result;
+    return SortingPolicy->DetachReadyGranules(Result);
+}
+
+const std::shared_ptr<NKikimr::NOlap::TActorBasedMemoryAccesor>& TGranulesFillingContext::GetMemoryAccessor() const {
+    return Owner.GetMemoryAccessor();
 }
 
 }

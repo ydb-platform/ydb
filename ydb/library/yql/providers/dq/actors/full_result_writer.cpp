@@ -22,6 +22,21 @@ namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;
 
+namespace {
+struct TFullResultWriterWriteRequestOOB {
+    NDqProto::TFullResultWriterWriteRequest Data;
+    TRope Payload;
+
+    NDq::TDqSerializedBatch PullSerializedBatch() {
+        NDq::TDqSerializedBatch result;
+        result.Proto = std::move(*Data.MutableData());
+        result.Payload = std::move(Payload);
+        return result;
+    }
+};
+
+}
+
 class TFullResultWriterActor : public NActors::TActor<TFullResultWriterActor> {
 public:
     static constexpr char ActorName[] = "YQL_DQ_FULL_RESULT_WRITER";
@@ -74,10 +89,15 @@ private:
     void OnWriteRequest(TEvFullResultWriterWriteRequest::TPtr& ev, const NActors::TActorContext&) {
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceID);
         auto& request = ev->Get()->Record;
-        if (request.GetFinish()) {
+        TFullResultWriterWriteRequestOOB record;
+        if (request.GetData().HasPayloadId()) {
+            record.Payload = ev->Get()->GetPayload(request.GetData().GetPayloadId());
+        }
+        record.Data = std::move(request);
+        if (record.Data.GetFinish()) {
             Finish();
         } else {
-            Continue(request);
+            Continue(std::move(record));
         }
     }
 
@@ -102,14 +122,14 @@ private:
         Send(SelfId(), MakeHolder<NActors::TEvents::TEvPoison>());
     }
 
-    void Continue(NDqProto::TFullResultWriterWriteRequest& request) {
+    void Continue(TFullResultWriterWriteRequestOOB&& request) {
         YQL_CLOG(DEBUG, ProviderDq) << "Continue -- RowCount = " << FullResultWriter->GetRowCount();
-        ui64 reqSize = request.ByteSizeLong();
-        WriteToFullResultTable(request);
+        ui64 reqSize = request.Data.ByteSizeLong() + request.Payload.size();
+        WriteToFullResultTable(std::move(request));
         BytesReceived += reqSize;
     }
 
-    void WriteToFullResultTable(NDqProto::TFullResultWriterWriteRequest& request) {
+    void WriteToFullResultTable(TFullResultWriterWriteRequestOOB&& request) {
         if (ErrorMessage) {
             YQL_CLOG(DEBUG, ProviderDq) << "Failed to write previous chunk, aborting";
             return;
@@ -117,12 +137,13 @@ private:
 
         try {
             TFailureInjector::Reach("full_result_fail_on_write", [] { throw yexception() << "full_result_fail_on_write"; });
-            ResultBuilder->WriteData(request.GetData(), [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
+            NDq::TDqSerializedBatch data = request.PullSerializedBatch();
+            ResultBuilder->WriteData(data, [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
                 writer->AddRow(value);
                 return true;
             });
             NDqProto::TFullResultWriterAck ackRecord; 
-            ackRecord.SetMessageId(request.GetMessageId());
+            ackRecord.SetMessageId(request.Data.GetMessageId());
             Send(AggregatorID, MakeHolder<TEvFullResultWriterAck>(ackRecord));
         } catch (...) {
             ErrorMessage = CurrentExceptionMessage();

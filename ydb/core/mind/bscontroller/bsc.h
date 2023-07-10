@@ -1,5 +1,6 @@
 #pragma once
-#include "defs.h"
+
+#include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
 

@@ -110,7 +110,9 @@ protected:
                     request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
                 }
             }
-            request.SetQuery(ToPgSyntax(query, ConnectionParams_));
+            // TODO(xenoxeno): check ConnectionParams_ to support different syntax
+            request.SetSyntax(Ydb::Query::SYNTAX_PG);
+            request.SetQuery(TString(query));
         }
     }
 
@@ -169,12 +171,19 @@ public:
 
     void FillMeta(const NYdb::TResultSet& resultSet, NPG::TEvPGEvents::TEvQueryResponse* response) {
         for (const NYdb::TColumn& column : resultSet.GetColumnsMeta()) {
-            // TODO: fill data sizes
-            response->DataFields.push_back({
-                .Name = column.Name,
-                .DataType = GetPgOidFromYdbType(column.Type),
-                // .DataTypeSize = column.Type.GetProto().Getpg_type().Gettyplen()
-            });
+            std::optional<NYdb::TPgType> pgType = GetPgTypeFromYdbType(column.Type);
+            if (pgType.has_value()) {
+                response->DataFields.push_back({
+                    .Name = column.Name,
+                    .DataType = pgType->Oid,
+                    .DataTypeSize = pgType->Typlen,
+                    .DataTypeModifier = pgType->Typmod,
+                });
+            } else {
+                response->DataFields.push_back({
+                    .Name = column.Name
+                });
+            }
         }
     }
 
@@ -185,7 +194,7 @@ public:
             auto& row = response->DataRows.back();
             row.resize(parser.ColumnsCount());
             for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                row[index] = ColumnValueToString(parser.ColumnParser(index));
+                row[index] = ColumnValueToRowValueField(parser.ColumnParser(index));
             }
         }
     }
@@ -373,7 +382,7 @@ public:
             auto& row = response->DataRows.back();
             row.resize(parser.ColumnsCount());
             for (size_t index = 0; index < parser.ColumnsCount(); ++index) {
-                row[index] = ColumnValueToString(parser.ColumnParser(index));
+                row[index] = ColumnValueToRowValueField(parser.ColumnParser(index));
             }
         }
     }

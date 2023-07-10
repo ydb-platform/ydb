@@ -47,6 +47,7 @@ NActors::IActor* CreatePendingFetcher(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
+    NYql::NConnector::IClient::TPtr clientConnector,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,

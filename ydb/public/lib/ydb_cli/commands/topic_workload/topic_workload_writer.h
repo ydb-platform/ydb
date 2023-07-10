@@ -13,8 +13,8 @@ namespace NYdb {
 
         struct TTopicWorkloadWriterParams {
             size_t TotalSec;
-            ui32 WarmupSec;
-            NYdb::TDriver* Driver;
+            size_t WarmupSec;
+            const NYdb::TDriver& Driver;
             std::shared_ptr<TLog> Log;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;
             std::shared_ptr<std::atomic<bool>> ErrorFlag;
@@ -32,7 +32,7 @@ namespace NYdb {
 
         class TTopicWorkloadWriterWorker {
         public:
-            static void WriterLoop(TTopicWorkloadWriterParams&& params);
+            static void WriterLoop(TTopicWorkloadWriterParams& params);
             static std::vector<TString> GenerateMessages(size_t messageSize);
         private:
             TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);

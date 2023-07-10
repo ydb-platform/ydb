@@ -107,6 +107,14 @@
         GROUPS(), \
         TYPES(TString, TDuration, bool), \
         NAMES("queryId", "latencyMs", "success")) \
+    PROBE(CreateDatabaseRequest, \
+        GROUPS(), \
+        TYPES(TString, TString, TDuration, i64, bool), \
+        NAMES("scope", "user", "latencyMs", "size", "success")) \
+    PROBE(DescribeDatabaseRequest, \
+        GROUPS(), \
+        TYPES(TString, TString, TDuration, i64, bool), \
+        NAMES("scope", "user", "latencyMs", "size", "success")) \
 
 // YQ_CONTROL_PLANE_STORAGE_PROVIDER
 

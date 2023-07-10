@@ -1,6 +1,7 @@
 #include "size_calcer.h"
 #include "switch_type.h"
 #include "arrow_helpers.h"
+#include "dictionary/conversion.h"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/system/yassert.h>
 
@@ -95,13 +96,52 @@ ui32 TRowSizeCalculator::GetRowBytesSize(const ui32 row) const {
     return result;
 }
 
+ui64 GetArrayDataRawSize(const std::shared_ptr<arrow::ArrayData>& data) {
+    if (!data) {
+        return 0;
+    }
+    ui64 result = 0;
+    for (auto&& i : data->buffers) {
+        if (i) {
+            result += i->capacity();
+        }
+    }
+    for (auto&& i : data->child_data) {
+        for (auto&& b : i->buffers) {
+            if (b) {
+                result += b->capacity();
+            }
+        }
+    }
+    if (data->dictionary) {
+        for (auto&& b : data->dictionary->buffers) {
+            if (b) {
+                result += b->capacity();
+            }
+        }
+    }
+    return result;
+}
+
+
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch) {
         return 0;
     }
     ui64 bytes = 0;
-    for (auto& column : batch->columns()) { // TODO: use column_data() instead of columns()
+    for (auto& column : batch->columns()) {
         bytes += GetArrayDataSize(column);
+    }
+    return bytes;
+}
+
+ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    if (!batch) {
+        return 0;
+    }
+    ui64 bytes = 0;
+    for (auto& column : batch->column_data()) {
+        bytes += GetArrayDataRawSize(column);
     }
     return bytes;
 }
@@ -153,6 +193,10 @@ ui64 GetArrayDataSizeImpl<arrow::Decimal128Type>(const std::shared_ptr<arrow::Ar
 
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
     auto type = column->type();
+    if (type->id() == arrow::Type::DICTIONARY) {
+        auto dictArray = static_pointer_cast<arrow::DictionaryArray>(column);
+        return GetDictionarySize(dictArray);
+    }
     ui64 bytes = 0;
     bool success = SwitchTypeWithNull(type->id(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);

@@ -28,7 +28,9 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
     struct TEvPrivate {
         enum EEv {
             EvRetrySending = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvRegularSending,
             EvRetrySubscriber,
+            EvUpdateSnapshotState,
         };
 
         struct TEvRetrySending :
@@ -39,15 +41,23 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
             }
         };
 
+        struct TEvRegularSending :
+                public TEventLocal<TEvRegularSending, EEv::EvRegularSending> {
+        };
+
         struct TEvRetrySubscriber :
                 public TEventLocal<TEvRetrySubscriber, EEv::EvRetrySubscriber> {
+        };
+
+        struct TEvUpdateSnapshotState:
+                public TEventLocal<TEvUpdateSnapshotState, EEv::EvUpdateSnapshotState> {
         };
     };
 
     struct TRetryState {
         bool IsScheduled = false;
         NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
-        TDuration CurrentDelay = TDuration::MilliSeconds(10);
+        TDuration CurrentDelay = TDuration::MilliSeconds(50);
     };
 
     struct TNodeState {
@@ -210,8 +220,19 @@ private:
     }
 
     void UpdateResourceSnapshotState() {
+        if (ResourceSnapshotRetryState.IsScheduled) {
+            return;
+        }
+        auto now = TlsActivationContext->Monotonic();
+        if (now - ResourceSnapshotRetryState.LastRetryAt < ResourceSnapshotRetryState.CurrentDelay) {
+            auto at = ResourceSnapshotRetryState.LastRetryAt + GetRetryDelay(ResourceSnapshotRetryState);
+            ResourceSnapshotRetryState.IsScheduled = true;
+            Schedule(at - now, new TEvPrivate::TEvUpdateSnapshotState);
+            return;
+        }
         TVector<NKikimrKqp::TKqpNodeResources> resources;
         resources.reserve(NodesState.size());
+
         for (const auto& [id, state] : NodesState) {
             auto currentResources = state.NodeData.GetResources();
             if (currentResources.GetNodeId()) {
@@ -223,6 +244,8 @@ private:
             ResourceSnapshotState->Snapshot =
                 std::make_shared<TVector<NKikimrKqp::TKqpNodeResources>>(std::move(resources));
         }
+
+        ResourceSnapshotRetryState.LastRetryAt = now;
     }
 
     void SendInfos(TVector<ui32> infoNodeIds, TVector<ui32> nodeIds = {}) {
@@ -238,14 +261,22 @@ private:
                 if (nodesStateIt == NodesState.end()) {
                     return;
                 }
-                SendingToNode(nodesStateIt->second, false, {}, snapshotMsg);
+                SendingToNode(nodesStateIt->second, true, {}, snapshotMsg);
             }
         } else {
             auto snapshotMsg = CreateSnapshotMessage(infoNodeIds, false);
 
+            TDuration currentLatency = TDuration::MilliSeconds(0);
+            auto nowMonotic = TlsActivationContext->Monotonic();
+
             for (auto& [id, state] : NodesState) {
-                SendingToNode(state, false, {}, snapshotMsg);
+                SendingToNode(state, true, {}, snapshotMsg);
+                if (id != SelfId().NodeId()) {
+                    currentLatency = Max(currentLatency, nowMonotic - state.LastUpdateAt);
+                }
             }
+
+            Counters->RmMaxSnapshotLatency->Set(currentLatency.MilliSeconds());
         }
     }
 
@@ -301,6 +332,8 @@ private:
         LOG_I("Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
             << ", board: " << BoardState.Path
             << ", ssGroupId: " << BoardState.StateStorageGroupId);
+
+        Schedule(TDuration::Seconds(2), new TEvPrivate::TEvRegularSending);
     }
 
 
@@ -312,6 +345,7 @@ private:
             CreateSubscriber();
             return;
         }
+
         LOG_D("Get board info from subscriber, serving tenant: " << BoardState.Tenant
                 << ", board: " << BoardState.Path
                 << ", ssGroupId: " << BoardState.StateStorageGroupId
@@ -405,6 +439,19 @@ private:
         PassAway();
     }
 
+    void Handle(TEvPrivate::TEvUpdateSnapshotState::TPtr&) {
+        ResourceSnapshotRetryState.IsScheduled = false;
+
+        UpdateResourceSnapshotState();
+    }
+
+    void Handle(TEvPrivate::TEvRegularSending::TPtr&) {
+        SendInfos({SelfId().NodeId()});
+
+        Schedule(TDuration::Seconds(2), new TEvPrivate::TEvRegularSending);
+    }
+
+
 private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
@@ -415,6 +462,8 @@ private:
             hFunc(TEvKqpResourceInfoExchanger::TEvSendResources, Handle);
             hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
             hFunc(TEvPrivate::TEvRetrySending, Handle);
+            hFunc(TEvPrivate::TEvRegularSending, Handle);
+            hFunc(TEvPrivate::TEvUpdateSnapshotState, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvents::TEvPoison, Handle);
         }
@@ -430,16 +479,15 @@ private:
     }
 
     TDuration GetRetryDelay(TRetryState& state) {
-        auto ret = state.CurrentDelay;
         auto newDelay = state.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > TDuration::Seconds(1)) {
-            newDelay = TDuration::Seconds(1);
+        if (newDelay > TDuration::Seconds(2)) {
+            newDelay = TDuration::Seconds(2);
         }
-        newDelay *= AppData()->RandomProvider->Uniform(100, 115);
+        newDelay *= AppData()->RandomProvider->Uniform(10, 200);
         newDelay /= 100;
         state.CurrentDelay = newDelay;
-        return ret;
+        return state.CurrentDelay;
     }
 
     void SendingToNode(TNodeState& state, bool retry,
@@ -506,6 +554,8 @@ private:
         std::optional<TInstant> LastPublishTime;
     };
     TBoardState BoardState;
+
+    TRetryState ResourceSnapshotRetryState;
 
     THashMap<ui32, TNodeState> NodesState;
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;

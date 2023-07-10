@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/base/events.h>
 #include <ydb/services/bg_tasks/protos/container.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/object_factory/object_factory.h>

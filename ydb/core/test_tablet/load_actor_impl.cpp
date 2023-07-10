@@ -10,6 +10,7 @@ namespace NKikimr::NTestShard {
         , Settings(settings)
         , StateServerWriteLatency(1024)
         , WriteLatency(1024)
+        , ReadLatency(1024)
     {}
 
     void TLoadActor::Bootstrap(const TActorId& parentId) {
@@ -39,7 +40,7 @@ namespace NKikimr::NTestShard {
             return;
         }
         if (StallCounter > 500) {
-            if (WritesInFlight.empty() && DeletesInFlight.empty() && TransitionInFlight.empty()) {
+            if (WritesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() && TransitionInFlight.empty()) {
                 StallCounter = 0;
             } else {
                 return;
@@ -50,7 +51,7 @@ namespace NKikimr::NTestShard {
             barrier = Settings.GetValidateAfterBytes();
         }
         if (BytesProcessed > barrier) { // time to perform validation
-            if (WritesInFlight.empty() && DeletesInFlight.empty() && TransitionInFlight.empty()) {
+            if (WritesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() && TransitionInFlight.empty()) {
                 RunValidation(false);
             }
         } else { // resume load
@@ -59,6 +60,9 @@ namespace NKikimr::NTestShard {
                 if (WritesInFlight.size() < Settings.GetMaxInFlight()) {
                     TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
                 }
+            }
+            if (ReadsInFlight.size() < 10 && IssueRead()) {
+                TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
             }
             if (BytesOfData > Settings.GetMaxDataBytes()) { // delete some data if needed
                 IssueDelete();
@@ -132,10 +136,30 @@ namespace NKikimr::NTestShard {
                 }
                 DeletesInFlight.erase(it);
             }
+            if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
+                const auto& [key, offset, size, timestamp] = it->second;
+                const auto jt = KeysBeingRead.find(key);
+                Y_VERIFY(jt != KeysBeingRead.end() && jt->second);
+                if (!--jt->second) {
+                    KeysBeingRead.erase(jt);
+                }
+                ReadsInFlight.erase(it);
+            }
         } else {
-            STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, ev->Get()->ToString()));
+            auto makeResponse = [&] {
+                NKikimrClient::TResponse copy;
+                copy.CopyFrom(record);
+                for (auto& m : *copy.MutableReadResult()) {
+                    if (m.HasValue()) {
+                        m.SetValue(TStringBuilder() << m.GetValue().size() << " bytes of data");
+                    }
+                }
+                return SingleLineProto(copy);
+            };
+            STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());
+            ProcessReadResult(record.GetCookie(), record.GetReadResult());
         }
         Action();
     }

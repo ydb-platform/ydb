@@ -7,7 +7,7 @@
 
 
 #include <library/cpp/actors/core/actor.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NActors {
 
@@ -29,10 +29,11 @@ Y_UNIT_TEST_SUITE(TActorActivity) {
 
     Y_UNIT_TEST(Basic) {
         TAutoPtr<IActor> actor = new TTestActor();
-        UNIT_ASSERT_VALUES_EQUAL(actor->GetActivityType(), static_cast<ui32>(NKikimrServices::TActivity::ASYNC_DESTROYER));
+        const ui32 activityIndex = actor->GetActivityType();
 
-        UNIT_ASSERT((TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetIndexByName("ASYNC_DESTROYER") == static_cast<ui32>(NKikimrServices::TActivity::ASYNC_DESTROYER)));
+        UNIT_ASSERT_VALUES_EQUAL(TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetIndexByName("ASYNC_DESTROYER"), activityIndex);
 
-        UNIT_ASSERT((TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(static_cast<ui32>(NKikimrServices::TActivity::ASYNC_DESTROYER)) == "ASYNC_DESTROYER"));
+        Cerr << TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(activityIndex) << Endl;
+        UNIT_ASSERT(TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(activityIndex) == "ASYNC_DESTROYER");
     }
 }

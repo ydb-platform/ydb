@@ -2,11 +2,11 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -111,21 +111,6 @@ bool FillTxControl(const Ydb::Query::TransactionControl& from, Ydb::Table::Trans
 
     to.set_commit_tx(from.commit_tx());
     return true;
-}
-
-Ydb::Table::QueryStatsCollection::Mode GetCollectStatsMode(Ydb::Query::StatsMode mode) {
-    switch (mode) {
-        case Ydb::Query::StatsMode::STATS_MODE_NONE:
-            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
-        case Ydb::Query::StatsMode::STATS_MODE_BASIC:
-            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
-        case Ydb::Query::StatsMode::STATS_MODE_FULL:
-            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
-        case Ydb::Query::StatsMode::STATS_MODE_PROFILE:
-            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
-        default:
-            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED;
-    }
 }
 
 bool ParseQueryAction(const Ydb::Query::ExecuteQueryRequest& req, NKikimrKqp::EQueryAction& queryAction,
@@ -257,9 +242,13 @@ private:
             }
         }
 
+        auto queryType = req->concurrent_result_sets()
+            ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
+            : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY;
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             queryAction,
-            NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+            queryType,
             SelfId(),
             Request_,
             "", // sessionId

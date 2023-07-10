@@ -7,6 +7,8 @@
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#include <ydb/public/lib/fq/scope.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
 
 namespace NFq {
@@ -494,6 +496,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
             newTask->set_execution_id(task.Internal.execution_id());
             newTask->set_operation_id(task.Internal.operation_id());
+            *newTask->mutable_compute_connection() = task.Internal.compute_connection();
         }
 
         return result;

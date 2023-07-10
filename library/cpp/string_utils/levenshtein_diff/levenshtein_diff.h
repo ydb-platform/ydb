@@ -95,7 +95,7 @@ namespace NLevenshtein {
             ma[0][i] = std::make_pair(ma[0][i - 1].first + insertWeigher(str2[i - 1]), EMT_INSERT);
         }
         const TWeightType maxWeight = std::numeric_limits<TWeightType>::max();
-        // Here goes basic Damerau-Levestein's algorithm
+        // Here goes basic Damerau-Levenshtein's algorithm
         for (int i = 1; i <= l1; i++) {
             for (int j = 1; j <= l2; j++) {
                 if (str1[i - 1] == str2[j - 1]) {
@@ -195,14 +195,42 @@ namespace NLevenshtein {
 
     template <class TStringType, bool Damerau = false>
     size_t DistanceImpl(const TStringType& str1, const TStringType& str2) {
-        TEditChain editChain;
-        GetEditChainGeneric<TStringType, Damerau>(str1, str2, editChain);
-        size_t result = 0;
-        for (auto edit : editChain) {
-            if (IsImportantEditMove(edit))
-                result++;
+        if (str1.size() > str2.size()) {
+            return DistanceImpl<TStringType, Damerau>(str2, str1);
         }
-        return result;
+
+        size_t size1 = str1.size();
+        size_t size2 = str2.size();
+
+        TVector<size_t> currentRow(size1 + 1);
+        TVector<size_t> previousRow(size1 + 1);
+        TVector<size_t> transpositionRow(size1 + 1);
+
+        for (size_t i = 0; i <= size1; ++i) {
+            previousRow[i] = i;
+        }
+
+        for (size_t i = 1; i <= size2; ++i) {
+            currentRow[0] = i;
+
+            for (size_t j = 1; j <= size1; ++j) {
+                size_t cost = str1[j - 1] == str2[i - 1] ? 0 : 1;
+
+                currentRow[j] = std::min(previousRow[j - 1] + cost, std::min(currentRow[j - 1], previousRow[j]) + 1);
+
+                if (Damerau && i > 1 && j > 1 && str1[j - 2] == str2[i - 1] && str1[j - 1] == str2[i - 2]) {
+                    currentRow[j] = std::min(currentRow[j], transpositionRow[j - 2] + cost);
+                }
+            }
+
+            if (Damerau) {
+                std::swap(transpositionRow, previousRow);
+            }
+
+            std::swap(previousRow, currentRow);
+        }
+
+        return previousRow[size1];
     }
 
     template <class TStringType>

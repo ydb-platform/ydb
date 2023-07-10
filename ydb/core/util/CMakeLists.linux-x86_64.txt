@@ -27,6 +27,7 @@ target_link_libraries(ydb-core-util PUBLIC
   ydb-core-base
   ydb-core-protos
   cpp-deprecated-atomic
+  ydb-library-yverify_stream
 )
 target_sources(ydb-core-util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/address_classifier.cpp
@@ -47,4 +48,5 @@ target_sources(ydb-core-util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/testactorsys.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/text.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/ulid.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/ui64id.cpp
 )

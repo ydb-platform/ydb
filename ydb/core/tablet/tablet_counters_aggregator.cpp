@@ -315,7 +315,8 @@ public:
                 TTabletTypes::DataShard, CountersByTabletType);
             auto hasSchemeshard = (bool)FindCountersByTabletType(
                 TTabletTypes::SchemeShard, CountersByTabletType);
-            YdbCounters->Initialize(Counters, hasDatashard, hasSchemeshard);
+            bool hasColumnShard = static_cast<bool>(FindCountersByTabletType(TTabletTypes::ColumnShard, CountersByTabletType));
+            YdbCounters->Initialize(Counters, hasDatashard, hasSchemeshard, hasColumnShard);
             YdbCounters->Transform();
         }
     }
@@ -758,6 +759,10 @@ private:
         TCounterPtr ScanBytes;
         TCounterPtr DatashardRowCount;
         TCounterPtr DatashardSizeBytes;
+        TCounterPtr ColumnShardScanRows_;
+        TCounterPtr ColumnShardScanBytes_;
+        TCounterPtr ColumnShardBulkUpsertRows_;
+        TCounterPtr ColumnShardBulkUpsertBytes_;
         TCounterPtr ResourcesStorageUsedBytes;
         TCounterPtr ResourcesStorageLimitBytes;
         TCounterPtr ResourcesStorageTableUsedBytes;
@@ -786,6 +791,11 @@ private:
         TCounterPtr DbUniqueRowsTotal;
         TCounterPtr DbUniqueDataBytes;
         THistogramPtr ConsumedCpuHistogram;
+
+        TCounterPtr ColumnShardScannedBytes_;
+        TCounterPtr ColumnShardScannedRows_;
+        TCounterPtr ColumnShardUpsertBlobsWritten_;
+        TCounterPtr ColumnShardUpsertBytesWritten_;
 
         TCounterPtr DiskSpaceTablesTotalBytes;
         TCounterPtr DiskSpaceTopicsTotalBytes;
@@ -826,6 +836,15 @@ private:
             DatashardSizeBytes = ydbGroup->GetNamedCounter("name",
                 "table.datashard.size_bytes", false);
 
+            ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
+                "table.columnshard.scan.rows", false);
+            ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
+                "table.columnshard.scan.bytes", false);
+            ColumnShardBulkUpsertRows_ = ydbGroup->GetNamedCounter("name",
+                "table.columnshard.bulk_upsert.rows", false);
+            ColumnShardBulkUpsertBytes_ = ydbGroup->GetNamedCounter("name",
+                "table.columnshard.bulk_upsert.bytes", false);
+
             ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.used_bytes", false);
             ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name",
@@ -856,7 +875,7 @@ private:
                 "table.datashard.used_core_percents", NMonitoring::LinearHistogram(12, 0, 10), false);
         };
 
-        void Initialize(::NMonitoring::TDynamicCounterPtr counters, bool hasDatashard, bool hasSchemeshard) {
+        void Initialize(::NMonitoring::TDynamicCounterPtr counters, bool hasDatashard, bool hasSchemeshard, bool hasColumnShard) {
             if (hasDatashard && !RowUpdates) {
                 auto datashardGroup = counters->GetSubgroup("type", "DataShard");
                 auto appGroup = datashardGroup->GetSubgroup("category", "app");
@@ -879,6 +898,16 @@ private:
                 DbUniqueRowsTotal = execGroup->GetCounter("SUM(DbUniqueRowsTotal)");
                 DbUniqueDataBytes = execGroup->GetCounter("SUM(DbUniqueDataBytes)");
                 ConsumedCpuHistogram = execGroup->FindHistogram("HIST(ConsumedCPU)");
+            }
+
+            if (hasColumnShard && !ColumnShardScannedBytes_) {
+                auto columnshardGroup = counters->GetSubgroup("type", "ColumnShard");
+                auto appGroup = columnshardGroup->GetSubgroup("category", "app");
+
+                ColumnShardScannedBytes_ = appGroup->GetCounter("ColumnShard/ScannedBytes");
+                ColumnShardScannedRows_ = appGroup->GetCounter("ColumnShard/ScannedRows");
+                ColumnShardUpsertBlobsWritten_ = appGroup->GetCounter("ColumnShard/UpsertBlobsWritten");
+                ColumnShardUpsertBytesWritten_ = appGroup->GetCounter("ColumnShard/UpsertBytesWritten");
             }
 
             if (hasSchemeshard && !DiskSpaceTablesTotalBytes) {
@@ -915,6 +944,13 @@ private:
                 if (ConsumedCpuHistogram) {
                     TransferBuckets(ShardCpuUtilization, ConsumedCpuHistogram);
                 }
+            }
+
+            if (ColumnShardScannedBytes_) {
+                ColumnShardScanRows_->Set(ColumnShardScannedRows_->Val());
+                ColumnShardScanBytes_->Set(ColumnShardScannedBytes_->Val());
+                ColumnShardBulkUpsertRows_->Set(ColumnShardUpsertBlobsWritten_->Val());
+                ColumnShardBulkUpsertBytes_->Set(ColumnShardUpsertBytesWritten_->Val());
             }
 
             if (DiskSpaceTablesTotalBytes) {
@@ -1000,7 +1036,8 @@ public:
             if (YdbCounters) {
                 auto hasDatashard = (bool)GetCounters(TTabletTypes::DataShard);
                 auto hasSchemeshard = (bool)GetCounters(TTabletTypes::SchemeShard);
-                YdbCounters->Initialize(SolomonCounters, hasDatashard, hasSchemeshard);
+                auto hasColumnshard = static_cast<bool>(GetCounters(TTabletTypes::ColumnShard));
+                YdbCounters->Initialize(SolomonCounters, hasDatashard, hasSchemeshard, hasColumnshard);
                 YdbCounters->Transform();
             }
         }

@@ -758,7 +758,22 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             CHECK_EXPECTED(cmd, Uint64Marker);
             index = buf.ReadVarUI64();
         } else {
-            index = ReadNextSerializedNumber<ui64>(cmd, buf);
+            if (cmd == BeginListSymbol) {
+                cmd = buf.Read();
+                YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
+                auto name = ReadNextString(cmd, buf);
+                auto foundIndex = static_cast<TStructType*>(underlyingType)->FindMemberIndex(name);
+                YQL_ENSURE(foundIndex, "Unexpected member: " << name);
+                index = *foundIndex;
+                cmd = buf.Read();
+                if (cmd == ListItemSeparatorSymbol) {
+                    cmd = buf.Read();
+                }
+
+                CHECK_EXPECTED(cmd, EndListSymbol);
+            } else {
+                index = ReadNextSerializedNumber<ui64>(cmd, buf);
+            }
         }
 
         YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
@@ -1117,8 +1132,9 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             bool unusedIsOptional;
             auto unpackedType = UnpackOptional(keyType, unusedIsOptional);
             YQL_ENSURE(unpackedType->IsData() &&
-                static_cast<TDataType*>(unpackedType)->GetSchemeType() == NUdf::TDataType<char*>::Id,
-                "Expected String type as dictionary key type");
+                (static_cast<TDataType*>(unpackedType)->GetSchemeType() == NUdf::TDataType<char*>::Id ||
+                static_cast<TDataType*>(unpackedType)->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id),
+                "Expected String or Utf8 type as dictionary key type");
 
             auto filler = [&](TValuesDictHashMap& map) {
                 cmd = buf.Read();

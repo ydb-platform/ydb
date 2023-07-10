@@ -22,7 +22,7 @@ target_link_libraries(yql-dq-runtime PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  ydb-core-util
+  ydb-library-yverify_stream
   ydb-library-mkql_proto
   minikql-comp_nodes-llvm
   parser-pg_wrapper-interface

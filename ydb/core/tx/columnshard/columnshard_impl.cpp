@@ -818,14 +818,15 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     if (eviction.empty()) {
-        LOG_S_TRACE("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
+        if (Tiers || TablesManager.GetTtl().PathsCount()) {
+            LOG_S_DEBUG("TTL not started. No tables to activate it on (or delayed) at tablet " << TabletID());
+        }
         return {};
     }
 
-    LOG_S_DEBUG("Prepare TTL at tablet " << TabletID());
-
     for (auto&& i : eviction) {
-        LOG_S_DEBUG("Evicting path " << i.first << " with " << i.second.GetDebugString() << " at tablet " << TabletID());
+        LOG_S_DEBUG("Prepare TTL evicting path " << i.first << " with " << i.second.GetDebugString()
+            << " at tablet " << TabletID());
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
@@ -833,7 +834,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
 
     if (!indexChanges) {
-        LOG_S_DEBUG("Cannot prepare TTL at tablet " << TabletID());
+        LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());
         return {};
     }
     if (indexChanges->NeedRepeat) {
@@ -841,6 +842,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
+    LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
     BackgroundController.StartTtl();
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
@@ -859,7 +861,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
 
     auto changes = TablesManager.StartIndexCleanup(cleanupSnapshot, CompactionLimits.Get(), TLimits::MAX_TX_RECORDS);
     if (!changes) {
-        LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
+        LOG_S_INFO("Cannot prepare cleanup at tablet " << TabletID());
         return {};
     }
 
@@ -952,36 +954,28 @@ void TColumnShard::Reexport(const TActorContext& ctx) {
     for (auto& [tierName, evictSet] : tierBlobsToReexport) {
         ++exportNo;
         LOG_S_INFO("Reexport " << exportNo << " at tablet " << TabletID());
-        ctx.Send(SelfId(), new TEvPrivate::TEvExport(exportNo, tierName, evictSet));
+        ExportBlobs(ctx, std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, evictSet));
     }
 }
 
-void TColumnShard::SendExport(const TActorContext& ctx, ui64 exportNo, TString tierName, ui64 pathId,
-                            THashSet<TUnifiedBlobId>&& blobs) {
-    LOG_S_DEBUG("Init export " << exportNo << " for pathId " << pathId << " of " << blobs.size() << " blobs, tier '"
-        << tierName << "' at tablet " << TabletID());
+void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPrivate::TEvExport>&& event) {
+    Y_VERIFY(event);
+    Y_VERIFY(event->ExportNo);
+    Y_VERIFY(event->Blobs.size());
+    Y_VERIFY(event->SrcToDstBlobs.size() == event->Blobs.size());
 
-    Y_VERIFY(exportNo);
-    Y_VERIFY(pathId);
-    ctx.Send(SelfId(), new TEvPrivate::TEvExport(exportNo, tierName, pathId, std::move(blobs)));
-}
-
-void TColumnShard::ExportBlobs(const TActorContext& ctx, TEvPrivate::TEvExport::TPtr& ev) const {
-    Y_VERIFY(ev->Get()->Blobs.size());
-
-    TStringBuilder strBlobs;
-    for (auto& [blobId, _] : ev->Get()->Blobs) {
-        strBlobs << "'" << blobId.ToStringNew() << "' ";
-    }
-
-    const auto& tierName = ev->Get()->TierName;
+    const auto& tierName = event->TierName;
     if (auto s3 = GetS3ActorForTier(tierName)) {
-        LOG_S_DEBUG("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
-        auto event = std::make_unique<TEvPrivate::TEvExport>(ev, s3);
+        TStringBuilder strBlobs;
+        for (auto& [blobId, _] : event->Blobs) {
+            strBlobs << "'" << blobId.ToStringNew() << "' ";
+        }
+
+        event->SetS3Actor(s3);
+        LOG_S_NOTICE("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
         ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
     } else {
-        LOG_S_INFO("Cannot export blobs "
-            << strBlobs << "(no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
+        LOG_S_INFO("Cannot export blobs (no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
     }
 }
 

@@ -54,8 +54,9 @@ SRCS(
     type_alias.h
     ulid.cpp
     ulid.h
+    ui64id.cpp
+    ui64id.h
     wildcard.h
-    yverify_stream.h
 )
 
 PEERDIR(
@@ -72,6 +73,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     library/cpp/deprecated/atomic
+    ydb/library/yverify_stream
 )
 
 END()

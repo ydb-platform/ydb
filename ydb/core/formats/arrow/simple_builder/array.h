@@ -25,6 +25,24 @@ public:
     }
 };
 
+template <class TValue>
+class TFillerBuilderConstructor {
+public:
+    using TBuilder = typename arrow::TypeTraits<TValue>::BuilderType;
+    static TBuilder Construct() {
+        return TBuilder();
+    }
+};
+
+template <>
+class TFillerBuilderConstructor<arrow::TimestampType> {
+public:
+    using TBuilder = arrow::TypeTraits<arrow::TimestampType>::BuilderType;
+    static TBuilder Construct() {
+        return arrow::TimestampBuilder(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
+    }
+};
+
 template <class TFiller>
 class TSimpleArrayConstructor: public IArrayBuilder {
 private:
@@ -33,7 +51,7 @@ private:
     const TFiller Filler;
 protected:
     virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
-        TBuilder fBuilder = TBuilder();
+        TBuilder fBuilder = TFillerBuilderConstructor<typename TFiller::TValue>::Construct();
         Y_VERIFY(fBuilder.Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
             Y_VERIFY(fBuilder.Append(Filler.GetValue(i)).ok());

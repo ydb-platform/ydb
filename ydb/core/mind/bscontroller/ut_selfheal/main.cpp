@@ -53,8 +53,8 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
         }
 
         TString error;
-        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Initial group layout is incorrect, ErrorReason# "
-            << error);
+        UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), true, error),
+                "Initial group layout is incorrect, ErrorReason# " << error);
 
         UNIT_ASSERT_VALUES_EQUAL(active.size(), numNodes * numDisksPerNode);
 
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
                     UNIT_FAIL("non-active disk is present in group");
                 }
             }
-            UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), error), "Error on step# " << i
+            UNIT_ASSERT_C(CheckBaseConfigLayout(geom, response.GetStatus(0).GetBaseConfig(), true, error), "Error on step# " << i
                 << ", ErrorReason# " << error);
         }
     }

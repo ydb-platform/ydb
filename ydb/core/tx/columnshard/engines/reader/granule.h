@@ -10,14 +10,32 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 class TGranulesFillingContext;
+class TGranulesLiveControl {
+private:
+    TAtomicCounter GranulesCounter = 0;
+public:
+    i64 GetCount() const {
+        return GranulesCounter.Val();
+    }
+
+    void Inc() {
+        GranulesCounter.Inc();
+    }
+    void Dec() {
+        Y_VERIFY(GranulesCounter.Dec() >= 0);
+    }
+};
 
 class TGranule {
 public:
     using TPtr = std::shared_ptr<TGranule>;
 private:
     ui64 GranuleId = 0;
+    ui64 RawDataSize = 0;
+    ui64 RawDataSizeReal = 0;
 
     bool NotIndexedBatchReadyFlag = false;
+    bool InConstruction = false;
     std::shared_ptr<arrow::RecordBatch> NotIndexedBatch;
     std::shared_ptr<NArrow::TColumnFilter> NotIndexedBatchFutureFilter;
 
@@ -27,19 +45,15 @@ private:
     std::deque<TBatch> Batches;
     std::set<ui32> WaitBatches;
     std::set<ui32> GranuleBatchNumbers;
+    std::shared_ptr<TGranulesLiveControl> LiveController;
     TGranulesFillingContext* Owner = nullptr;
     THashSet<const void*> BatchesToDedup;
-    ui64 BlobsDataSize = 0;
+
+    TScanMemoryLimiter::TGuard GranuleDataSize;
     void CheckReady();
 public:
-    TGranule(const ui64 granuleId, TGranulesFillingContext& owner)
-        : GranuleId(granuleId)
-        , Owner(&owner) {
-    }
-
-    ui64 GetBlobsDataSize() const noexcept {
-        return BlobsDataSize;
-    }
+    TGranule(const ui64 granuleId, TGranulesFillingContext& owner);
+    ~TGranule();
 
     ui64 GetGranuleId() const noexcept {
         return GranuleId;
@@ -88,6 +102,10 @@ public:
         return *Owner;
     }
 
+    TGranulesFillingContext& GetOwner() {
+        return *Owner;
+    }
+
     class TBatchForMerge {
     private:
         TBatch* Batch = nullptr;
@@ -127,6 +145,7 @@ public:
     std::deque<TBatchForMerge> SortBatchesByPK(const bool reverse, TReadMetadata::TConstPtr readMetadata);
 
     const std::set<ui32>& GetEarlyFilterColumns() const;
+    void StartConstruction();
     void OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch);
     void OnBlobReady(const TBlobRange& range) noexcept;
     bool OnFilterReady(TBatch& batchInfo);

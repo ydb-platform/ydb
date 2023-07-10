@@ -101,6 +101,13 @@ namespace NKikimr::NFlatTxCoordinator {
     }
 
     void TTxCoordinator::NotifyUpdatedLastStep() {
+        while (!PendingSiblingSteps.empty()) {
+            auto it = PendingSiblingSteps.begin();
+            if (VolatileState.LastPlanned < *it) {
+                break;
+            }
+            PendingSiblingSteps.erase(it);
+        }
         for (const auto& pr : LastStepSubscribers) {
             NotifyUpdatedLastStep(pr.first, pr.second);
         }
@@ -112,6 +119,87 @@ namespace NKikimr::NFlatTxCoordinator {
             actorId,
             new TEvTxProxy::TEvUpdatedLastStep(TabletID(), subscriber.SeqNo, VolatileState.LastPlanned),
             0, subscriber.Cookie);
+    }
+
+    void TTxCoordinator::SubscribeToSiblings() {
+        // We subscribe the first time we see non-empty coordinators list
+        if (!Siblings.empty() || Config.Coordinators.empty()) {
+            return;
+        }
+
+        for (ui64 coordinatorId : Config.Coordinators) {
+            if (coordinatorId == TabletID()) {
+                // We never subscribe to ourselves
+                continue;
+            }
+
+            auto& state = Siblings[coordinatorId];
+            state.CoordinatorId = coordinatorId;
+            SubscribeToSibling(state);
+        }
+    }
+
+    void TTxCoordinator::SubscribeToSibling(TSiblingState& state) {
+        if (!state.Subscribed) {
+            auto pipeCache = MakePipePeNodeCacheID(false);
+            Send(pipeCache, new TEvPipeCache::TEvForward(
+                    new TEvTxProxy::TEvSubscribeLastStep(state.CoordinatorId, ++state.SeqNo),
+                    state.CoordinatorId,
+                    true));
+            state.Subscribed = true;
+        }
+    }
+
+    void TTxCoordinator::UnsubscribeFromSiblings() {
+        for (auto& pr : Siblings) {
+            if (pr.second.Subscribed) {
+                auto pipeCache = MakePipePeNodeCacheID(false);
+                Send(pipeCache, new TEvPipeCache::TEvForward(
+                        new TEvTxProxy::TEvUnsubscribeLastStep(pr.first, pr.second.SeqNo),
+                        pr.first,
+                        false));
+                Send(pipeCache, new TEvPipeCache::TEvUnlink(pr.first));
+                pr.second.Subscribed = false;
+            }
+        }
+    }
+
+    void TTxCoordinator::Handle(TEvTxProxy::TEvUpdatedLastStep::TPtr& ev) {
+        auto* msg = ev->Get();
+        ui64 coordinatorId = msg->Record.GetCoordinatorID();
+        ui64 seqNo = msg->Record.GetSeqNo();
+        if (auto* state = Siblings.FindPtr(coordinatorId); state && state->Subscribed && state->SeqNo == seqNo) {
+            // Receiving TEvUpdateLastStep confirmed this sibling supports
+            // subscriptions and will notify us on new steps, this is later
+            // used to decide if we may relax plan step ticking.
+            if (!state->Confirmed) {
+                ++SiblingsConfirmed;
+                state->Confirmed = true;
+            }
+        }
+
+        ui64 step = msg->Record.GetLastStep();
+        if (step > VolatileState.LastPlanned && PendingSiblingSteps.insert(step).second) {
+            SchedulePlanTickExact(step);
+        }
+    }
+
+    void TTxCoordinator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        auto* msg = ev->Get();
+        if (auto* state = Siblings.FindPtr(msg->TabletId); state && state->Subscribed) {
+            state->Subscribed = false;
+            if (state->Confirmed) {
+                bool wasAllConfirmed = SiblingsConfirmed == Siblings.size();
+                --SiblingsConfirmed;
+                state->Confirmed = false;
+                if (wasAllConfirmed) {
+                    // Switching to unconfirmed mode, next nick may change
+                    SchedulePlanTick();
+                }
+            }
+            // TODO: add retry delay
+            SubscribeToSibling(*state);
+        }
     }
 
 } // namespace NKikimr::NFlatTxCoordinator

@@ -3,7 +3,7 @@
 #include "dq_channel_storage.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_transport.pb.h>
+#include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
@@ -51,7 +51,7 @@ public:
     // <| consumer methods
     // can throw TDqChannelStorageException
     [[nodiscard]]
-    virtual bool Pop(NDqProto::TData& data) = 0;
+    virtual bool Pop(TDqSerializedBatch& data) = 0;
     // Pop watermark.
     [[nodiscard]]
     virtual bool Pop(NDqProto::TWatermark& watermark) = 0;
@@ -64,7 +64,7 @@ public:
     //       Data-query implementation should be one-shot for Pop (a-la PopAll) call and without ChannelStorage.
     // can throw TDqChannelStorageException
     [[nodiscard]]
-    virtual bool PopAll(NDqProto::TData& data) = 0;
+    virtual bool PopAll(TDqSerializedBatch& data) = 0;
     // |>
 
     virtual ui64 Drop() = 0;

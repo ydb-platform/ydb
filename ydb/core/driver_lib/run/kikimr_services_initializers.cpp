@@ -1,3 +1,4 @@
+#include "auto_config_initializer.h"
 #include "config.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
@@ -98,7 +99,7 @@
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/pq_l2_service.h>
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 
 #include <ydb/core/public_http/http_service.h>
@@ -158,6 +159,7 @@
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
@@ -263,7 +265,6 @@ void AddExecutorPool(
     const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
     const NKikimrConfig::TActorSystemConfig& systemConfig,
     ui32 poolId,
-    ui32 maxActivityType,
     ui32& unitedThreads,
     const NKikimr::TAppData* appData)
 {
@@ -285,7 +286,6 @@ void AddExecutorPool(
         basic.SpinThreshold = poolConfig.GetSpinThreshold();
         basic.Affinity = ParseAffinity(poolConfig.GetAffinity());
         basic.RealtimePriority = poolConfig.GetRealtimePriority();
-        basic.MaxActivityType = maxActivityType;
         if (poolConfig.HasTimePerMailboxMicroSecs()) {
             basic.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
         } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
@@ -310,7 +310,6 @@ void AddExecutorPool(
         io.PoolName = poolConfig.GetName();
         io.Threads = poolConfig.GetThreads();
         io.Affinity = ParseAffinity(poolConfig.GetAffinity());
-        io.MaxActivityType = maxActivityType;
         cpuManager.IO.emplace_back(std::move(io));
         break;
     }
@@ -321,7 +320,6 @@ void AddExecutorPool(
         united.Concurrency = poolConfig.GetConcurrency();
         united.Weight = (NActors::TPoolWeight)poolConfig.GetWeight();
         united.Allowed = ParseAffinity(poolConfig.GetAffinity());
-        united.MaxActivityType = maxActivityType;
         if (poolConfig.HasTimePerMailboxMicroSecs()) {
             united.TimePerMailbox = TDuration::MicroSeconds(poolConfig.GetTimePerMailboxMicroSecs());
         } else if (systemConfig.HasTimePerMailboxMicroSecs()) {
@@ -386,14 +384,14 @@ static TUnitedWorkersConfig CreateUnitedWorkersConfig(const NKikimrConfig::TActo
     return result;
 }
 
-static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config, ui32 maxActivityType,
+static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config,
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
     ui32 unitedThreads = 0;
     cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
     for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
-        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, maxActivityType, unitedThreads, appData);
+        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, unitedThreads, appData);
     }
     cpuManager.UnitedWorkers = CreateUnitedWorkersConfig(config.GetUnitedWorkers(), unitedThreads);
     return cpuManager;
@@ -583,289 +581,13 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     return result;
 }
 
-namespace {
-
-    enum class EPoolKind : i8 {
-        System = 0,
-        User = 1,
-        Batch = 2,
-        IO = 3,
-        IC = 4,
-    };
-
-    struct TShortPoolCfg {
-        i16 ThreadCount;
-        i16 MaxThreadCount;
-    };
-
-    constexpr i16 MaxPreparedCpuCount = 31;
-    constexpr i16 GRpcWorkerCountInMaxPreparedCpuCase = 4;
-    constexpr i16 GrpcProxyCountInMaxPreparedCpuCase = 4;
-    constexpr i16 CpuCountForEachGRpcWorker = MaxPreparedCpuCount / GRpcWorkerCountInMaxPreparedCpuCase;
-    constexpr i16 CpuCountForEachGRpcProxy = MaxPreparedCpuCount / GrpcProxyCountInMaxPreparedCpuCase;
-    constexpr i16 GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase = 1000;
-    constexpr i16 GRpcHandlersPerCompletionQueuePerCpu = GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase / MaxPreparedCpuCount;
-
-    TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][5] {
-        {  {0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
-        {  {1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 1},  {0, 2},   {0, 1}, {0, 0}, {1, 1} },     // 2
-        {  {1, 2},  {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 2},  {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 2} },     // 6
-        {  {2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3} },     // 7
-        {  {2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 3} },     // 8
-        {  {2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 3} },     // 9
-        {  {2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 3} },     // 10
-        {  {2, 6},  {6, 11},  {2, 3}, {0, 0}, {2, 4} },     // 11
-        {  {2, 6},  {7, 12},  {2, 3}, {0, 0}, {2, 5} },     // 12
-        {  {3, 7},  {7, 13},  {2, 3}, {0, 0}, {2, 5} },     // 13
-        {  {3, 7},  {7, 14},  {2, 3}, {0, 0}, {3, 6} },     // 14
-        {  {3, 8},  {8, 15},  {2, 4}, {0, 0}, {3, 6} },     // 15
-        {  {3, 8},  {9, 16},  {2, 4}, {0, 0}, {3, 6} },     // 16
-        {  {3, 9},  {10, 17}, {2, 4}, {0, 0}, {3, 7} },     // 17
-        {  {3, 9},  {10, 18}, {3, 5}, {0, 0}, {3, 7} },     // 18
-        {  {4, 10}, {10, 19}, {3, 5}, {0, 0}, {4, 8} },     // 19
-        {  {4, 10}, {10, 20}, {3, 5}, {0, 0}, {4, 8} },     // 20
-        {  {4, 11}, {11, 21}, {3, 5}, {0, 0}, {4, 8} },     // 21
-        {  {4, 11}, {12, 22}, {3, 5}, {0, 0}, {4, 9} },     // 22
-        {  {4, 12}, {13, 23}, {3, 6}, {0, 0}, {4, 9} },     // 23
-        {  {4, 12}, {13, 24}, {3, 6}, {0, 0}, {5, 10} },    // 24
-        {  {5, 13}, {13, 25}, {3, 6}, {0, 0}, {5, 10} },    // 25
-        {  {5, 13}, {13, 26}, {4, 7}, {0, 0}, {5, 10} },    // 26
-        {  {5, 14}, {14, 27}, {4, 7}, {0, 0}, {5, 11} },    // 27
-        {  {5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 11} },    // 28
-        {  {5, 15}, {15, 29}, {4, 8}, {0, 0}, {6, 12} },    // 29
-        {  {5, 15}, {16, 30}, {4, 8}, {0, 0}, {6, 12} },    // 30
-        {  {6, 18}, {16, 31}, {4, 8}, {0, 0}, {6, 12} },    // 31
-    };
-
-    TShortPoolCfg HybridCpuTable[MaxPreparedCpuCount + 1][5] {
-        {  {0, 0},   {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
-        {  {1, 1},   {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 1},   {0, 2},   {0, 1}, {0, 0}, {1, 1} },     // 2
-        {  {1, 2},   {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 2},   {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {1, 2},   {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {1, 2},   {2, 6},   {1, 1}, {0, 0}, {2, 2} },     // 6
-        {  {2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3} },     // 7
-        {  {2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 3} },     // 8
-        {  {2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4} },     // 9
-        {  {3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 4} },     // 10
-        {  {3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5} },     // 11
-        {  {3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 5} },     // 12
-        {  {4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6} },     // 13
-        {  {4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 6} },     // 14
-        {  {4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7} },     // 15
-        {  {5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 7} },     // 16
-        {  {5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8} },     // 17
-        {  {5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 8} },     // 18
-        {  {6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9} },     // 19
-        {  {6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 9} },     // 20
-        {  {6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10} },     // 21
-        {  {7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 10} },     // 22
-        {  {7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11} },     // 23
-        {  {7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 11} },    // 24
-        {  {8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12} },    // 25
-        {  {8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 12} },    // 26
-        {  {8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13} },    // 27
-        {  {9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 13} },    // 28
-        {  {9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14} },    // 29
-        {  {9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 14} },   // 30
-        {  {10, 15}, {10, 31}, {1, 6}, {0, 0}, {10, 15} },   // 31
-    };
-
-    TShortPoolCfg StorageCpuTable[MaxPreparedCpuCount + 1][5] {
-        {  {0, 0},   {0, 0},  {0, 0}, {0, 0}, {0, 0} },     // 0
-        {  {1, 1},   {0, 1},  {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 2},   {0, 2},  {0, 1}, {0, 0}, {1, 1} },     // 2
-        {  {1, 3},   {0, 3},  {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 2} },     // 6
-        {  {4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3} },     // 7
-        {  {5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 3} },     // 8
-        {  {5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4} },     // 9
-        {  {6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 4} },     // 10
-        {  {6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 4} },     // 11
-        {  {7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 5} },     // 12
-        {  {8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 5} },     // 13
-        {  {8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 6} },     // 14
-        {  {9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 6} },     // 15
-        {  {10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 6} },     // 16
-        {  {11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 7} },     // 17
-        {  {11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 7} },     // 18
-        {  {11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 8} },     // 19
-        {  {12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 8} },     // 20
-        {  {13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 8} },     // 21
-        {  {14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 9} },     // 22
-        {  {15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 9} },     // 23
-        {  {15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 10} },    // 24
-        {  {16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 10} },    // 25
-        {  {16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 10} },    // 26
-        {  {17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 11} },    // 27
-        {  {18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 11} },    // 28
-        {  {18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 12} },    // 29
-        {  {19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 12} },    // 30
-        {  {20, 31}, {1, 31}, {4, 8}, {0, 0}, {6, 12} },    // 31
-    };
-
-    i16 GetIOThreadCount(i16 cpuCount) {
-        return (cpuCount - 1) / (MaxPreparedCpuCount * 2) + 1;
-    }
-
-    TShortPoolCfg GetShortPoolChg(EPoolKind pool, i16 cpuCount, TShortPoolCfg cpuTable[][5]) {
-        i16 k = cpuCount / MaxPreparedCpuCount;
-        i16 mod = cpuCount % MaxPreparedCpuCount;
-        ui8 poolIdx = static_cast<i8>(pool);
-        if (!k) {
-            return cpuTable[cpuCount][poolIdx];
-        }
-
-        TShortPoolCfg result = cpuTable[MaxPreparedCpuCount][poolIdx];
-        result.ThreadCount *= k;
-        result.MaxThreadCount *= k;
-        TShortPoolCfg additional = cpuTable[mod][poolIdx];
-        result.ThreadCount += additional.ThreadCount;
-        result.MaxThreadCount += additional.MaxThreadCount;
-        return result;
-    }
-
-    i16 GetCpuCount() {
-        TAffinity affinity;
-        affinity.Current();
-        TCpuMask cpuMask = static_cast<TCpuMask>(affinity);
-        if (cpuMask.Size()) {
-            ui32 cpuCount = cpuMask.CpuCount();
-            return cpuCount ? cpuCount : std::thread::hardware_concurrency();
-        }
-        return std::thread::hardware_concurrency();
-    }
-}
-
 
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
     auto& systemConfig = Config.GetActorSystemConfig();
     bool hasASCfg = Config.HasActorSystemConfig();
     if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
-        auto *mutableSystemConfig = Config.MutableActorSystemConfig();
-        mutableSystemConfig->SetUseAutoConfig(true);
-        mutableSystemConfig->ClearExecutor();
-
-        i16 cpuCount = mutableSystemConfig->HasCpuCount() ? mutableSystemConfig->GetCpuCount() : GetCpuCount();
-        Y_VERIFY(cpuCount);
-        mutableSystemConfig->SetCpuCount(cpuCount);
-
-        if (!mutableSystemConfig->HasScheduler()) {
-            auto *scheduler = mutableSystemConfig->MutableScheduler();
-            scheduler->SetResolution(64);
-            scheduler->SetSpinThreshold(0);
-            scheduler->SetProgressThreshold(10'000);
-        }
-
-        ui16 poolCount = Min(5, cpuCount + 1);
-        TVector<TString> names = {"System", "User", "Batch", "IO", "IC"};
-        TVector<ui32> priorities = {30, 20, 10, 0, 40};
-        TVector<ui32> executorIds = {0, 1, 2, 3, 4};
-
-        auto *serviceExecutor = mutableSystemConfig->AddServiceExecutor();
-        serviceExecutor->SetServiceName("Interconnect");
-        switch (cpuCount) {
-        case 1:
-            mutableSystemConfig->SetUserExecutor(1);
-            mutableSystemConfig->SetSysExecutor(1);
-            mutableSystemConfig->SetBatchExecutor(1);
-            mutableSystemConfig->SetIoExecutor(2);
-            serviceExecutor->SetExecutorId(1);
-
-            poolCount = 2;
-            names = {"Common", "IO"};
-            priorities = {40, 0};
-            executorIds = {0, 0, 0, 1, 0};
-            break;
-        case 2:
-            mutableSystemConfig->SetUserExecutor(1);
-            mutableSystemConfig->SetSysExecutor(1);
-            mutableSystemConfig->SetBatchExecutor(1);
-            mutableSystemConfig->SetIoExecutor(2);
-            serviceExecutor->SetExecutorId(1);
-
-            poolCount = 2;
-            names = {"Common", "IO"};
-            priorities = {40, 0};
-            executorIds = {0, 0, 0, 1, 0};
-            break;
-        case 3:
-            mutableSystemConfig->SetUserExecutor(1);
-            mutableSystemConfig->SetSysExecutor(1);
-            mutableSystemConfig->SetBatchExecutor(2);
-            mutableSystemConfig->SetIoExecutor(3);
-            serviceExecutor->SetExecutorId(4);
-
-            poolCount = 4;
-            names = {"Common", "Batch", "IO", "IC"};
-            priorities = {30, 10, 0, 40,};
-            executorIds = {0, 0, 1, 2, 3};
-            break;
-        default:
-            mutableSystemConfig->SetUserExecutor(1);
-            mutableSystemConfig->SetSysExecutor(2);
-            mutableSystemConfig->SetBatchExecutor(3);
-            mutableSystemConfig->SetIoExecutor(4);
-            serviceExecutor->SetExecutorId(5);
-            break;
-        }
-
-        TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
-        for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
-            executors.push_back(mutableSystemConfig->AddExecutor());
-        }
-
-        auto &cpuTable = (mutableSystemConfig->GetNodeType() == NKikimrConfig::TActorSystemConfig::STORAGE ? StorageCpuTable :
-                          mutableSystemConfig->GetNodeType() == NKikimrConfig::TActorSystemConfig::COMPUTE ? ComputeCpuTable :
-                          HybridCpuTable );
-
-
-        for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
-            auto *executor = executors[poolIdx];
-            if (names[poolIdx] == "IO") {
-                executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-                executor->SetThreads(GetIOThreadCount(cpuCount));
-                executor->SetName(names[poolIdx]);
-                continue;
-            }
-            EPoolKind poolKind = EPoolKind::System;
-            if (names[poolIdx] == "User") {
-                poolKind = EPoolKind::User;
-            } else if (names[poolIdx] == "Batch") {
-                poolKind = EPoolKind::Batch;
-            } else if (names[poolIdx] == "IC") {
-                poolKind = EPoolKind::IC;
-            }
-            TShortPoolCfg cfg = GetShortPoolChg(poolKind, cpuCount, cpuTable);
-            i16 threadsCount = cfg.ThreadCount;
-            if (poolCount == 2) {
-                threadsCount = cpuCount;
-            }
-            executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
-            executor->SetThreads(threadsCount);
-            executor->SetThreads(Max(cfg.MaxThreadCount, threadsCount));
-            executor->SetPriority(priorities[poolIdx]);
-            executor->SetName(names[poolIdx]);
-
-            if (names[poolIdx] == "Common") {
-                executor->SetSpinThreshold(0);
-                executor->SetTimePerMailboxMicroSecs(100);
-            } else if (names[poolIdx] == "IC") {
-                executor->SetSpinThreshold(10);
-                executor->SetTimePerMailboxMicroSecs(100);
-                executor->SetMaxAvgPingDeviation(500);
-            } else {
-                executor->SetSpinThreshold(1);
-            }
-        }
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig());
     }
 
     Y_VERIFY(Config.HasActorSystemConfig());
@@ -875,8 +597,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
     setup->NodeId = NodeId;
-    setup->MaxActivityType = GetActivityTypeCount();
-    setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType, appData);
+    setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
 
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
@@ -1387,7 +1108,7 @@ TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConf
 void TSharedCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    auto config = MakeIntrusive<TSharedPageCacheConfig>();
+    auto config = MakeHolder<TSharedPageCacheConfig>();
 
     NKikimrSharedCache::TSharedCacheConfig cfg;
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
@@ -1410,7 +1131,7 @@ void TSharedCacheInitializer::InitializeServices(
     config->Counters = new TSharedPageCacheCounters(sausageGroup);
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(config.Get()), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(CreateSharedPageCache(std::move(config)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 
     auto *configurator = NConsole::CreateSharedCacheConfigurator();
     setup->LocalServices.emplace_back(TActorId(),
@@ -1903,19 +1624,8 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
     bool hasASCfg = Config.HasActorSystemConfig();
 
     if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
-        auto *mutableSystemConfig = Config.MutableActorSystemConfig();
-        i16 cpuCount = mutableSystemConfig->HasCpuCount() ? mutableSystemConfig->GetCpuCount() : GetCpuCount();
 
-        auto *grpcConfig = Config.MutableGRpcConfig();
-        if (!grpcConfig->HasWorkerThreads()) {
-            grpcConfig->SetWorkerThreads(Max(2, cpuCount / CpuCountForEachGRpcWorker));
-        }
-        if (!grpcConfig->HasHandlersPerCompletionQueue()) {
-            grpcConfig->SetHandlersPerCompletionQueue(GRpcHandlersPerCompletionQueuePerCpu * cpuCount);
-        }
-        if (!grpcConfig->HasGRpcProxyCount()) {
-            grpcConfig->SetGRpcProxyCount(Max(2, cpuCount / CpuCountForEachGRpcProxy));
-        }
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableGRpcConfig(), Config.GetActorSystemConfig());
     }
 
     if (!IsServiceInitialized(setup, NMsgBusProxy::CreateMsgBusProxyId())
@@ -2347,9 +2057,11 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
 TKqpServiceInitializer::TKqpServiceInitializer(
         const TKikimrRunConfig& runConfig,
-        std::shared_ptr<TModuleFactories> factories)
+        std::shared_ptr<TModuleFactories> factories,
+        IGlobalObjectStorage& globalObjects)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
+    , GlobalObjects(globalObjects)
 {}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
@@ -2380,6 +2092,10 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
             TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        // We need to keep YqlLoggerScope alive as long as something may be trying to log
+        GlobalObjects.AddGlobalObject(std::make_shared<NYql::NLog::YqlLoggerScope>(
+            new NYql::NLog::TTlsLogBackend(new TNullLogBackend())));
 
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(),
             std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources));

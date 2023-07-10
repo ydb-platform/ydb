@@ -1,6 +1,6 @@
 #include "dq_compute_actor_watermarks.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 

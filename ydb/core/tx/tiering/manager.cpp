@@ -27,6 +27,7 @@ public:
     ~TActor() {
         Owner->Stop();
     }
+
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
@@ -35,27 +36,34 @@ public:
                 break;
         }
     }
+
     void Bootstrap() {
         Become(&TThis::StateMain);
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(Owner->GetExternalDataManipulation()));
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvSubscribeExternal(SecretsFetcher));
     }
+
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshot();
         if (auto configs = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshot)) {
             ConfigsSnapshot = configs;
             if (SecretsSnapshot) {
                 Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
+            } else {
+                ALS_DEBUG(NKikimrServices::TX_TIERING) << "Waiting secrets for update at tablet " << Owner->TabletId;
             }
         } else if (auto secrets = std::dynamic_pointer_cast<NMetadata::NSecret::TSnapshot>(snapshot)) {
             SecretsSnapshot = secrets;
             if (ConfigsSnapshot) {
                 Owner->TakeConfigs(ConfigsSnapshot, SecretsSnapshot);
+            } else {
+                ALS_DEBUG(NKikimrServices::TX_TIERING) << "Waiting configs for update at tablet " << Owner->TabletId;
             }
         } else {
             Y_VERIFY(false, "unexpected behaviour");
         }
     }
+
     void Handle(NActors::TEvents::TEvPoison::TPtr& /*ev*/) {
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(Owner->GetExternalDataManipulation()));
         Send(GetExternalDataActorId(), new NMetadata::NProvider::TEvUnsubscribeExternal(SecretsFetcher));
@@ -66,6 +74,7 @@ public:
 namespace NTiers {
 
 TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Restarting tier '" << GetTierName() << "' at tablet " << TabletId;
     if (Config.IsSame(config)) {
         return *this;
     }
@@ -79,20 +88,24 @@ TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata
 
 bool TManager::Stop() {
     if (!StorageActorId) {
+        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' hasn't been started at tablet " << TabletId;
         return true;
     }
     if (TlsActivationContext) {
         TActivationContext::AsActorContext().Send(StorageActorId, new TEvents::TEvPoisonPill());
     }
     StorageActorId = {};
+    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' stopped at tablet " << TabletId;
     return true;
 }
 
 bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     if (!Config.NeedExport()) {
+        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' has no exports at tablet " << TabletId;
         return true;
     }
     if (!!StorageActorId) {
+        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' is already started at tablet " << TabletId;
         return true;
     }
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -105,6 +118,7 @@ bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
     ctx.Send(newActor, new TEvPrivate::TEvS3Settings(s3Config));
     StorageActorId = newActor;
 #endif
+    ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' started at tablet " << TabletId;
     return true;
 }
 
@@ -123,6 +137,9 @@ NArrow::TCompression ConvertCompression(const NKikimrSchemeOp::TCompressionOptio
 }
 
 void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
+    ALS_INFO(NKikimrServices::TX_TIERING) << "Take configs:"
+        << (snapshotExt ? " snapshots" : "") << (secrets ? " secrets" : "") << " at tablet " << TabletId;
+
     auto snapshotPtr = std::dynamic_pointer_cast<NTiers::TConfigsSnapshot>(snapshotExt);
     Y_VERIFY(snapshotPtr);
     Snapshot = snapshotExt;
@@ -139,11 +156,14 @@ void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt
         }
     }
     for (auto&& i : snapshot.GetTierConfigs()) {
-        if (Managers.contains(i.second.GetTierName())) {
+        auto tierName = i.second.GetTierName();
+        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Take config for tier '" << tierName << "' at tablet " << TabletId;
+        if (Managers.contains(tierName)) {
+            ALS_DEBUG(NKikimrServices::TX_TIERING) << "Ignore tier '" << tierName << "' at tablet " << TabletId;
             continue;
         }
         NTiers::TManager localManager(TabletId, TabletActorId, i.second);
-        auto& manager = Managers.emplace(i.second.GetTierName(), std::move(localManager)).first->second;
+        auto& manager = Managers.emplace(tierName, std::move(localManager)).first->second;
         manager.Start(Secrets);
     }
 

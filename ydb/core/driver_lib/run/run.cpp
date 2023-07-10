@@ -1,3 +1,4 @@
+#include "auto_config_initializer.h"
 #include "run.h"
 #include "dummy.h"
 #include "cert_auth_props.h"
@@ -45,7 +46,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/statestorage_impl.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -384,6 +385,9 @@ TKikimrRunner::~TKikimrRunner() {
     }
 }
 
+void TKikimrRunner::AddGlobalObject(std::shared_ptr<void> object) {
+    GlobalObjects.push_back(std::move(object));
+}
 
 void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool includeHostName)
 {
@@ -1013,24 +1017,18 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 {
     const auto& cfg = runConfig.AppConfig;
-    const ui32 sysPoolId = cfg.GetActorSystemConfig().HasSysExecutor() ? cfg.GetActorSystemConfig().GetSysExecutor() : 0;
-    const ui32 userPoolId = cfg.GetActorSystemConfig().HasUserExecutor() ? cfg.GetActorSystemConfig().GetUserExecutor() : 0;
-    const ui32 ioPoolId = cfg.GetActorSystemConfig().HasIoExecutor() ? cfg.GetActorSystemConfig().GetIoExecutor() : 0;
-    const ui32 batchPoolId = cfg.GetActorSystemConfig().HasBatchExecutor() ? cfg.GetActorSystemConfig().GetBatchExecutor() : 0;
-    TMap<TString, ui32> servicePools;
-    for (ui32 i = 0; i < cfg.GetActorSystemConfig().ServiceExecutorSize(); ++i) {
-        auto item = cfg.GetActorSystemConfig().GetServiceExecutor(i);
-        const TString service = item.GetServiceName();
-        const ui32 pool = item.GetExecutorId();
-        servicePools.insert(std::pair<TString, ui32>(service, pool));
-    }
+    
+    bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
+    NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
+    TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
 
-    AppData.Reset(new TAppData(sysPoolId, userPoolId, ioPoolId, batchPoolId,
+    AppData.Reset(new TAppData(pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
                                servicePools,
                                TypeRegistry.Get(),
                                FunctionRegistry.Get(),
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
+    
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
@@ -1163,7 +1161,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
 
     auto logConfig = runConfig.AppConfig.GetLogConfig();
     LogSettings.Reset(new NActors::NLog::TSettings(NActors::TActorId(runConfig.NodeId, "logger"),
-        NKikimrServices::LOGGER,
+        NActorsServices::LOGGER,
         (NActors::NLog::EPriority)logConfig.GetDefaultLevel(),
         (NActors::NLog::EPriority)logConfig.GetDefaultSamplingLevel(),
         logConfig.GetDefaultSamplingRate(),
@@ -1502,7 +1500,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 #endif
 
     if (serviceMask.EnableKqp) {
-        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories));
+        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
 
     if (serviceMask.EnableMetadataProvider) {
@@ -1599,25 +1597,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     return sil;
 }
 
-void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
-    Y_VERIFY(as != nullptr);
-    if (as->MemProfActivityBase != 0)
-        return;
-    TVector<TString> holders;
-    TVector<const char*> activityNames;
-    for (ui32 i = 0; i < NKikimrServices::TActivity::EType_ARRAYSIZE; ++i) {
-        auto current = (NKikimrServices::TActivity::EType)i;
-        const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str();
-        if (currName[0] == '\0') {
-            holders.push_back("EActivityType_" + ToString<ui32>(i));
-            currName = holders.back().c_str();
-        }
-        activityNames.push_back(currName);
-    }
-    as->MemProfActivityBase = NProfiling::MakeTags(activityNames);
-    Y_VERIFY(as->MemProfActivityBase != 0);
-}
-
 void TKikimrRunner::KikimrStart() {
 
     if (!!PollerThreads) {
@@ -1626,7 +1605,6 @@ void TKikimrRunner::KikimrStart() {
 
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
-        RegisterBaseTagForMemoryProfiling(ActorSystem.Get());
         ActorSystem->Start();
     }
 

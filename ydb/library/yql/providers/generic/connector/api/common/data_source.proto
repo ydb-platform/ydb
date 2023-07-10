@@ -1,39 +1,35 @@
 syntax = "proto3";
 
-package NYql.Connector.API;
+package NYql.NConnector.NApi;
 
 import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 
 option go_package = "a.yandex-team.ru/ydb/library/yql/providers/generic/connector/api/common";
 
-// Credentials represents various ways of user authentication in the data source instance 
-message Credentials {
-    // Basic
-    message Basic {
+// TCredentials represents various ways of user authentication in the data source instance
+message TCredentials {
+    message TBasic {
         string username = 1;
         string password = 2;
     }
 
     oneof payload {
-        Basic basic = 1;
+        TBasic basic = 1;
     }
 }
 
-// DataSourceKind enumerates the external data sources
+// EDataSourceKind enumerates the external data sources
 // supported in the federated query system
-enum DataSourceKind {
+enum EDataSourceKind {
     DATA_SOURCE_KIND_RESERVED = 0;
     CLICKHOUSE = 1;
     POSTGRESQL = 2;
 }
 
-// DataSourceInstance helps to identify the instance of a data source to route request to.
-message DataSourceInstance {
-    DataSourceKind kind = 1;
-    Endpoint endpoint = 2;
-
-    // database name as it is
+// TDataSourceInstance helps to identify the instance of a data source to route request to.
+message TDataSourceInstance {
+    EDataSourceKind kind = 1;
+    TEndpoint endpoint = 2;
     string database = 3;
-
-    Credentials credentials = 4;
+    TCredentials credentials = 4;
 }

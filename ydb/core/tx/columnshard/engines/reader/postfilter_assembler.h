@@ -2,6 +2,7 @@
 #include "common.h"
 #include "conveyor_task.h"
 
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
@@ -9,7 +10,7 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 class TBatch;
-class TAssembleBatch: public NColumnShard::IDataTasksProcessor::ITask {
+class TAssembleBatch: public NColumnShard::IDataTasksProcessor::ITask, public NColumnShard::TMonitoringObjectsCounter<TAssembleBatch, true, true> {
 private:
     using TBase = NColumnShard::IDataTasksProcessor::ITask;
     TPortionInfo::TPreparedBatchData BatchConstructor;

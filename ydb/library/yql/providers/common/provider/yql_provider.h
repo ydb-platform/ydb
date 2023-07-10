@@ -48,6 +48,7 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TableSettings;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions;
     NNodes::TMaybeNode<NNodes::TCoAtom> TableType;
+    NNodes::TMaybeNode<NNodes::TCallable> PgDelete;
 
     TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other) {}

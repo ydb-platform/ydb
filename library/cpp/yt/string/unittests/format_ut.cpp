@@ -148,6 +148,13 @@ TEST(TFormatTest, Quotes)
     EXPECT_EQ("'\\\'\"'", Format("%qv", "\'\""));
     EXPECT_EQ("\"\\x01\"", Format("%Qv", "\x1"));
     EXPECT_EQ("'\\x1b'", Format("%qv", '\x1b'));
+    EXPECT_EQ("'\\\\'", Format("%qv", '\\'));
+    EXPECT_EQ("'\\n'", Format("%qv", '\n'));
+    EXPECT_EQ("'\\t'", Format("%qv", '\t'));
+    EXPECT_EQ("'\\\''", Format("%qv", '\''));
+    EXPECT_EQ("\"'\"", Format("%Qv", '\''));
+    EXPECT_EQ("'\"'", Format("%qv", '\"'));
+    EXPECT_EQ("\"\\\"\"", Format("%Qv", '\"'));
 }
 
 TEST(TFormatTest, Nullable)
@@ -174,6 +181,19 @@ TEST(TFormatTest, Pointers)
         EXPECT_EQ("12345678abcdefab", Format("%x", ptr));
         EXPECT_EQ("12345678ABCDEFAB", Format("%X", ptr));
     }
+}
+
+TEST(TFormatTest, LazyMultiValueFormatter)
+{
+    int i = 1;
+    TString s = "hello";
+    std::vector<int> range{1, 2, 3};
+    auto lazyFormatter = MakeLazyMultiValueFormatter(
+        "int: %v, string: %v, range: %v",
+        i,
+        s,
+        MakeFormattableView(range, TDefaultFormatter{}));
+    EXPECT_EQ("int: 1, string: hello, range: [1, 2, 3]", Format("%v", lazyFormatter));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -285,6 +285,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_DML:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
                 return true;
 
@@ -401,6 +402,7 @@ public:
             case NKikimrKqp::QUERY_ACTION_EXPLAIN: {
                 auto type = QueryState->GetType();
                 if (type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY &&
+                    type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY &&
                     type != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT)
                 {
                     return ForwardRequest(ev);
@@ -675,6 +677,7 @@ public:
                     type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
                     type == NKikimrKqp::QUERY_TYPE_AST_SCAN ||
                     type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY ||
+                    type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY ||
                     type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
                 );
                 break;
@@ -886,8 +889,16 @@ public:
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
-        auto& txCtx = *QueryState->TxCtx;
+        if (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+            YQL_ENSURE(QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
+            YQL_ENSURE(tx->StagesSize() == 0);
 
+            SendToSchemeExecuter(tx);
+            ++QueryState->CurrentTx;
+            return false;
+        }
+
+        auto& txCtx = *QueryState->TxCtx;
         bool literal = tx && tx->IsLiteralTx();
 
         if (commit) {
@@ -991,6 +1002,14 @@ public:
         SendToExecuter(std::move(request));
         ++QueryState->CurrentTx;
         return false;
+    }
+
+    void SendToSchemeExecuter(const TKqpPhyTxHolder::TConstPtr& tx) {
+        auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
+        auto executerActor = CreateKqpSchemeExecuter(tx, SelfId(), Settings.Database, userToken,
+            QueryState->TxCtx->TxAlloc);
+
+        ExecuterId = RegisterWithSameMailbox(executerActor);
     }
 
     void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
@@ -1188,6 +1207,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+            case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
                 if (IsQueryAllowedToLog(text)) {

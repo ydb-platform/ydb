@@ -1,6 +1,7 @@
 #include "clusters_from_connections.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
 #include <util/generic/hash.h>
@@ -152,15 +153,14 @@ void AddClustersFromConnections(
         }
         case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
             const auto& ch = conn.content().setting().clickhouse_cluster();
-            auto* clusterCfg = gatewaysConfig.MutableClickHouse()->AddClusterMapping();
+            auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
+            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::CLICKHOUSE);
             clusterCfg->SetName(connectionName);
-            clusterCfg->SetId(ch.database_id());
-            if (ch.host())
-                clusterCfg->SetCluster(ch.host());
-            clusterCfg->SetNativeHostPort(9440);
-            clusterCfg->SetNativeSecure(true);
-            clusterCfg->SetCHToken(TStringBuilder() << "basic#" << ch.login() << "#" << ch.password());
-            clusters.emplace(connectionName, ClickHouseProviderName);
+            clusterCfg->SetDatabaseId(ch.database_id());
+            clusterCfg->mutable_credentials()->mutable_basic()->set_username(ch.login());
+            clusterCfg->mutable_credentials()->mutable_basic()->set_password(ch.password());
+            FillClusterAuth(*clusterCfg, ch.auth(), authToken, accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
             break;
         }
         case FederatedQuery::ConnectionSetting::kObjectStorage: {

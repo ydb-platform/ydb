@@ -39,6 +39,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
     class TKernelsWrapper {
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> Reg;
         std::unique_ptr<NYql::TKernelRequestBuilder> ReqBuilder;
+        NYql::TExprContext Ctx;
         public:
             TKernelsWrapper() {
                 auto reg = CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
@@ -51,64 +52,65 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                 switch (operation) {
                     case NYql::TKernelRequestBuilder::EBinaryOp::Add:
                     {
-                        NYql::TExprContext ctx;
-                        auto blockInt32Type = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int32));
-                        return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Add, blockInt32Type, blockInt32Type, blockInt32Type);
+                        auto blockInt32Type = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int32));
+                        if (scalar) {
+                            auto scalarInt32Type = Ctx.template MakeType<NYql::TScalarExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Int32));
+                            return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Add, blockInt32Type, scalarInt32Type, blockInt32Type);
+                        } else {
+                            return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Add, blockInt32Type, blockInt32Type, blockInt32Type);
+                        }
                     }
                     case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
+                    case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
                     {
-                        NYql::TExprContext ctx;
-                        auto blockStringType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
-                        auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
+                        auto blockStringType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
+                        auto blockBoolType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
                         if (scalar) {
-                            auto scalarStringType = ctx.template MakeType<NYql::TScalarExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
-                            return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, scalarStringType, blockBoolType);
+                            auto scalarStringType = Ctx.template MakeType<NYql::TScalarExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
+                            return ReqBuilder->AddBinaryOp(operation, blockStringType, scalarStringType, blockBoolType);
                         } else {
-                            return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, blockStringType, blockStringType, blockBoolType);
+                            return ReqBuilder->AddBinaryOp(operation, blockStringType, blockStringType, blockBoolType);
                         }
                     }
                     case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
                     {
-                        NYql::TExprContext ctx;
-                        auto blockStringType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
-                        auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
+                        auto blockStringType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::String));
+                        auto blockBoolType = Ctx.template MakeType<NYql::TBlockExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
                         return ReqBuilder->AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, blockStringType, blockStringType, blockBoolType);
                     }
                     default:
                         Y_FAIL("Not implemented");
-                
+
                 }
-            } 
+            }
 
             ui32 AddJsonExists(bool isBinaryType = true) {
-                NYql::TExprContext ctx;
-                auto blockOptJsonType = ctx.template MakeType<NYql::TBlockExprType>(
-                    ctx.template MakeType<NYql::TOptionalExprType>(
-                    ctx.template MakeType<NYql::TDataExprType>(isBinaryType ? NYql::EDataSlot::JsonDocument : NYql::EDataSlot::Json)));
-                auto scalarStringType = ctx.template MakeType<NYql::TScalarExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
-                auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(
-                    ctx.template MakeType<NYql::TOptionalExprType>(
-                    ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool)));
+                auto blockOptJsonType = Ctx.template MakeType<NYql::TBlockExprType>(
+                    Ctx.template MakeType<NYql::TOptionalExprType>(
+                    Ctx.template MakeType<NYql::TDataExprType>(isBinaryType ? NYql::EDataSlot::JsonDocument : NYql::EDataSlot::Json)));
+                auto scalarStringType = Ctx.template MakeType<NYql::TScalarExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
+                auto blockBoolType = Ctx.template MakeType<NYql::TBlockExprType>(
+                    Ctx.template MakeType<NYql::TOptionalExprType>(
+                    Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool)));
 
                 return ReqBuilder->JsonExists(blockOptJsonType, scalarStringType, blockBoolType);
             }
 
             ui32 AddJsonValue(bool isBinaryType = true, NYql::EDataSlot resultType = NYql::EDataSlot::Utf8) {
-                NYql::TExprContext ctx;
-                auto blockOptJsonType = ctx.template MakeType<NYql::TBlockExprType>(
-                    ctx.template MakeType<NYql::TOptionalExprType>(
-                    ctx.template MakeType<NYql::TDataExprType>(isBinaryType ? NYql::EDataSlot::JsonDocument : NYql::EDataSlot::Json)));
-                auto scalarStringType = ctx.template MakeType<NYql::TScalarExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
-                auto blockResultType = ctx.template MakeType<NYql::TBlockExprType>(
-                    ctx.template MakeType<NYql::TOptionalExprType>(
-                    ctx.template MakeType<NYql::TDataExprType>(resultType)));
+                auto blockOptJsonType = Ctx.template MakeType<NYql::TBlockExprType>(
+                    Ctx.template MakeType<NYql::TOptionalExprType>(
+                    Ctx.template MakeType<NYql::TDataExprType>(isBinaryType ? NYql::EDataSlot::JsonDocument : NYql::EDataSlot::Json)));
+                auto scalarStringType = Ctx.template MakeType<NYql::TScalarExprType>(Ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Utf8));
+                auto blockResultType = Ctx.template MakeType<NYql::TBlockExprType>(
+                    Ctx.template MakeType<NYql::TOptionalExprType>(
+                    Ctx.template MakeType<NYql::TDataExprType>(resultType)));
 
                 return ReqBuilder->JsonValue(blockOptJsonType, scalarStringType, blockResultType);
             }
 
             TString Serialize() {
                 return ReqBuilder->Serialize();
-            }            
+            }
     };
 
     TString SerializeProgram(const NKikimrSSA::TProgram& programProto) {
@@ -122,7 +124,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         Y_PROTOBUF_SUPPRESS_NODISCARD olapProgramProto.SerializeToString(&programSerialized);
         return programSerialized;
     }
-    
+
     Y_UNIT_TEST(YqlKernel) {
         TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
         TIndexColumnResolver columnResolver(indexInfo);
@@ -148,7 +150,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::Add);
         programProto.SetKernels(kernels.Serialize());
         const auto programSerialized = SerializeProgram(programProto);
-       
+
         TProgramContainer program;
         TString errors;
         UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
@@ -158,7 +160,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         updates.AddRow().Add<int32_t>(100).Add<int32_t>(0);
 
         auto batch = updates.BuildArrow();
-        UNIT_ASSERT(program.ApplyProgram(batch).ok());
+        auto res = program.ApplyProgram(batch);
+        UNIT_ASSERT_C(res.ok(), res.ToString());
 
         TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Int32)) }));
         result.AddRow().Add<int32_t>(2);
@@ -200,7 +203,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true);
             programProto.SetKernels(kernels.Serialize());
             const auto programSerialized = SerializeProgram(programProto);
-        
+
             TProgramContainer program;
             TString errors;
             UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
@@ -211,7 +214,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
             auto batch = updates.BuildArrow();
             Cerr << batch->ToString() << Endl;
-            UNIT_ASSERT(program.ApplyProgram(batch).ok());
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
 
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
             result.AddRow().Add<ui8>(1);
@@ -248,7 +252,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith);
             programProto.SetKernels(kernels.Serialize());
             const auto programSerialized = SerializeProgram(programProto);
-        
+
             TProgramContainer program;
             TString errors;
             UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
@@ -258,7 +262,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             updates.AddRow().Add<std::string>("Lorem ipsum dolor sit amet.").Add<std::string>("amet.");
 
             auto batch = updates.BuildArrow();
-            UNIT_ASSERT(program.ApplyProgram(batch).ok());
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
 
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
             result.AddRow().Add<ui8>(1);
@@ -274,12 +279,11 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StringContains);
             programProto.SetKernels(kernels.Serialize());
             const auto programSerialized = SerializeProgram(programProto);
-        
+
             TProgramContainer program;
             TString errors;
             UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-          
             TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Bytes) }, {"substring", TTypeInfo(NTypeIds::Bytes) }}));
             updates.AddRow().Add<std::string>("Lorem ipsum \xC0 dolor\f sit amet.").Add<std::string>("dolor");
             updates.AddRow().Add<std::string>("Lorem ipsum dolor sit \amet.").Add<std::string>("amet.");
@@ -333,12 +337,12 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         kernels.AddJsonExists(isBinaryType);
         programProto.SetKernels(kernels.Serialize());
         const auto programSerialized = SerializeProgram(programProto);
-       
+
         TProgramContainer program;
         TString errors;
         UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Utf8) }}));
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Json) }}));
         NJson::TJsonValue testJson;
         testJson["key"] = "value";
         updates.AddRow().Add<std::string>(testJson.GetStringRobust());
@@ -362,6 +366,104 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         auto expected = result.BuildArrow();
         UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+    }
+
+    Y_UNIT_TEST(Like) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TIndexColumnResolver columnResolver(indexInfo);
+
+        NKikimrSSA::TProgram programProto;
+        {
+            auto* command = programProto.AddCommand();
+            auto* constantProto = command->MutableAssign()->MutableConstant();
+            constantProto->SetBytes("001");
+            command->MutableAssign()->MutableColumn()->SetName("suffix");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* constantProto = command->MutableAssign()->MutableConstant();
+            constantProto->SetBytes("uid");
+            command->MutableAssign()->MutableColumn()->SetName("prefix");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(0);
+            functionProto->AddArguments()->SetName("string");
+            functionProto->AddArguments()->SetName("prefix");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_STARTS_WITH);
+            command->MutableAssign()->MutableColumn()->SetName("start_with");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+            functionProto->SetKernelIdx(1);
+            functionProto->AddArguments()->SetName("string");
+            functionProto->AddArguments()->SetName("suffix");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_STR_ENDS_WITH);
+            command->MutableAssign()->MutableColumn()->SetName("ends_with");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_SIMPLE_ARROW);
+            functionProto->AddArguments()->SetName("start_with");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_CAST_TO_BOOLEAN);
+            command->MutableAssign()->MutableColumn()->SetName("start_with_bool");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_SIMPLE_ARROW);
+            functionProto->AddArguments()->SetName("ends_with");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_CAST_TO_BOOLEAN);
+            command->MutableAssign()->MutableColumn()->SetName("ends_with_bool");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* functionProto = command->MutableAssign()->MutableFunction();
+            functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_SIMPLE_ARROW);
+            functionProto->AddArguments()->SetName("start_with_bool");
+            functionProto->AddArguments()->SetName("ends_with_bool");
+            functionProto->SetId(NKikimrSSA::TProgram::TAssignment::EFunction::TProgram_TAssignment_EFunction_FUNC_BINARY_AND);
+            command->MutableAssign()->MutableColumn()->SetName("result");
+        }
+        {
+            auto* command = programProto.AddCommand();
+            auto* prjectionProto = command->MutableProjection();
+            auto* column = prjectionProto->AddColumns();
+            column->SetName("result");
+        }
+
+        {
+            TKernelsWrapper kernels;
+            UNIT_ASSERT_VALUES_EQUAL(kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true), 0);
+            UNIT_ASSERT_VALUES_EQUAL(kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::EndsWith, true), 1);
+            programProto.SetKernels(kernels.Serialize());
+            const auto programSerialized = SerializeProgram(programProto);
+
+            TProgramContainer program;
+            TString errors;
+            UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
+
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"string", TTypeInfo(NTypeIds::Utf8) }}));
+            updates.AddRow().Add<std::string>("uid_3000001");
+            updates.AddRow().Add<std::string>("uid_3000003");
+
+            auto batch = updates.BuildArrow();
+            auto res = program.ApplyProgram(batch);
+            UNIT_ASSERT_C(res.ok(), res.ToString());
+
+            TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("result", TTypeInfo(NTypeIds::Bool)) }));
+            result.AddRow().Add<bool>(true);
+            result.AddRow().Add<bool>(false);
+
+            auto expected = result.BuildArrow();
+            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
+        }
+
     }
 
     Y_UNIT_TEST(JsonExists) {
@@ -403,12 +505,12 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         kernels.AddJsonValue(isBinaryType, resultType);
         programProto.SetKernels(kernels.Serialize());
         const auto programSerialized = SerializeProgram(programProto);
-       
+
         TProgramContainer program;
         TString errors;
         UNIT_ASSERT_C(program.Init(columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, programSerialized, errors), errors);
 
-        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Utf8) }}));
+        TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({{"json_data", TTypeInfo(isBinaryType ? NTypeIds::JsonDocument : NTypeIds::Json) }}));
         {
             NJson::TJsonValue testJson;
             testJson["key"] = "value";
@@ -454,43 +556,43 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         Cerr << "Check output for " << resultType << Endl;
         if (resultType == NYql::EDataSlot::Utf8) {
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Utf8)) }));
-        
+
             result.AddRow().Add<std::string>("value");
             result.AddRow().Add<std::string>("10");
             result.AddRow().Add<std::string>("0.1");
             result.AddRow().Add<std::string>("false");
             result.AddRow().AddNull();
             result.AddRow().AddNull();
-            
+
             auto expected = result.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
         } else if (resultType == NYql::EDataSlot::Bool) {
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint8)) }));
-        
+
             result.AddRow().AddNull();
             result.AddRow().AddNull();
             result.AddRow().AddNull();
             result.AddRow().Add<ui8>(0);
             result.AddRow().AddNull();
             result.AddRow().AddNull();
-            
+
             auto expected = result.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
         } else if (resultType == NYql::EDataSlot::Int64 || resultType == NYql::EDataSlot::Uint64) {
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Int64)) }));
-        
+
             result.AddRow().AddNull();
             result.AddRow().Add<i64>(10);
             result.AddRow().AddNull();
             result.AddRow().AddNull();
             result.AddRow().AddNull();
             result.AddRow().AddNull();
-            
+
             auto expected = result.BuildArrow();
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected->ToString());
         } else if (resultType == NYql::EDataSlot::Double || resultType == NYql::EDataSlot::Float) {
             TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Double)) }));
-        
+
             result.AddRow().AddNull();
             result.AddRow().Add<double>(10);
             result.AddRow().Add<double>(0.1);
@@ -553,7 +655,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         updates.AddRow().Add("");
 
         auto batch = updates.BuildArrow();
-        UNIT_ASSERT(program.ApplyProgram(batch).ok());
+        auto res = program.ApplyProgram(batch);
+        UNIT_ASSERT_C(res.ok(), res.ToString());
 
         TTableUpdatesBuilder result(NArrow::MakeArrowSchema( { std::make_pair("0", TTypeInfo(NTypeIds::Uint64)) }));
         result.AddRow().Add<uint64_t>(3);

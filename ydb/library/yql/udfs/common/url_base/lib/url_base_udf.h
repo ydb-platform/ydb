@@ -336,11 +336,20 @@ ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TCutWWW, CutWWWPrefix)
 
 ARROW_UDF_SINGLE_STRING_FUNCTION_FOR_URL(TCutWWW2, CutWWWNumberedPrefix)
 
-SIMPLE_UDF(TCutQueryStringAndFragment, char*(TAutoMap<char*>)) {
+BEGIN_SIMPLE_ARROW_UDF(TCutQueryStringAndFragment, char*(TAutoMap<char*>)) {
     const std::string_view input(args[0].AsStringRef());
     const auto cut = input.find_first_of("?#");
     return std::string_view::npos == cut ? NUdf::TUnboxedValue(args[0]) : valueBuilder->SubString(args[0], 0U, cut);
 }
+struct TCutQueryStringAndFragmentKernelExec : public TUnaryKernelExec<TCutQueryStringAndFragmentKernelExec> {
+    template <typename TSink>
+    static void Process(TBlockItem arg, const TSink& sink) {
+        const std::string_view input(arg.AsStringRef());
+        const auto cut = input.find_first_of("?#");
+        sink(TBlockItem(arg.AsStringRef().Substring(0U, cut)));
+    }
+};
+END_SIMPLE_ARROW_UDF(TCutQueryStringAndFragment, TCutQueryStringAndFragmentKernelExec::Do);
 
 BEGIN_SIMPLE_ARROW_UDF(TEncode, TOptional<char*>(TOptional<char*>)) {
     EMPTY_RESULT_ON_EMPTY_ARG(0);

@@ -227,6 +227,10 @@ def _optional_type_to_native(type_pb):
     return types.OptionalType(type_to_native(type_pb.optional_type.item))
 
 
+def _list_type_to_native(type_pb):
+    return types.ListType(type_to_native(type_pb.list_type.item))
+
+
 def _primitive_type_to_native(type_pb):
     return _primitive_type_by_id.get(type_pb.type_id)
 
@@ -240,6 +244,7 @@ _type_to_native_map = {
     "type_id": _primitive_type_to_native,
     "decimal_type": _decimal_type_to_native,
     "null_type": _null_type_factory,
+    "list_type": _list_type_to_native,
 }
 
 

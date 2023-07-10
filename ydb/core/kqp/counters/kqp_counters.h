@@ -332,6 +332,8 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
 
@@ -341,6 +343,8 @@ public:
 public:
     // Transactions
     THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters> TxByKind;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TxReplySizeExceededError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataShardTxReplySizeExceededError;
 
     // Compile service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheSize;
@@ -357,6 +361,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
 
     // Spilling counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
@@ -384,6 +389,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
+
+    // Sequences counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SequencerErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SequencerOk;
 
     // Physical tx duration
     NMonitoring::THistogramPtr LiteralTxTotalTimeHistogram;

@@ -315,14 +315,14 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
             dbgOut << DbgPrintTuple(key, typeRegistry)
                    << " " << stats.RowCount << " " << stats.DataSize.Size << Endl;
-            
+
             UNIT_ASSERT_C(CompareTypedCellVectors(key.Columns, prevKey.GetCells().data(), key.Types, key.ColumnCount, prevKey.GetCells().size()) > 0,
                           "Keys must be sorted");
 
             UNIT_ASSERT(prevRowCount < stats.RowCount);
-            UNIT_ASSERT(prevDataSize < stats.DataSize.Size);            
+            UNIT_ASSERT(prevDataSize < stats.DataSize.Size);
 
-            prevKey = TSerializedCellVec(TSerializedCellVec::Serialize(TConstArrayRef<TCell>(key.Columns, key.ColumnCount)));
+            prevKey = TSerializedCellVec(TConstArrayRef<TCell>(key.Columns, key.ColumnCount));
             prevRowCount = stats.RowCount;
             prevDataSize = stats.DataSize.Size;
         }

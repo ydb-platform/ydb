@@ -5,6 +5,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include "json_handlers.h"
 #include "json_tabletinfo.h"
 #include "json_vdiskinfo.h"
@@ -31,6 +32,16 @@ using namespace NMonitoring;
 #define Ctest Cnull
 #else
 #define Ctest Cerr
+#endif
+
+#ifdef address_sanitizer_enabled
+#define SANITIZER_TYPE address
+#endif
+#ifdef memory_sanitizer_enabled
+#define SANITIZER_TYPE memory
+#endif
+#ifdef thread_sanitizer_enabled
+#define SANITIZER_TYPE thread
 #endif
 
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
@@ -431,6 +442,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         Ctest << "Request timer = " << timer.Passed() << Endl;
         Ctest << "BASE_PERF = " << BASE_PERF << Endl;
-        UNIT_ASSERT_LT(timer.Passed(), 10 * BASE_PERF);
+
+#ifndef SANITIZER_TYPE
+#if !defined(NDEBUG) || defined(_hardening_enabled_) 
+        UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 30 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 30 * BASE_PERF);
+#else
+        UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 10 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 10 * BASE_PERF);
+#endif
+#endif
     }
 }

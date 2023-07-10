@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
 add_library(core-kqp-run_script_actor)
 target_compile_options(core-kqp-run_script_actor PRIVATE

@@ -133,6 +133,13 @@ namespace NKikimr::NBsController {
                             ev->GroupLayoutSanitizerEnabled = Self->GroupLayoutSanitizerEnabled;
                             Self->Send(Self->SelfHealId, ev.release());
                         }
+                        for (bool value : settings.GetAllowMultipleRealmsOccupation()) {
+                            Self->AllowMultipleRealmsOccupation = value;
+                            db.Table<T>().Key(true).Update<T::AllowMultipleRealmsOccupation>(Self->AllowMultipleRealmsOccupation);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->AllowMultipleRealmsOccupation = Self->AllowMultipleRealmsOccupation;
+                            Self->Send(Self->SelfHealId, ev.release());
+                        }
                         return true;
                     }
 

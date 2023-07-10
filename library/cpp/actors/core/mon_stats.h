@@ -2,6 +2,7 @@
 
 #include "defs.h"
 //#include "actor.h"
+#include <library/cpp/actors/util/local_process_key.h>
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
 #include <util/system/hp_timer.h>
 
@@ -109,12 +110,12 @@ namespace NActors {
         ui64 MailboxPushedOutByEventCount = 0;
         ui64 NotEnoughCpuExecutions = 0;
 
-        TExecutorThreadStats(size_t activityVecSize = 5) // must be not empty as 0 used as default
-            : ElapsedTicksByActivity(activityVecSize)
-            , ReceivedEventsByActivity(activityVecSize)
-            , ActorsAliveByActivity(activityVecSize)
-            , ScheduledEventsByActivity(activityVecSize)
-            , StuckActorsByActivity(activityVecSize)
+        TExecutorThreadStats() // must be not empty as 0 used as default
+            : ElapsedTicksByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , ReceivedEventsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , ActorsAliveByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , ScheduledEventsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , StuckActorsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
         {}
 
         template <typename T>

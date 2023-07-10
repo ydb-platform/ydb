@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
+#include <ydb/core/kqp/runtime/kqp_sequencer_factory.h>
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
@@ -60,6 +61,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCou
     RegisterKqpReadActor(*factory, counters);
     RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
     RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
+    RegisterSequencerActorFactory(*factory, counters);
     return factory;
 }
 

@@ -242,7 +242,7 @@ public:
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
                     auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
-                    NDqProto::TData outputData;
+                    NYql::NDq::TDqSerializedBatch outputData;
                     while (outputChannel->Pop(outputData)) {
                         ResponseEv->TakeResult(channelDesc.DstInputIndex, outputData);
                     }

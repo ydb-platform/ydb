@@ -7,7 +7,9 @@
 #include "serializer/abstract.h"
 #include "serializer/stream.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/services/services.pb.h>
+
 #include <util/system/yassert.h>
 #include <util/string/join.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
@@ -798,11 +800,12 @@ bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shar
 
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size) {
     arrow::Status result = arrow::Status::OK();
-    if (builder.type()->id() == arrow::Type::BINARY) {
-        arrow::BaseBinaryBuilder<arrow::BinaryType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::BinaryType>&>(builder);
-        result = bBuilder.ReserveData(size);
-    } else if (builder.type()->id() == arrow::Type::STRING) {
-        arrow::BaseBinaryBuilder<arrow::StringType>& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::StringType>&>(builder);
+    if (builder.type()->id() == arrow::Type::BINARY ||
+        builder.type()->id() == arrow::Type::STRING)
+    {
+        static_assert(std::is_convertible_v<arrow::StringBuilder&, arrow::BaseBinaryBuilder<arrow::BinaryType>&>,
+            "Expected StringBuilder to be BaseBinaryBuilder<BinaryType>");
+        auto& bBuilder = static_cast<arrow::BaseBinaryBuilder<arrow::BinaryType>&>(builder);
         result = bBuilder.ReserveData(size);
     }
 
@@ -926,6 +929,13 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui3
         ++idx;
     }
     return result;
+}
+
+std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original) {
+    if (!original) {
+        return nullptr;
+    }
+    return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
 }

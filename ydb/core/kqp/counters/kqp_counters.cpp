@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/protos/issue_id.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 
@@ -105,6 +105,8 @@ void TKqpCountersBase::Init() {
         KqpGroup->GetCounter("Request/QueryTypeAstScan", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_QUERY] =
         KqpGroup->GetCounter("Request/QueryTypeGenericQuery", true);
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY] =
+        KqpGroup->GetCounter("Request/QueryTypeGenericConcurrentQuery", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT] =
         KqpGroup->GetCounter("Request/QueryTypeGenericScript", true);
     OtherQueryTypes = KqpGroup->GetCounter("Requests/QueryTypeOther", true);
@@ -741,6 +743,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     CreateTxKindCounters(TKqpTransactionInfo::EKind::ReadOnly, "ReadOnly");
     CreateTxKindCounters(TKqpTransactionInfo::EKind::WriteOnly, "WriteOnly");
     CreateTxKindCounters(TKqpTransactionInfo::EKind::ReadWrite, "ReadWrite");
+    TxReplySizeExceededError = KqpGroup->GetCounter("Tx/TxReplySizeExceededErrorCount", true);
+    DataShardTxReplySizeExceededError = KqpGroup->GetCounter("Tx/DataShardTxReplySizeExceededErrorCount", true);
 
     /* Compile service */
     CompileQueryCacheSize = YdbGroup->GetNamedCounter("name", "table.query.compilation.cached_query_count", false);
@@ -759,6 +763,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
+    RmMaxSnapshotLatency = KqpGroup->GetCounter("RM/MaxSnapshotLatency", false);
 
     /* Spilling */
     SpillingWriteBlobs = KqpGroup->GetCounter("Spilling/WriteBlobs", true);
@@ -787,6 +792,12 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
+
+    /* sequencers */
+
+    SequencerActorsCount = KqpGroup->GetCounter("Sequencer/ActorCount", false);
+    SequencerErrors = KqpGroup->GetCounter("Sequencer/Errors", true);
+    SequencerOk = KqpGroup->GetCounter("Sequencer/Ok", true);
 
     LiteralTxTotalTimeHistogram = KqpGroup->GetHistogram(
         "PhyTx/LiteralTxTotalTimeMs", NMonitoring::ExponentialHistogram(10, 2, 1));
@@ -1185,6 +1196,14 @@ const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::RecompileReques
 
 const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetActiveSessionActors() const {
     return TKqpCountersBase::ActiveSessionActors;
+}
+
+const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetTxReplySizeExceededError() const {
+    return TxReplySizeExceededError;
+}
+
+const ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetDataShardTxReplySizeExceededError() const {
+    return DataShardTxReplySizeExceededError;
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetQueryTypeCounter(

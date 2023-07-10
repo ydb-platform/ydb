@@ -3,7 +3,7 @@
 
 #include "local_rate_limiter.h"
 
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 
 #include <ydb/public/api/protos/ydb_auth.pb.h>

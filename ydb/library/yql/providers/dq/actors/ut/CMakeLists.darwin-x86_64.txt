@@ -22,6 +22,7 @@ target_link_libraries(ydb-library-yql-providers-dq-actors-ut PUBLIC
   yql-dq-actors
   dq-actors-compute
   udf-service-stub
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-library-yql-providers-dq-actors-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0

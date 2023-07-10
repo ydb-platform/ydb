@@ -3,7 +3,7 @@
 
 //#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/debug/valgrind_check.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <library/cpp/actors/util/intrinsics.h>

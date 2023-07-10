@@ -32,9 +32,13 @@ public:
     virtual ~IBlobConstructor() {}
     virtual const TString& GetBlob() const = 0;
     virtual bool RegisterBlobId(const TUnifiedBlobId& blobId) = 0;
-    virtual EStatus BuildNext(NColumnShard::TUsage& resourceUsage, const TAppData& appData) = 0;
+    virtual EStatus BuildNext() = 0;
+    virtual NColumnShard::TUsage& GetResourceUsage() = 0;
 
-    virtual TAutoPtr<NActors::IEventBase> BuildResult(NKikimrProto::EReplyStatus status, NColumnShard::TBlobBatch&& blobBatch, THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels, const NColumnShard::TUsage& resourceUsage) = 0;
+    virtual TAutoPtr<NActors::IEventBase> BuildResult(
+        NKikimrProto::EReplyStatus status,
+        NColumnShard::TBlobBatch&& blobBatch,
+        THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels) = 0;
 };
 
 }

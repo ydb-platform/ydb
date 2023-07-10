@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_explain_prepared.cpp
+    kqp_gateway_proxy.cpp
     kqp_host.cpp
     kqp_runner.cpp
     kqp_transform.cpp

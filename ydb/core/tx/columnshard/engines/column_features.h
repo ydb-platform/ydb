@@ -57,6 +57,8 @@ private:
     std::shared_ptr<arrow::Schema> ExpectedSchema;
     const ui32 ColumnId;
 public:
+    TString DebugString() const;
+
     TColumnLoader(NArrow::NTransformation::ITransformer::TPtr transformer, NArrow::NSerialization::IDeserializer::TPtr deserializer,
         const std::shared_ptr<arrow::Schema>& expectedSchema, const ui32 columnId)
         : Transformer(transformer)

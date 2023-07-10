@@ -38,7 +38,7 @@ public:
 
     virtual ui64 GetChannelId() const = 0;
 
-    virtual void Push(NDqProto::TData&& data) = 0;
+    virtual void Push(TDqSerializedBatch&& data) = 0;
 
     virtual void Finish() = 0;
 

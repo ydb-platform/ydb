@@ -2,7 +2,6 @@
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 namespace NKikimr {
@@ -33,6 +32,7 @@ public:
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> UsePgParser;
         TMaybe<TSqlVersion> SyntaxVersion;
+        TMaybe<bool> ConcurrentResults;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " IsInternalCall: " << IsInternalCall << " }";

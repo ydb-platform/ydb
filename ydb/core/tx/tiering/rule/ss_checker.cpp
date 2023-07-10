@@ -1,7 +1,7 @@
 #include "ss_checker.h"
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NColumnShard::NTiers {
 

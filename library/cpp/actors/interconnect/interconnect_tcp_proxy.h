@@ -58,7 +58,7 @@ namespace NActors {
         };
 
         static constexpr EActivityType ActorActivityType() {
-            return INTERCONNECT_PROXY_TCP;
+            return EActivityType::INTERCONNECT_PROXY_TCP;
         }
 
         TInterconnectProxyTCP(const ui32 node, TInterconnectProxyCommon::TPtr common, IActor **dynamicPtr = nullptr);

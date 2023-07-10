@@ -421,7 +421,7 @@ namespace NKikimr {
 
         public:
             static constexpr EActivityType ActorActivityType() {
-                return ACTORLIB_STATS;
+                return EActivityType::ACTORLIB_STATS;
             }
 
             TMemProfMonitor(TDuration interval, std::unique_ptr<IAllocMonitor> allocMonitor, const TString& filePathPrefix)

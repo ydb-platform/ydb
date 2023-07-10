@@ -95,6 +95,11 @@
                 "ColumnId": 19,
                 "ColumnName": "NextVirtualGroupId",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "AllowMultipleRealmsOccupation",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -118,7 +123,8 @@
                     16,
                     17,
                     18,
-                    19
+                    19,
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,

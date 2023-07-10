@@ -188,8 +188,7 @@ namespace NActors {
         return MonPorts[nodeIndex];
     }
 
-    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup) {
-        setup.MaxActivityType = GetActivityTypeCount();
+    void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& /*setup*/) {
     }
 
     NKikimr::TAppData& TTestActorRuntime::GetAppData(ui32 nodeIndex) {

@@ -68,17 +68,9 @@ void TNodeBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
     Die(ctx);
 }
 
-void TNodeBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
+void TNodeBroker::DefaultSignalTabletActive(const TActorContext &ctx)
 {
-    switch (ev->GetTypeRewrite()) {
-    case TEvNodeBroker::EvListNodes:
-    case TEvNodeBroker::EvResolveNode:
-    case TEvNodeBroker::EvRegistrationRequest:
-        EnqueuedEvents.push_back(ev);
-        break;
-    default:
-        TTabletExecutedFlat::Enqueue(ev);
-    }
+    Y_UNUSED(ctx);
 }
 
 bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
@@ -283,13 +275,6 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
         LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
                     "Scheduled epoch update at " << Epoch.End);
     }
-}
-
-void TNodeBroker::ProcessEnqueuedEvents(const TActorContext&)
-{
-    for (auto &ev : EnqueuedEvents)
-        Receive(ev);
-    EnqueuedEvents.clear();
 }
 
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,

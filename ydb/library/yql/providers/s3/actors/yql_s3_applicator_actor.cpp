@@ -2,7 +2,7 @@
 #include "yql_s3_applicator_actor.h"
 
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>

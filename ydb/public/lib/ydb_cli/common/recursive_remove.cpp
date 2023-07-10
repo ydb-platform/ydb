@@ -99,7 +99,8 @@ TStatus RemoveDirectoryRecursive(
         const TString& path,
         ERecursiveRemovePrompt prompt,
         const TRemoveDirectorySettings& settings,
-        bool removeSelf)
+        bool removeSelf,
+        bool createProgressBar)
 {
     auto recursiveListResult = RecursiveList(schemeClient, path, {}, removeSelf);
     if (!recursiveListResult.Status.IsSuccess()) {
@@ -111,8 +112,11 @@ TStatus RemoveDirectoryRecursive(
             return TStatus(EStatus::SUCCESS, {});
         }
     }
-
-    TProgressBar bar(recursiveListResult.Entries.size());
+    
+    std::unique_ptr<TProgressBar> bar;
+    if (createProgressBar) {
+        bar = std::make_unique<TProgressBar>(recursiveListResult.Entries.size());
+    }
     // output order is: Root, Recursive(children)...
     // we need to reverse it to delete recursively
     for (auto it = recursiveListResult.Entries.rbegin(); it != recursiveListResult.Entries.rend(); ++it) {
@@ -147,7 +151,9 @@ TStatus RemoveDirectoryRecursive(
                 return TStatus(EStatus::UNSUPPORTED, MakeIssues(TStringBuilder()
                     << "Unsupported entry type: " << entry.Type));
         }
-        bar.AddProgress(1);
+        if (createProgressBar) {
+            bar->AddProgress(1);
+        }
     }
 
     return TStatus(EStatus::SUCCESS, {});
@@ -158,9 +164,10 @@ TStatus RemoveDirectoryRecursive(
         TTableClient& tableClient,
         const TString& path,
         const TRemoveDirectorySettings& settings,
-        bool removeSelf)
+        bool removeSelf,
+        bool createProgressBar)
 {
-    return RemoveDirectoryRecursive(schemeClient, &tableClient, nullptr, path, ERecursiveRemovePrompt::Never, settings, removeSelf);
+    return RemoveDirectoryRecursive(schemeClient, &tableClient, nullptr, path, ERecursiveRemovePrompt::Never, settings, removeSelf, createProgressBar);
 }
 
 TStatus RemoveDirectoryRecursive(
@@ -170,9 +177,10 @@ TStatus RemoveDirectoryRecursive(
         const TString& path,
         ERecursiveRemovePrompt prompt,
         const TRemoveDirectorySettings& settings,
-        bool removeSelf)
+        bool removeSelf,
+        bool createProgressBar)
 {
-    return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, prompt, settings, removeSelf);
+    return RemoveDirectoryRecursive(schemeClient, &tableClient, &topicClient, path, prompt, settings, removeSelf, createProgressBar);
 }
 
 }

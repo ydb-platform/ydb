@@ -38,11 +38,10 @@ private:
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
 
-        NYql::TIssues issues;
-        if (CheckSession(req->session_id(), issues)) {
+        if (CheckSession(req->session_id(), Request_.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
         } else {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
+            return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release()); //no respose will be sended, so don't wait for anything

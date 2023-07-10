@@ -242,7 +242,7 @@ using namespace NTSAN;
 ui32 TExecutor::GetMaxQueueSizeAndClear() const {
     ui32 max = 0;
     for (unsigned i = 0; i < WorkerThreads.size(); ++i) {
-        TExecutorWorkerThreadLocalData* wtls = RelaxedLoad(&WorkerThreads[i]->ThreadLocalData);
+        TExecutorWorkerThreadLocalData* wtls = AtomicGet(WorkerThreads[i]->ThreadLocalData);
         max = Max<ui32>(max, RelaxedLoad(&wtls->MaxQueueSize));
         RelaxedStore<ui32>(&wtls->MaxQueueSize, 0);
     }

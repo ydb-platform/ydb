@@ -806,13 +806,11 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&&
 
     auto promise = NewPromise<TReadRowsResult>();
 
-    auto responseCb = [promise]
-        (Ydb::Table::ReadRowsResponse* response, TPlainStatus status) mutable {
-            Y_VERIFY(response);
-            TResultSet resultSet = TResultSet(response->result_set());
-            TReadRowsResult val(TStatus(std::move(status)), std::move(resultSet));
-            promise.SetValue(std::move(val));
-        };
+    auto responseCb = [promise] (Ydb::Table::ReadRowsResponse* response, TPlainStatus status) mutable {
+        Ydb::ResultSet resultSet = response ? std::move(*response->mutable_result_set()) : Ydb::ResultSet{};
+        TReadRowsResult val(TStatus(std::move(status)), std::move(resultSet));
+        promise.SetValue(std::move(val));
+    };
 
     Connections_->Run<Ydb::Table::V1::TableService, Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>(
         std::move(request),

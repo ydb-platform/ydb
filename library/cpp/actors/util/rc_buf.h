@@ -316,8 +316,11 @@ class TRcBuf {
 
         struct TBackendHolder {
             uintptr_t Data[2];
-            operator bool() const noexcept {
+            explicit operator bool() const noexcept {
                 return Data[0] || Data[1];
+            }
+            friend bool operator ==(const TBackendHolder& x, const TBackendHolder& y) {
+                return x.Data[0] == y.Data[0] && x.Data[1] == y.Data[1];
             }
         };
 
@@ -602,7 +605,7 @@ class TRcBuf {
         }
 
         explicit operator bool() const {
-            return Owner;
+            return static_cast<bool>(Owner);
         }
 
     private:

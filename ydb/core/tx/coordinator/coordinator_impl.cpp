@@ -5,7 +5,7 @@
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/tx.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -13,7 +13,11 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-static constexpr TDuration MaxEmptyPlanDelay = TDuration::Seconds(1);
+// When we need to plan a step far in the future don't schedule timer for more
+// that this timeout. This is useful when coordinator starts on a node with
+// incorrect wallclock time lagging in the past, and we expect eventual
+// intervention where time actually jumps forward.
+static constexpr TDuration MaxPlanTickDelay = TDuration::Seconds(30);
 
 static void SendTransactionStatus(const TActorId &proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus status,
         ui64 txid, ui64 stepId, const TActorContext &ctx, ui64 tabletId) {
@@ -47,8 +51,6 @@ static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvPro
     return proposal;
 }
 
-const ui32 TTxCoordinator::Schema::CurrentVersion = 1;
-
 TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -64,10 +66,6 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     // HACK
     Cerr << "Coordinator LOG will be dumped to " << DebugName << Endl;
 #endif
-
-    Config.PlanAhead = 50;
-    Config.Resolution = 1250;
-    Config.RapidSlotFlushSize = 1000; // todo: something meaningful
 
     MonCounters.CurrentTxInFly = 0;
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
@@ -127,22 +125,20 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
         rapidSlot.Queue->Push(proposal.Release());
         ++rapidSlot.QueueSize;
 
-        if (rapidSlot.QueueSize >= Config.RapidSlotFlushSize && !VolatileState.Queue.RapidFreeze) {
-            TVector<TQueueType::TSlot> slots;
-            slots.push_back(rapidSlot);
-            rapidSlot = TQueueType::TSlot();
-            VolatileState.LastPlanned = planStep;
-            VolatileState.Queue.RapidFreeze = true;
-
-            NotifyUpdatedLastStep();
-            Execute(CreateTxPlanStep(planStep, slots, true), ctx);
+        if (rapidSlot.QueueSize >= Config.RapidSlotFlushSize) {
+            SchedulePlanTickExact(planStep);
         }
+
+        // We may be sleeping at reduced resolution, try to wake up sooner
+        SchedulePlanTickAligned(planStep);
     } else {
         TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep);
         planSlot.Queue->Push(proposal.Release());
         ++planSlot.QueueSize;
-    }
 
+        // We may be sleeping at reduced resolution, try to wake up sooner
+        SchedulePlanTickExact(planStep);
+    }
 }
 
 void TTxCoordinator::Handle(TEvTxProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
@@ -171,9 +167,118 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
     VolatileState.Queue.Unsorted->Push(proposal.Release());
 }
 
+bool TTxCoordinator::AllowReducedPlanResolution() const {
+    return (
+        !VolatileState.Queue.Unsorted &&
+        VolatileState.LastEmptyStep &&
+        VolatileState.LastEmptyStep == VolatileState.LastPlanned &&
+        VolatileState.LastAcquired < VolatileState.LastEmptyStep &&
+        Config.Coordinators.size() > 0 &&
+        SiblingsConfirmed == Siblings.size());
+}
+
+void TTxCoordinator::SchedulePlanTick() {
+    const ui64 resolution = Config.Resolution;
+    const TInstant now = TAppData::TimeProvider->Now();
+    const TMonotonic monotonic = AppData()->MonotonicTimeProvider->Now();
+
+    // Step corresponding to current time
+    ui64 current = now.MilliSeconds();
+
+    // Next minimum step we would like to have
+    ui64 next = (VolatileState.LastPlanned + 1 + resolution - 1) / resolution * resolution;
+
+    if (AllowReducedPlanResolution()) {
+        // We want to tick with reduced resolution when all siblings are confirmed
+        ui64 reduced = (VolatileState.LastPlanned + 1 + Config.ReducedResolution - 1) / Config.ReducedResolution * Config.ReducedResolution;
+        // Include transactions waiting in the queue, so we don't sleep for seconds when the next tx is in 10ms
+        ui64 minWaiting = (VolatileState.Queue.MinLowSlot() + resolution - 1) / resolution * resolution;
+        if (minWaiting && minWaiting < reduced) {
+            reduced = minWaiting;
+        }
+        if (next < reduced) {
+            next = reduced;
+        }
+    }
+
+    if (!PendingSiblingSteps.empty()) {
+        auto it = PendingSiblingSteps.begin();
+        if (*it < next) {
+            next = *it;
+        }
+    }
+
+    // Adjust to the closest step that snaps to the resolution grid
+    if (next < current) {
+        current = current / resolution * resolution;
+        if (next < current) {
+            next = current;
+        }
+    }
+
+    // Avoid scheduling more events if another is already pending
+    if (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
+        return;
+    }
+
+    // Calculate a delay until we can plan the desired next step
+    TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
+
+    // Schedule using an absolute deadline so we don't wake up early due to stale timer
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
+        "Coordinator# " << TabletID() << " scheduling step " << next << " in " << delay << " at " << (monotonic + delay));
+    if (delay > TDuration::Zero()) {
+        Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
+    } else {
+        Send(SelfId(), new TEvPrivate::TEvPlanTick(next));
+    }
+    PendingPlanTicks.push_front(next);
+}
+
+void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
+    if (next <= VolatileState.LastPlanned) {
+        return;
+    }
+
+    if (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
+        return;
+    }
+
+    const TInstant now = TAppData::TimeProvider->Now();
+    const TMonotonic monotonic = AppData()->MonotonicTimeProvider->Now();
+
+    TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
+
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_COORDINATOR,
+        "Coordinator# " << TabletID() << " scheduling step " << next << " in " << delay << " at " << (monotonic + delay));
+    if (delay > TDuration::Zero()) {
+        Schedule(monotonic + delay, new TEvPrivate::TEvPlanTick(next));
+    } else {
+        Send(SelfId(), new TEvPrivate::TEvPlanTick(next));
+    }
+    PendingPlanTicks.push_front(next);
+}
+
+void TTxCoordinator::SchedulePlanTickAligned(ui64 next) {
+    if (next <= VolatileState.LastPlanned) {
+        return;
+    }
+
+    if (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
+        return;
+    }
+
+    const ui64 resolution = Config.Resolution;
+    SchedulePlanTickExact((next + resolution - 1) / resolution * resolution);
+}
+
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
     //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned);
+
+    ui64 next = ev->Get()->Step;
+    while (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
+        PendingPlanTicks.pop_front();
+    }
 
     if (VolatileState.Queue.Unsorted) {
         while (TAutoPtr<TTransactionProposal> x = VolatileState.Queue.Unsorted->Pop())
@@ -181,20 +286,33 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
         VolatileState.Queue.Unsorted.Destroy();
     }
 
-    // do work
     const ui64 resolution = Config.Resolution;
-    const ui64 now = TAppData::TimeProvider->Now().MilliSeconds();
-    const ui64 dirty = now + Config.PlanAhead;
-    const ui64 next = (dirty + resolution - 1) / resolution * resolution;
+    const TInstant now = TAppData::TimeProvider->Now();
+
+    // Check the step corresponding to current time
+    ui64 current = now.MilliSeconds();
+    if (current < next) {
+        // We cannot plan this yet, schedule some other step
+        return SchedulePlanTick();
+    }
+
+    // Snap to grid and prefer planning current time instead of some past
+    current = current / resolution * resolution;
+    if (next < current) {
+        next = current;
+    }
 
     if (next <= VolatileState.LastPlanned) {
-        return SchedulePlanTick(ctx);
+        // This step has already been planned, schedule the next time
+        return SchedulePlanTick();
     }
 
     TVector<TQueueType::TSlot> slots;
-    slots.reserve(1000);
 
     if (VolatileState.Queue.RapidSlot.QueueSize) {
+        if (slots.empty()) {
+            slots.reserve(1000);
+        }
         slots.push_back(VolatileState.Queue.RapidSlot);
         VolatileState.Queue.RapidSlot = TQueueType::TSlot();
     }
@@ -204,35 +322,24 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
         if (frontIt->first > next)
             break;
 
-        if (frontIt->second.QueueSize)
+        if (frontIt->second.QueueSize) {
+            if (slots.empty()) {
+                slots.reserve(1000);
+            }
             slots.push_back(frontIt->second);
+        }
 
         VolatileState.Queue.Low.erase(frontIt);
     }
 
-    VolatileState.LastPlanned = next;
-    SchedulePlanTick(ctx);
-
-    // Check if we have an empty step
     if (slots.empty()) {
-        auto monotonic = ctx.Monotonic();
-        if (VolatileState.LastEmptyPlanAt &&
-            VolatileState.LastAcquired < VolatileState.LastEmptyStep &&
-            Config.Coordinators.size() == 1 &&
-            (monotonic - VolatileState.LastEmptyPlanAt) < MaxEmptyPlanDelay)
-        {
-            // Avoid empty plan steps more than once a second for a lonely coordinator
-            return;
-        }
         VolatileState.LastEmptyStep = next;
-        VolatileState.LastEmptyPlanAt = monotonic;
-    } else {
-        VolatileState.LastEmptyStep = 0;
-        VolatileState.LastEmptyPlanAt = { };
     }
+    VolatileState.LastPlanned = next;
 
     NotifyUpdatedLastStep();
-    Execute(CreateTxPlanStep(next, slots, false), ctx);
+    Execute(CreateTxPlanStep(next, slots), ctx);
+    SchedulePlanTick();
 }
 
 void TTxCoordinator::Handle(TEvTxCoordinator::TEvMediatorQueueConfirmations::TPtr &ev, const TActorContext &ctx) {
@@ -420,11 +527,6 @@ void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &
         }
         ctx.Send(mediator.QueueActor, new TEvTxCoordinator::TEvMediatorQueueStep(mediator.GenCookie, extracted));
     }
-}
-
-void TTxCoordinator::SchedulePlanTick(const TActorContext &ctx) {
-    const ui64 planResolution = Config.Resolution;
-    ctx.Schedule(TDuration::MilliSeconds(planResolution), new TEvPrivate::TEvPlanTick());
 }
 
 bool TTxCoordinator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {

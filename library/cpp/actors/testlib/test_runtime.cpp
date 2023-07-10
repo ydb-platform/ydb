@@ -85,7 +85,7 @@ namespace NActors {
     class TTestActorRuntimeBase::TEdgeActor : public TActor<TEdgeActor> {
     public:
         static constexpr EActivityType ActorActivityType() {
-            return TEST_ACTOR_RUNTIME;
+            return EActivityType::TEST_ACTOR_RUNTIME;
         }
 
         TEdgeActor(TTestActorRuntimeBase* runtime)
@@ -513,7 +513,7 @@ namespace NActors {
 
     void TTestActorRuntimeBase::InitNode(TNodeDataBase* node, size_t nodeIndex) {
         const NActors::TActorId loggerActorId = NActors::TActorId(FirstNodeId + nodeIndex, "logger");
-        node->LogSettings = new NActors::NLog::TSettings(loggerActorId, 410 /* NKikimrServices::LOGGER */,
+        node->LogSettings = new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER,
             NActors::NLog::PRI_WARN,  NActors::NLog::PRI_WARN, 0);
         node->LogSettings->SetAllowDrop(false);
         node->LogSettings->SetThrottleDelay(TDuration::Zero());
@@ -1802,7 +1802,7 @@ namespace NActors {
         class TReplyActor : public TActor<TReplyActor> {
         public:
             static constexpr EActivityType ActorActivityType() {
-                return TEST_ACTOR_RUNTIME;
+                return EActivityType::TEST_ACTOR_RUNTIME;
             }
 
             TReplyActor(TStrandingActorDecorator* owner)
@@ -1818,7 +1818,7 @@ namespace NActors {
         };
 
         static constexpr EActivityType ActorActivityType() {
-            return TEST_ACTOR_RUNTIME;
+            return EActivityType::TEST_ACTOR_RUNTIME;
         }
 
         TStrandingActorDecorator(const TActorId& delegatee, bool isSync, const TVector<TActorId>& additionalActors,

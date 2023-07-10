@@ -7,6 +7,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/core/base/events.h>
 
 namespace NKikimr::NMetadata::NRequest {
@@ -39,6 +40,11 @@ enum EEvents {
     EvRequestFinished,
     EvRequestFailed,
     EvRequestStart,
+
+    EvCreatePathRequest,
+    EvCreatePathInternalResponse,
+    EvCreatePathResponse,
+
     EvEnd
 };
 
@@ -65,6 +71,8 @@ public:
     virtual void OnRequestFailed(const TString& errorMessage) = 0;
 };
 
+using TDialogCreatePath = TDialogPolicyImpl<Ydb::Scheme::MakeDirectoryRequest, Ydb::Scheme::MakeDirectoryResponse,
+    EEvents::EvCreatePathRequest, EEvents::EvCreatePathInternalResponse, EEvents::EvCreatePathResponse>;
 using TDialogCreateTable = TDialogPolicyImpl<Ydb::Table::CreateTableRequest, Ydb::Table::CreateTableResponse,
     EEvents::EvCreateTableRequest, EEvents::EvCreateTableInternalResponse, EEvents::EvCreateTableResponse>;
 using TDialogDropTable = TDialogPolicyImpl<Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse,
@@ -91,6 +99,15 @@ class TOperatorChecker {
 public:
     static bool IsSuccess(const TResponse& r) {
         return r.operation().status() == Ydb::StatusIds::SUCCESS;
+    }
+};
+
+template <>
+class TOperatorChecker<Ydb::Scheme::MakeDirectoryResponse> {
+public:
+    static bool IsSuccess(const Ydb::Scheme::MakeDirectoryResponse& r) {
+        return r.operation().status() == Ydb::StatusIds::SUCCESS ||
+            r.operation().status() == Ydb::StatusIds::ALREADY_EXISTS;
     }
 };
 

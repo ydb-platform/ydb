@@ -165,6 +165,30 @@ class TCompactionPriority: public TCompactionPriorityInfo {
 private:
     using TBase = TCompactionPriorityInfo;
     TGranuleAdditiveSummary GranuleSummary;
+
+    enum class EProblemPriorityPrediction: ui32 {
+        GranuleOverload = 100,
+        BigInsertedSize = 90,
+        ManyInsertedPortions = 80,
+        Other = 0
+    };
+
+    EProblemPriorityPrediction GetPriorityClass() const {
+        if (GranuleSummary.GetActivePortionsCount() <= 1) {
+            return EProblemPriorityPrediction::Other;
+        }
+        if (GranuleSummary.GetGranuleSize() > TCompactionLimits::MAX_BLOB_SIZE * 10) {
+            return EProblemPriorityPrediction::GranuleOverload;
+        } else if (GranuleSummary.GetInserted().GetPortionsSize() > (i64)TCompactionLimits::MAX_BLOB_SIZE * 5) {
+            return EProblemPriorityPrediction::BigInsertedSize;
+        } else if (GranuleSummary.GetInserted().GetPortionsCount() > 50) {
+            return EProblemPriorityPrediction::ManyInsertedPortions;
+        } else {
+            return EProblemPriorityPrediction::Other;
+        }
+
+    }
+
     ui64 GetWeightCorrected() const {
         if (GranuleSummary.GetActivePortionsCount() <= 1) {
             return 0;
@@ -179,8 +203,8 @@ public:
 
     }
     bool operator<(const TCompactionPriority& item) const {
-        return std::tuple(GetWeightCorrected(), GranuleSummary.GetActivePortionsCount(), item.NextAttemptInstant)
-            < std::tuple(item.GetWeightCorrected(), item.GranuleSummary.GetActivePortionsCount(), NextAttemptInstant);
+        return std::tuple((ui32)GetPriorityClass(), GetWeightCorrected(), GranuleSummary.GetActivePortionsCount(), item.NextAttemptInstant)
+            < std::tuple((ui32)item.GetPriorityClass(), item.GetWeightCorrected(), item.GranuleSummary.GetActivePortionsCount(), NextAttemptInstant);
     }
 
 };
@@ -222,6 +246,7 @@ public:
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
         if (InCompaction() || Empty()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("granule_id", GetGranuleId())("granule_size", Size());
             return false;
         }
         return NeedSplitCompaction(limits) || NeedInternalCompaction(limits);
@@ -254,7 +279,11 @@ public:
     void UpsertPortion(const TPortionInfo& info);
 
     virtual TString DebugString() const override {
-        return TStringBuilder() << "granule:" << GetGranuleId() << ";path_id:" << Record.PathId << ";";
+        return TStringBuilder() << "granule:" << GetGranuleId() << ";"
+            << "path_id:" << Record.PathId << ";"
+            << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
+            << "portions_count:" << Portions.size() << ";"
+            ;
     }
 
     const TGranuleRecord Record;

@@ -30,6 +30,7 @@ struct TEvKqpCompute {
             , Generation(generation)
             , Finished(false) {}
 
+        std::optional<ui32> AvailablePacks;
         ui32 ScanId;
         ui32 Generation;
         TVector<TOwnedCellVec> Rows;
@@ -52,11 +53,7 @@ struct TEvKqpCompute {
         }
 
         bool IsEmpty() const {
-            if (ArrowBatch) {
-                return ArrowBatch->num_rows() == 0;
-            } else {
-                return Rows.size() == 0;
-            }
+            return GetRowsCount() == 0;
         }
 
         bool IsSerializable() const override {
@@ -93,6 +90,9 @@ struct TEvKqpCompute {
             ev->Finished = pbEv->Record.GetFinished();
             ev->RequestedBytesLimitReached = pbEv->Record.GetRequestedBytesLimitReached();
             ev->LastKey = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetLastKey()).GetCells());
+            if (pbEv->Record.HasAvailablePacks()) {
+                ev->AvailablePacks = pbEv->Record.GetAvailablePacks();
+            }
 
             auto rows = pbEv->Record.GetRows();
             ev->Rows.reserve(rows.size());
@@ -123,6 +123,9 @@ struct TEvKqpCompute {
                 Remote->Record.SetPageFaults(PageFaults);
                 Remote->Record.SetPageFault(PageFault);
                 Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));
+                if (AvailablePacks) {
+                    Remote->Record.SetAvailablePacks(*AvailablePacks);
+                }
 
                 switch (GetDataFormat()) {
                     case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:

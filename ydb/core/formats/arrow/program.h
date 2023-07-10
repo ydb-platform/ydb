@@ -226,7 +226,7 @@ public:
     std::vector<std::string>& MutableArguments() { return Arguments; }
     const std::string& GetName() const { return Name; }
     const arrow::compute::ScalarAggregateOptions* GetOptions() const { return &ScalarOpts; }
-    
+
     IStepFunction<TAggregateAssign>::TPtr GetFunction(arrow::compute::ExecContext* ctx) const;
 
 private:

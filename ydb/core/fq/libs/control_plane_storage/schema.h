@@ -15,6 +15,7 @@ namespace NFq {
 #define TENANTS_TABLE_NAME "tenants"
 #define TENANT_ACKS_TABLE_NAME "tenant_acks"
 #define MAPPINGS_TABLE_NAME "mappings"
+#define COMPUTE_DATABASES_TABLE_NAME "compute_databases"
 
 // columns
 #define SCOPE_COLUMN_NAME "scope"

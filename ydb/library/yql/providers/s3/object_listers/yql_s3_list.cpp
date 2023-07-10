@@ -408,7 +408,7 @@ private:
             YQL_CLOG(INFO, ProviderS3)
                 << "Listing of " << ctx.ListingRequest.Url << ctx.ListingRequest.Prefix
                 << ": got error from http gateway: " << issues.ToString(true);
-            ctx.Promise.SetValue(std::move(issues));
+            ctx.Promise.SetValue(TListError{EListError::GENERAL, std::move(issues)});
             ctx.NextRequestPromise.SetValue(Nothing());
         }
     } catch (const std::exception& ex) {

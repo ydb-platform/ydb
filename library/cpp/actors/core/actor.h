@@ -4,6 +4,7 @@
 #include "event.h"
 #include "executor_thread.h"
 #include "monotonic.h"
+#include "indexes.h"
 
 #include <library/cpp/actors/util/local_process_key.h>
 
@@ -321,56 +322,43 @@ namespace NActors {
         friend class TExecutorPoolBaseMailboxed;
         friend class TExecutorThread;
 
+        IActor(const ui32 activityType)
+            : SelfActorId(TActorId())
+            , ElapsedTicks(0)
+            , ActivityType(activityType)
+            , HandledEvents(0) {
+        }
+
     protected:
         TActorCallbackBehaviour CImpl;
     public:
         using TEventFlags = IEventHandle::TEventFlags;
         using TReceiveFunc = TActorCallbackBehaviour::TReceiveFunc;
         /// @sa services.proto NKikimrServices::TActivity::EType
-        enum EActorActivity {
-            OTHER = 0,
-            ACTOR_SYSTEM = 1,
-            ACTORLIB_COMMON = 2,
-            ACTORLIB_STATS = 3,
-            LOG_ACTOR = 4,
-            INTERCONNECT_PROXY_TCP = 12,
-            INTERCONNECT_SESSION_TCP = 13,
-            INTERCONNECT_COMMON = 171,
-            SELF_PING_ACTOR = 207,
-            TEST_ACTOR_RUNTIME = 283,
-            INTERCONNECT_HANDSHAKE = 284,
-            INTERCONNECT_POLLER = 285,
-            INTERCONNECT_SESSION_KILLER = 286,
-            ACTOR_SYSTEM_SCHEDULER_ACTOR = 312,
-            ACTOR_FUTURE_CALLBACK = 337,
-            INTERCONNECT_MONACTOR = 362,
-            INTERCONNECT_LOAD_ACTOR = 376,
-            INTERCONNECT_LOAD_RESPONDER = 377,
-            NAMESERVICE = 450,
-            DNS_RESOLVER = 481,
-            INTERCONNECT_PROXY_WRAPPER = 546,
-            ACTOR_COROUTINE = 577
-        };
-
+        using EActorActivity = EInternalActorType;
         using EActivityType = EActorActivity;
         ui32 ActivityType;
 
     protected:
         ui64 HandledEvents;
 
-        IActor(TActorCallbackBehaviour&& cImpl, ui32 activityType = OTHER)
+        template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
+        IActor(const EEnum activityEnumType = EActivityType::OTHER)
+            : IActor(TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
+        }
+
+        IActor(TActorCallbackBehaviour&& cImpl, const ui32 activityType)
             : SelfActorId(TActorId())
             , ElapsedTicks(0)
             , CImpl(std::move(cImpl))
             , ActivityType(activityType)
-            , HandledEvents(0) {
+            , HandledEvents(0)
+        {
         }
 
-        IActor(ui32 activityType = OTHER)
-            : SelfActorId(TActorId())
-            , ElapsedTicks(0)
-            , ActivityType(activityType)
-            , HandledEvents(0) {
+        template <typename EEnum = EActivityType, typename std::enable_if<std::is_enum<EEnum>::value, bool>::type v = true>
+        IActor(TActorCallbackBehaviour&& cImpl, const EEnum activityEnumType = EActivityType::OTHER)
+            : IActor(std::move(cImpl), TEnumProcessKey<TActorActivityTag, EEnum>::GetIndex(activityEnumType)) {
         }
 
     public:
@@ -587,8 +575,6 @@ namespace NActors {
         }
     };
 
-    struct TActorActivityTag {};
-
     inline size_t GetActivityTypeCount() {
         return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetCount();
     }
@@ -598,12 +584,19 @@ namespace NActors {
     }
 
     class IActorCallback: public IActor {
-    public:
-        IActorCallback(TReceiveFunc stateFunc, ui32 activityType = OTHER)
+    protected:
+        template <class TEnum = IActor::EActivityType>
+        IActorCallback(TReceiveFunc stateFunc, const TEnum activityType = IActor::EActivityType::OTHER)
             : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
 
         }
 
+        IActorCallback(TReceiveFunc stateFunc, const ui32 activityType)
+            : IActor(TActorCallbackBehaviour(stateFunc), activityType) {
+
+        }
+
+    public:
         template <typename T>
         void Become(T stateFunc) {
             CImpl.Become(stateFunc);
@@ -638,11 +631,12 @@ namespace NActors {
         template <typename T>
         struct HasActorActivityType<T, decltype((void)T::ActorActivityType, (const char*)nullptr)>: std::true_type {};
 
-        static ui32 GetActivityTypeIndex() {
+        static ui32 GetActivityTypeIndexImpl() {
             if constexpr(HasActorName<TDerived>::value) {
                 return TLocalProcessKey<TActorActivityTag, TDerived::ActorName>::GetIndex();
             } else if constexpr (HasActorActivityType<TDerived>::value) {
                 using TActorActivity = decltype(((TDerived*)nullptr)->ActorActivityType());
+                static_assert(std::is_enum<TActorActivity>::value);
                 return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex(TDerived::ActorActivityType());
             } else {
                 // 200 characters is limit for solomon metric tag length
@@ -650,12 +644,21 @@ namespace NActors {
             }
         }
 
+        static ui32 GetActivityTypeIndex() {
+            static const ui32 result = GetActivityTypeIndexImpl();
+            return result;
+        }
+
     protected:
         // static constexpr char ActorName[] = "UNNAMED";
 
-        TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev), ui32 activityType = GetActivityTypeIndex())
-            : IActorCallback(static_cast<TReceiveFunc>(func), activityType)
-        {
+        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev))
+            : IActorCallback(static_cast<TReceiveFunc>(func), GetActivityTypeIndex()) {
+        }
+
+        template <class TEnum = EActivityType>
+        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev), const TEnum activityEnumType = EActivityType::OTHER)
+            : IActorCallback(static_cast<TReceiveFunc>(func), activityEnumType) {
         }
 
     public:

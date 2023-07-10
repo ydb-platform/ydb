@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    aligned_page_pool_ut.cpp
     compact_hash_ut.cpp
     mkql_alloc_ut.cpp
     mkql_node_builder_ut.cpp

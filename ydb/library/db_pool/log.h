@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/log.h>
 

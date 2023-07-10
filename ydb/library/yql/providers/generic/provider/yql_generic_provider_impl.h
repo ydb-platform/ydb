@@ -10,7 +10,7 @@
 namespace NYql {
 
     THolder<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state);
-    THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state, Connector::IClient::TPtr client);
+    THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state, NConnector::IClient::TPtr client);
 
     THolder<TVisitorTransformerBase> CreateGenericDataSourceTypeAnnotationTransformer(TGenericState::TPtr state);
     THolder<TVisitorTransformerBase> CreateGenericDataSinkTypeAnnotationTransformer(TGenericState::TPtr state);

@@ -7,11 +7,11 @@ class TDqInputChannel : public TDqInputImpl<TDqInputChannel, IDqInputChannel> {
     using TBaseImpl = TDqInputImpl<TDqInputChannel, IDqInputChannel>;
     friend TBaseImpl;
 private:
-    std::deque<NDqProto::TData> DataForDeserialize;
+    std::deque<TDqSerializedBatch> DataForDeserialize;
     ui64 StoredSerializedBytes = 0;
 
-    void PushImpl(NDqProto::TData&& data) {
-        const i64 space = data.GetRaw().size();
+    void PushImpl(TDqSerializedBatch&& data) {
+        const i64 space = data.Size();
 
         NKikimr::NMiniKQL::TUnboxedValueBatch batch(InputType);
         if (Y_UNLIKELY(ProfileStats)) {
@@ -22,7 +22,7 @@ private:
             DataSerializer.Deserialize(data, InputType, batch);
         }
 
-        YQL_ENSURE(batch.RowCount() == data.GetRows());
+        YQL_ENSURE(batch.RowCount() == data.RowCount());
         AddBatch(std::move(batch), space);
     }
 
@@ -79,12 +79,12 @@ public:
         return TBaseImpl::Pop(batch);
     }
 
-    void Push(NDqProto::TData&& data) override {
+    void Push(TDqSerializedBatch&& data) override {
         YQL_ENSURE(!Finished, "input channel " << ChannelId << " already finished");
-        if (Y_UNLIKELY(data.GetRows() == 0)) {
+        if (Y_UNLIKELY(data.Proto.GetRows() == 0)) {
             return;
         }
-        StoredSerializedBytes += data.GetRaw().size();
+        StoredSerializedBytes += data.Size();
         DataForDeserialize.emplace_back(std::move(data));
     }
 

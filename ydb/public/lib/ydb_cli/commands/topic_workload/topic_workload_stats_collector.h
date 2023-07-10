@@ -33,12 +33,12 @@ namespace NYdb {
             template<class T>
             using TEventQueues = std::vector<THolder<TAutoLockFreeQueue<T>>>;
 
-            void CollectThreadEvents(ui32 windowIt);
+            void CollectThreadEvents();
             template<class T>
-            void CollectThreadEvents(ui32 windowIt, TEventQueues<T>& queues);
+            void CollectThreadEvents(TEventQueues<T>& queues);
 
             template<class T>
-            static void AddEvent(size_t index, TEventQueues<T>& queues, const T& event);
+            void AddEvent(size_t index, TEventQueues<T>& queues, const T& event);
 
             void PrintWindowStats(ui32 windowIt);
             void PrintStats(TMaybe<ui32> windowIt) const;
@@ -63,6 +63,8 @@ namespace NYdb {
 
             THolder<TTopicWorkloadStats> WindowStats;
             TTopicWorkloadStats TotalStats;
+
+            TInstant WarmupTime;
         };
     }
 }

@@ -2,7 +2,7 @@
 #include "tabletid.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/interconnect.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -70,7 +70,6 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     ui32 WaitForReplicasToSuccess;
 
     TDuration GetReconnectDelayForReplica(TReplica& replica) {
-        auto ret = replica.CurrentDelay;
         auto newDelay = replica.CurrentDelay;
         newDelay *= 2;
         if (newDelay > TDuration::Seconds(5)) {
@@ -79,7 +78,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         newDelay *= AppData()->RandomProvider->Uniform(100, 115);
         newDelay /= 100;
         replica.CurrentDelay = newDelay;
-        return ret;
+        return replica.CurrentDelay;
     }
 
     struct {

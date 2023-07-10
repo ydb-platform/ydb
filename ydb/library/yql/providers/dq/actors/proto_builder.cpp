@@ -59,7 +59,7 @@ bool TProtoBuilder::CanBuildResultSet() const {
     return ResultType->GetKind() == TType::EKind::Struct;
 }
 
-TString TProtoBuilder::BuildYson(const TVector<NYql::NDqProto::TData>& rows, ui64 maxBytesLimit) {
+TString TProtoBuilder::BuildYson(const TVector<NYql::NDq::TDqSerializedBatch>& rows, ui64 maxBytesLimit) {
     ui64 size = 0;
     TStringStream out;
     NYson::TYsonWriter writer((IOutputStream*)&out);
@@ -81,14 +81,14 @@ TString TProtoBuilder::BuildYson(const TVector<NYql::NDqProto::TData>& rows, ui6
     return out.Str();
 }
 
-bool TProtoBuilder::WriteYsonData(const NYql::NDqProto::TData& data, const std::function<bool(const TString& rawYson)>& func) {
+bool TProtoBuilder::WriteYsonData(const NYql::NDq::TDqSerializedBatch& data, const std::function<bool(const TString& rawYson)>& func) {
     return WriteData(data, [&](const NYql::NUdf::TUnboxedValuePod& value) {
         auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
         return func(rowYson);
     });
 }
 
-bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
+bool TProtoBuilder::WriteData(const NYql::NDq::TDqSerializedBatch& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
@@ -105,7 +105,7 @@ bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<b
     });
 }
 
-bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
+bool TProtoBuilder::WriteData(const TVector<NYql::NDq::TDqSerializedBatch>& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
@@ -125,7 +125,7 @@ bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::f
     return true;
 }
 
-Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDqProto::TData>& data) {
+Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDq::TDqSerializedBatch>& data) {
     Ydb::ResultSet resultSet;
     auto structType = AS_TYPE(TStructType, ResultType);
     MKQL_ENSURE(structType, "Result is not a struct");

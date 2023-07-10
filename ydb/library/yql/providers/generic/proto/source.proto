@@ -11,7 +11,7 @@ message TSource {
     // Token to access database
     string token = 1;
     // Prepared Select expression
-    NYql.Connector.API.Select select = 2;
+    NYql.NConnector.NApi.TSelect select = 2;
     // Description of instance to connect
-    NYql.Connector.API.DataSourceInstance data_source_instance = 3;
+    NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 3;
 }

@@ -24,10 +24,35 @@ void Print(const TString& marker, TBuffer& buffer, ssize_t length) {
         if (i > 0) {
             sb << ", ";
         }
-        sb << "0x" << Hex(c >> 4) << Hex(c & 0x0F);
+        sb << "0x" << Hex((c & 0xF0) >> 4) << Hex(c & 0x0F);
     }
-    KAFKA_LOG_T("Packet " << marker << ": " << sb);
+    KAFKA_LOG_ERROR("Packet " << marker << ": " << sb);
 }
+
+TApiVersionsResponseData GetApiVersions() {
+    TApiVersionsResponseData response;
+    response.ApiKeys.resize(4);
+
+    response.ApiKeys[0].ApiKey = PRODUCE;
+    response.ApiKeys[0].MinVersion = 3; // From version 3 record batch format is 2. Supported only 2 batch format.
+    response.ApiKeys[0].MaxVersion = TProduceRequestData::MessageMeta::PresentVersions.Max;
+
+    response.ApiKeys[1].ApiKey = API_VERSIONS;
+    response.ApiKeys[1].MinVersion = TApiVersionsRequestData::MessageMeta::PresentVersions.Min;
+    response.ApiKeys[1].MaxVersion = TApiVersionsRequestData::MessageMeta::PresentVersions.Max;
+
+    response.ApiKeys[2].ApiKey = METADATA;
+    response.ApiKeys[2].MinVersion = TMetadataRequestData::MessageMeta::PresentVersions.Min;
+    response.ApiKeys[2].MaxVersion = TMetadataRequestData::MessageMeta::PresentVersions.Max;
+
+    response.ApiKeys[3].ApiKey = INIT_PRODUCER_ID;
+    response.ApiKeys[3].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;
+    response.ApiKeys[3].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
+
+    return response;
+}
+
+static const TApiVersionsResponseData KAFKA_API_VERSIONS = GetApiVersions();
 
 class TKafkaConnection: public TActorBootstrapped<TKafkaConnection>, public TNetworkConfig {
 public:
@@ -147,26 +172,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, TApiVersionsRequestData* /*message*/, size_t messageSize) {
-        TApiVersionsResponseData response;
-        response.ApiKeys.resize(4);
-
-        response.ApiKeys[0].ApiKey = PRODUCE;
-        response.ApiKeys[0].MinVersion = TProduceRequestData::MessageMeta::PresentVersionMin;
-        response.ApiKeys[0].MaxVersion = TProduceRequestData::MessageMeta::PresentVersionMax;
-
-        response.ApiKeys[1].ApiKey = API_VERSIONS;
-        response.ApiKeys[1].MinVersion = TApiVersionsRequestData::MessageMeta::PresentVersionMin;
-        response.ApiKeys[1].MaxVersion = TApiVersionsRequestData::MessageMeta::PresentVersionMax;
-
-        response.ApiKeys[2].ApiKey = METADATA;
-        response.ApiKeys[2].MinVersion = TMetadataRequestData::MessageMeta::PresentVersionMin;
-        response.ApiKeys[2].MaxVersion = TMetadataRequestData::MessageMeta::PresentVersionMax;
-
-        response.ApiKeys[3].ApiKey = INIT_PRODUCER_ID;
-        response.ApiKeys[3].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersionMin;
-        response.ApiKeys[3].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersionMax;
-
-        Reply(header, &response);
+        Reply(header, &KAFKA_API_VERSIONS);
 
         InflightSize -= messageSize;
     }
@@ -205,7 +211,7 @@ protected:
         InflightSize -= messageSize;
     }
 
-    void HandleMessage(TRequestHeaderData* header, TMetadataRequestData* /*message*/, size_t messageSize) {
+    void HandleMessage(TRequestHeaderData* header, TMetadataRequestData* message, size_t messageSize) {
         TMetadataResponseData response;
         response.ThrottleTimeMs = 0;
         response.ClusterId = "cluster-ahjgk";
@@ -215,16 +221,20 @@ protected:
         response.Brokers[0].NodeId = 1;
         response.Brokers[0].Host = "lbk-dev-02.search.yandex.net";
         response.Brokers[0].Port = 9092;
+        response.Brokers[0].Rack = "rack-1-1";
 
-        response.Topics.resize(1);
-        response.Topics[0].TopicId = TKafkaUuid(0, 1);
-        response.Topics[0].Name = "topic-1";
-        response.Topics[0].Partitions.resize(1);
-        response.Topics[0].Partitions[0].LeaderId = 1; // response.Brokers[0].NodeId
-        response.Topics[0].Partitions[0].ReplicaNodes.resize(1);
-        response.Topics[0].Partitions[0].ReplicaNodes[0] = 1;
-        response.Topics[0].Partitions[0].IsrNodes.resize(1);
-        response.Topics[0].Partitions[0].IsrNodes[0] = 1;
+        response.Topics.resize(message->Topics.size());
+        for(size_t i = 0; i < message->Topics.size(); ++i) {
+            response.Topics[i].TopicId = TKafkaUuid(0, i + 1);
+            response.Topics[i].Name = message->Topics[i].Name;
+            response.Topics[i].Partitions.resize(1);
+            response.Topics[i].Partitions[0].PartitionIndex = 0;
+            response.Topics[i].Partitions[0].LeaderId = 1; // response.Brokers[0].NodeId
+            response.Topics[i].Partitions[0].ReplicaNodes.resize(1);
+            response.Topics[i].Partitions[0].ReplicaNodes[0] = 1;
+            response.Topics[i].Partitions[0].IsrNodes.resize(1);
+            response.Topics[i].Partitions[0].IsrNodes[0] = 1;
+        }
 
         Reply(header, &response);
 
@@ -256,7 +266,7 @@ protected:
         }
     }
 
-    void Reply(TRequestHeaderData* header, TApiMessage* reply) {
+    void Reply(const TRequestHeaderData* header, const TApiMessage* reply) {
         // TODO improve allocation
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;

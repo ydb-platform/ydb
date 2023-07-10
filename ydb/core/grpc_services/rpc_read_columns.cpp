@@ -6,7 +6,7 @@
 #include "resolve_local_db_table.h"
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
@@ -534,7 +534,7 @@ private:
             MinKeyInclusive = proto->from_key_inclusive();
         } else {
             TVector<TCell> allNulls(KeyColumnTypes.size());
-            MinKey.Parse(TSerializedCellVec::Serialize(allNulls));
+            MinKey = TSerializedCellVec(allNulls);
             MinKeyInclusive = true;
         }
 
@@ -548,7 +548,7 @@ private:
             MaxKeyInclusive = proto->to_key_inclusive();
         } else {
             TVector<TCell> infinity;
-            MaxKey.Parse(TSerializedCellVec::Serialize(infinity));
+            MaxKey = TSerializedCellVec(infinity);
             MaxKeyInclusive = false;
         }
 

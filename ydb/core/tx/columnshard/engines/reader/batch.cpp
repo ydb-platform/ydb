@@ -7,19 +7,21 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-TBatch::TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo)
+TBatch::TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo, const ui64 predictedBatchSize)
     : BatchAddress(address)
     , Portion(portionInfo.Records[0].Portion)
     , Granule(owner.GetGranuleId())
+    , PredictedBatchSize(predictedBatchSize)
     , Owner(&owner)
-    , PortionInfo(&portionInfo) {
+    , PortionInfo(&portionInfo)
+{
     Y_VERIFY(portionInfo.Records.size());
 
     if (portionInfo.CanIntersectOthers()) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "intersect_portion");
+        ACFL_TRACE("event", "intersect_portion");
         Owner->SetDuplicationsAvailable(true);
         if (portionInfo.CanHaveDups()) {
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "dup_portion");
+            ACFL_TRACE("event", "dup_portion");
             DuplicationsAvailableFlag = true;
         }
     }
@@ -143,6 +145,7 @@ void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
             }
         }
     }
+    CheckReadyForAssemble();
 }
 
 bool TBatch::InitFilter(std::shared_ptr<NArrow::TColumnFilter> filter, std::shared_ptr<arrow::RecordBatch> filterBatch,
@@ -166,6 +169,7 @@ bool TBatch::AddIndexedReady(const TBlobRange& bRange, const TString& blobData) 
     FetchedBytes += bRange.Size;
     Data.emplace(bRange, TPortionInfo::TAssembleBlobInfo(blobData));
     Owner->OnBlobReady(bRange);
+    CheckReadyForAssemble();
     return true;
 }
 
@@ -210,6 +214,18 @@ void TBatch::GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::
         from = *FirstPK;
         to = *LastPK;
     }
+}
+
+bool TBatch::CheckReadyForAssemble() {
+    if (IsFetchingReady()) {
+        auto& context = Owner->GetOwner();
+        auto processor = context.GetTasksProcessor();
+        if (auto assembleBatchTask = AssembleTask(processor.GetObject(), context.GetReadMetadata())) {
+            processor.Add(context, assembleBatchTask);
+        }
+        return true;
+    }
+    return false;
 }
 
 }

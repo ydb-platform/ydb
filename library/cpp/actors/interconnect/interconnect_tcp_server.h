@@ -12,7 +12,7 @@ namespace NActors {
     class TInterconnectListenerTCP: public TActor<TInterconnectListenerTCP>, public TInterconnectLoggingBase {
     public:
         static constexpr EActivityType ActorActivityType() {
-            return INTERCONNECT_COMMON;
+            return EActivityType::INTERCONNECT_COMMON;
         }
 
         TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket = Nothing());

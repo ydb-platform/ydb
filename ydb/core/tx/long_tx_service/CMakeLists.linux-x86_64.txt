@@ -22,6 +22,7 @@ target_link_libraries(core-tx-long_tx_service PUBLIC
   ydb-core-base
   core-tx-columnshard
   tx-long_tx_service-public
+  ydb-library-services
 )
 target_sources(core-tx-long_tx_service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/acquire_snapshot_impl.cpp

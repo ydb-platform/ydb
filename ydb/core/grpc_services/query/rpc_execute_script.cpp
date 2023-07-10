@@ -1,11 +1,11 @@
 #include "service_query.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/public/api/protos/draft/ydb_query.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -44,7 +44,6 @@ bool FillQueryContent(const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::T
     }
 }
 
-
 std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest)
 {
@@ -66,7 +65,8 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
         }
     }
 
-
+    kqpRequest.MutableRequest()->SetCollectStats(GetCollectStatsMode(req.stats_mode()));
+    kqpRequest.MutableRequest()->SetSyntax(req.script_content().syntax());
 
     kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
     kqpRequest.MutableRequest()->SetKeepSession(false);

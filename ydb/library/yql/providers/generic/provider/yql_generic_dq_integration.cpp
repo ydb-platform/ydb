@@ -96,11 +96,7 @@ namespace NYql {
                     const auto& cluster = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
                     const auto& table = settings.Table().StringValue();
                     const auto& token = settings.Token().Name().StringValue();
-                    const auto& endpoint = State_->Configuration->ClusterConfigs[cluster].endpoint();
-
-                    YQL_CLOG(INFO, ProviderGeneric)
-                        << "Filling source settings"
-                        << ": cluster: " << cluster << ", table: " << table << ", endpoint: " << endpoint.DebugString();
+                    const auto& endpoint = State_->Configuration->ClusterNamesToClusterConfigs[cluster].endpoint();
 
                     Generic::TSource srcDesc;
                     srcDesc.set_token(token);
@@ -110,6 +106,13 @@ namespace NYql {
                         db = "default";
                         dbTable = table;
                     }
+
+                    YQL_CLOG(INFO, ProviderGeneric)
+                        << "Filling source settings"
+                        << ": cluster: " << cluster
+                        << ", database: " << db
+                        << ", table: " << table
+                        << ", endpoint: " << endpoint.ShortDebugString();
 
                     const auto& columns = settings.Columns();
 
@@ -128,7 +131,7 @@ namespace NYql {
                         column->mutable_name()->assign(column_name);
 
                         // assign column type
-                        auto type = Connector::GetColumnTypeByName(tableMeta.Schema, column_name);
+                        auto type = NConnector::GetColumnTypeByName(tableMeta.Schema, column_name);
                         column->mutable_type()->CopyFrom(type);
                     }
 

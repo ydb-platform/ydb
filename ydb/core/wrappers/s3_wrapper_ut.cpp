@@ -1,6 +1,6 @@
 #include "s3_storage_config.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>

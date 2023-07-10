@@ -115,7 +115,7 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
             LOG_D("Try to retry to another node, nodeId: " << *targetNode << ", requestId: " << requestId);
             auto anotherTarget = MakeKqpNodeServiceID(*targetNode);
             TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(anotherTarget, ExecuterId, ev.release(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, requestId,  nullptr, ExecuterSpan.GetTraceId()));
+                CalcSendMessageFlagsForNode(*targetNode), requestId,  nullptr, ExecuterSpan.GetTraceId()));
             requestData.RetryNumber++;
             return true;
         }
@@ -308,6 +308,13 @@ TString TKqpPlanner::GetEstimationsInfo() const {
         ss << "0;";
     }
     return ss.Str();
+}
+
+void TKqpPlanner::Unsubscribe() {
+    for(ui64 nodeId: TrackingNodes) {
+        TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(
+            TActivationContext::InterconnectProxy(nodeId), ExecuterId, new TEvents::TEvUnsubscribe()));
+    }
 }
 
 void TKqpPlanner::PrepareToProcess() {

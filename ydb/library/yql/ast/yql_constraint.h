@@ -253,7 +253,7 @@ public:
     void ToJson(NJson::TJsonWriter& out) const override;
 
     bool IsOrderBy(const TSortedConstraintNode& sorted) const;
-    bool HasEqualColumns(const std::vector<std::string_view>& columns) const;
+    bool ContainsCompleteSet(const std::vector<std::string_view>& columns) const;
 
     void FilterUncompleteReferences(TSetType& references) const;
 

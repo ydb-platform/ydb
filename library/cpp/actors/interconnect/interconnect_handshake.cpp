@@ -1218,12 +1218,12 @@ namespace NActors {
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
-            std::move(peerHostName), std::move(params)), IActor::INTERCONNECT_HANDSHAKE);
+            std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
-            IActor::INTERCONNECT_HANDSHAKE);
+            IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
 }

@@ -85,9 +85,9 @@ namespace NPage {
             return &Page;
         }
 
-        const auto* Label() const noexcept
+        NPage::TLabel Label() const noexcept
         {
-            return TDeref<const NPage::TLabel>::At(Raw.data(), 0);
+            return ReadUnaligned<NPage::TLabel>(Raw.data());
         }
 
         TIter Rewind(TRowId to, TIter on, int dir) const

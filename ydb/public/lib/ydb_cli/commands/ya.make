@@ -9,6 +9,10 @@ SRCS(
     click_bench.cpp
     kv_workload.cpp
     stock_workload.cpp
+    topic_operations_scenario.cpp
+    topic_read_scenario.cpp
+    topic_write_scenario.cpp
+    topic_readwrite_scenario.cpp
     tpch.cpp
     ydb_sdk_core_access.cpp
     ydb_command.cpp
@@ -39,6 +43,7 @@ PEERDIR(
     ydb/public/lib/operation_id
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/topic_workload
+    ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic

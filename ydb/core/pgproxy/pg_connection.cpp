@@ -430,6 +430,33 @@ protected:
     void HandleMessage(const TPGFlush*) {
     }
 
+    static void FillDataRow(TPGStreamOutput<TPGDataRow>& dataOut, const TEvPGEvents::TDataRow& dataIn) {
+        dataOut << uint16_t(dataIn.size()); // number of fields
+        for (const auto& item : dataIn) {
+            if (item.Value) {
+                const auto& value(item.Value.value());
+                dataOut << uint32_t(value.size()) << value;
+            } else {
+                dataOut << uint32_t(-1);
+            }
+        }
+    }
+
+    static void FillDataRowDescription(TPGStreamOutput<TPGRowDescription>& dataOut, const std::vector<TEvPGEvents::TRowDescriptionField>& dataIn) {
+        dataOut << uint16_t(dataIn.size()); // number of fields
+        for (const auto& field : dataIn) {
+            dataOut
+                << TStringBuf(field.Name) << '\0'
+                << uint32_t(field.TableId)
+                << uint16_t(field.ColumnId)
+                << uint32_t(field.DataType)
+                << uint16_t(field.DataTypeSize)
+                << uint32_t(field.DataTypeModifier)
+                << uint16_t(0)          // format text
+                ;
+        }
+    }
+
     bool FlushAndPoll() {
         if (FlushOutput()) {
             RequestPoller();
@@ -497,27 +524,13 @@ protected:
                 } else {
                     if (!ev->Get()->DataFields.empty()) { // rowDescription
                         TPGStreamOutput<TPGRowDescription> rowDescription;
-                        rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
-                        for (const auto& field : ev->Get()->DataFields) {
-                            rowDescription
-                                << TStringBuf(field.Name) << '\0'
-                                << uint32_t(field.TableId)
-                                << uint16_t(field.ColumnId)
-                                << uint32_t(field.DataType)
-                                << uint16_t(field.DataTypeSize)
-                                << uint32_t(0xffffffff) // type modifier
-                                << uint16_t(0)          // format text
-                                ;
-                        }
+                        FillDataRowDescription(rowDescription, ev->Get()->DataFields);
                         SendStream(rowDescription);
                     }
                     { // dataFields
                         for (const auto& row : ev->Get()->DataRows) {
                             TPGStreamOutput<TPGDataRow> dataRow;
-                            dataRow << uint16_t(row.size()); // number of fields
-                            for (const auto& item : row) {
-                                dataRow << uint32_t(item.size()) << item;
-                            }
+                            FillDataRow(dataRow, row);
                             SendStream(dataRow);
                         }
                     }
@@ -560,18 +573,7 @@ protected:
                 if (ev->Get()->DataFields.size() > 0) {
                     // rowDescription
                     TPGStreamOutput<TPGRowDescription> rowDescription;
-                    rowDescription << uint16_t(ev->Get()->DataFields.size()); // number of fields
-                    for (const auto& field : ev->Get()->DataFields) {
-                        rowDescription
-                            << TStringBuf(field.Name) << '\0'
-                            << uint32_t(field.TableId)
-                            << uint16_t(field.ColumnId)
-                            << uint32_t(field.DataType)
-                            << uint16_t(field.DataTypeSize)
-                            << uint32_t(0xffffffff) // type modifier
-                            << uint16_t(0)          // format text
-                            ;
-                    }
+                    FillDataRowDescription(rowDescription, ev->Get()->DataFields);
                     SendStream(rowDescription);
                 } else {
                     SendMessage(TPGNoData());
@@ -605,10 +607,7 @@ protected:
                     { // dataFields
                         for (const auto& row : ev->Get()->DataRows) {
                             TPGStreamOutput<TPGDataRow> dataRow;
-                            dataRow << uint16_t(row.size()); // number of fields
-                            for (const auto& item : row) {
-                                dataRow << uint32_t(item.size()) << item;
-                            }
+                            FillDataRow(dataRow, row);
                             SendStream(dataRow);
                         }
                     }

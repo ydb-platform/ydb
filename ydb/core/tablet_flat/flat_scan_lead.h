@@ -14,14 +14,14 @@ namespace NTable {
             Valid = true;
             Tags.assign(tags.begin(), tags.end());
             Relation = seek;
-            Key = TSerializedCellVec(TSerializedCellVec::Serialize(key));
+            Key = TSerializedCellVec(key);
             StopKey = { };
         }
 
         void Until(TArrayRef<const TCell> key, bool inclusive)
         {
             Y_VERIFY(Valid, "Until must be called after To");
-            StopKey = TSerializedCellVec(TSerializedCellVec::Serialize(key));
+            StopKey = TSerializedCellVec(key);
             StopKeyInclusive = inclusive;
         }
 

@@ -19,7 +19,7 @@
 
 #include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -4106,7 +4106,7 @@ public:
 
         NActors::TActorId loggerActorId = NActors::TActorId(setup->NodeId, "logger");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
-            new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
+            new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER,
                 IsVerbose ? NLog::PRI_ERROR : NLog::PRI_CRIT,
                 IsVerbose ? NLog::PRI_ERROR : NLog::PRI_CRIT,
                 0));

@@ -912,6 +912,16 @@ private:
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
         TStringStream str;
         str.Reserve(8 * 1024);
+
+        auto snapshot = TVector<NKikimrKqp::TKqpNodeResources>();
+
+        if (PublishResourcesByExchanger) {
+            ResourceManager->RequestClusterResourcesInfo(
+                [&snapshot](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                    snapshot = std::move(resources);
+                });
+        }
+
         HTML(str) {
             PRE() {
                 str << "Current config:" << Endl;
@@ -960,6 +970,35 @@ private:
                         }
                     } // with_lock (bucket.Lock)
                 }
+
+                if (snapshot.empty()) {
+                    str << "No nodes resource info" << Endl;
+                } else {
+                    str << Endl << "Resources info: " << Endl;
+                    str << "Nodes count: " << snapshot.size() << Endl;
+                    str << Endl;
+                    for(const auto& entry : snapshot) {
+                        str << "  NodeId: " << entry.GetNodeId() << Endl;
+                        str << "    ResourceManagerActorId: " << entry.GetResourceManagerActorId() << Endl;
+                        str << "    AvailableComputeActors: " << entry.GetAvailableComputeActors() << Endl;
+                        str << "    UsedMemory: " << entry.GetUsedMemory() << Endl;
+                        str << "    TotalMemory: " << entry.GetTotalMemory() << Endl;
+                        str << "    Transactions:" << Endl;
+                        for (const auto& tx: entry.GetTransactions()) {
+                            str << "      TxId: " << tx.GetTxId() << Endl;
+                            str << "        ComputeActors: " << tx.GetComputeActors() << Endl;
+                            str << "        Memory: " << tx.GetMemory() << Endl;
+                            str << "        StartTimestamp: " << tx.GetStartTimestamp() << Endl;
+                        }
+                        str << "    Timestamp: " << entry.GetTimestamp() << Endl;
+                        str << "    Memory:" << Endl;;
+                        for (const auto& memoryInfo: entry.GetMemory()) {
+                            str << "      Pool: " << memoryInfo.GetPool() << Endl;
+                            str << "      Available: " << memoryInfo.GetAvailable() << Endl;
+                        }
+                        str << "    ExecutionUnits: " << entry.GetExecutionUnits() << Endl;
+                    }
+                 }
             } // PRE()
         }
 

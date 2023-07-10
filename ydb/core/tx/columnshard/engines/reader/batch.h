@@ -22,6 +22,7 @@ class TBatch;
 
 class TBatchFetchedInfo {
 private:
+    YDB_READONLY_DEF(std::optional<ui64>, BatchSize);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilteredBatch);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, FilterBatch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
@@ -57,6 +58,7 @@ public:
     void InitBatch(std::shared_ptr<arrow::RecordBatch> fullBatch) {
         Y_VERIFY(!FilteredBatch);
         FilteredBatch = fullBatch;
+        BatchSize = NArrow::GetBatchMemorySize(FilteredBatch);
     }
 
     ui32 GetFilteredRecordsCount() const {
@@ -69,13 +71,14 @@ public:
     }
 };
 
-class TBatch {
+class TBatch: TNonCopyable {
 private:
     const TBatchAddress BatchAddress;
     YDB_READONLY(ui64, Portion, 0);
     YDB_READONLY(ui64, Granule, 0);
     YDB_READONLY(ui64, WaitingBytes, 0);
     YDB_READONLY(ui64, FetchedBytes, 0);
+    const ui64 PredictedBatchSize;
 
     THashSet<TBlobRange> WaitIndexed;
     mutable std::optional<std::shared_ptr<TSortableBatchPosition>> FirstPK;
@@ -93,10 +96,24 @@ private:
     std::set<ui32> AskedColumnIds;
     void ResetCommon(const std::set<ui32>& columnIds);
     ui64 GetUsefulBytes(const ui64 bytes) const;
+    bool CheckReadyForAssemble();
+    bool IsFetchingReady() const {
+        return WaitIndexed.empty();
+    }
 
 public:
     std::shared_ptr<TSortableBatchPosition> GetFirstPK(const bool reverse, const TIndexInfo& indexInfo) const;
     void GetPKBorders(const bool reverse, const TIndexInfo& indexInfo, std::shared_ptr<TSortableBatchPosition>& from, std::shared_ptr<TSortableBatchPosition>& to) const;
+
+    ui64 GetPredictedBatchSize() const {
+        return PredictedBatchSize;
+    }
+
+    ui64 GetRealBatchSizeVerified() const {
+        auto result = FetchedInfo.GetBatchSize();
+        Y_VERIFY(result);
+        return *result;
+    }
 
     bool AllowEarlyFilter() const {
         return PortionInfo->AllowEarlyFilter();
@@ -113,7 +130,7 @@ public:
         return GetUsefulBytes(FetchedBytes);
     }
 
-    TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo);
+    TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo, const ui64 predictedBatchSize);
     bool AddIndexedReady(const TBlobRange& bRange, const TString& blobData);
     bool AskedColumnsAlready(const std::set<ui32>& columnIds) const;
 
@@ -134,10 +151,6 @@ public:
 
     const TGranule& GetOwner() const {
         return *Owner;
-    }
-
-    bool IsFetchingReady() const {
-        return WaitIndexed.empty();
     }
 
     const TPortionInfo& GetPortionInfo() const {

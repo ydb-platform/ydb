@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     class TSendReceiveActor : public TActorBootstrapped<TSendReceiveActor> {
     public:
         static constexpr auto ActorActivityType() {
-            return ACTORLIB_COMMON;
+            return EActivityType::ACTORLIB_COMMON;
         }
 
         TSendReceiveActor(double* elapsedTime, TActorId receiver, bool allocation, ERole role, ESendingType sendingType, ui32 neighbours = 0)
@@ -646,10 +646,8 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
     Y_UNIT_TEST(LocalProcessKey) {
         static constexpr char ActorName[] = "TestActor";
 
-        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetName(IActor::INTERCONNECT_PROXY_TCP) == "INTERCONNECT_PROXY_TCP"));
-
+        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetName(IActor::EActivityType::INTERCONNECT_PROXY_TCP) == "INTERCONNECT_PROXY_TCP"));
         UNIT_ASSERT((TLocalProcessKey<TActorActivityTag, ActorName>::GetName() == ActorName));
-        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(IActor::INTERCONNECT_PROXY_TCP) == IActor::INTERCONNECT_PROXY_TCP));
     }
 }
 

@@ -162,7 +162,7 @@
                                                                             "Id": 106
                                                                         },
                                                                         "Constant": {
-                                                                            "Text": "google"
+                                                                            "Bytes": "google"
                                                                         }
                                                                     }
                                                                 },
@@ -180,14 +180,31 @@
                                                                                     "Id": 106
                                                                                 }
                                                                             ],
-                                                                            "Id": 9
+                                                                            "FunctionType": 2,
+                                                                            "Id": 9,
+                                                                            "KernelIdx": 0
+                                                                        }
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "Assign": {
+                                                                        "Column": {
+                                                                            "Id": 108
+                                                                        },
+                                                                        "Function": {
+                                                                            "Arguments": [
+                                                                                {
+                                                                                    "Id": 107
+                                                                                }
+                                                                            ],
+                                                                            "Id": 18
                                                                         }
                                                                     }
                                                                 },
                                                                 {
                                                                     "Filter": {
                                                                         "Predicate": {
-                                                                            "Id": 107
+                                                                            "Id": 108
                                                                         }
                                                                     }
                                                                 },

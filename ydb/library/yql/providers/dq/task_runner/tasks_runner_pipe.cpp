@@ -500,14 +500,16 @@ public:
         return response.GetFreeSpace();
     }
 
-    void Push(NDqProto::TData&& data) override {
+    void Push(TDqSerializedBatch&& data) override {
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::PUSH);
         header.SetTaskId(TaskId);
         header.SetChannelId(ChannelId);
         header.Save(&Output);
-        data.Save(&Output);
+
+        YQL_ENSURE(!data.IsOOB(), "OOB Transport is not supported here");
+        data.Proto.Save(&Output);
     }
 
     void Finish() override {
@@ -577,7 +579,7 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Push(NDqProto::TData&& data) override {
+    void Push(TDqSerializedBatch&& data) override {
         try {
             return Delegate->Push(std::move(data));
         } catch (...) {
@@ -730,7 +732,9 @@ public:
         auto inputType = GetInputType();
         NDqProto::TSourcePushRequest data;
         TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
-        *data.MutableData() = dataSerializer.Serialize(batch, inputType);
+        TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
+        YQL_ENSURE(!serialized.IsOOB());
+        *data.MutableData() = std::move(serialized.Proto);
         data.SetSpace(space);
 
         NDqProto::TCommandHeader header;
@@ -839,7 +843,7 @@ public:
     { }
 
     [[nodiscard]]
-    NDqProto::TPopResponse Pop(NDqProto::TData& data) override {
+    NDqProto::TPopResponse Pop(TDqSerializedBatch& data) override {
         NDqProto::TCommandHeader header;
         header.SetVersion(1);
         header.SetCommand(NDqProto::TCommandHeader::POP);
@@ -849,7 +853,9 @@ public:
 
         NDqProto::TPopResponse response;
         response.Load(&Input);
-        data = std::move(*response.MutableData());
+        data.Clear();
+        data.Proto = std::move(*response.MutableData());
+        YQL_ENSURE(!data.IsOOB());
         return response;
     }
 
@@ -958,7 +964,7 @@ public:
     }
     // can throw TDqChannelStorageException
     [[nodiscard]]
-    bool Pop(NDqProto::TData& data) override {
+    bool Pop(TDqSerializedBatch& data) override {
         try {
             auto response = Delegate->Pop(data);
             return response.GetResult();
@@ -981,7 +987,7 @@ public:
     //       Data-query implementation should be one-shot for Pop (a-la PopAll) call and without ChannelStorage.
     // can throw TDqChannelStorageException
     [[nodiscard]]
-    bool PopAll(NDqProto::TData& data) override {
+    bool PopAll(TDqSerializedBatch& data) override {
         Y_UNUSED(data);
         ythrow yexception() << "unimplemented";
     }
@@ -1114,11 +1120,11 @@ public:
                 TaskRunner->GetTypeEnv(),
                 TaskRunner->GetHolderFactory(),
                 NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
+            
+            TDqSerializedBatch serialized;
+            serialized.Proto = std::move(*response.MutableData());
 
-            dataSerializer.Deserialize(
-                response.GetData(),
-                GetOutputType(),
-                batch);
+            dataSerializer.Deserialize(serialized, GetOutputType(), batch);
 
             return response.GetBytes();
         } catch (...) {

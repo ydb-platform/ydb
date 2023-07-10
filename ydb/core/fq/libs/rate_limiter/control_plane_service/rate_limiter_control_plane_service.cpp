@@ -1,7 +1,7 @@
 #include "rate_limiter_control_plane_service.h"
 #include "update_limit_actor.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>

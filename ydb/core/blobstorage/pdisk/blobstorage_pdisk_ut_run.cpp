@@ -108,7 +108,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         NActors::TActorId loggerActorId = NActors::TActorId(1, "logger");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
-            new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
+            new NActors::NLog::TSettings(loggerActorId, NActorsServices::LOGGER,
                 NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
         logSettings->Append(
             NActorsServices::EServiceCommon_MIN,

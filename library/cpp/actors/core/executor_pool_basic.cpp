@@ -29,7 +29,7 @@ namespace NActors {
         i16 maxThreadCount,
         i16 defaultThreadCount,
         i16 priority)
-        : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
+        : TExecutorPoolBase(poolId, threads, affinity)
         , SpinThreshold(spinThreshold)
         , SpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , Threads(new TThreadCtx[threads])
@@ -48,6 +48,7 @@ namespace NActors {
         , Harmonizer(harmonizer)
         , Priority(priority)
     {
+        Y_UNUSED(maxActivityType);
         i16 limit = Min(threads, (ui32)Max<i16>());
         if (DefaultThreadCount) {
             DefaultThreadCount = Min(DefaultThreadCount, limit);
@@ -79,7 +80,7 @@ namespace NActors {
             cfg.TimePerMailbox,
             cfg.EventsPerMailbox,
             cfg.RealtimePriority,
-            cfg.MaxActivityType,
+            0,
             cfg.MinThreadCount,
             cfg.MaxThreadCount,
             cfg.DefaultThreadCount,
@@ -232,7 +233,7 @@ namespace NActors {
 
             if (needToWait && wctx.HasCapturedMessageBox) {
                 timers.HPNow = GetCycleCountFast();
-                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timers.HPNow - timers.HPStart);
+                wctx.AddElapsedCycles(ActorSystemIndex, timers.HPNow - timers.HPStart);
                 return 0;
             }
 
@@ -260,7 +261,7 @@ namespace NActors {
             if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                 timers.HPNow = GetCycleCountFast();
                 timers.Elapsed += timers.HPNow - timers.HPStart;
-                wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timers.Elapsed);
+                wctx.AddElapsedCycles(ActorSystemIndex, timers.Elapsed);
                 if (timers.Parked > 0) {
                     wctx.AddParkedCycles(timers.Parked);
                 }

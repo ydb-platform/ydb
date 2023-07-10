@@ -147,7 +147,7 @@ public:
             runner->Prepare(runnerSettings, limits);
         }
 
-        TVector<NDqProto::TData> rows;
+        TVector<NDq::TDqSerializedBatch> rows;
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
             YQL_CLOG(DEBUG, ProviderDq) << " NDq::ERunStatus " << runner->Run();
@@ -155,7 +155,7 @@ public:
             NDq::ERunStatus status;
             while ((status = runner->Run()) == NDq::ERunStatus::PendingOutput || status == NDq::ERunStatus::Finished) {
                 if (!fillSettings.Discard) {
-                    NDqProto::TData data;
+                    NDq::TDqSerializedBatch data;
                     while (runner->GetOutputChannel(0)->Pop(data)) {
                         rows.push_back(std::move(data));
                         data = {};
@@ -940,18 +940,29 @@ private:
         }
     }
 
-    IGraphTransformer::TStatus FallbackWithMessage(const TExprNode& node, const TString& message, TExprContext& ctx, bool isRoot) {
+    IGraphTransformer::TStatus FallbackWithMessage(const TExprNode& node, TIssue issue, TExprContext& ctx, bool isRoot) {
         if (State->Metrics) {
             State->Metrics->IncCounter("dq", "Fallback");
         }
         State->Statistics[State->MetricId++].Entries.push_back(TOperationStatistics::TEntry("Fallback", 0, 0, 0, 0, 1));
-        auto issue = TIssue(ctx.GetPosition(node.Pos()), message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING);
         if (isRoot) {
             ctx.AssociativeIssues.emplace(&node, TIssues{std::move(issue)});
         } else {
             ctx.IssueManager.RaiseIssue(issue);
         }
         return IGraphTransformer::TStatus::Error;
+    }
+
+    IGraphTransformer::TStatus FallbackWithMessage(const TExprNode& node, const TString& message, TExprContext& ctx, bool isRoot) {
+        return FallbackWithMessage(node, TIssue(ctx.GetPosition(node.Pos()), message).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING), ctx, isRoot);
+    }
+
+    IGraphTransformer::TStatus FallbackWithMessage(const TExprNode& node, const TFallbackError& error, TExprContext& ctx, bool isRoot) {
+        if (auto issue = error.GetIssue()) {
+            return FallbackWithMessage(node, *issue, ctx, isRoot);
+        } else {
+            return FallbackWithMessage(node, error.what(), ctx, isRoot);
+        }
     }
 
     TPublicIds::TPtr GetPublicIds(const TExprNode::TPtr& root) const {
@@ -1091,7 +1102,7 @@ private:
             return SyncError();
         } catch (const TFallbackError& err) {
             YQL_ENSURE(canFallback, "Unexpected TFallbackError: " << err.what());
-            return SyncStatus(FallbackWithMessage(pull.Ref(), err.what(), ctx, true));
+            return SyncStatus(FallbackWithMessage(pull.Ref(), err, ctx, true));
         }
 
         bool fallbackFlag = false;
@@ -1576,7 +1587,7 @@ private:
                 }
             } catch (const TFallbackError& err) {
                 YQL_ENSURE(canFallback, "Unexpected TFallbackError: " << err.what());
-                return FallbackWithMessage(*input, err.what(), ctx, false);
+                return FallbackWithMessage(*input, err, ctx, false);
             }
 
             bool fallbackFlag = false;

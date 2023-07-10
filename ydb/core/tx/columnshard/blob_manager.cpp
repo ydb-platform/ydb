@@ -591,7 +591,8 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
     if (!extracted) {
         dropped = DroppedEvictedBlobs.contains(evict);
         if (!dropped) {
-            return false; // update after erase
+            LOG_S_NOTICE("Update after forget '" << evict.Blob << "' at tablet " << TabletInfo->TabletID);
+            return false;
         }
         extracted = ExtractEvicted(old, meta, true);
     }
@@ -625,8 +626,13 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
 }
 
 bool TBlobManager::EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) {
-    db.EraseEvictBlob(evict);
-    return DroppedEvictedBlobs.erase(evict);
+    Y_VERIFY(!EvictedBlobs.contains(evict)); // erase before drop
+
+    if (DroppedEvictedBlobs.erase(evict)) {
+        db.EraseEvictBlob(evict);
+        return true;
+    }
+    return false;
 }
 
 bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) {

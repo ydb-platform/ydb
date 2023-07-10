@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>

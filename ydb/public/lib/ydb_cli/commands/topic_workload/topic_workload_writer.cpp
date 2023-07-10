@@ -138,7 +138,7 @@ void TTopicWorkloadWriterWorker::Process() {
 
                 WriteSession->Write(std::move(ContinuationToken.GetRef()), data, MessageId, createTimestamp);
 
-                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << now - *createTimestamp.Get());
+                WRITE_LOG(Params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Written message " << MessageId << " CreateTimestamp " << createTimestamp << " delta from now " << (Params.ByteRate == 0 ? TDuration() : now - *createTimestamp.Get()));
                 ContinuationToken.Clear();
                 MessageId++;
             }
@@ -220,16 +220,15 @@ bool TTopicWorkloadWriterWorker::ProcessSessionClosedEvent(
 
 void TTopicWorkloadWriterWorker::CreateWorker() {
     WRITE_LOG(Params.Log, ELogPriority::TLOG_INFO, TStringBuilder() << "Create writer worker for ProducerId " << Params.ProducerId << " PartitionId " << Params.PartitionId);
-    Y_VERIFY(Params.Driver);
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
     settings.PartitionId(Params.PartitionId);
-    WriteSession = NYdb::NTopic::TTopicClient(*Params.Driver).CreateWriteSession(settings);
+    WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
 }
 
-void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams&& params) {
+void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params) {
     TTopicWorkloadWriterWorker writer(std::move(params));
 
     (*params.StartedCount)++;

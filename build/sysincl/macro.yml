@@ -900,11 +900,6 @@
       - contrib/libs/nvidia/thrust/thrust/system/omp/detail/execution_policy.h
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/execution_policy.h
 
-- source_filter: "^contrib/python/mercurial"
-  includes:
-    - SHA1DC_CUSTOM_INCLUDE_SHA1_C: contrib/libs/libgit2/src/util/git2_util.h
-    - SHA1DC_CUSTOM_INCLUDE_UBC_CHECK_C: contrib/libs/libgit2/src/util/git2_util.h
-
 - source_filter: "^contrib/libs/unixodbc/libltdl"
   includes:
       - LT_CONFIG_H: $U/config.h

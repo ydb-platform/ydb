@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_ru_calculator PUBLIC
   core-tx-tx_proxy
   udf-service-stub
   yql-sql-pg_dummy
+  ydb-services-ydb
 )
 target_link_options(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
   -ldl

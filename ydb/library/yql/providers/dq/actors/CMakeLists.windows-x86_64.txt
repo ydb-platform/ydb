@@ -17,7 +17,6 @@ target_link_libraries(providers-dq-actors PUBLIC
   yutil
   cpp-actors-core
   library-cpp-yson
-  ydb-core-base
   ydb-library-mkql_proto
   yql-core-services
   core-services-mounts

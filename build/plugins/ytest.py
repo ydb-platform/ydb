@@ -140,7 +140,18 @@ def validate_test(unit, kw):
     invalid_requirements_for_distbuild = [
         requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')
     ]
-    sb_tags = [tag for tag in tags if tag.startswith('sb:')]
+
+    sb_tags = []
+    # XXX Unfortunately, some users have already started using colons
+    # in their tag names. Use skip set to avoid treating their tag as system ones.
+    # Remove this check when all such user tags are removed.
+    skip_set = ('ynmt_benchmark', 'bert_models', 'zeliboba_map')
+    # Verify the prefixes of the system tags to avoid pointless use of the REQUIREMENTS macro parameters in the TAG macro.
+    for tag in tags:
+        if tag.startswith('sb:'):
+            sb_tags.append(tag)
+        elif ':' in tag and not tag.startswith('ya:') and tag.split(':')[0] not in skip_set:
+            errors.append("Only [[imp]]sb:[[rst]] and [[imp]]ya:[[rst]] prefixes are allowed in system tags: {}".format(tag))
 
     if is_fat:
         if size != consts.TestSize.Large:
@@ -442,6 +453,9 @@ def onadd_ytest(unit, *args):
 
     if flat_args[1] == "fuzz.test":
         unit.ondata("arcadia/fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
+
+    if not flat_args[1] in ("unittest.py", "gunittest", "g_benchmark"):
+        unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))
 
     test_data = sorted(
         _common.filter_out_by_keyword(
@@ -821,6 +835,8 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     split_factor = unit.get('TEST_SPLIT_FACTOR') or ''
     test_size = unit.get('TEST_SIZE_NAME') or ''
     test_cwd = unit.get('TEST_CWD_VALUE') or ''
+    yt_spec = get_values_list(unit, 'TEST_YT_SPEC_VALUE')
+    unit.ondata_files(yt_spec)
 
     unit_path = unit.path()
     test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
@@ -830,7 +846,6 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     data, data_files = get_canonical_test_resources(unit)
     test_data += data
     python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
-    yt_spec = get_values_list(unit, 'TEST_YT_SPEC_VALUE')
     if not binary_path:
         binary_path = os.path.join(unit_path, unit.filename())
     _dump_test(
@@ -902,6 +917,8 @@ def onjava_test(unit, *args):
     path = _common.strip_roots(unit_path)
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
+    yt_spec_values = get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')
+    unit.ondata_files(yt_spec_values)
 
     test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
     test_data.append('arcadia/build/scripts/run_junit.py')
@@ -954,7 +971,7 @@ def onjava_test(unit, *args):
         'JAVA_CLASSPATH_CMD_TYPE': java_cp_arg_type,
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT'),
         'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION') or '_DEFAULT') + '_FOR_TESTS',
-        'YT-SPEC': serialize_list(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE')),
+        'YT-SPEC': serialize_list(yt_spec_values),
     }
     test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
     if test_classpath_origins:

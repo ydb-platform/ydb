@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
-#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -91,6 +90,7 @@ struct TGraphMeta {
     TActorId ExecuterId;
     bool UseFollowers = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
+    TString Database;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena; 
@@ -108,8 +108,9 @@ struct TGraphMeta {
 
 struct TTaskInputMeta {
     // these message are allocated using the protubuf arena.
-    NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings;
-    NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings;
+    NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
+    NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
+    NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
 };
 
 struct TTaskOutputMeta {

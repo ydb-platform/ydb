@@ -73,6 +73,7 @@ PEERDIR(
     ydb/core/tracing
     ydb/core/util
     ydb/library/persqueue/topic_parser
+    ydb/library/services
 )
 
 END()

@@ -1079,7 +1079,11 @@ private:
                 settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
             }
 
-            settings.DynamicClusterProvider = SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources() ? NYql::KikimrProviderName : TString{};
+            if (SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
+                settings.DynamicClusterProvider = NYql::KikimrProviderName;
+                settings.BindingsMode = SessionCtx->Config().BindingsMode;
+            }
+
             settings.InferSyntaxVersion = true;
             settings.V0ForceDisable = false;
             settings.WarnOnV0 = false;
@@ -1323,11 +1327,17 @@ private:
 
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        SessionCtx->Query().PreparingQuery->SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
+
         if (settings.DocumentApiRestricted) {
             SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;
         }
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
+        }
+        if (settings.ConcurrentResults) {
+            YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
+            SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
         }
 
         TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;
@@ -1515,9 +1525,12 @@ private:
         };
 
         // Kikimr provider
+        auto gatewayProxy = CreateKqpGatewayProxy(Gateway, SessionCtx);
+
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
-        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, ExternalSourceFactory, IsInternalCall);
-        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, queryExecutor);
+        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx,
+            ExternalSourceFactory, IsInternalCall);
+        auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, gatewayProxy, SessionCtx, queryExecutor);
 
         FillSettings.AllResultsBytesLimit = Nothing();
         FillSettings.RowsLimitPerWrite = SessionCtx->Config()._ResultRowsLimit.Get().GetRef();

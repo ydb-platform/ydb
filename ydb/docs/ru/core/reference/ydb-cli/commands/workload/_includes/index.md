@@ -24,4 +24,5 @@
 * [Stock](../stock.md) - симулятор склада интернет-магазина.
 * [Key-value](../../../workload-kv.md) - Key-Value нагрузка.
 * [ClickBench](../../../workload-click-bench.md) - аналитический бенчмарк ClickBench (https://github.com/ClickHouse/ClickBench).
-<!-- * [Topic](../../../workload-topic.md) - Topic нагрузка. -->
+* [TPC-H](../../../workload-tpch.md) - TPC-H бенчмарк (https://www.tpc.org/tpch/).
+* [Topic](../../../workload-topic.md) - Topic нагрузка.

@@ -1,6 +1,8 @@
 #include "profiler.h"
 #include "tcmalloc.h"
 
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
@@ -242,7 +244,7 @@ namespace NActors {
 
         public:
             static constexpr EActivityType ActorActivityType() {
-                return ACTORLIB_STATS;
+                return EActivityType::ACTORLIB_STATS;
             }
 
             TProfilerActor(TDynamicCountersPtr counters, TString dir, std::unique_ptr<IProfilerLogic> profiler)

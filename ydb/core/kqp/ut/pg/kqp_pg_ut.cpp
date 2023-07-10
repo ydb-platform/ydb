@@ -142,11 +142,11 @@ bool ExecutePgInsertForCoercion(
 }
 
 template <typename T>
-void ValidatePgYqlResult(const T& result, const TPgTypeTestSpec& spec) {
+ui32 ValidatePgYqlResult(const T& result, const TPgTypeTestSpec& spec, bool check = true) {
     TResultSetParser parser(result.GetResultSetParser(0));
-    bool gotRows = false;
+    ui32 rows = 0;
     for (size_t i = 0; parser.TryNextRow(); ++i) {
-        gotRows = true;
+        rows++;
         auto check = [&parser] (const TString& column, const TString& expected) {
             auto& c = parser.ColumnParser(column);
             UNIT_ASSERT_VALUES_EQUAL(expected, c.GetPg().Content_);
@@ -158,7 +158,10 @@ void ValidatePgYqlResult(const T& result, const TPgTypeTestSpec& spec) {
         }
         check("value", expected);
     }
-    Y_ENSURE(gotRows, "empty select result");
+    if (check) {
+        Y_ENSURE(rows, "empty select result");
+    }
+    return rows;
 }
 
 void ValidateTypeCoercionResult(
@@ -1060,7 +1063,6 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn);
             session.Close().GetValueSync();
 
-            session = db.CreateSession().GetValueSync().GetSession();
             auto result = ExecutePgSelect(kikimr, tableName);
             ValidatePgYqlResult(result, spec);
         };
@@ -1324,6 +1326,21 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(DropTablePg) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                DROP TABLE Test;
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(CreateNotNullPgColumn) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
         auto client = kikimr.GetTableClient();
@@ -1408,6 +1425,131 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             testSingleType(spec);
             testSingleType(arraySpec);
         };
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            testType(spec);
+        }
+    }
+
+    Y_UNIT_TEST(TableDeleteAllData) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec) {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, false, spec.TextIn);
+            session.Close().GetValueSync();
+
+            {
+                session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(
+                    TStringBuilder() << R"(
+                    --!syntax_pg
+                    DELETE FROM )" << tableName << ';'
+                , TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                auto result = ExecutePgSelect(kikimr, tableName);
+                ui32 rows = ValidatePgYqlResult(result, spec, false);
+                UNIT_ASSERT_C(!rows, "table is not empty");
+            }
+        };
+
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textInArray = [&spec] (auto i) {
+                auto str = spec.TextIn(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeTestSpec arraySpec{arrayTypeId, spec.IsKey, textInArray, textOutArray};
+
+            testSingleType(spec);
+            testSingleType(arraySpec);
+        };
+
+        auto testByteaType = [&] () {
+            testSingleType(typeByteaSpec);
+            testSingleType(typeByteaArraySpec);
+        };
+
+        testByteaType();
+
+        for (const auto& spec : typeSpecs) {
+            Cerr << spec.TypeId << Endl;
+            testType(spec);
+        }
+    }
+
+    Y_UNIT_TEST(TableDeleteWhere) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        int cnt = 0;
+        auto testSingleType = [&kikimr, &cnt] (TPgTypeTestSpec spec) {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto tableName = createTable(db, session, spec.TypeId, spec.IsKey, /*isText=*/false, spec.TextIn, "", 2);
+            if (!spec.IsKey && cnt) {
+                return;
+            }
+            cnt += !spec.IsKey;
+            {
+                auto valType = NYql::NPg::LookupType(spec.TypeId).Name;
+                if (spec.TypeId == CHAROID) {
+                    valType = "\"char\"";
+                }
+                if (spec.TypeId == BITOID) {
+                    valType.append("(4)");
+                }
+                TString keyType = (spec.IsKey) ? valType : "int2";
+                TString keyIn = (spec.IsKey) ? spec.TextIn(1) : "1";
+
+                session = db.CreateSession().GetValueSync().GetSession();
+                TString req = Sprintf("\
+                    --!syntax_pg\n\
+                    DELETE FROM %s WHERE key = '%s'::%s", tableName.Data(), keyIn.Data(), keyType.Data());
+                Cerr << req << Endl;
+                auto result = session.ExecuteDataQuery(req, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+            {
+                auto result = ExecutePgSelect(kikimr, tableName);
+                ui32 rows = ValidatePgYqlResult(result, spec);
+                Y_ENSURE(rows == 1, "incorrect rows size");
+            }
+        };
+
+        auto testType = [&] (const TPgTypeTestSpec& spec) {
+            auto textInArray = [&spec] (auto i) {
+                auto str = spec.TextIn(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto textOutArray = [&spec] (auto i) {
+                auto str = spec.TextOut(i);
+                return spec.ArrayPrint(str);
+            };
+
+            auto arrayTypeId = NYql::NPg::LookupType(spec.TypeId).ArrayTypeId;
+            TPgTypeTestSpec arraySpec{arrayTypeId, spec.IsKey, textInArray, textOutArray};
+
+            testSingleType(spec);
+            testSingleType(arraySpec);
+        };
+
+        auto testByteaType = [&] () {
+            testSingleType(typeByteaSpec);
+            testSingleType(typeByteaArraySpec);
+        };
+
+        testByteaType();
 
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;

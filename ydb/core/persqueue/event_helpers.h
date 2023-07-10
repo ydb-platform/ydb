@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 
 #include <library/cpp/actors/core/actor.h>

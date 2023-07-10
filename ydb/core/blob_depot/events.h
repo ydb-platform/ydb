@@ -1,7 +1,6 @@
 #pragma once
 
-#include "defs.h"
-
+#include <library/cpp/actors/core/event.h>
 #include <ydb/core/protos/blob_depot.pb.h>
 
 namespace NKikimr {

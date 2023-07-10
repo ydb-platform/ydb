@@ -462,6 +462,61 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
+NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
+    if (!node.Maybe<TKqlSequencer>()) {
+        return node;
+    }
+
+    const auto& sequencer = node.Cast<TKqlSequencer>();
+
+    TMaybeNode<TKqpCnSequencer> cnSequencer;
+    if (IsDqPureExpr(sequencer.Input())) {
+        YQL_ENSURE(sequencer.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List,
+            "" << sequencer.Input().Ref().Dump());
+
+        cnSequencer = Build<TKqpCnSequencer>(ctx, sequencer.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                    .Build()
+                    .Program()
+                        .Args({})
+                        .Body<TCoIterator>()
+                            .List(sequencer.Input())
+                            .Build()
+                        .Build()
+                    .Settings(TDqStageSettings::New()
+                        .BuildNode(ctx, sequencer.Pos()))
+                    .Build()
+                .Index().Build("0")
+            .Build()
+            .Table(sequencer.Table())
+            .Columns(sequencer.Columns())
+            .AutoIncrementColumns(sequencer.AutoIncrementColumns())
+            .InputItemType(sequencer.InputItemType())
+            .Done();
+    } else {
+        return node;
+    }
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+            .Inputs()
+                .Add(cnSequencer.Cast())
+                .Build()
+            .Program()
+                .Args({"sequencer_output"})
+                .Body<TCoToStream>()
+                    .Input("sequencer_output")
+                    .Build()
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Build()
+            .Index().Build("0")
+        .Build().Done();    
+}
+
 NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
     if (!node.Maybe<TKqlStreamLookupTable>()) {
         return node;

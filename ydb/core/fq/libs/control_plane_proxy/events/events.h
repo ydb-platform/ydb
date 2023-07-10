@@ -93,6 +93,7 @@ struct TEvControlPlaneProxy {
         TTenantInfo::TPtr TenantInfo;
         TString SubjectType;
         bool ComputeYDBOperationWasPerformed;
+        TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>

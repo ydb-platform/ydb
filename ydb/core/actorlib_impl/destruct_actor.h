@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/events.h>
 
 namespace NActors {

@@ -16,8 +16,8 @@ using NActors::TEvents;
 
 class TLoadNetwork:  public NActors::TActorBootstrapped<TLoadNetwork> {
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TEST_ACTOR_RUNTIME;
+    static constexpr NActors::IActor::EActivityType ActorActivityType() {
+        return NActors::IActor::EActivityType::TEST_ACTOR_RUNTIME;
     }
 
     TLoadNetwork(ui32 selfNodeId, ui32 totalNodesCount)

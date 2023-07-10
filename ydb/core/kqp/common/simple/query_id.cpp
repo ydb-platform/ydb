@@ -25,6 +25,7 @@ TKqpQueryId::TKqpQueryId(const TString& cluster, const TString& database, const 
         case NKikimrKqp::QUERY_TYPE_AST_DML:
         case NKikimrKqp::QUERY_TYPE_AST_SCAN:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
             break;
 

@@ -32,6 +32,7 @@ PEERDIR(
     library/cpp/grpc/client
     library/cpp/json
     ydb/core/base
+    ydb/library/services
     ydb/public/lib/deprecated/client
     ydb/public/lib/deprecated/kicli
 )

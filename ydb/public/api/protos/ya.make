@@ -14,7 +14,6 @@ SRCS(
     draft/ydb_long_tx.proto
     draft/ydb_maintenance.proto
     draft/ydb_logstore.proto
-    draft/ydb_query.proto
     draft/ydb_dynamic_config.proto
     ydb_federation_discovery.proto
     persqueue_error_codes_v1.proto
@@ -33,6 +32,7 @@ SRCS(
     ydb_monitoring.proto
     ydb_operation.proto
     ydb_query_stats.proto
+    ydb_query.proto
     ydb_rate_limiter.proto
     ydb_scheme.proto
     ydb_scripting.proto

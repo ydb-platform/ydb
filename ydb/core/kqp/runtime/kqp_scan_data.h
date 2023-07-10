@@ -3,7 +3,7 @@
 #include "kqp_compute.h"
 #include "kqp_scan_data_meta.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>

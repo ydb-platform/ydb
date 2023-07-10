@@ -236,12 +236,8 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
     UpdatePortionStats(*PathStats[pathId], portionInfo, updateType, exPortionInfo);
 }
 
-void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
-                                              EStatsUpdateType updateType,
-                                              const TPortionInfo* exPortionInfo) const {
+TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, ui64& metadataBytes) {
     TColumnEngineStats::TPortionsStats deltaStats;
-    ui64 columnRecords = portionInfo.Records.size();
-    ui64 metadataBytes = 0;
     THashSet<TUnifiedBlobId> blobs;
     for (auto& rec : portionInfo.Records) {
         metadataBytes += rec.Metadata.size();
@@ -259,6 +255,15 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     }
     deltaStats.Blobs = blobs.size();
     deltaStats.Portions = 1;
+    return deltaStats;
+}
+
+void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
+                                              EStatsUpdateType updateType,
+                                              const TPortionInfo* exPortionInfo) const {
+    ui64 columnRecords = portionInfo.Records.size();
+    ui64 metadataBytes = 0;
+    TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo, metadataBytes);
 
     Y_VERIFY(!exPortionInfo || exPortionInfo->Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_VERIFY(portionInfo.Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
@@ -285,9 +290,18 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
         engineStats.ColumnMetadataBytes += metadataBytes;
 
         stats += deltaStats;
-    } else if (&srcStats != &stats) { // SwitchedPortions || PortionsToEvict
-        srcStats -= deltaStats;
+    } else if (&srcStats != &stats || exPortionInfo) { // SwitchedPortions || PortionsToEvict
         stats += deltaStats;
+
+        if (exPortionInfo) {
+            ui64 rmMetadataBytes = 0;
+            srcStats -= DeltaStats(*exPortionInfo, rmMetadataBytes);
+
+            engineStats.ColumnRecords += columnRecords - exPortionInfo->Records.size();
+            engineStats.ColumnMetadataBytes += metadataBytes - rmMetadataBytes;
+        } else {
+            srcStats -= deltaStats;
+        }
     }
 }
 
@@ -333,7 +347,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
     // Cleanup empty granules
     for (auto& pathId : emptyGranulePaths) {
         for (auto& emptyGranules : EmptyGranuleTracks(pathId)) {
-            // keep first one => megre, keep nothing => drop.
+            // keep first one => merge, keep nothing => drop.
             bool keepFirst = !pathsToDrop.contains(pathId);
             for (auto& [mark, granule] : emptyGranules) {
                 if (keepFirst) {
@@ -1166,11 +1180,11 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                     }
                     Y_VERIFY(outPortion.Produced());
                     if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
+                        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
                             ("granule", granule)("portion", portionInfo->Portion());
                         continue;
                     } else {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
+                        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
                             ("granule", granule)("portion", portionInfo->Portion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));

@@ -1,7 +1,7 @@
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include "proxy.h"
 
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -271,10 +271,16 @@ private:
             return;
         }
 
-        auto& data = ev->Get()->Record.GetChannelData().GetData();
-        auto resultSet = ResultBuilder->BuildResultSet({data});
-        FreeSpace -= data.GetRaw().size();
-        OccupiedSpace += data.GetRaw().size();
+        TVector<NDq::TDqSerializedBatch> batch(1);
+        NDq::TDqSerializedBatch& data = batch.front();
+        data.Proto = std::move(*ev->Get()->Record.MutableChannelData()->MutableData());
+        if (data.Proto.HasPayloadId()) {
+            data.Payload = ev->Get()->GetPayload(data.Proto.GetPayloadId());
+        }
+
+        FreeSpace -= data.Size();
+        OccupiedSpace += data.Size();
+        auto resultSet = ResultBuilder->BuildResultSet(batch);
 
         if (OccupiedSpace > ResultBytesLimit) {
             TIssues issues;
@@ -290,21 +296,22 @@ private:
         request.Sender = ev->Sender;
         request.ChannelId = ev->Get()->Record.GetChannelData().GetChannelId();
         request.SeqNo = ev->Get()->Record.GetSeqNo();
-        request.Size = data.GetRaw().size();
+        request.Size = data.Size();
 
         ConstructResults(resultSet, startRowIndex);
         SendResult();
 
+        Size += data.Size();
+        Rows += data.RowCount();
+
         if (!Truncated &&
-            (!AllResultsBytesLimit || Size + data.GetRaw().size() < *AllResultsBytesLimit)
-            && (!RowsLimitPerWrite || Rows + data.GetRows() < *RowsLimitPerWrite)) {
-            Head.push_back(data);
+            (!AllResultsBytesLimit || Size + data.Size() < *AllResultsBytesLimit)
+            && (!RowsLimitPerWrite || Rows + data.RowCount() < *RowsLimitPerWrite)) {
+            Head.push_back(std::move(data));
         } else {
             Truncated = true;
         }
 
-        Size += data.GetRaw().size();
-        Rows += data.GetRows();
         Cookie++;
     }
 
@@ -333,7 +340,7 @@ private:
     };
     THashMap<ui64, TRequest> Requests;
 
-    TVector<NYql::NDqProto::TData> Head;
+    TVector<NDq::TDqSerializedBatch> Head;
     bool Truncated = false;
     TMaybe<ui64> AllResultsBytesLimit = 10000;
     TMaybe<ui64> RowsLimitPerWrite = 1000;

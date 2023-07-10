@@ -60,6 +60,14 @@ private:
         }
 
         table.Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
+        if (!phyColumn.GetDefaultFromSequence().empty()) {
+            TString seq = phyColumn.GetDefaultFromSequence();
+            if (!seq.StartsWith(table.Path)) {
+                seq = table.Path + "/" + seq;
+            }
+
+            table.Sequences.emplace(phyColumn.GetId().GetName(), seq);
+        }
     }
 
     void FillTable(const NKqpProto::TKqpPhyTable& phyTable) {
@@ -149,6 +157,13 @@ private:
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                         auto& table = TableKeys.GetTable(MakeTableId(input.GetStreamLookup().GetTable()));
                         for (auto& column : input.GetStreamLookup().GetColumns()) {
+                            addColumn(table, column);
+                        }
+                    }
+
+                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
+                        auto& table = TableKeys.GetTable(MakeTableId(input.GetSequencer().GetTable()));
+                        for(auto& column: input.GetSequencer().GetColumns()) {
                             addColumn(table, column);
                         }
                     }

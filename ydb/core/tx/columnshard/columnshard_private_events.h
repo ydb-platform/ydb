@@ -137,7 +137,8 @@ struct TEvPrivate {
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TMap<TString, TString> ErrorStrings;
 
-        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, const THashSet<TUnifiedBlobId>& blobIds)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId,
+                           const THashSet<TUnifiedBlobId>& blobIds)
             : ExportNo(exportNo)
             , TierName(tierName)
         {
@@ -169,14 +170,8 @@ struct TEvPrivate {
             }
         }
 
-        TEvExport(TEvPrivate::TEvExport::TPtr& ev, TActorId dstActor)
-            : ExportNo(ev->Get()->ExportNo)
-            , TierName(ev->Get()->TierName)
-            , DstActor(dstActor)
-            , Blobs(std::move(ev->Get()->Blobs))
-            , SrcToDstBlobs(std::move(ev->Get()->SrcToDstBlobs))
-        {
-            Y_VERIFY(DstActor);
+        void SetS3Actor(TActorId s3) {
+            DstActor = s3;
         }
 
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {

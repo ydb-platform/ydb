@@ -24,7 +24,7 @@
 
 namespace NKikimr {
 
-class TKikimrRunner : public virtual TThrRefBase {
+class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
     static TProgramShouldContinue KikimrShouldContinue;
     static void OnTerminate(int);
@@ -44,6 +44,8 @@ protected:
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;
+
+    std::vector<std::shared_ptr<void>> GlobalObjects;
 
     THolder<NKqp::TKqpShutdownController> KqpShutdownController;
 
@@ -99,6 +101,9 @@ protected:
     TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList(
         const TKikimrRunConfig& runConfig,
         const TBasicKikimrServicesMask& serviceMask = {});
+
+private:
+    void AddGlobalObject(std::shared_ptr<void> object) override;
 
 public:
     static void SetSignalHandlers();

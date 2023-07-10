@@ -88,7 +88,7 @@ namespace NActors {
 
     public:
         static constexpr EActivityType ActorActivityType() {
-            return NAMESERVICE;
+            return EActivityType::NAMESERVICE;
         }
 
         TInterconnectDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup>& setup, const TDuration& pendingPeriod, ui32 /*resolvePoolId*/ )

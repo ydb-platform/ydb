@@ -68,7 +68,7 @@ public:
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");
 
         if (!loggerSettings) {
-            constexpr ui32 LoggerComponentId = 410; // NKikimrServices::LOGGER
+            constexpr ui32 LoggerComponentId = NActorsServices::LOGGER;
             loggerSettings = MakeIntrusive<NLog::TSettings>(
                 loggerActorId,
                 (NLog::EComponent)LoggerComponentId,

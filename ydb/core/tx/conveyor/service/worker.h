@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/conclusion/result.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/hfunc.h>

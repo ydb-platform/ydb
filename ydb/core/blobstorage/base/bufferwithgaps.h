@@ -6,7 +6,7 @@
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {
 

@@ -1,5 +1,7 @@
 #include "metering.h"
 
+#include <ydb/library/services/services.pb.h>
+
 #include <library/cpp/logger/record.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>

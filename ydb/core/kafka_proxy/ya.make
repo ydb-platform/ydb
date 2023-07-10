@@ -12,6 +12,7 @@ SRCS(
     kafka_messages_int.cpp
     kafka_messages_int.h
     kafka_proxy.h
+    kafka_records.cpp
 )
 
 PEERDIR(

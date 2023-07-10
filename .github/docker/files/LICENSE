@@ -1,0 +1,119 @@
+YDB License Agreement
+
+THIS IS AN AGREEMENT BETWEEN YOU AND YANDEX LLC (WITH ITS AFFILIATES,
+"YANDEX") THAT GOVERNS YOUR USE OF THE YDB SOFTWARE (TOGETHER WITH
+ANY UPDATES AND ENHANCEMENTS TO IT, AND ACCOMPANYING DOCUMENTATION, THE
+“SOFTWARE”) THAT YANDEX MAKES AVAILABLE TO YOU. IF YOU INSTALL OR USE THE
+SOFTWARE, YOU WILL BE BOUND BY THIS LICENSE AGREEMENT.
+
+1. Use of the Software
+Yandex hereby grants you a personal, limited, nonexclusive, non-transferable,
+non-sublicenseable license to (a) install the Software on computer equipment
+owned or controlled by you and (b) use the Software solely (i) for your internal
+business purposes in any public cloud. Some components of the Software (whether
+developed by Yandex or third parties) may also be governed by applicable
+open-source software licenses located in the software component's source code.
+Your license rights with respect to these individual components are defined by
+the applicable open-source software license, and nothing in this License
+Agreement will restrict, limit, or otherwise affect any rights or obligations
+you may have, or conditions to which you may be subject, under such open source
+software licenses.
+
+2. Limitations
+You may not, and you will not encourage, assist or authorize any other person
+to, (a) incorporate any portion of it into your own programs or compile any
+portion of it in combination with your own programs; or (b) sell, rent, lease,
+lend, loan, distribute, act as a service bureau, provide the Software as a
+stand-alone hosted solution for others to use, publicly communicate, transform,
+or sub-license the Software or otherwise assign any rights to the Software in
+whole or in part; (c) modify, alter, tamper with, repair, or otherwise create
+derivative works of the Software, or (d) reverse engineer, disassemble, or
+decompile the Software or apply any other process or procedure to derive the
+source code of any software included in the Software. All rights granted to you
+are conditioned on your continued compliance with this License Agreement, and
+will immediately and automatically terminate if you do not comply with any term
+or condition of this License Agreement or the Terms of Use of Yandex.Cloud
+Platform Service posted at https://yandex.ru/legal/cloud_termsofuse/.
+
+3. Reservation of Rights
+You may not use the Software for any illegal purpose. The Software is the
+intellectual property of Yandex or its licensors. The structure, organization,
+and code of the Software are valuable trade secrets and confidential information
+of Yandex. The Software is protected by law, including without limitation
+copyright laws and international treaty provisions. Except for the rights
+explicitly granted to you in this License Agreement, all right, title and
+interest in the Software are reserved and retained by Yandex and Yandex’s
+licensors. You do not acquire any intellectual property or other rights in the
+Software as a result of downloading the Software.
+
+4. Updates
+In order to keep the Software up-to-date, we may offer automatic or manual
+updates at any time. If we elect to provide maintenance or support of any kind,
+we may terminate that maintenance or support at any time without notice to you.
+
+5. Termination
+You may terminate this License Agreement at any time by uninstalling or
+destroying all copies of the Software that are in your possession or control.
+Your rights under this License Agreement will automatically terminate without
+notice from Yandex if you fail to comply with any of its terms. In the case of
+termination, you must cease all use and destroy all copies of the Software.
+Yandex may modify, suspend, discontinue, or terminate your right to use part or
+all of the Software at any time without notice to you, and in that event Yandex
+may modify the Software to make it inoperable. Yandex will not be liable to you
+should it exercise those rights. Yandex’s failure to insist upon or enforce your
+strict compliance with this License Agreement will not constitute a waiver of
+any of Yandex’s rights.
+
+6. Disclaimer of Warranties and Limitation of Liability
+a. YOU EXPRESSLY ACKNOWLEDGE AND AGREE THAT INSTALLATION AND USE OF, AND ANY
+OTHER ACCESS TO, THE SOFTWARE IS AT YOUR SOLE RISK. THE SOFTWARE IS DELIVERED TO
+YOU “AS IS” WITH ALL FAULTS AND WITHOUT WARRANTY OF ANY KIND, AND YANDEX, ITS
+LICENSORS AND DISTRIBUTORS, AND EACH OF THEIR RESPECTIVE AFFILIATES AND
+SUPPLIERS (COLLECTIVELY, THE “RELEASED PARTIES”) DISCLAIM ALL WARRANTIES,
+EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION THE IMPLIED WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, QUIET ENJOYMENT,
+AND NON-INFRINGEMENT. NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY A
+RELEASED PARTY OR AN AUTHORIZED REPRESENTATIVE OF A RELEASED PARTY WILL CREATE A
+WARRANTY. THE LAWS OF CERTAIN JURISDICTIONS DO NOT ALLOW THE DISCLAIMER OF
+IMPLIED WARRANTIES. IF THESE LAWS APPLY TO YOU, SOME OR ALL OF THE ABOVE
+DISCLAIMERS, EXCLUSIONS, OR LIMITATIONS MAY NOT APPLY TO YOU, AND YOU MAY HAVE
+ADDITIONAL RIGHTS.
+b. TO THE EXTENT NOT PROHIBITED BY LAW, NO RELEASED PARTY WILL BE LIABLE TO YOU
+FOR ANY INCIDENTAL OR CONSEQUENTIAL DAMAGES FOR BREACH OF ANY EXPRESS OR IMPLIED
+WARRANTY, BREACH OF CONTRACT, NEGLIGENCE, STRICT LIABILITY, OR ANY OTHER LEGAL
+THEORY RELATED TO THE SOFTWARE, INCLUDING WITHOUT LIMITATION ANY DAMAGES ARISING
+OUT OF LOSS OF PROFITS, REVENUE, DATA, OR USE OF THE SOFTWARE, EVEN IF A
+RELEASED PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. IN ANY CASE,
+ANY RELEASED PARTY’S AGGREGATE LIABILITY UNDER THE AGREEMENT WILL BE LIMITED TO
+$50.00. THE LAWS OF CERTAIN JURISDICTIONS DO NOT ALLOW THE EXCLUSION OR
+LIMITATION OF INCIDENTAL OR CONSEQUENTIAL DAMAGES. IF THESE LAWS APPLY TO YOU,
+SOME OR ALL OF THE ABOVE EXCLUSIONS OR LIMITATIONS MAY NOT APPLY TO YOU, AND YOU
+MAY HAVE ADDITIONAL RIGHTS.
+
+7. Indemnification
+You are liable for and will defend, indemnify, and hold harmless the Released
+Parties and their officers, directors, agents, and employees, from and against
+any liability, loss, damage, cost, or expense (including reasonable attorneys’
+fees) arising out of your use of the Software, violation of the License
+Agreement, violation of applicable law, or violation of any right of any person
+or entity, including without limitation intellectual property rights.
+
+8. Amendment
+We may amend this License Agreement at our sole discretion by posting the
+revised terms on the Yandex’s website (https://cloud.yandex.ru/) or within the
+Software. Your continued use of the Software after any amendment's effective
+date evidences your agreement to be bound by it.
+
+9. Conflicts
+The terms of this License Agreement govern the Software and any updates or
+upgrades to the Software that we may provide that replace or supplement the
+original Software, unless the update or upgrade is accompanied by a separate
+license, in which case the terms of that license will govern.
+
+NOTE
+Other license terms may apply to certain, identified software files contained
+within or distributed with the accompanying software if such terms are included
+in the file named “Third_Party_Licenses” that accompanies the Software. Such
+other license terms will then apply in lieu of the terms of the software license
+above.
+

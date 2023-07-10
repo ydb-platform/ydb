@@ -23,4 +23,5 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_records.cpp
 )

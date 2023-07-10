@@ -37,6 +37,8 @@ namespace NKafka {
  * - array   - can be nullable
  */
 
+class TKafkaRecordBatch;
+
 using TKafkaBool = ui8;
 using TKafkaInt8 = i8;
 using TKafkaInt16 = i16;
@@ -50,11 +52,110 @@ using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;
 using TKafkaRawBytes = TArrayRef<const char>;
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
-using TKafkaRecords = std::optional<TKafkaRawBytes>;
+using TKafkaRecords = std::optional<TKafkaRecordBatch>;
 
 using TKafkaVersion = i16;
 
+class TKafkaVersions {
+public:
+    constexpr TKafkaVersions(TKafkaVersion min, TKafkaVersion max)
+        : Min(min)
+        , Max(max) {
+    }
+
+    TKafkaVersion Min;
+    TKafkaVersion Max;
+};
+
+static constexpr TKafkaVersions VersionsNever(0, -1);
+static constexpr TKafkaVersions VersionsAlways(0, Max<TKafkaVersion>());
+
 using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter;
+
+namespace NPrivate {
+
+struct TKafkaBoolDesc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = true;
+};
+
+struct TKafkaIntDesc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = true;
+};
+
+struct TKafkaVarintDesc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = false;
+};
+
+struct TKafkaUnsignedVarintDesc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = true;
+    static constexpr bool FixedLength = false;
+
+    inline static bool IsNull(const TKafkaInt64 value) { return -1 == value; };
+};
+
+struct TKafkaUuidDesc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = true;
+};
+
+struct TKafkaFloat64Desc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = true;
+};
+
+struct TKafkaStringDesc {
+    static constexpr bool Default = true;
+    static constexpr bool Nullable = true;
+    static constexpr bool FixedLength = false;
+
+    inline static bool IsNull(const TKafkaString& value) { return !value; };
+};
+
+struct TKafkaStructDesc {
+    static constexpr bool Default = false;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = false;
+};
+
+struct TKafkaBytesDesc {
+    static constexpr bool Default = false;
+    static constexpr bool Nullable = true;
+    static constexpr bool FixedLength = false;
+
+    inline static bool IsNull(const TKafkaBytes& value) { return !value; };
+};
+
+struct TKafkaRecordsDesc {
+    static constexpr bool Default = false;
+    static constexpr bool Nullable = false;
+    static constexpr bool FixedLength = false;
+};
+
+struct TKafkaArrayDesc {
+    static constexpr bool Default = false;
+    static constexpr bool Nullable = true;
+    static constexpr bool FixedLength = false;
+
+    template<typename T>
+    inline static bool IsNull(const std::vector<T>& value) { return value.empty(); };
+};
+
+enum ESizeFormat {
+    Default = 0,
+    Varint = 1
+};
+
+} // namespace NPrivate
+
 
 template <typename T>
 void NormalizeNumber(T& value) {
@@ -87,7 +188,6 @@ public:
 
     void writeUnsignedVarint(TKafkaUint32 val);
     void writeVarint(TKafkaInt32 val);
-    void writeVarint(TKafkaInt64 val);
     void write(const char* val, size_t length);
 
 private:
@@ -114,6 +214,7 @@ public:
     void read(char* val, size_t length);
     char get();
     ui32 readUnsignedVarint();
+    i32 readVarint();
     TArrayRef<const char> Bytes(size_t length);
 
     void skip(size_t length);

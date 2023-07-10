@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
@@ -652,7 +652,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                     indexCells.push_back(keyCells.GetCells()[keyColumnIdToIdx.at(id)]);
                 }
 
-                indexColumnValues.push_back(std::move(TSerializedCellVec::Serialize(indexCells)));
+                indexColumnValues.push_back(TSerializedCellVec::Serialize(indexCells));
             }
         }
 

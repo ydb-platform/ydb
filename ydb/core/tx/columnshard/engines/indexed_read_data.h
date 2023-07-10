@@ -19,31 +19,49 @@ namespace NKikimr::NOlap {
 
 class TIndexedReadData {
 private:
+    TReadContext Context;
     std::unique_ptr<NIndexedReader::TGranulesFillingContext> GranulesContext;
+    THashMap<TUnifiedBlobId, NOlap::TCommittedBlob> WaitCommitted;
 
-    NColumnShard::TConcreteScanCounters Counters;
-    NColumnShard::TDataTasksProcessorContainer TasksProcessor;
     TFetchBlobsQueue FetchBlobsQueue;
+    TFetchBlobsQueue PriorityBlobsQueue;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
     bool OnePhaseReadMode = false;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
 
-    THashMap<TBlobRange, NIndexedReader::TBatch*> IndexedBlobSubscriber; // blobId -> batch
-    THashSet<TBlobRange> IndexedBlobs;
-    ui32 ReadyNotIndexed{ 0 };
-    std::shared_ptr<arrow::RecordBatch> NotIndexedOutscopeBatch; // outscope granules batch
+    THashMap<TBlobRange, NIndexedReader::TBatchAddress> IndexedBlobSubscriber;
+    std::shared_ptr<arrow::RecordBatch> NotIndexedOutscopeBatch;
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription;
 
+    void AddNotIndexed(const TBlobRange& blobRange, const TString& column);
+    void AddNotIndexed(const TUnifiedBlobId& blobId, const std::shared_ptr<arrow::RecordBatch>& batch);
+    void RegisterZeroGranula();
+
+    void AddIndexed(const TBlobRange& blobRange, const TString& column);
+    bool IsIndexedBlob(const TBlobRange& blobRange) const {
+        return IndexedBlobSubscriber.contains(blobRange);
+    }
 public:
-    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
-        const bool internalRead, const NColumnShard::TConcreteScanCounters& counters, NColumnShard::TDataTasksProcessorContainer tasksProcessor);
+    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, const bool internalRead, const TReadContext& context);
+
+    TString DebugString() const {
+        return TStringBuilder()
+            << "internal:" << OnePhaseReadMode << ";"
+            << "wait_committed:" << WaitCommitted.size() << ";"
+            << "granules_context:(" << (GranulesContext ? GranulesContext->DebugString() : "NO") << ");"
+            ;
+    }
+
+    const std::shared_ptr<TActorBasedMemoryAccesor>& GetMemoryAccessor() const {
+        return Context.GetMemoryAccessor();
+    }
 
     const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
-        return Counters;
+        return Context.GetCounters();
     }
 
     const NColumnShard::TDataTasksProcessorContainer& GetTasksProcessor() const noexcept {
-        return TasksProcessor;
+        return Context.GetProcessor();
     }
 
     NIndexedReader::TGranulesFillingContext& GetGranulesContext() {
@@ -51,30 +69,15 @@ public:
         return *GranulesContext;
     }
 
-    /// Initial FetchBlobsQueue filling (queue from external scan iterator). Granules could be read independently
-    void InitRead(ui32 numNotIndexed);
+    void InitRead();
     void Abort();
     bool IsFinished() const;
 
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddNotIndexed(ui32 batchNo, TString blob, const TCommittedBlob& commitedBlob) {
-        auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->GetBlobSchema(commitedBlob.GetSchemaSnapshot()));
-        AddNotIndexed(batchNo, batch, commitedBlob);
-    }
+    void AddData(const TBlobRange& blobRange, const TString& data);
 
-    void AddNotIndexed(ui32 batchNo, const std::shared_ptr<arrow::RecordBatch>& batch, const TCommittedBlob& commitedBlob) {
-        Y_VERIFY(batchNo < NotIndexed.size());
-        Y_VERIFY(!NotIndexed[batchNo]);
-        ++ReadyNotIndexed;
-        NotIndexed[batchNo] = MakeNotIndexedBatch(batch, commitedBlob.GetSchemaSnapshot());
-    }
-
-    void AddIndexed(const TBlobRange& blobRange, const TString& column);
-    bool IsIndexedBlob(const TBlobRange& blobRange) const {
-        return IndexedBlobs.contains(blobRange);
-    }
     NOlap::TReadMetadata::TConstPtr GetReadMetadata() const {
         return ReadMetadata;
     }
@@ -87,14 +90,14 @@ public:
     }
 
     void AddBlobToFetchInFront(const ui64 granuleId, const TBlobRange& range) {
-        FetchBlobsQueue.emplace_front(granuleId, range);
+        PriorityBlobsQueue.emplace_back(granuleId, range);
     }
 
     bool HasMoreBlobs() const {
-        return FetchBlobsQueue.size();
+        return FetchBlobsQueue.size() || PriorityBlobsQueue.size();
     }
 
-    TBlobRange ExtractNextBlob();
+    TBlobRange ExtractNextBlob(const bool hasReadyResults);
 
 private:
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(
@@ -102,7 +105,8 @@ private:
 
     std::shared_ptr<arrow::RecordBatch> MergeNotIndexed(
         std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
-    std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
+    std::vector<TPartialReadResult> ReadyToOut(const i64 maxRowsInBatch);
+    void MergeTooSmallBatches(const std::shared_ptr<TMemoryAggregation>& memAggregation, std::vector<TPartialReadResult>& out) const;
     std::vector<TPartialReadResult> MakeResult(
         std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules, int64_t maxRowsInBatch) const;
 };

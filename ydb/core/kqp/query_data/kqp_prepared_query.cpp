@@ -7,7 +7,7 @@
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -113,6 +113,7 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
             Proto, &phyTx, Alloc);
         Transactions.emplace_back(std::move(txHolder));
         for (const auto& stage: phyTx.GetStages()) {
+
             for (const auto& tableOp: stage.GetTableOps()) {
                 tablesSet.insert(tableOp.GetTable().GetPath());
             }
@@ -121,7 +122,12 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                     tablesSet.insert(input.GetStreamLookup().GetTable().GetPath());
                 }
+
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
+                    tablesSet.insert(input.GetSequencer().GetTable().GetPath());
+                }
             }
+
             for (const auto& source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());

@@ -1447,7 +1447,24 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
         if (value.GetLiteral()) {
             TString clusterName = *value.GetLiteral();
             if (allowBinding && to_lower(clusterName) == "bindings") {
-                isBinding = true;
+                switch (Ctx.Settings.BindingsMode) {
+                case NSQLTranslation::EBindingsMode::DISABLED:
+                    Ctx.Error(Ctx.Pos(), TIssuesIds::YQL_DISABLED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax has ended";
+                    Ctx.IncrementMonCounter("sql_errors", "DisabledBinding");
+                    return false;
+                case NSQLTranslation::EBindingsMode::ENABLED:
+                    isBinding = true;
+                    break;
+                case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
+                    Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon";
+                    Ctx.IncrementMonCounter("sql_errors", "DeprecatedBinding");
+                    [[fallthrough]];
+                case NSQLTranslation::EBindingsMode::DROP:
+                    service = Context().Scoped->CurrService;
+                    cluster = Context().Scoped->CurrCluster;
+                    break;
+                }
+
                 return true;
             }
             TString normalizedClusterName;
@@ -6269,6 +6286,7 @@ bool TSqlTranslation::ImportStatement(const TRule_import_stmt& stmt, TVector<TSt
     if (!ModulePath(stmt.GetRule_module_path2(), modulePath)) {
         return false;
     }
+
     TVector<TSymbolNameWithPos> names;
     TVector<TSymbolNameWithPos> aliases;
     if (!NamedBindList(stmt.GetRule_named_bind_parameter_list4(), names, aliases)) {
@@ -10651,6 +10669,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
     static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes", "checkedops"};
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
+    const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     for (auto pragmaValue : pragmaValues) {
         if (pragmaValue->HasAlt_pragma_value3()) {
             auto value = Token(pragmaValue->GetAlt_pragma_value3().GetToken1());
@@ -10659,7 +10678,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
 
-            values.push_back(TDeferredAtom(Ctx.Pos(), parsed->Content));
+            TString prefix;
+            if (withFileAlias && (values.size() == 0)) {
+                prefix = Ctx.Settings.FileAliasPrefix;
+            }
+
+            values.push_back(TDeferredAtom(Ctx.Pos(), prefix + parsed->Content));
         }
         else if (pragmaValue->HasAlt_pragma_value2()
             && pragmaValue->GetAlt_pragma_value2().GetRule_id1().HasAlt_id2()
@@ -10677,8 +10701,13 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
 
+            TString prefix;
+            if (withFileAlias && (values.size() == 0)) {
+                prefix = Ctx.Settings.FileAliasPrefix;
+            }
+
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx, namedNode, atom);
+            MakeTableFromExpression(Ctx, namedNode, atom, prefix);
             values.push_back(atom);
         } else {
             Error() << "Expected string" << (withConfigure ? ", named parameter" : "") << " or 'default' keyword as pragma value for pragma: " << pragma;

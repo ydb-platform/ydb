@@ -43,6 +43,15 @@ TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExpr
     return node;
 }
 
+TExprNodeBuilder GetterBuilder(TExprNodeBuilder parent, ui32 index, TConstraintNode::TPathType path) {
+    if (path.empty())
+        return parent.Arg(index, "item");
+
+    const auto& name = path.back();
+    path.pop_back();
+    return GetterBuilder(parent.Callable(index, "Member"), 0U, path).Atom(1, name).Seal();
+}
+
 }
 
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
@@ -1749,19 +1758,8 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
                 .List()
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         size_t index = 0;
-                        for (auto c : constent) {
-                            if (c.first.front().empty())
-                                parent.Arg(index++, "item");
-                            else if (1U == c.first.front().size()) {
-                                parent.Callable(index++, "Member")
-                                    .Arg(0, "item")
-                                    .Atom(1, c.first.front().front())
-                                .Seal();
-                            } else {
-                                parent.Callable(index++, "Null").Seal();
-                                break;
-                            }
-                        }
+                        for (const auto& c : constent)
+                            GetterBuilder(parent, index++, c.first.front());
                         return parent;
                     })
                 .Seal()

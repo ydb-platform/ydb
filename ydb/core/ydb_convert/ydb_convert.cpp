@@ -2,7 +2,7 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/base/kikimr_issue.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 

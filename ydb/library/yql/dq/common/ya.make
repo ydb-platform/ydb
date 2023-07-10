@@ -5,6 +5,7 @@ PEERDIR(
     library/cpp/actors/util
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/proto
+    ydb/library/yql/utils
 )
 
 SRCS(

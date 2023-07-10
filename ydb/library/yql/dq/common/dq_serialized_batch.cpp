@@ -1,5 +1,6 @@
 #include "dq_serialized_batch.h"
 
+#include <ydb/library/yql/utils/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/system/unaligned_mem.h>
@@ -22,30 +23,6 @@ T ReadNumber(TStringBuf& src) {
     src.Skip(sizeof(T));
     return result;
 }
-
-class TContigousChunkOverBuf : public IContiguousChunk {
-public:
-    TContigousChunkOverBuf(const std::shared_ptr<TBuffer>& owner, TContiguousSpan span)
-        : Owner_(owner)
-        , Span_(span)
-    {
-    }
-private:
-    TContiguousSpan GetData() const override {
-        return Span_;
-    }
-
-    TMutableContiguousSpan GetDataMut() override {
-        YQL_ENSURE(false, "Payload mutation is not supported");
-    }
-
-    size_t GetOccupiedMemorySize() const override {
-        return Span_.GetSize();
-    }
-
-    const std::shared_ptr<TBuffer> Owner_;
-    const TContiguousSpan Span_;
-};
 
 }
 
@@ -92,10 +69,7 @@ TDqSerializedBatch LoadSpilled(TBuffer&& blob) {
 
     size_t ropeSize = ReadNumber<size_t>(source);
     YQL_ENSURE(ropeSize == source.size(), "Spilled data is corrupted");
-    if (ropeSize) {
-        result.Payload = TRope(new TContigousChunkOverBuf(sharedBuf, source));
-    }
-
+    result.Payload = MakeReadOnlyRope(sharedBuf, source.data(), source.size());
     return result;
 }
 

@@ -21,6 +21,7 @@ target_link_libraries(yql-dq-common PUBLIC
   cpp-actors-util
   library-mkql_proto-protos
   yql-dq-proto
+  library-yql-utils
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-dq-common PRIVATE

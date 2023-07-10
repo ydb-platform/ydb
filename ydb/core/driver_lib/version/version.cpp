@@ -26,7 +26,8 @@ const TCurrent* TCompatibilityInfo::GetCurrent() {
             .Build = "trunk"
         }.ToPB();
 
-        // Y_VERIFY_DEBUG(CompleteFromTag(current));
+        // bool success = CompleteFromTag(current);
+        // Y_VERIFY_DEBUG(success);
 
         CompatibilityInfo = TCurrent();
         CompatibilityInfo->CopyFrom(current);
@@ -445,7 +446,7 @@ TString GetTagString() {
                 break;
             }
         }
-        branch = tag;
+        tag = branch;
     }
 
     for (const char* prefix : { "ydb/", "nbs/", "releases/nbs/", "releases/ydb/" , "releases/" }) {
@@ -474,22 +475,22 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
             if (version->HasMajor()) {
                 Y_VERIFY_DEBUG(version->GetMajor() == versionFromTag.GetMajor());
             } else {
-                version->SetYear(versionFromTag.GetYear());
+                version->SetMajor(versionFromTag.GetMajor());
             }
 
             if (versionFromTag.HasMinor()) {
                 if (version->HasMinor()) {
                     Y_VERIFY_DEBUG(version->GetMinor() == versionFromTag.GetMinor());
                 } else {
-                    version->SetYear(versionFromTag.GetYear());
+                    version->SetMinor(versionFromTag.GetMinor());
                 }
             }
 
             if (versionFromTag.HasHotfix()) {
-                if (version->HasYear()) {
-                    Y_VERIFY_DEBUG(version->GetYear() == versionFromTag.GetYear());
+                if (version->HasHotfix()) {
+                    Y_VERIFY_DEBUG(version->GetHotfix() == versionFromTag.GetHotfix());
                 } else {
-                    version->SetYear(versionFromTag.GetYear());
+                    version->SetHotfix(versionFromTag.GetHotfix());
                 }
             }
 

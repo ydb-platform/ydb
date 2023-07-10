@@ -1,3 +1,4 @@
+#include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/driver_lib/version/version.h>
 #include "ut_helpers.h"
@@ -577,6 +578,12 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         auto stored = TCompatibilityInfo::MakeStored(EComponentId::Test1);
         TString errorReason;
         UNIT_ASSERT_C(TCompatibilityInfo::CheckCompatibility(&stored, EComponentId::Test1, errorReason), errorReason);
+    }
+
+    Y_UNIT_TEST(PrintCurrentVersion) {
+        TString str;
+        google::protobuf::TextFormat::PrintToString(*TCompatibilityInfo::GetCurrent(), &str);
+        Cerr << str << Endl;
     }
 }
 

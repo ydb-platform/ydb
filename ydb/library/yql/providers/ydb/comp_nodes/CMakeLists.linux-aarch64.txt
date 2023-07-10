@@ -16,11 +16,13 @@ target_link_libraries(providers-ydb-comp_nodes PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-scheme
+  library-mkql_proto-protos
+  dq-actors-protos
   minikql-computation-llvm
   providers-common-structured_token
+  providers-ydb-proto
   public-lib-experimental
   cpp-client-ydb_driver
-  providers-ydb-proto
 )
 target_sources(providers-ydb-comp_nodes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/comp_nodes/yql_kik_scan.cpp

@@ -84,14 +84,12 @@ jobs:
           push: true
           context: .github/docker/
           file: .github/docker/Dockerfile
-          tags: ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
           platforms: linux/amd64
           provenance: false
           build-args: |
             GIT_REPO=${{ github.server_url }}/${{ github.repository }}
-            GIT_REF=${{ inputs.git_ref }}
+            GIT_REF=${{ inputs.git_ref || 'main' }}
           secrets: |
             "ccache_remote_storage=${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}"
 

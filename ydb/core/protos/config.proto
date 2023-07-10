@@ -1306,8 +1306,8 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
-    optional bool EnableSequentialReads = 38 [default = false];
-    optional bool EnableKqpImmediateEffects = 39 [default = true];
+    optional bool EnableKqpImmediateEffects = 38 [default = true];
+    optional bool EnableSequentialReads = 39 [default = false];
     optional bool EnablePreparedDdl = 42 [default = false];
 
     enum EBindingsMode {

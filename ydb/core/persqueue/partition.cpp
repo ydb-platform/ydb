@@ -412,7 +412,7 @@ void TPartition::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx)
 
 
 bool CheckDiskStatus(const TStorageStatusFlags status) {
-    return !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+    return !status.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {

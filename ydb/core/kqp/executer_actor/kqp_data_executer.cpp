@@ -1531,8 +1531,7 @@ private:
         }
     }
 
-    void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx,
-        const TMaybe<ui64> lockTxId, const bool isOlap)
+    void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const bool isOlap)
     {
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
@@ -1560,6 +1559,7 @@ private:
             dataTransaction.SetPerShardKeysSizeLimitBytes(Request.PerShardKeysSizeLimitBytes);
         }
 
+        auto& lockTxId = TasksGraph.GetMeta().LockTxId;
         if (lockTxId) {
             dataTransaction.SetLockTxId(*lockTxId);
             dataTransaction.SetLockNodeId(SelfId().NodeId());
@@ -1662,11 +1662,6 @@ private:
     }
 
     void Execute() {
-        LockTxId = Request.AcquireLocksTxId;
-        if (LockTxId.Defined() && *LockTxId == 0) {
-            LockTxId = TxId;
-        }
-
         NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
@@ -1710,7 +1705,7 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            if (auto actors = BuildScanTasksFromSource(stageInfo, LockTxId)) {
+                            if (auto actors = BuildScanTasksFromSource(stageInfo)) {
                                 readActors += *actors;
                             } else {
                                 UnknownAffectedShardCount = true;
@@ -2221,7 +2216,7 @@ private:
                 LOG_D("datashard task: " << taskId << ", proto: " << protoTask.ShortDebugString());
             }
 
-            ExecuteDatashardTransaction(shardId, *shardTx, LockTxId, isOlap.value_or(false));
+            ExecuteDatashardTransaction(shardId, *shardTx, isOlap.value_or(false));
         }
 
         ExecuteTopicTabletTransactions(TopicTxs);
@@ -2389,7 +2384,6 @@ private:
     TDatashardTxs DatashardTxs;
     TTopicTabletTxs TopicTxs;
 
-    TMaybe<ui64> LockTxId;
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;
     ui64 LastShard = 0;

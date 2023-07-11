@@ -1301,7 +1301,7 @@ message TTableServiceConfig {
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
     optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
-    optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
+    reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = false];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];

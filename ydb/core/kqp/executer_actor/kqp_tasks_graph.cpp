@@ -278,7 +278,7 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
         columnProto->SetName(column);
         columnProto->SetId(columnIt->second.Id);
         columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
-        
+
         auto aic = autoIncrementColumns.find(column);
         if (aic != autoIncrementColumns.end()) {
             auto sequenceIt = table.Sequences.find(column);
@@ -952,7 +952,8 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
 
 void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
     const auto& snapshot = tasksGraph.GetMeta().Snapshot;
-    
+    const auto& lockTxId = tasksGraph.GetMeta().LockTxId;
+
     switch (input.Type()) {
         case NYql::NDq::TTaskInputType::Source:
             inputDesc.MutableSource()->SetType(input.SourceType);
@@ -1008,6 +1009,9 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
             YQL_ENSURE(snapshot.IsValid(), "stream lookup cannot be performed without the snapshot.");
             input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
             input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
+            if (lockTxId) {
+                input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
+            }
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);

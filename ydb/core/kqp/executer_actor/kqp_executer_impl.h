@@ -321,6 +321,13 @@ protected:
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
+        auto lockTxId = Request.AcquireLocksTxId;
+        if (lockTxId.Defined() && *lockTxId == 0) {
+            lockTxId = TxId;
+        }
+
+        TasksGraph.GetMeta().SetLockTxId(lockTxId);
+
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
@@ -702,7 +709,7 @@ protected:
         }
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const TMaybe<ui64> lockTxId = {}) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -804,6 +811,7 @@ protected:
             settings->SetItemsLimit(itemsLimit);
 
             auto self = static_cast<TDerived*>(this)->SelfId();
+            auto& lockTxId = TasksGraph.GetMeta().LockTxId;
             if (lockTxId) {
                 settings->SetLockTxId(*lockTxId);
                 settings->SetLockNodeId(self.NodeId());

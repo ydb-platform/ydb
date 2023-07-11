@@ -317,6 +317,14 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
         const bool needDataRead = CheckIndexCovering(lookupIndex, indexMeta);
 
         if (!needDataRead) {
+            if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+                return Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                    .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+                    .LookupKeys(lookupIndex.LookupKeys())
+                    .Columns(lookupIndex.Columns())
+                    .Done();
+            }
+
             return Build<TKqlLookupTable>(ctx, node.Pos())
                 .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
                 .LookupKeys(lookupIndex.LookupKeys())
@@ -325,6 +333,20 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
         }
 
         auto keyColumnsList = BuildKeyColumnsList(tableDesc, node.Pos(), ctx);
+
+        if (kqpCtx.Config->EnableKqpDataQueryStreamLookup) {
+            TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+                .LookupKeys(lookupIndex.LookupKeys())
+                .Columns(keyColumnsList)
+                .Done();
+
+            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                .Table(lookupIndex.Table())
+                .LookupKeys(lookupIndexTable.Ptr())
+                .Columns(lookupIndex.Columns())
+                .Done();
+        }
 
         TExprBase lookupIndexTable = Build<TKqlLookupTable>(ctx, node.Pos())
             .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))

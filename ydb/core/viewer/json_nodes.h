@@ -45,6 +45,9 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::vector<TNodeId> NodeIds;
     std::optional<ui32> Offset;
     std::optional<ui32> Limit;
+    ui32 UptimeSeconds = 0;
+    bool ProblemNodesOnly = false;
+    TString Filter;
 
     enum class EWith {
         Everything,
@@ -102,6 +105,9 @@ public:
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        UptimeSeconds = FromStringWithDefault<ui32>(params.Get("uptime"), 0);
+        ProblemNodesOnly = FromStringWithDefault<bool>(params.Get("problems_only"), ProblemNodesOnly);
+        Filter = params.Get("filter");
         FilterTenant = params.Get("tenant");
         FilterStoragePool = params.Get("pool");
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
@@ -504,6 +510,33 @@ public:
         return 0;
     }
 
+    bool CheckNodeFilters(TNodeId nodeId) {
+        auto itSysInfo = SysInfo.find(nodeId);
+        if (itSysInfo != SysInfo.end()) {
+            if (itSysInfo->second.SystemStateInfoSize() == 1) {
+                const NKikimrWhiteboard::TSystemStateInfo& sysInfo = itSysInfo->second.GetSystemStateInfo(0);
+                if (UptimeSeconds > 0 && sysInfo.HasStartTime() && itSysInfo->second.HasResponseTime()
+                        && itSysInfo->second.GetResponseTime() - sysInfo.GetStartTime() > UptimeSeconds * 1000) {
+                    return false;
+                }
+                if (ProblemNodesOnly && sysInfo.HasSystemState()
+                        && GetViewerFlag(sysInfo.GetSystemState()) == NKikimrViewer::EFlag::Green) {
+                    return false;
+                }
+                if (Filter) {
+                    if (sysInfo.HasHost() && sysInfo.GetHost().Contains(Filter)) {
+                        return true;
+                    }
+                    if (std::to_string(nodeId).contains(Filter)) {
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     void ReplyAndPassAway() {
         NKikimrViewer::TNodesInfo result;
         if (Storage && BaseConfig) {
@@ -532,6 +565,8 @@ public:
         }
 
         for (TNodeId nodeId : NodeIds) {
+            if (!CheckNodeFilters(nodeId))
+                continue;
             if (Storage) {
                 if (With == EWith::MissingDisks) {
                     auto itPDiskState = PDiskInfo.find(nodeId);
@@ -691,7 +726,10 @@ struct TJsonRequestParameters<TJsonNodes> {
                       {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
                       {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
                       {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
+                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
+                      {"name":"uptime","in":"query","description":"return only nodes with less uptime in sec.","required":false,"type":"integer"},
+                      {"name":"problems_only","in":"query","description":"return only problem nodes","required":false,"type":"boolean"},
+                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"}])___";
     }
 };
 

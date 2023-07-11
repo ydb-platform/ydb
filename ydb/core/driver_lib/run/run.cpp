@@ -1442,7 +1442,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableSecurityServices) {
         sil->AddServiceInitializer(new TSecurityServicesInitializer(runConfig, ModuleFactories));
     }
-
+    if (serviceMask.EnablePersQueueClusterTracker) {
+        sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
+    }
+    
     if (BusServer && serviceMask.EnableMessageBusServices) {
         sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer));
     }
@@ -1488,9 +1491,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnableNetClassifier) {
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
-    }
-    if (serviceMask.EnablePersQueueClusterTracker) {
-        sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));

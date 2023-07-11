@@ -854,6 +854,12 @@ namespace Tests {
         }
 
         {
+            IActor* pqClusterTracker = NPQ::NClusterTracker::CreateClusterTracker();
+            TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx);
+            Runtime->RegisterService(NPQ::NClusterTracker::MakeClusterTrackerID(), pqClusterTrackerId, nodeIdx);
+        }
+
+        {
             if (Settings->PQConfig.GetEnabled() == true) {
                 IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
                         new ::NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
@@ -884,12 +890,6 @@ namespace Tests {
             IActor* kesusService = NKesus::CreateKesusProxyService();
             TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx);
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);
-        }
-
-        {
-            IActor* pqClusterTracker = NPQ::NClusterTracker::CreateClusterTracker();
-            TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx);
-            Runtime->RegisterService(NPQ::NClusterTracker::MakeClusterTrackerID(), pqClusterTrackerId, nodeIdx);
         }
 
         {

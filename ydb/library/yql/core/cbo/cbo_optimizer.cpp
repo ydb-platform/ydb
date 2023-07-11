@@ -23,10 +23,10 @@ TStringBuf Prefix(int level) {
         : Prefixes.back();
 }
 
-void PrettyPrintVar(TStringBuilder& b, const IOptimizer::TOutput& output, IOptimizer::TVarId varId) {
+void PrettyPrintVar(TStringBuilder& b, const IOptimizer::TInput* input, IOptimizer::TVarId varId) {
     const auto& [relno, varno] = varId;
-    auto varName = output.Input
-        ? output.Input->Rels[relno-1].TargetVars[varno-1].Name
+    auto varName = input
+        ? input->Rels[relno-1].TargetVars[varno-1].Name
         : '\0';
     if (!varName) {
         b << "(" << relno << "," << varno << ")";
@@ -66,9 +66,9 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
 
         if (!isEmpty(node.LeftVar) && !isEmpty(node.RightVar)) {
             b << prefix << " Op: ";
-            PrettyPrintVar(b, output, node.LeftVar);
+            PrettyPrintVar(b, output.Input, node.LeftVar);
             b << " = ";
-            PrettyPrintVar(b, output, node.RightVar);
+            PrettyPrintVar(b, output.Input, node.RightVar);
             b << "\n";
         }
     }
@@ -85,6 +85,22 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
     }
 }
 
+void PrettyPrintRel(TStringBuilder& b, const IOptimizer::TInput* input, const auto& relId) {
+    const auto& rel = input->Rels[relId - 1];
+    b << "{";
+    b << "rows: " << rel.Rows << ",";
+    b << "cost: " << rel.TotalCost << ",";
+    b << "vars: [";
+    for (ui32 i = 0; i < rel.TargetVars.size(); i++) {
+        PrettyPrintVar(b, input, {relId, i + 1});
+        if (i != rel.TargetVars.size() - 1) {
+            b << ", ";
+        }
+    }
+    b << "]";
+    b << "}";
+}
+
 } // namespace
 
 TString IOptimizer::TOutput::ToString() const {
@@ -92,6 +108,34 @@ TString IOptimizer::TOutput::ToString() const {
     b << "{\n";
     PrettyPrintNode(0, b, *this, 0);
     b << "}\n";
+    return b;
+}
+
+TString IOptimizer::TInput::ToString() {
+    TStringBuilder b;
+    b << "Rels: [";
+    for (ui32 i = 0; i < Rels.size(); ++i) {
+        PrettyPrintRel(b, this, i + 1);
+        if (i != Rels.size() - 1) {
+            b << ",\n";
+        }
+    }
+    b << "]\n";
+    b << "EqClasses: [";
+    for (ui32 i = 0; i < EqClasses.size(); ++i) {
+        b << "[";
+        for (ui32 j = 0; j < EqClasses[i].Vars.size(); ++j) {
+            PrettyPrintVar(b, this, EqClasses[i].Vars[j]);
+            if (j != EqClasses[i].Vars.size() - 1) {
+                b << ",";
+            }
+        }
+        b << "]";
+        if (i != EqClasses.size() - 1) {
+            b << ",";
+        }
+    }
+    b << "]\n";
     return b;
 }
 

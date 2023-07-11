@@ -97,4 +97,24 @@ Y_UNIT_TEST(PgJoinSearch3Rels) {
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
 }
 
+Y_UNIT_TEST(InputToString) {
+    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
+    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
+    IOptimizer::TInput input = {{rel1, rel2, rel3}};
+
+    input.EqClasses.emplace_back(IOptimizer::TEq {
+        {{1, 1}, {2, 1}, {3, 1}}
+    });
+
+    auto str = input.ToString();
+
+    TString expected = R"__(Rels: [{rows: 100000,cost: 1000000,vars: [a]},
+{rows: 1000000,cost: 9000009,vars: [b]},
+{rows: 10000,cost: 9009,vars: [c]}]
+EqClasses: [[a,b,c]]
+)__";
+    UNIT_ASSERT_STRINGS_EQUAL(expected, str);
+}
+
 } // Y_UNIT_TEST_SUITE(PgOptimizer)

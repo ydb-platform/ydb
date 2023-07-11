@@ -22,20 +22,30 @@ public:
 
     struct TExecSettings {
         TMaybe<bool> DocumentApiRestricted;
+        TMaybe<bool> UsePgParser;
+        TMaybe<TSqlVersion> SyntaxVersion;
 
         TString ToString() const {
-            return TStringBuilder() << "TExecSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " }";
+            return TStringBuilder() << "TExecSettings{"
+                << " DocumentApiRestricted: " << DocumentApiRestricted
+                << " UsePgParser: " << UsePgParser
+                << " SyntaxVersion: " << SyntaxVersion
+                << " }";
         }
     };
 
     struct TPrepareSettings: public TExecSettings {
         TMaybe<bool> IsInternalCall;
-        TMaybe<bool> UsePgParser;
-        TMaybe<TSqlVersion> SyntaxVersion;
         TMaybe<bool> ConcurrentResults;
 
         TString ToString() const {
-            return TStringBuilder() << "TPrepareSettings{ DocumentApiRestricted: " << DocumentApiRestricted << " IsInternalCall: " << IsInternalCall << " }";
+            return TStringBuilder() << "TPrepareSettings{"
+                << " DocumentApiRestricted: " << DocumentApiRestricted
+                << " UsePgParser: " << UsePgParser
+                << " SyntaxVersion: " << SyntaxVersion
+                << " IsInternalCall: " << IsInternalCall
+                << " ConcurrentResults: " << ConcurrentResults
+                << " }";
         }
     };
 

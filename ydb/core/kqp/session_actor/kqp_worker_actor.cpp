@@ -573,6 +573,18 @@ private:
         switch (type) {
             case NKikimrKqp::QUERY_TYPE_SQL_DDL: {
                 IKqpHost::TExecSettings execSettings;
+                switch (QueryState->RequestEv->GetSyntax()) {
+                    case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                        execSettings.UsePgParser = false;
+                        execSettings.SyntaxVersion = 1;
+                        break;
+
+                    case Ydb::Query::Syntax::SYNTAX_PG:
+                        execSettings.UsePgParser = true;
+                        break;
+                    default:
+                        break;
+                }
                 execSettings.DocumentApiRestricted = IsDocumentApiRestricted(QueryState->RequestEv->GetRequestType());
                 QueryState->AsyncQueryResult = KqpHost->ExecuteSchemeQuery(query, true, execSettings);
                 break;

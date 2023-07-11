@@ -1207,8 +1207,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
             auto tableName = "Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
             auto typeName = ((isArray) ? "_pg" : "pg") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key pgint2";
@@ -1220,7 +1220,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 PRIMARY KEY (key)\n\
             );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
             Cerr << req << Endl;
-            auto result = client.ExecuteYqlScript(req).GetValueSync();
+            auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             if (!isArray) {
@@ -1269,8 +1269,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
             auto tableName = "Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
             auto typeName = ((isArray) ? "_" : "") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key int2";
@@ -1282,7 +1282,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 %s\n\
             );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
             Cerr << req << Endl;
-            auto result = client.ExecuteYqlScript(req).GetValueSync();
+            auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             if (!isArray) {
                 ExecutePgInsert(kikimr, tableName, spec);

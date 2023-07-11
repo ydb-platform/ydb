@@ -130,7 +130,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(R"(
-                --!syntax_pg
                 CREATE TABLE test (id int8,PRIMARY KEY (id)))"
             ).GetValueSync();
 

@@ -1227,7 +1227,7 @@ private:
         }
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion, {});
+        auto queryExpr = CompileYqlQuery(query, isSql, false, ctx, sqlVersion, settings.UsePgParser);
         if (!queryExpr) {
             return nullptr;
         }

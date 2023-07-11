@@ -461,4 +461,55 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST(InitialScan) {
+        TTestWithReboots t;
+        t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                for (ui64 i = 1; i < 10; ++i) {
+                    NKikimrMiniKQL::TResult result;
+                    TString error;
+                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, Sprintf(R"(
+                        (
+                            (let key '( '('key (Uint64 '%lu) ) ) )
+                            (let row '( '('value (Uint64 '%lu) ) ) )
+                            (return (AsList (UpdateRow '__user__Table key row) ))
+                        )
+                    )", i, 10 * i), result, error);
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+                    UNIT_ASSERT_VALUES_EQUAL(error, "");
+                }
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                      State: ECdcStreamStateScan
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            NKikimrSchemeOp::ECdcStreamState state;
+            do {
+                state = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+                    .GetPathDescription().GetCdcStreamDescription().GetState();
+            } while (state != NKikimrSchemeOp::ECdcStreamStateReady);
+        });
+    }
+
 } // TCdcStreamWithRebootsTests

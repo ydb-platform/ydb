@@ -27,7 +27,7 @@ struct TClickHouseState : public TThrRefBase
     TTypeAnnotationContext* Types = nullptr;
     TClickHouseConfiguration::TPtr Configuration = MakeIntrusive<TClickHouseConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
 };
 

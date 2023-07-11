@@ -1,6 +1,8 @@
 #pragma once
+
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_host_transformer.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 
 namespace NFq {
@@ -12,17 +14,17 @@ public:
         const NActors::TActorId& recipient,
         const TString& ydbMvpEndpoint,
         const TString& mdbGateway,
-        bool mdbTransformHost = false,
+        NYql::IMdbHostTransformer::TPtr&& mdbHostTransformer, 
         const TString& traceId = ""
     );
 
-    NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const override;
+    NThreading::TFuture<NYql::TDatabaseResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const override;
 private:
     NActors::TActorSystem* ActorSystem;
     const NActors::TActorId Recipient;
     const TString YdbMvpEndpoint;
     const TString MdbGateway;
-    const bool MdbTransformHost = false;
+    NYql::IMdbHostTransformer::TPtr MdbHostTransformer;
     const TString TraceId;
 };
 

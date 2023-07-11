@@ -25,6 +25,7 @@ target_link_libraries(ydb-services-fq-ut_integration PUBLIC
   cpp-regex-pcre
   library-cpp-svnversion
   fq-libs-control_plane_storage
+  fq-libs-db_id_async_resolver_impl
   fq-libs-db_schema
   fq-libs-private_client
   core-testlib-default

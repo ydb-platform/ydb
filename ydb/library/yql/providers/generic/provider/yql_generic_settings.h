@@ -58,7 +58,7 @@ namespace NYql {
             if (dbResolver && databaseId) {
                 const auto token = MakeStructuredToken(cluster, credentials);
 
-                databaseIds[std::make_pair(databaseId, NYql::DatabaseType::Generic)] = NYql::TDatabaseAuth{token, /*AddBearer=*/true};
+                databaseIds[std::make_pair(databaseId, DataSourceKindToDatabaseType(cluster.GetKind()))] = NYql::TDatabaseAuth{token, /*AddBearer=*/true};
 
                 DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
                 YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";

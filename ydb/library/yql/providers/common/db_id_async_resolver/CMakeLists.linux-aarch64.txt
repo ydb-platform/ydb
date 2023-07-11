@@ -13,5 +13,6 @@ target_link_libraries(providers-common-db_id_async_resolver INTERFACE
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
+  connector-api-common
   yql-public-issue
 )

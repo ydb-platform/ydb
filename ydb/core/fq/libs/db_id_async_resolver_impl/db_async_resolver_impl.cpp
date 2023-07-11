@@ -10,18 +10,18 @@ TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
     const NActors::TActorId& recipient,
     const TString& ydbMvpEndpoint,
     const TString& mdbGateway,
-    bool mdbTransformHost,
+    NYql::IMdbHostTransformer::TPtr&& mdbHostTransformer, 
     const TString& traceId)
     : ActorSystem(actorSystem)
     , Recipient(recipient)
     , YdbMvpEndpoint(ydbMvpEndpoint)
     , MdbGateway(mdbGateway)
-    , MdbTransformHost(mdbTransformHost)
+    , MdbHostTransformer(std::move(mdbHostTransformer))
     , TraceId(traceId)
 {
 }
 
-TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const TDatabaseAuthMap& ids) const
+TFuture<NYql::TDatabaseResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const TDatabaseAuthMap& ids) const
 {
     // Cloud database ids validataion
     for (const auto& kv: ids) {
@@ -29,7 +29,7 @@ TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const 
         YQL_ENSURE(kv.first.first, "empty cluster name");
     }
 
-    auto promise = NewPromise<NYql::TDbResolverResponse>();
+    auto promise = NewPromise<NYql::TDatabaseResolverResponse>();
     TDuration timeout = TDuration::Seconds(40);
     auto callback = MakeHolder<NYql::TRichActorFutureCallback<TEvents::TEvEndpointResponse>>(
         [promise] (TAutoPtr<NActors::TEventHandle<TEvents::TEvEndpointResponse>>& event) mutable {
@@ -45,7 +45,7 @@ TFuture<NYql::TDbResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(const 
 
     ActorSystem->Send(new NActors::IEventHandle(Recipient, callbackId,
         new TEvents::TEvEndpointRequest(ids, YdbMvpEndpoint, MdbGateway,
-            TraceId, MdbTransformHost)));
+            TraceId, MdbHostTransformer)));
 
     return promise.GetFuture();
 }

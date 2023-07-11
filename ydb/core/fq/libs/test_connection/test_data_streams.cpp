@@ -25,9 +25,9 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     struct TEvResolveDbResponse : NActors::TEventLocal<TEvResolveDbResponse, EvResolveDbResponse> {
-        NYql::TDbResolverResponse Result;
+        NYql::TDatabaseResolverResponse Result;
 
-        TEvResolveDbResponse(const NYql::TDbResolverResponse& result)
+        TEvResolveDbResponse(const NYql::TDatabaseResolverResponse& result)
             : Result(result)
         {}
     };
@@ -145,14 +145,14 @@ private:
             SendOpenSession();
             return;
         }
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> ids;
-        ids[std::pair{ClusterConfig.GetDatabaseId(), NYql::DatabaseType::DataStreams}] = {StructuredToken, CommonConfig.GetUseBearerForYdb()};
+        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap ids;
+        ids[std::pair{ClusterConfig.GetDatabaseId(), NYql::EDatabaseType::DataStreams}] = {StructuredToken, CommonConfig.GetUseBearerForYdb()};
         DbResolver->ResolveIds(ids).Apply([self=SelfId(), as=TActivationContext::ActorSystem()](const auto& future) {
             try {
                 auto result = future.GetValue();
                 as->Send(new IEventHandle(self, self, new TEvPrivate::TEvResolveDbResponse(result), 0));
             } catch (...) {
-                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvResolveDbResponse(NYql::TDbResolverResponse{{}, false, NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, CurrentExceptionMessage())}}), 0));
+                as->Send(new IEventHandle(self, self, new TEvPrivate::TEvResolveDbResponse(NYql::TDatabaseResolverResponse{{}, false, NYql::TIssues{MakeErrorIssue(NFq::TIssuesIds::BAD_REQUEST, CurrentExceptionMessage())}}), 0));
             }
         });
     }
@@ -165,7 +165,7 @@ private:
             return;
         }
 
-        auto it = response.DatabaseId2Endpoint.find(std::pair{ClusterConfig.GetDatabaseId(), NYql::DatabaseType::DataStreams});
+        auto it = response.DatabaseId2Endpoint.find(std::pair{ClusterConfig.GetDatabaseId(), NYql::EDatabaseType::DataStreams});
         if (it == response.DatabaseId2Endpoint.end()) {
             TC_LOG_E(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());
             ReplyError(TStringBuilder{} << "Test data streams connection: database is not found for database_id " << ClusterConfig.GetDatabaseId());

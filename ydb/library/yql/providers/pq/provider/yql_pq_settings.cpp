@@ -18,7 +18,7 @@ void TPqConfiguration::Init(
     const TPqGatewayConfig& config,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds)
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds)
 {
     TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
     for (auto& cluster: config.GetClusterMapping()) {
@@ -52,7 +52,7 @@ void TPqConfiguration::Init(
             YQL_CLOG(DEBUG, ProviderPq) << "Settings: clusterName = " << cluster.GetName()
                 << ", clusterDbId = "  << cluster.GetDatabaseId() << ", cluster.GetEndpoint(): " << cluster.GetEndpoint() << ", HasEndpoint = " << (cluster.HasEndpoint() ? "TRUE" : "FALSE") ;
             if (cluster.GetDatabaseId()) {
-                databaseIds[std::make_pair(cluster.GetDatabaseId(), NYql::DatabaseType::DataStreams)] =
+                databaseIds[std::make_pair(cluster.GetDatabaseId(), NYql::EDatabaseType::DataStreams)] =
                     NYql::TDatabaseAuth{structuredTokenJson, cluster.GetAddBearerToToken()};
                 DbId2Clusters[cluster.GetDatabaseId()].emplace_back(cluster.GetName());
                 YQL_CLOG(DEBUG, ProviderPq) << "Add dbId: " << cluster.GetDatabaseId() << " to DbId2Clusters";

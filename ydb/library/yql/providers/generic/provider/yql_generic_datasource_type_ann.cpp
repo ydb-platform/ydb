@@ -51,7 +51,7 @@ namespace NYql {
                         ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(item->GetItemType())));
                 }
 
-                // FIXME:
+                // FIXME: YQ-2190
                 // Clickhouse provider used to work with multiple tables simultaneously;
                 // I don't know what to do with others.
                 break;

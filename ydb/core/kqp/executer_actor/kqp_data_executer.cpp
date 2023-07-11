@@ -137,7 +137,7 @@ public:
 
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
-        if (Request.AcquireLocksTxId || Request.ValidateLocks || Request.EraseLocks) {
+        if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
             YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE);
         }
 
@@ -1306,7 +1306,7 @@ private:
             return false;
         }
 
-        if (Request.ValidateLocks && Request.EraseLocks) {
+        if (Request.LocksOp == ELocksOp::Commit) {
             YQL_ENSURE(!Request.UseImmediateEffects);
             return false;
         }
@@ -1969,7 +1969,7 @@ private:
 
         Request.TopicOperations.BuildTopicTxs(topicTxs);
 
-        const bool needRollback = Request.EraseLocks && !Request.ValidateLocks;
+        const bool needRollback = Request.LocksOp == ELocksOp::Rollback;
 
         VolatileTx = (
             // We want to use volatile transactions only when the feature is enabled
@@ -2004,11 +2004,9 @@ private:
             VolatileTx ||
             Request.TopicOperations.HasReadOperations())
         {
-            YQL_ENSURE(Request.ValidateLocks || Request.EraseLocks || VolatileTx);
+            YQL_ENSURE(Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback || VolatileTx);
 
-            bool needCommit = (
-                (Request.ValidateLocks && Request.EraseLocks) ||
-                VolatileTx);
+            bool needCommit = Request.LocksOp == ELocksOp::Commit || VolatileTx;
 
             auto locksOp = needCommit
                 ? NKikimrTxDataShard::TKqpLocks::Commit
@@ -2077,7 +2075,7 @@ private:
                 }
             }
 
-            if (Request.ValidateLocks || needCommit) {
+            if (needCommit) {
                 NProtoBuf::RepeatedField<ui64> sendingShards(sendingShardsSet.begin(), sendingShardsSet.end());
                 NProtoBuf::RepeatedField<ui64> receivingShards(receivingShardsSet.begin(), receivingShardsSet.end());
 

@@ -61,6 +61,12 @@ struct TModuleResolverState : public TThrRefBase {
 
 void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
 
+enum class ELocksOp {
+    Unspecified = 0,
+    Commit,
+    Rollback
+};
+
 class IKqpGateway : public NYql::IKikimrGateway {
 public:
     struct TPhysicalTxData : private TMoveOnly {
@@ -124,8 +130,7 @@ public:
         TVector<TPhysicalTxData> Transactions;
         TMap<ui64, TVector<NKikimrTxDataShard::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
-        bool ValidateLocks = false;
-        bool EraseLocks = false;
+        ELocksOp LocksOp = ELocksOp::Unspecified;
         TMaybe<ui64> AcquireLocksTxId;
         TDuration Timeout;
         TMaybe<TDuration> CancelAfter;

@@ -976,12 +976,13 @@ public:
             }
 
             if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasReadOperations()) {
-                request.ValidateLocks = !txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() ||
-                    txCtx.TopicOperations.HasReadOperations();
-                request.EraseLocks = true;
-
-                LOG_D("TExecPhysicalRequest, tx has locks, ValidateLocks: " << request.ValidateLocks
-                        << " EraseLocks: " << request.EraseLocks);
+                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasReadOperations()) {
+                    LOG_D("TExecPhysicalRequest, tx has commit locks");
+                    request.LocksOp = ELocksOp::Commit;
+                } else {
+                    LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                    request.LocksOp = ELocksOp::Rollback;
+                }
 
                 for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
                     auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
@@ -1588,8 +1589,7 @@ public:
             AppData()->TimeProvider, AppData()->RandomProvider);
         auto request = PreparePhysicalRequest(nullptr, allocPtr);
 
-        request.EraseLocks = true;
-        request.ValidateLocks = false;
+        request.LocksOp = ELocksOp::Rollback;
 
         // Should tx with empty LocksMap be aborted?
         for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {

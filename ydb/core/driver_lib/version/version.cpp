@@ -1,9 +1,11 @@
+#include <google/protobuf/text_format.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include "version.h"
 
 using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
 using TStored = NKikimrConfig::TStoredCompatibilityInfo;
+using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
 
 namespace NKikimr {
 
@@ -74,6 +76,31 @@ const TStored* TCompatibilityInfo::GetUnknown() {
     }
 
     return &*UnknownYdbRelease;
+}
+
+// Auxiliary output functions
+TString PrintStoredAndCurrent(const TStored* stored, const TCurrent* current) {
+    TString storedStr;
+    TString currentStr;
+    google::protobuf::TextFormat::PrintToString(*stored, &storedStr);
+    google::protobuf::TextFormat::PrintToString(*current, &currentStr);
+    return TStringBuilder() << "Stored CompatibilityInfo# { " << storedStr << " } "
+            "Current CompatibilityInfo# { " << currentStr << " } ";
+}
+
+TString PrintStoredAndCurrent(const TOldFormat& stored, const TCurrent* current) {
+    TStringStream str;
+    str << "Stored CompatibilityInfo# { ";
+    str << "Tag# " << stored.Tag;
+    str << "AcceptedTag# { ";
+    for (const TString& tag : stored.AcceptedTags) {
+        str << tag << " ";
+    }
+    str << " } } ";
+    TString currentStr;
+    google::protobuf::TextFormat::PrintToString(*current, &currentStr);
+    str << "Currrent CompatibilityInfo# { " << currentStr << " }";
+    return str.Str();
 }
 
 TStored TCompatibilityInfo::MakeStored(ui32 componentId, const TCurrent* current) {
@@ -253,7 +280,7 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
             useDefault = false;
             if (CheckRule(storedBuild, storedYdbVersion, rule)) {
                 if (rule.HasForbidden() && rule.GetForbidden()) {
-                    errorReason = "Stored version is explicitly prohibited";
+                    errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {
                     permitted = true;
@@ -269,7 +296,7 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
             if (CheckRule(currentBuild, currentYdbVersion, rule)) {
                 useDefault = false;
                 if (rule.HasForbidden() && rule.GetForbidden()) {
-                    errorReason = "Current version is explicitly prohibited";
+                    errorReason = "Current version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {
                     permitted = true;
@@ -285,11 +312,11 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
             if (CheckDefaultRules(currentBuild, currentYdbVersion, storedBuild, storedYdbVersion)) {
                 return true;
             } else {
-                errorReason = "Versions are not compatible by default rules";
+                errorReason = "Versions are not compatible by default rules, " + PrintStoredAndCurrent(stored, current);
                 return false;
             }
         }
-        errorReason = "Versions are not compatible by given rule sets";
+        errorReason = "Versions are not compatible by given rule sets, " + PrintStoredAndCurrent(stored, current);
         return false;
     }
 }
@@ -516,8 +543,6 @@ void CheckVersionTag() {
     }
 }
 
-using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
-
 bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
         const TOldFormat& stored, ui32 componentId, TString& errorReason) {
     Y_VERIFY(current);
@@ -545,7 +570,7 @@ bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompati
             }
             if (CheckRule(storedBuild, &*storedVersion, rule)) {
                 if (rule.HasForbidden() && rule.GetForbidden()) {
-                    errorReason = "Stored version is explicitly prohibited";
+                    errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {
                     permitted = true;
@@ -582,7 +607,8 @@ bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompati
                 return true;
             }
             if (currentYdbVersion.GetYear() != storedVersion->GetYear()) {
-                errorReason = "Default rules used, stored's and current's Year differ";
+                errorReason = "Default rules used, stored's and current's Year differ, "
+                        + PrintStoredAndCurrent(stored, current);
                 return false;
             }
             if (!currentYdbVersion.HasMajor() || !storedVersion->HasMajor()) {
@@ -591,23 +617,27 @@ bool TCompatibilityInfo::CheckCompatibility(const NKikimrConfig::TCurrentCompati
             if (std::abs((i32)currentYdbVersion.GetMajor() - (i32)storedVersion->GetMajor()) <= 1) {
                 return true;
             } else {
-                errorReason = "Default rules used, stored's and current's Major difference is more than 1";
+                errorReason = "Default rules used, stored's and current's Major difference is more than 1, "
+                        + PrintStoredAndCurrent(stored, current);
                 return false;
             }
         } else if (!current->HasYdbVersion() && !storedVersion) {
             if (*storedBuild == current->GetBuild()) {
                 return true;
             } else {
-                errorReason = "Default rules used, both versions are non-stable, stored's and current's Build differ";
+                errorReason = "Default rules used, both versions are non-stable, stored's and current's Build differ, "
+                        + PrintStoredAndCurrent(stored, current);
                 return false;
             }
         } else {
-            errorReason = "Default rules used, stable and non-stable versions are incompatible";
+            errorReason = "Default rules used, stable and non-stable versions are incompatible, "
+                    + PrintStoredAndCurrent(stored, current);
             return false;
         }
     }
 
-    errorReason = "Version tag doesn't match any current compatibility rule, current version is not in accepted tags list";
+    errorReason = "Version tag doesn't match any current compatibility rule, current version is not in accepted tags list, "
+            + PrintStoredAndCurrent(stored, current);
     return false;
 }
 

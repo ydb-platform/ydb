@@ -197,14 +197,14 @@ bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
 }
 
-TOwnedCellVecBatch::TOwnedCellVecBatch() {
-    Buffers.emplace_back(InitialBufferSizeDegree);
+TOwnedCellVecBatch::TOwnedCellVecBatch()
+    : Pool(std::make_unique<TMemoryPool>(InitialPoolSize)) {
 }
 
 size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
     size_t cellsSize = cells.size();
     if (cellsSize == 0) {
-        Cells.emplace_back();
+        CellVectors.emplace_back();
         return 0;
     }
 
@@ -216,18 +216,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
         }
     }
 
-    char * allocatedBuffer = Buffers.back().Allocate(size);
-    if (!allocatedBuffer) {
-        uint8_t nextBufferSizeDegree = Buffers.back().GetSizeDegree();
-        while (size > (1ULL << nextBufferSizeDegree)) {
-            ++nextBufferSizeDegree;
-        }
-
-        Buffers.emplace_back(nextBufferSizeDegree);
-        allocatedBuffer = Buffers.back().Allocate(size);
-    }
-
-    Y_VERIFY_DEBUG(allocatedBuffer != nullptr);
+    char * allocatedBuffer = reinterpret_cast<char *>(Pool->Allocate(size));
 
     TCell* ptrCell = reinterpret_cast<TCell*>(allocatedBuffer);
     char* ptrData = reinterpret_cast<char*>(ptrCell + cellsSize);
@@ -251,7 +240,7 @@ size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
         ++ptrCell;
     }
 
-    Cells.push_back(cellvec);
+    CellVectors.push_back(cellvec);
     return size;
 }
 

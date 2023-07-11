@@ -8,6 +8,7 @@
 #include <util/generic/bitops.h>
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
+#include <util/memory/pool.h>
 
 #include <type_traits>
 
@@ -514,108 +515,53 @@ public:
     size_t Append(TConstArrayRef<TCell> cells);
 
     size_t Size() const {
-        return Cells.size();
+        return CellVectors.size();
     }
 
     bool Empty() const {
-        return Cells.empty();
+        return CellVectors.empty();
     }
 
     bool empty() const {
-        return Cells.empty();
+        return CellVectors.empty();
     }
 
     using iterator = TVector<TConstArrayRef<TCell>>::iterator;
     using const_iterator = TVector<TConstArrayRef<TCell>>::const_iterator;
 
     iterator begin() {
-        return Cells.begin();
+        return CellVectors.begin();
     }
 
     iterator end() {
-        return Cells.end();
+        return CellVectors.end();
     }
 
     const_iterator cbegin() {
-        return Cells.cbegin();
+        return CellVectors.cbegin();
     }
 
     const_iterator cend() {
-        return Cells.cend();
+        return CellVectors.cend();
     }
 
     TConstArrayRef<TCell> operator[](size_t index) const {
-        return Cells[index];
+        return CellVectors[index];
     }
 
     TConstArrayRef<TCell> front() const {
-        return Cells.front();
+        return CellVectors.front();
     }
 
     TConstArrayRef<TCell> back() const {
-        return Cells.back();
+        return CellVectors.back();
     }
 
 private:
-    static constexpr size_t InitialBufferSizeDegree = 16;
+    static constexpr size_t InitialPoolSize = 1ULL << 16;
 
-    class Buffer {
-    public:
-        Buffer(uint8_t sizeDegree)
-            : BufferBegin(reinterpret_cast<char *>(malloc(1ULL << sizeDegree)))
-            , SizeDegree(sizeDegree)
-        {
-            if (Y_UNLIKELY(!BufferBegin)) {
-                throw std::bad_alloc();
-            }
-        }
-
-        Buffer(const Buffer & rhs) = delete;
-
-        Buffer & operator=(const Buffer && rhs) = delete;
-
-        Buffer(Buffer && rhs) {
-            std::swap(BufferBegin, rhs.BufferBegin);
-            std::swap(Position, rhs.Position);
-            std::swap(SizeDegree, rhs.SizeDegree);
-        }
-
-        char * Allocate(size_t size) {
-            if (AvailableSize() < size) {
-                return nullptr;
-            }
-
-            char * result = BufferBegin + Position;
-            Position += size;
-
-            return result;
-        }
-
-        uint8_t GetSizeDegree() const {
-            return SizeDegree;
-        }
-
-        size_t Size() const {
-            return 1ULL << SizeDegree;
-        }
-
-        size_t AvailableSize() const {
-            return Size() - Position;
-        }
-
-        ~Buffer() {
-            if (BufferBegin)
-                free(BufferBegin);
-        }
-
-    private:
-        char * BufferBegin = nullptr;
-        size_t Position = 0;
-        uint8_t SizeDegree = 0;
-    };
-
-    TVector<Buffer> Buffers;
-    TVector<TConstArrayRef<TCell>> Cells;
+    std::unique_ptr<TMemoryPool> Pool;
+    TVector<TConstArrayRef<TCell>> CellVectors;
 };
 
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);

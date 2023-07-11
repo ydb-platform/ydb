@@ -25,6 +25,18 @@ using NConsole::TEvConsole;
 using NConsole::ITxExecutor;
 using NConsole::TTxProcessor;
 
+class INodeBrokerHooks {
+protected:
+    ~INodeBrokerHooks() = default;
+
+public:
+    virtual void OnActivateExecutor(ui64 tabletId);
+
+public:
+    static INodeBrokerHooks* Get();
+    static void Set(INodeBrokerHooks* hooks);
+};
+
 class TNodeBroker : public TActor<TNodeBroker>
                   , public TTabletExecutedFlat
                   , public ITxExecutor {
@@ -171,6 +183,7 @@ private:
             HFuncTraced(TEvNodeBroker::TEvResolveNode, Handle);
             HFuncTraced(TEvNodeBroker::TEvRegistrationRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvExtendLeaseRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
@@ -277,6 +290,8 @@ private:
     void Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);

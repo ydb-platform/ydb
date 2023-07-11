@@ -14,7 +14,10 @@
 
 namespace NKikimr::NMiniKQL {
 
-arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+namespace {
+
+template<typename T>
+arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& pool) {
     if (!value) {
         std::shared_ptr<arrow::DataType> arrowType;
         MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
@@ -32,7 +35,7 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arr
 
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            arrowValue.emplace_back(ConvertScalar(tupleType->GetElementType(i), value.GetElement(i), pool).scalar());
+            arrowValue.emplace_back(DoConvertScalar(tupleType->GetElementType(i), value.GetElement(i), pool).scalar());
         }
 
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
@@ -42,30 +45,30 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arr
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
         case NUdf::EDataSlot::Int8:
-            return arrow::Datum(static_cast<int8_t>(value.Get<i8>()));
+            return arrow::Datum(static_cast<int8_t>(value.template Get<i8>()));
         case NUdf::EDataSlot::Bool:
         case NUdf::EDataSlot::Uint8:
-            return arrow::Datum(static_cast<uint8_t>(value.Get<ui8>()));
+            return arrow::Datum(static_cast<uint8_t>(value.template Get<ui8>()));
         case NUdf::EDataSlot::Int16:
-            return arrow::Datum(static_cast<int16_t>(value.Get<i16>()));
+            return arrow::Datum(static_cast<int16_t>(value.template Get<i16>()));
         case NUdf::EDataSlot::Uint16:
         case NUdf::EDataSlot::Date:
-            return arrow::Datum(static_cast<uint16_t>(value.Get<ui16>()));
+            return arrow::Datum(static_cast<uint16_t>(value.template Get<ui16>()));
         case NUdf::EDataSlot::Int32:
-            return arrow::Datum(static_cast<int32_t>(value.Get<i32>()));
+            return arrow::Datum(static_cast<int32_t>(value.template Get<i32>()));
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
-            return arrow::Datum(static_cast<uint32_t>(value.Get<ui32>()));
+            return arrow::Datum(static_cast<uint32_t>(value.template Get<ui32>()));
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
-            return arrow::Datum(static_cast<int64_t>(value.Get<i64>()));
+            return arrow::Datum(static_cast<int64_t>(value.template Get<i64>()));
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
-            return arrow::Datum(static_cast<uint64_t>(value.Get<ui64>()));
+            return arrow::Datum(static_cast<uint64_t>(value.template Get<ui64>()));
         case NUdf::EDataSlot::Float:
-            return arrow::Datum(static_cast<float>(value.Get<float>()));
+            return arrow::Datum(static_cast<float>(value.template Get<float>()));
         case NUdf::EDataSlot::Double:
-            return arrow::Datum(static_cast<double>(value.Get<double>()));
+            return arrow::Datum(static_cast<double>(value.template Get<double>()));
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Yson:
@@ -88,6 +91,16 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arr
     }
 
     MKQL_ENSURE(false, "Unsupported type");
+}
+
+} // namespace
+
+arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    return DoConvertScalar(type, value, pool);
+}
+
+arrow::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
+    return DoConvertScalar(type, value, pool);
 }
 
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {

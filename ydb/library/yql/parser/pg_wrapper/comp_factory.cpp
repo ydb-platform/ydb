@@ -2449,15 +2449,16 @@ extern "C" void WriteSkiffPgValue(TPgType* type, const NUdf::TUnboxedValuePod& v
 
 } // namespace NCommon
 
-arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
-    const auto& desc = NPg::LookupType(type->GetTypeId());
+namespace {
+
+template<typename TScalarGetter, typename TPointerGetter>
+arrow::Datum DoMakePgScalar(const NPg::TTypeDesc& desc, arrow::MemoryPool& pool, const TScalarGetter& getScalar, const TPointerGetter& getPtr) {
     if (desc.PassByValue) {
-        return arrow::MakeScalar((uint64_t)ScalarDatumFromPod(value));
+        return arrow::MakeScalar(getScalar());
     } else {
-        auto ptr = (const char*)PointerDatumFromPod(value);
+        const char* ptr = getPtr();
         ui32 size;
         if (desc.TypeLen == -1) {
-            auto ptr = (const text*)PointerDatumFromPod(value);
             size = GetCleanVarSize((const text*)ptr) + VARHDRSZ;
         } else {
             size = strlen(ptr) + 1;
@@ -2468,6 +2469,24 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
         std::memcpy(buffer->mutable_data() + sizeof(void*), ptr, size);
         return arrow::Datum(std::make_shared<arrow::BinaryScalar>(buffer));
     }
+}
+
+} // namespace
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    return DoMakePgScalar(
+        NPg::LookupType(type->GetTypeId()), pool,
+        [&value]() { return (uint64_t)ScalarDatumFromPod(value); },
+        [&value]() { return (const char*)PointerDatumFromPod(value); }
+    );
+}
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
+    return DoMakePgScalar(
+        NPg::LookupType(type->GetTypeId()), pool,
+        [&value]() { return (uint64_t)ScalarDatumFromItem(value); },
+        [&value]() { return (const char*)PointerDatumFromItem(value); }
+    );
 }
 
 TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {

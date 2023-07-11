@@ -247,6 +247,13 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
     return arrow::Datum();
 }
 
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(pool);
+    return arrow::Datum();
+}
+
 TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
     Y_UNUSED(originalType);
     Y_UNUSED(targetType);

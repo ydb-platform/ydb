@@ -1346,10 +1346,14 @@ TType* TProtoImporter::ImportTypeFromProto(const Ydb::Type& input) {
         case Ydb::Type::kEmptyDictType:
             return env.GetTypeOfEmptyDict();
         case Ydb::Type::kPgType: {
-            const auto& typeName = input.pg_type().type_name();
-            auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-            MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type name: " << typeName);
-            return TPgType::Create(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc), env);
+            if (const auto& typeName = input.pg_type().type_name()) {
+                auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+                MKQL_ENSURE(typeDesc, TStringBuilder() << "Unknown PG type name: " << typeName);
+                return TPgType::Create(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc), env);
+            } else {
+                const auto& typeId = input.pg_type().oid();
+                return TPgType::Create(typeId, env);
+            }
         }
         case Ydb::Type::kTypeId: {
             MKQL_ENSURE(NUdf::FindDataSlot(input.type_id()), TStringBuilder() << "unknown type id: " << ui32(input.type_id()));

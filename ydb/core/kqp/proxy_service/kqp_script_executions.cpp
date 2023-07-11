@@ -453,6 +453,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TCreateScriptOperationQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $run_script_actor_id AS Text;
@@ -569,6 +570,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TScriptLeaseUpdater::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -602,6 +604,7 @@ public:
         }
 
         TString sql = R"(
+            -- TScriptLeaseUpdater::OnGetLeaseInfo
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $lease_deadline AS Timestamp;
@@ -705,7 +708,8 @@ public:
             || status == Ydb::StatusIds::TIMEOUT
             || status == Ydb::StatusIds::BAD_SESSION
             || status == Ydb::StatusIds::SESSION_EXPIRED
-            || status == Ydb::StatusIds::SESSION_BUSY) {
+            || status == Ydb::StatusIds::SESSION_BUSY
+            || status == Ydb::StatusIds::ABORTED) {
             return ERetryErrorClass::ShortRetry;
         }
 
@@ -738,6 +742,7 @@ public:
                                const NYql::TIssues& issues = LeaseExpiredIssues(), TTxControl txControl = TTxControl::ContinueAndCommitTx(),
                                TMaybe<NKqpProto::TKqpStatsQuery> kqpStats = Nothing(), TMaybe<TString> queryPlan = Nothing(), TMaybe<TString> queryAst = Nothing()) {
         TString sql = R"(
+            -- TScriptExecutionFinisherBase::FinishScriptExecution
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $operation_status AS Int32;
@@ -843,6 +848,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TScriptExecutionFinisher::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -924,6 +930,7 @@ public:
 
     void OnRunQuery() override {
         const TString sql = R"(
+            -- TCheckLeaseStatusActor::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1043,6 +1050,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TForgetScriptExecutionOperationActor::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1091,6 +1099,7 @@ public:
 
         TStringBuilder sql;
         sql << R"(
+            -- TForgetScriptExecutionOperationActor::OnGetInfo
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1149,15 +1158,143 @@ private:
     NYql::TIssues Issues;
 };
 
-class TGetScriptExecutionOperationActor : public TScriptExecutionFinisherBase {
+class TGetScriptExecutionOperationBase : public TScriptExecutionFinisherBase {
 public:
-    explicit TGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev)
+    explicit TGetScriptExecutionOperationBase(TEvGetScriptExecutionOperation::TPtr ev, Ydb::Query::ExecuteScriptMetadata&& metadata = Ydb::Query::ExecuteScriptMetadata(), NYql::TIssues&& issues = {})
         : Request(std::move(ev))
-    {
+        , Metadata(metadata)
+        , Issues(issues)
+        , StartActorTime(TInstant::Now())
+    {}
+
+    bool CheakLeaseDeadline(NYdb::TResultSetParser& deadlineResult) {
+        deadlineResult.TryNextRow();
+
+        TMaybe<TInstant> leaseDeadline = deadlineResult.ColumnParser(0).GetOptionalTimestamp();
+        if (!leaseDeadline) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state");
+            return false;
+        }
+
+        if (*leaseDeadline < StartActorTime) {
+            LeaseExpired = true;
+            Ready = true;
+
+            FinishScriptExecution(Request->Get()->Database, Metadata.execution_id(), Ydb::StatusIds::ABORTED, Ydb::Query::EXEC_STATUS_ABORTED, Issues);
+            SetQueryResultHandler(&TGetScriptExecutionOperationBase::OnFinishOperation);
+            return false;
+        }
+
+        return true;
     }
+
+    void OnFinishOperation() {
+        Issues = LeaseExpiredIssues();
+        Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_ABORTED);
+        Finish(Ydb::StatusIds::SUCCESS, std::move(Issues));
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
+        if (status == Ydb::StatusIds::SUCCESS) {
+            TMaybe<google::protobuf::Any> metadata;
+            metadata.ConstructInPlace().PackFrom(Metadata);
+
+            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(Ready, status, std::move(Issues), std::move(metadata)));
+        } else {
+            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(false, status, std::move(issues), Nothing()));
+        }
+    }
+
+protected:
+    TEvGetScriptExecutionOperation::TPtr Request;
+    Ydb::Query::ExecuteScriptMetadata Metadata;
+    NYql::TIssues Issues;
+    TInstant StartActorTime;
+    bool LeaseExpired = false;
+    bool Ready = false;
+};
+
+class TGetScriptExecutionOperationAfterTliActor : public TGetScriptExecutionOperationBase {
+public:
+    TGetScriptExecutionOperationAfterTliActor(TEvGetScriptExecutionOperation::TPtr ev, Ydb::Query::ExecuteScriptMetadata&& metadata, NYql::TIssues&& issues)
+        : TGetScriptExecutionOperationBase(std::move(ev), std::move(metadata), std::move(issues))
+    {}
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TGetScriptExecutionOperationAfterTliActor::OnRunQuery
+            DECLARE $database AS Text;
+            DECLARE $execution_id AS Text;
+
+            SELECT execution_status
+            FROM `.metadata/script_executions`
+            WHERE database = $database AND execution_id = $execution_id;
+            
+            SELECT lease_deadline
+            FROM `.metadata/script_execution_leases`
+            WHERE database = $database AND execution_id = $execution_id;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database")
+                .Utf8(Request->Get()->Database)
+                .Build()
+            .AddParam("$execution_id")
+                .Utf8(Metadata.execution_id())
+                .Build();
+
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+        SetQueryResultHandler(&TGetScriptExecutionOperationAfterTliActor::OnGetInfo);
+    }
+
+    void OnGetInfo() {
+        if (ResultSets.size() != 2) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (result.RowsCount() == 0) {
+            Finish(Ydb::StatusIds::NOT_FOUND, "No such execution");
+            return;
+        }
+
+        result.TryNextRow();
+
+        const TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
+        if (executionStatus) {
+            Metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
+        }
+
+        NYdb::TResultSetParser deadlineResult(ResultSets[1]);
+        if (deadlineResult.RowsCount() == 0) {
+            Ready = true;
+        } else if (!CheakLeaseDeadline(deadlineResult)) {
+            return;
+        }
+
+        CommitTransaction();
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+        if (status == Ydb::StatusIds::ABORTED && LeaseExpired) {
+            Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_ABORTED);
+            status = Ydb::StatusIds::SUCCESS;
+        }
+
+        Reply(status, std::move(issues));
+    }
+};
+
+class TGetScriptExecutionOperationActor : public TGetScriptExecutionOperationBase {
+public:
+    explicit TGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev)
+        : TGetScriptExecutionOperationBase(std::move(ev))
+    {}
+
+    void OnRunQuery() override {
+        TString sql = R"(
+            -- TGetScriptExecutionOperationActor::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1216,45 +1353,43 @@ public:
             Ready = true;
         }
 
-        Ydb::Query::ExecuteScriptMetadata metadata;
-
-        metadata.set_execution_id(*ScriptExecutionIdFromOperation(Request->Get()->OperationId));
+        Metadata.set_execution_id(*ScriptExecutionIdFromOperation(Request->Get()->OperationId));
 
         const TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
         if (executionStatus) {
-            metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
+            Metadata.set_exec_status(static_cast<Ydb::Query::ExecStatus>(*executionStatus));
         }
 
         const TMaybe<TString> sql = result.ColumnParser("query_text").GetOptionalUtf8();
         if (sql) {
-            metadata.mutable_script_content()->set_text(*sql);
+            Metadata.mutable_script_content()->set_text(*sql);
         }
 
         const TMaybe<i32> syntax = result.ColumnParser("syntax").GetOptionalInt32();
         if (syntax) {
-            metadata.mutable_script_content()->set_syntax(static_cast<Ydb::Query::Syntax>(*syntax));
+            Metadata.mutable_script_content()->set_syntax(static_cast<Ydb::Query::Syntax>(*syntax));
         }
 
         const TMaybe<i32> executionMode = result.ColumnParser("execution_mode").GetOptionalInt32();
         if (executionMode) {
-            metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
+            Metadata.set_exec_mode(static_cast<Ydb::Query::ExecMode>(*executionMode));
         }
 
         const TMaybe<TString> serializedStats = result.ColumnParser("stats").GetOptionalJsonDocument();
         if (serializedStats) {
             NJson::TJsonValue statsJson;
             NJson::ReadJsonTree(*serializedStats, &statsJson);
-            NProtobufJson::Json2Proto(statsJson, *metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
+            NProtobufJson::Json2Proto(statsJson, *Metadata.mutable_exec_stats(), NProtobufJson::TJson2ProtoConfig());
         }
 
         const TMaybe<TString> plan = result.ColumnParser("plan").GetOptionalJsonDocument();
         if (plan) {
-            metadata.mutable_exec_stats()->set_query_plan(*plan);
+            Metadata.mutable_exec_stats()->set_query_plan(*plan);
         }
 
         const TMaybe<TString> ast = result.ColumnParser("ast").GetOptionalUtf8();
         if (ast) {
-            metadata.mutable_exec_stats()->set_query_ast(*ast);
+            Metadata.mutable_exec_stats()->set_query_ast(*ast);
         }
 
         const TMaybe<TString> issuesSerialized = result.ColumnParser("issues").GetOptionalJsonDocument();
@@ -1273,11 +1408,10 @@ public:
             for (auto i = 0; i < value.GetIntegerRobust(); i++) {
                 const NJson::TJsonValue* metaValue;
                 value.GetValuePointer(i, &metaValue);
-                NProtobufJson::Json2Proto(*metaValue, *metadata.add_result_sets_meta());
+                NProtobufJson::Json2Proto(*metaValue, *Metadata.add_result_sets_meta());
             }
         }
 
-        bool finishing = false;
         if (!operationStatus) {
             // Check lease deadline
             NYdb::TResultSetParser deadlineResult(ResultSets[1]);
@@ -1286,51 +1420,24 @@ public:
                 return;
             }
 
-            deadlineResult.TryNextRow();
-
-            TMaybe<TInstant> leaseDeadline = deadlineResult.ColumnParser(0).GetOptionalTimestamp();
-            if (!leaseDeadline) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state");
+            if (!CheakLeaseDeadline(deadlineResult)) {
                 return;
             }
-
-            if (*leaseDeadline < TInstant::Now()) {
-                finishing = true;
-
-                metadata.set_exec_status(Ydb::Query::EXEC_STATUS_ABORTED);
-                Ready = true;
-                Issues = LeaseExpiredIssues();
-
-                FinishScriptExecution(Request->Get()->Database, ExecutionId, Ydb::StatusIds::ABORTED, Ydb::Query::EXEC_STATUS_ABORTED, Issues);
-                SetQueryResultHandler(&TGetScriptExecutionOperationActor::OnFinishOperation);
-            }
         }
 
-        Metadata.ConstructInPlace().PackFrom(metadata);
-
-        if (!finishing) {
-            CommitTransaction();
-        }
-    }
-
-    void OnFinishOperation() {
-        Finish(Ydb::StatusIds::SUCCESS, std::move(Issues));
+        CommitTransaction();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        if (status == Ydb::StatusIds::SUCCESS) {
-            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(Ready, status, std::move(Issues), std::move(Metadata)));
+        if (status == Ydb::StatusIds::ABORTED && LeaseExpired) {
+            Register(new TGetScriptExecutionOperationAfterTliActor(std::move(Request), std::move(Metadata), std::move(Issues)));
         } else {
-            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(false, status, std::move(issues), Nothing()));
+            Reply(status, std::move(issues));
         }
     }
 
 private:
-    TEvGetScriptExecutionOperation::TPtr Request;
     TString ExecutionId;
-    bool Ready = false;
-    NYql::TIssues Issues;
-    TMaybe<google::protobuf::Any> Metadata;
 };
 
 class TListScriptExecutionOperationsQuery : public TQueryBase {
@@ -1363,6 +1470,7 @@ public:
             )";
         }
         sql << R"(
+            -- TListScriptExecutionOperationsQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $page_size AS Uint64;
 
@@ -1681,6 +1789,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TSaveScriptExecutionResultMetaQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_metas AS JsonDocument;
@@ -1762,6 +1871,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TSaveScriptExecutionResultQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
@@ -1877,6 +1987,7 @@ public:
 
     void OnRunQuery() override {
         TString sql = R"(
+            -- TGetScriptExecutionResultQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;

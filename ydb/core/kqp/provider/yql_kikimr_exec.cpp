@@ -181,6 +181,8 @@ namespace {
         out.ExternalDataSource = settings.GetObjectId();
         out.SourceType = GetOrDefault(settings, "source_type");
         out.AuthMethod = GetOrDefault(settings, "auth_method");
+        out.ServiceAccount.Id = GetOrDefault(settings, "service_account_id");
+        out.ServiceAccount.SecretName = GetOrDefault(settings, "service_account_secret_name");
         out.Installation = GetOrDefault(settings, "installation");
         out.Location = GetOrDefault(settings, "location");
         return out;

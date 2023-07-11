@@ -587,11 +587,17 @@ struct TDropExternalTableSettings {
 };
 
 struct TCreateExternalDataSourceSettings {
+    struct TServiceAccount {
+        TString Id;
+        TString SecretName;
+    };
+
     TString ExternalDataSource;
     TString SourceType;
     TString Location;
     TString Installation;
     TString AuthMethod;
+    TServiceAccount ServiceAccount;
 };
 
 struct TAlterExternalDataSourceSettings {

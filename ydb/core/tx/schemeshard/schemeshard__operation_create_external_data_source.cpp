@@ -50,6 +50,7 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth, TString& errStr) {
             errStr = "Authorization method not specified";
             return false;
         }
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
         case NKikimrSchemeOp::TAuth::kNone: {
             return true;
         }

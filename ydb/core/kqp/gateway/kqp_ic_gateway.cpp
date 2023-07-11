@@ -2231,6 +2231,10 @@ private:
 
         if (settings.AuthMethod == "NONE") {
             externaDataSourceDesc.MutableAuth()->MutableNone();
+        } else if (settings.AuthMethod == "SERVICE_ACCOUNT") {
+            auto& sa = *externaDataSourceDesc.MutableAuth()->MutableServiceAccount();
+            sa.SetId(settings.ServiceAccount.Id);
+            sa.SetSecretName(settings.ServiceAccount.SecretName);
         }
     }
 

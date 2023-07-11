@@ -878,6 +878,7 @@ protected:
     bool PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result);
     bool PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result);
 
+    bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
@@ -10200,7 +10201,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             // ALTER TABLESTORE object_ref alter_table_store_action (COMMA alter_table_store_action)*;
             auto& node = core.GetAlt_sql_stmt_core38().GetRule_alter_table_store_stmt1();
             TObjectOperatorContext context(Ctx.Scoped);
-            
+
             if (node.GetRule_object_ref3().HasBlock1()) {
                 if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
                     false, context.ServiceId, context.Cluster)) {
@@ -11859,7 +11860,7 @@ namespace {
         YQL_ENSURE(columnType, "Unknown column type");
         result["TYPE"] = TDeferredAtom(pos, columnType);
         if (!nullable) {
-            result["NOT_NULL"] = TDeferredAtom(pos, "true");    
+            result["NOT_NULL"] = TDeferredAtom(pos, "true");
         }
         return true;
     }
@@ -11902,7 +11903,8 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
         return false;
     }
 
-    if (IsIn({"source_type", "installation", "location", "auth_method"}, key)) {
+    if (IsIn({"source_type", "installation", "location",
+              "auth_method", "service_account_id", "service_account_secret_name"}, key)) {
         if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
             return false;
         }
@@ -11925,18 +11927,50 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
             return false;
         }
     }
-
     if (result.find("source_type") == result.end()) {
         Ctx.Error() << "SOURCE_TYPE requires key";
         return false;
     }
-    if (result.find("auth_method") == result.end()) {
-        Ctx.Error() << "AUTH_METHOD requires key";
+    if (!ValidateAuthMethod(result)) {
         return false;
     }
     if (result.find("installation") == result.end() && result.find("location") == result.end()) {
         Ctx.Error() << "INSTALLATION or LOCATION must be specified";
         return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
+    const static TSet<TStringBuf> allAuthFields{
+        "service_account_id",
+        "service_account_secret_name"
+    };
+    const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
+        {"NONE", {}},
+        {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}}
+    };
+    auto authMethodIt = result.find("auth_method");
+    if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
+        Ctx.Error() << "AUTH_METHOD requires key";
+        return false;
+    }
+    const auto& authMethod = *authMethodIt->second.GetLiteral();
+    auto it = authMethodFields.find(authMethod);
+    if (it == authMethodFields.end()) {
+        Ctx.Error() << "Unknown AUTH_METHOD = " << authMethod;
+        return false;
+    }
+    const auto& currentAuthFields = it->second;
+    for (const auto& authField: allAuthFields) {
+        if (currentAuthFields.contains(authField) && !result.contains(TString{authField})) {
+            Ctx.Error() << to_upper(TString{authField}) << " requires key";
+            return false;
+        }
+        if (!currentAuthFields.contains(authField) && result.contains(TString{authField})) {
+            Ctx.Error() << to_upper(TString{authField}) << " key is not supported for AUTH_METHOD = " << authMethod;
+            return false;
+        }
     }
     return true;
 }

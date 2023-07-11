@@ -11,3 +11,4 @@ YDB CLI содержит набор команд, предназначенных
 - [Выгрузка в S3-совместимое объектное хранилище `export s3`](../s3_export.md)
 - [Загрузка из S3-совместимого объектного хранилища `import s3`](../s3_import.md)
 
+{% include [_includes/options_overlay.md](options_overlay.md) %}

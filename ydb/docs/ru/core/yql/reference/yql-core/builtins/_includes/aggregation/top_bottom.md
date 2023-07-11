@@ -32,9 +32,7 @@ FROM my_table;
 
 **Сигнатура**
 ```
-TOP_BY(T1?, T2, limit:Uint32)->List<T1>
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
-BOTTOM_BY(T1?, T2, limit:Uint32)->List<T1>
 BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 ```
 

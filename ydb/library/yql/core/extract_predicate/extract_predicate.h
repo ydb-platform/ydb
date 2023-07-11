@@ -9,6 +9,8 @@ struct TPredicateExtractorSettings {
     size_t MaxRanges = 10000;
     bool MergeAdjacentPointRanges = true;
     bool HaveNextValueCallable = false;
+    bool BuildLiteralRange = false;
+    std::function<bool(const NYql::TExprNode::TPtr&)> IsValidForRange;
 };
 
 class IPredicateRangeExtractor {
@@ -24,13 +26,28 @@ public:
         size_t UsedPrefixLen = 0;
         size_t PointPrefixLen = 0;
         TMaybe<size_t> ExpectedMaxRanges;
+
+        struct TLiteralRange {
+            struct TLiteralRangeBound {
+                bool Inclusive = false;
+                TVector<TExprNode::TPtr> Columns;
+            };
+
+            TLiteralRangeBound Left;
+            TLiteralRangeBound Right;
+        };
+
+        TMaybe<TLiteralRange> LiteralRange;
     };
 
-    virtual TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx) const = 0;
+    virtual TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const = 0;
 
     virtual ~IPredicateRangeExtractor() = default;
 };
 
 IPredicateRangeExtractor::TPtr MakePredicateRangeExtractor(const TPredicateExtractorSettings& settings = {});
+
+
+TExprNode::TPtr BuildPointsList(const IPredicateRangeExtractor::TBuildResult&, TConstArrayRef<TString> keyColumns, NYql::TExprContext& expCtx);
 
 }

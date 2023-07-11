@@ -407,6 +407,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePreparedDdl = serviceConfig.GetEnablePreparedDdl();
     kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
+    kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

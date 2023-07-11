@@ -370,6 +370,7 @@ private:
 
         bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
         bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
+        bool predicateExtract20 = Config.GetPredicateExtract20();
 
         bool enableSequentialReads = Config.GetEnableSequentialReads();
         bool defaultSyntaxVersion = Config.GetSqlVersion();
@@ -389,6 +390,7 @@ private:
             Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
             Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
             Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
+            Config.GetPredicateExtract20() != predicateExtract20 ||
             Config.GetEnableSequentialReads() != enableSequentialReads ||
             Config.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects) {
 

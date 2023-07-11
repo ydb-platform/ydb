@@ -85,16 +85,22 @@ struct TKqpUpsertRowsSettings {
 struct TKqpReadTableExplainPrompt {
     static constexpr TStringBuf UsedKeyColumnsName = "UsedKeyColumns";
     static constexpr TStringBuf ExpectedMaxRangesName = "ExpectedMaxRanges";
+    static constexpr TStringBuf PointPrefixLenName = "PointPrefixLen";
 
     TVector<TString> UsedKeyColumns;
-    TString ExpectedMaxRanges;
+    TMaybe<ui64> ExpectedMaxRanges;
+    ui64 PointPrefixLen = 0;
 
     void SetUsedKeyColumns(TVector<TString> columns) {
         UsedKeyColumns = columns;
     }
 
     void SetExpectedMaxRanges(size_t count) {
-        ExpectedMaxRanges = ToString(count);
+        ExpectedMaxRanges = count;
+    }
+
+    void SetPointPrefixLen(size_t len) {
+        PointPrefixLen = len;
     }
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;

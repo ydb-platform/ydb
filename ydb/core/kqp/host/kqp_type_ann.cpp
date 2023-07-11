@@ -303,7 +303,8 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     size_t argCount = (olapTable || index) ? 6 : 5;
 
-    if (!EnsureArgsCount(*node, argCount, ctx)) {
+    // prefix
+    if (!EnsureMinArgsCount(*node, argCount, ctx) && EnsureMaxArgsCount(*node, argCount + 1, ctx)) {
         return TStatus::Error;
     }
 

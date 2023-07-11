@@ -795,8 +795,10 @@ private:
             }
 
             if (explainPrompt.ExpectedMaxRanges) {
-                op.Properties["ReadRangesExpectedSize"] = explainPrompt.ExpectedMaxRanges;
+                op.Properties["ReadRangesExpectedSize"] = ToString(*explainPrompt.ExpectedMaxRanges);
             }
+
+            op.Properties["ReadRangesPointPrefixLen"] = ToString(explainPrompt.PointPrefixLen);
 
             auto& columns = op.Properties["ReadColumns"];
             for (const auto& col : sourceSettings.Columns()) {
@@ -1254,7 +1256,7 @@ private:
         }
 
         if (explainPrompt.ExpectedMaxRanges) {
-            op.Properties["ReadRangesExpectedSize"] = explainPrompt.ExpectedMaxRanges;
+            op.Properties["ReadRangesExpectedSize"] = *explainPrompt.ExpectedMaxRanges;
         }
 
         auto& columns = op.Properties["ReadColumns"];

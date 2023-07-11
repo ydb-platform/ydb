@@ -141,6 +141,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnablePredicateExtractForScanQuery = true;
     bool EnablePredicateExtractForDataQuery = false;
+    bool PredicateExtract20 = false;
     bool EnableKqpImmediateEffects = false;
     bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;

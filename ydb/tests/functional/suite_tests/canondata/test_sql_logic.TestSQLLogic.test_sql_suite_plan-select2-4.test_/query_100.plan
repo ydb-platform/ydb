@@ -42,7 +42,7 @@
                                                     "b",
                                                     "d"
                                                 ],
-                                                "ReadRangesExpectedSize": "1",
+                                                "ReadRangesExpectedSize": 1,
                                                 "ReadRangesKeys": [
                                                     "a"
                                                 ],

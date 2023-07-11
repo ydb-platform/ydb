@@ -779,7 +779,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
         UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetIssues().ToString());
         UNIT_ASSERT_C(op.Ready(), op.Status().GetIssues().ToString());
-        UNIT_ASSERT(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled);
+        UNIT_ASSERT_C(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled, op.Status().GetIssues().ToString());
         UNIT_ASSERT_EQUAL(op.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT(op.Status().GetStatus() == NYdb::EStatus::SUCCESS || op.Status().GetStatus() == NYdb::EStatus::CANCELLED);
 
@@ -826,14 +826,142 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteScriptFailsWithForgetAfter) {
+    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionFail(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
+        NYdb::NOperation::TOperationClient client(ydbDriver);
+        NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
+        do {
+            if (!op.Initialized()) {
+                Sleep(TDuration::MilliSeconds(10));
+            }
+            op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId);
+        } while (op.GetValueSync().Status().IsSuccess());
+        return op.GetValueSync();
+    }
+
+    void ExpectExecStatus(EExecStatus status, const TScriptExecutionOperation op, const NYdb::TDriver& ydbDriver) {
+        auto readyOp = WaitScriptExecutionOperation(op.Id(), ydbDriver);
+        UNIT_ASSERT_C(readyOp.Status().IsSuccess(), readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT_C(readyOp.Ready(), readyOp.Status().GetIssues().ToString());
+        UNIT_ASSERT(readyOp.Metadata().ExecStatus == status);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, op.Metadata().ExecutionId);
+    } 
+
+    void ExecuteScriptWithSettings(const TExecuteScriptSettings& settings, EExecStatus status, TString query = "SELECT 1;") {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto op = db.ExecuteScript(query, settings).ExtractValueSync();
+        ExpectExecStatus(status, op, kikimr.GetDriver());
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithCancelAfter) {
+        TString query = R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )";
+        auto settings = TExecuteScriptSettings().CancelAfter(TDuration::MilliSeconds(1));
+        ExecuteScriptWithSettings(settings, EExecStatus::Canceled, query);
+
+        settings = TExecuteScriptSettings().CancelAfter(TDuration::Seconds(10));
+        ExecuteScriptWithSettings(settings, EExecStatus::Completed);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithTimeout) {
+        TString query = R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )";
+        auto settings = TExecuteScriptSettings().OperationTimeout(TDuration::MilliSeconds(1));
+        ExecuteScriptWithSettings(settings, EExecStatus::Failed, query);
+
+        settings = TExecuteScriptSettings().OperationTimeout(TDuration::Seconds(100));
+        ExecuteScriptWithSettings(settings, EExecStatus::Completed);
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithCancelAfterAndTimeout) {
+        TString query = R"(
+            SELECT * FROM EightShard WHERE Text = "Value2" AND Data = 1 ORDER BY Key;
+            SELECT * FROM TwoShard WHERE Key < 10 ORDER BY Key;
+        )";
+        auto settings = TExecuteScriptSettings().CancelAfterWithTimeout(TDuration::MilliSeconds(1), TDuration::Seconds(100));
+        ExecuteScriptWithSettings(settings, EExecStatus::Canceled, query);
+
+        settings = TExecuteScriptSettings().CancelAfterWithTimeout(TDuration::Seconds(100), TDuration::MilliSeconds(1));
+        ExecuteScriptWithSettings(settings, EExecStatus::Failed, query);
+    }
+    
+    void CheckScriptOperationExpires(const TExecuteScriptSettings &settings) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
 
         auto scriptExecutionOperation = db.ExecuteScript(R"(
             SELECT 42
-        )", NYdb::NQuery::TExecuteScriptSettings().ForgetAfter(TDuration::Days(1))).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::UNSUPPORTED, scriptExecutionOperation.Status().GetIssues().ToString());
+        )", settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        
+        auto readyOp = WaitScriptExecutionFail(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_C(readyOp.Status().GetStatus() == EStatus::NOT_FOUND, readyOp.Status().GetStatus() << ":" << readyOp.Status().GetIssues().ToString());
+
+        NOperation::TOperationClient client(kikimr.GetDriver());
+
+        auto list = client.List<NYdb::NQuery::TScriptExecutionOperation>(100).ExtractValueSync();
+        UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
+        UNIT_ASSERT(list.GetList().size() == 0);
+
+        auto status = client.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::NOT_FOUND, status.GetIssues().ToString());
+
+        status = client.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::NOT_FOUND, status.GetIssues().ToString());
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.GetStatus() == NYdb::EStatus::NOT_FOUND, results.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithForgetAfter) {
+        CheckScriptOperationExpires(TExecuteScriptSettings().ForgetAfter(TDuration::MilliSeconds(50)));
+    }
+
+    void CheckScriptResultsExpire(const TExecuteScriptSettings& settings) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = db.ExecuteScript(R"(
+            SELECT 42
+        )", settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+
+        WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_C(resultSet.TryNextRow(), results.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+
+        while (results.GetStatus() != NYdb::EStatus::NOT_FOUND) {
+            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+            results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+            Sleep(TDuration::MilliSeconds(10));
+        }
+
+        UNIT_ASSERT_C(results.GetStatus() == NYdb::EStatus::NOT_FOUND, results.GetIssues().ToString());
+        NOperation::TOperationClient client(kikimr.GetDriver());
+        auto op = client.Get<TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
+        UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithResultsTtl) {
+        CheckScriptResultsExpire(TExecuteScriptSettings().ResultsTtl(TDuration::MilliSeconds(2000)));
+    }
+
+    Y_UNIT_TEST(ExecuteScriptWithResultsTtlAndForgetAfter) {
+
+        auto settings = TExecuteScriptSettings().ResultsTtl(TDuration::MilliSeconds(2000)).ForgetAfter(TDuration::Seconds(30));
+        CheckScriptResultsExpire(settings);
+
+        settings = TExecuteScriptSettings().ResultsTtl(TDuration::Minutes(1)).ForgetAfter(TDuration::MilliSeconds(500));
+        CheckScriptOperationExpires(settings);
     }
 
     TScriptExecutionOperation CreateScriptExecutionOperation(size_t numberOfRows, NYdb::NQuery::TQueryClient& db, const NYdb::TDriver& ydbDriver) {

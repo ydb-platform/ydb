@@ -70,7 +70,8 @@ struct TEvPrivate {
 
 // Writes new script into db.
 // If lease duration is zero, default one will be taken.
-NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record, TDuration leaseDuration = TDuration::Zero());
+NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record,
+                                                       TDuration operationTtl, TDuration resultsTtl, TDuration leaseDuration = TDuration::Zero());
 
 // Checks lease of execution, finishes execution if its lease is off, returns current status
 NActors::IActor* CreateCheckLeaseStatusActor(const TString& database, const TString& executionId, Ydb::StatusIds::StatusCode statusOnExpiredLease = Ydb::StatusIds::ABORTED, ui64 cookie = 0);

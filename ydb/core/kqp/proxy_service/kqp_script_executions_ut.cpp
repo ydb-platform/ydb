@@ -17,6 +17,8 @@ using namespace NSchemeShard;
 namespace  {
 
 constexpr TDuration TestLeaseDuration = TDuration::Seconds(1);
+constexpr TDuration TestOperationTtl = TDuration::Minutes(1);
+constexpr TDuration TestResultsTtl = TDuration::Minutes(1);
 const TString TestDatabase = "test_db";
 
 struct TScriptExecutionsYdbSetup {
@@ -82,7 +84,7 @@ struct TScriptExecutionsYdbSetup {
     }
 
     // Creates query in db. Returns execution id
-    TString CreateQueryInDb(const TString& query = "SELECT 42", TDuration leaseDuration = TestLeaseDuration) {
+    TString CreateQueryInDb(const TString& query = "SELECT 42", TDuration leaseDuration = TestLeaseDuration, TDuration operationTtl = TestOperationTtl, TDuration resultsTtl = TestResultsTtl) {
         TString executionId = CreateGuidAsString();
         NKikimrKqp::TEvQueryRequest req;
         req.MutableRequest()->SetDatabase(TestDatabase);
@@ -90,7 +92,7 @@ struct TScriptExecutionsYdbSetup {
         req.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         const ui32 node = 0;
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), req, leaseDuration), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), req, operationTtl, resultsTtl, leaseDuration), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
         auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor);
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);

@@ -41,7 +41,7 @@ public:
         request.set_stats_mode(settings.StatsMode_);
         request.mutable_script_content()->set_syntax(settings.Syntax_);
         request.mutable_script_content()->set_text(script);
-
+        SetDuration(settings.ResultsTtl_, *request.mutable_results_ttl());
         auto promise = NThreading::NewPromise<TScriptExecutionOperation>();
 
         auto responseCb = [promise]

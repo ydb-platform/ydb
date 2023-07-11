@@ -130,6 +130,7 @@ struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptS
     FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
     FLUENT_SETTING_DEFAULT(Ydb::Query::ExecMode, ExecMode, Ydb::Query::EXEC_MODE_EXECUTE);
     FLUENT_SETTING_DEFAULT(Ydb::Query::StatsMode, StatsMode, Ydb::Query::STATS_MODE_NONE);
+    FLUENT_SETTING(TDuration, ResultsTtl);
 };
 
 class TVersionedScriptId {

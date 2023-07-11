@@ -2,6 +2,7 @@ package NKikimrKqp;
 option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
+import "google/protobuf/duration.proto";
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
@@ -664,4 +665,10 @@ message TEvCancelScriptExecutionRequest {
 message TEvCancelScriptExecutionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
+}
+
+// stored in column "meta" of .metadata/script_executions table
+message TScriptExecutionOperationMeta {
+    optional google.protobuf.Duration OperationTtl = 1;
+    optional google.protobuf.Duration ResultsTtl = 2;
 }

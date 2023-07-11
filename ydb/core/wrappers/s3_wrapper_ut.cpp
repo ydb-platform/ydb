@@ -155,6 +155,21 @@ class TS3WrapperTests: public TS3MockTest {
         return response->Get()->Result;
     }
 
+    auto UploadPartCopy(const TString& sourceBucket, const TString& copySource, const TString& key, const TString& uploadId, int partNumber, int fromBytes, int toBytes) {
+        auto request = UploadPartCopyRequest()
+            .WithBucket("")
+            .WithCopySource(TString("/") + sourceBucket + "/" + copySource)
+            .WithKey(key)
+            .WithCopySourceRange(TString("bytes=") + ToString(fromBytes) + "-" + ToString(toBytes))
+            .WithUploadId(uploadId)
+            .WithPartNumber(partNumber);
+        auto response = Send<NExternalStorage::TEvUploadPartCopyResponse>(
+            new NExternalStorage::TEvUploadPartCopyRequest(request));
+
+        UNIT_ASSERT(response->Get());
+        return response->Get()->Result;
+    }
+
 public:
     void PutObject() {
         auto result = PutObject("key", "body");
@@ -269,6 +284,41 @@ public:
         UNIT_ASSERT(!result.IsSuccess());
     }
 
+    void CopyPartUpload() {
+        const TString body = "body";
+
+        {
+            auto result = PutObject("key", TString(body));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        TString uploadId;
+        TVector<CompletedPart> parts;
+
+        {
+            auto result = CreateMultipartUpload("key1");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPartCopy("TEST", "key", "key1", uploadId, 1, 1, 2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            parts.push_back(CompletedPart().WithPartNumber(1).WithETag(result.GetResult().GetCopyPartResult().GetETag()));
+        }
+
+        {
+            auto result = CompleteMultipartUpload("key1", uploadId, parts);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto [result, actualBody] = GetObject("key1", 2);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            UNIT_ASSERT_VALUES_EQUAL(actualBody, body.substr(1, 2));
+        }
+    }
+
 private:
     UNIT_TEST_SUITE(TS3WrapperTests);
     UNIT_TEST(PutObject);
@@ -281,6 +331,7 @@ private:
     UNIT_TEST(UploadUnknownPart);
     UNIT_TEST(CompleteUnknownUpload);
     UNIT_TEST(AbortUnknownUpload);
+    UNIT_TEST(CopyPartUpload);
     UNIT_TEST_SUITE_END();
 
 }; // TS3WrapperTests

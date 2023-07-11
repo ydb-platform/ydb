@@ -78,6 +78,7 @@ bool TS3Mock::TRequest::TryParseRange(TStringBuf str, std::pair<ui32, ui32>& ran
 }
 
 bool TS3Mock::TRequest::HttpBadRequest(const TReplyParams& params, const TString& error) {
+    Cerr << "S3_MOCK::HttpBadRequest: " << error << Endl;
     params.Output << "HTTP/1.1 400 Bad request\r\n\r\n";
     params.Output << error;
     return true;
@@ -163,7 +164,7 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
     }
     Cerr << "S3_MOCK::HttpServeWrite: " << path << " / " << queryParams.Print() << " / " << length << Endl;
 
-    const TString etag = MD5::Data(content);
+    TString etag = MD5::Data(content);
 
     if (!queryParams) {
         Parent->Data[path] = std::move(content);
@@ -191,7 +192,50 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
             parts.resize(partNumber);
         }
 
-        parts[partNumber - 1] = std::move(content);
+        const auto* sourceHeader = params.Input.Headers().FindHeader("x-amz-copy-source");
+        if (sourceHeader) {
+            const auto* sourceRangeHeader = params.Input.Headers().FindHeader("x-amz-copy-source-range");
+            if (!sourceRangeHeader) {
+                return HttpBadRequest(params, "Invalid range");
+            }
+
+            std::pair<ui32, ui32> range(0, 0);
+            if (!TryParseRange(sourceRangeHeader->Value(), range)) {
+                return HttpBadRequest(params, "Invalid range");
+            }
+
+            const auto* source = Parent->Data.FindPtr(sourceHeader->Value());
+            if (!source) {
+                return HttpBadRequest(params, "Invalid source");
+            }
+
+            if (source->size() < range.first + range.second) {
+                return HttpBadRequest(params, "Range is outside of source");
+            }
+
+            const auto part = source->substr(range.first, range.second);
+
+            parts[partNumber - 1] = part;
+            etag = MD5::Data(part);
+
+            params.Output << "HTTP/1.1 200 Ok\r\n";
+            THttpHeaders headers;
+            headers.AddHeader("x-amz-id-2", "LriYPLdmOdAiIfgSm/F1YsViT1LW94/xUQxMsF7xiEb1a0wiIOIxl+zbwZ163pt7");
+            headers.AddHeader("x-amz-request-id", "0A49CE4060975EAC");
+            headers.OutTo(&params.Output);
+            params.Output << Sprintf(R"(
+                <CopyPartResult>
+                    <ETag>%s</ETag>
+                    <LastModified>2011-04-11T20:34:56.000Z</LastModified>
+                </CopyPartResult>
+            )", etag.c_str());
+
+            params.Output.Flush();
+
+            return true;
+        } else {
+            parts[partNumber - 1] = std::move(content);
+        }
     }
 
     params.Output << "HTTP/1.1 200 Ok\r\n";

@@ -56,6 +56,7 @@ public:
             hFunc(TEvCompleteMultipartUploadRequest, Handle);
             hFunc(TEvAbortMultipartUploadRequest, Handle);
             hFunc(TEvCheckObjectExistsRequest, Handle);
+            hFunc(TEvUploadPartCopyRequest, Handle);
 
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }

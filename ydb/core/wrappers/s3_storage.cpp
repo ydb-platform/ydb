@@ -317,6 +317,12 @@ void TS3ExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const
     Call<TEvAbortMultipartUploadRequest, TEvAbortMultipartUploadResponse, TContextBase>(
         ev, &S3Client::AbortMultipartUploadAsync);
 }
+
+void TS3ExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
+    Call<TEvUploadPartCopyRequest, TEvUploadPartCopyResponse, TContextBase>(
+        ev, &S3Client::UploadPartCopyAsync);
+}
+
 }
 
 #endif // KIKIMR_DISABLE_S3_OPS

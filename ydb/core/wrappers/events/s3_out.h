@@ -10,6 +10,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartCopyRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
 
 #include <util/stream/output.h>
@@ -56,6 +57,10 @@ void Out(IOutputStream& out, const Aws::S3::Model::AbortMultipartUploadOutcome& 
 void Out(IOutputStream& out, const Aws::S3::Model::UploadPartRequest& request);
 void Out(IOutputStream& out, const Aws::S3::Model::UploadPartResult& result);
 void Out(IOutputStream& out, const Aws::S3::Model::UploadPartOutcome& outcome);
+
+void Out(IOutputStream& out, const Aws::S3::Model::UploadPartCopyRequest& request);
+void Out(IOutputStream& out, const Aws::S3::Model::UploadPartCopyResult& result);
+void Out(IOutputStream& out, const Aws::S3::Model::UploadPartCopyOutcome& outcome);
 
 void Out(IOutputStream& out, const Aws::S3::Model::CompletedMultipartUpload& upload);
 void Out(IOutputStream& out, const Aws::S3::Model::CompletedPart& part);
@@ -183,6 +188,18 @@ Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::UploadPartResult, out, value) {
 }
 
 Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::UploadPartOutcome, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::UploadPartCopyRequest, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::UploadPartCopyResult, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::UploadPartCopyOutcome, out, value) {
     NKikimr::NWrappers::Out(out, value);
 }
 

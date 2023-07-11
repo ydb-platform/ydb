@@ -20,6 +20,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/PutObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartCopyRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
 #include <library/cpp/actors/core/log.h>
 #include <util/string/builder.h>
@@ -91,6 +92,7 @@ public:
     virtual void Execute(TEvUploadPartRequest::TPtr& ev) const override;
     virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const override;
     virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override;
+    virtual void Execute(TEvUploadPartCopyRequest::TPtr& ev) const override;
 };
 } // NKikimr::NWrappers::NExternalStorage
 

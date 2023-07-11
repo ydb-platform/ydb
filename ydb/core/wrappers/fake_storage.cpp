@@ -183,6 +183,10 @@ void TFakeExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const 
     TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
 
 }
+
+void TFakeExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& /*ev*/) const {
+}
+
 }
 
 #endif // KIKIMR_DISABLE_S3_OPS

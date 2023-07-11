@@ -4192,7 +4192,19 @@ void TEvDataShard::TEvReadResult::FillRecord() {
         protoBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
         ArrowBatch.reset();
         return;
-    } else if (!Rows.empty()) {
+    }
+
+    if (!Batch.empty()) {
+        auto* protoBatch = Record.MutableCellVec();
+        protoBatch->MutableRows()->Reserve(Batch.Size());
+        for (const auto& row: Batch) {
+            protoBatch->AddRows(TSerializedCellVec::Serialize(row));
+        }
+        Batch = {};
+        return;
+    }
+
+    if (!Rows.empty()) {
         auto* protoBatch = Record.MutableCellVec();
         protoBatch->MutableRows()->Reserve(Rows.size());
         for (const auto& row: Rows) {

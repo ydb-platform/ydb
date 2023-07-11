@@ -121,6 +121,26 @@ public:
     const char* InlineData() const                  { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
     const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
 #endif
+
+    void CopyDataInto(char * dst) const {
+        if (IsInline_) {
+            switch (DataSize_) {
+                case 8: memcpy(dst, &IntVal, 8); break;
+                case 7: memcpy(dst, &IntVal, 7); break;
+                case 6: memcpy(dst, &IntVal, 6); break;
+                case 5: memcpy(dst, &IntVal, 5); break;
+                case 4: memcpy(dst, &IntVal, 4); break;
+                case 3: memcpy(dst, &IntVal, 3); break;
+                case 2: memcpy(dst, &IntVal, 2); break;
+                case 1: memcpy(dst, &IntVal, 1); break;
+            }
+            return;
+        }
+
+        if (Ptr) {
+            memcpy(dst, Ptr, DataSize_);
+        }
+    }
 };
 
 #pragma pack(pop)

@@ -97,7 +97,7 @@ namespace {
             size += sizeof(TCellHeader) + cell.Size();
         }
 
-        resultBuffer.resize(size);
+        resultBuffer.ReserveAndResize(size);
         char* resultBufferData = resultBuffer.Detach();
 
         ui16 cellsSize = cells.size();
@@ -115,7 +115,7 @@ namespace {
 
             const auto & cell = cells[i];
             if (cell.Size() > 0) {
-                memcpy(resultBufferData, cell.Data(), cell.Size());
+                cell.CopyDataInto(resultBufferData);
             }
 
             if (resultCells) {

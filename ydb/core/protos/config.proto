@@ -1294,7 +1294,7 @@ message TTableServiceConfig {
     reserved 24; // optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
-    optional bool EnableKqpScanQuerySourceRead = 26 [default = true];
+    optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
     optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;

@@ -102,6 +102,7 @@ TCollectedStreamResult JoinStatsBasic(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getIter) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
+    appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
     auto settings = TKikimrSettings()
         .SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
@@ -152,7 +153,9 @@ Y_UNIT_TEST(JoinStatsBasicScan) {
 template <typename Iterator>
 void MultiTxStatsFull(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getResult) {
-    auto kikimr = DefaultKikimrRunner();
+    auto app = NKikimrConfig::TAppConfig();
+    app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+    TKikimrRunner kikimr(app);
     auto it = getResult(kikimr, ECollectQueryStatsMode::Full, R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
     )");

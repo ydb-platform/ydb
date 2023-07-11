@@ -174,7 +174,10 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
     }
 
     Y_UNIT_TEST(LimitOnShard) {
-        TKikimrRunner kikimr;
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(app);
+
         TScriptingClient client(kikimr.GetDriver());
 
         NYdb::NScripting::TExecuteYqlRequestSettings execSettings;
@@ -197,7 +200,10 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
     }
 
     Y_UNIT_TEST(QueryStats) {
-        TKikimrRunner kikimr;
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(app);
+
         TScriptingClient client(kikimr.GetDriver());
 
         NYdb::NScripting::TExecuteYqlRequestSettings execSettings;
@@ -549,7 +555,10 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
     }
 
     Y_UNIT_TEST(StreamExecuteYqlScriptScanCancelation) {
-        TKikimrRunner kikimr;
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        TKikimrRunner kikimr(app);
+
         TScriptingClient client(kikimr.GetDriver());
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 

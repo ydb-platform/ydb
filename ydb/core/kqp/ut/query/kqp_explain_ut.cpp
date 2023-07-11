@@ -341,7 +341,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST(SelfJoin3xSameLabels) {
-        auto kikimr = DefaultKikimrRunner();
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+
+        TKikimrRunner kikimr(app);
         auto db = kikimr.GetTableClient();
         TStreamExecScanQuerySettings settings;
         settings.Explain(true);

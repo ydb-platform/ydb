@@ -402,6 +402,11 @@ public:
         if (BoardPublishActor) {
             Send(BoardPublishActor, new TEvents::TEvPoison);
         }
+
+        LocalSessions->ForEachNode([this](TNodeId node) {
+            Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
+        });
+
         return TActor::PassAway();
     }
 
@@ -664,20 +669,25 @@ public:
         const auto traceId = event.GetTraceId();
         TKqpRequestInfo requestInfo(traceId);
         const auto sessionId = request.GetSessionId();
+        const bool extIdleCheck = request.GetExtIdleCheck();
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         Counters->ReportPingSession(dbCounters, request.ByteSize());
 
-        TActorId targetId;
         // Local session
         if (sessionInfo) {
-            KQP_PROXY_LOG_D("Received ping session request, has local session, trace_id: " << traceId);
+            const bool sameNode = ev->Sender.NodeId() == SelfId().NodeId();
+            KQP_PROXY_LOG_D("Received ping session request, has local session: " << sessionId
+                << ", extIdleCheck: " << extIdleCheck
+                << ", sameNode: " << sameNode
+                << ", trace_id: " << traceId);
 
-            targetId = sessionInfo->WorkerId;
             const bool isIdle = LocalSessions->IsSessionIdle(sessionInfo);
             if (isIdle) {
                 LocalSessions->StopIdleCheck(sessionInfo);
-                LocalSessions->StartIdleCheck(sessionInfo, GetSessionIdleDuration());
+                if (!extIdleCheck) {
+                    LocalSessions->StartIdleCheck(sessionInfo, GetSessionIdleDuration());
+                }
             }
 
             auto result = std::make_unique<TEvKqp::TEvPingSessionResponse>();
@@ -687,16 +697,33 @@ public:
                 ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
                 : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY;
             record.MutableResponse()->SetSessionStatus(sessionStatus);
-            Send(ev->Sender, result.release(), 0, ev->Cookie);
+            if (extIdleCheck && isIdle) {
+                //TODO: fix
+                ui32 flags = IEventHandle::FlagTrackDelivery;
+                if (!sameNode) {
+                    const TNodeId nodeId = ev->Sender.NodeId();
+                    KQP_PROXY_LOG_T("Subscribe local session: " << sessionInfo->WorkerId
+                        << " to remote: " << ev->Sender << " , nodeId: " << nodeId);
+
+                    LocalSessions->AttachSession(sessionInfo, nodeId);
+
+                    flags |= IEventHandle::FlagSubscribeOnSession;
+                }
+                Send(ev->Sender, result.release(), flags, ev->Cookie);
+            } else {
+                Send(ev->Sender, result.release(), 0, ev->Cookie);
+            }
             return;
         }
 
         // Forward request to another proxy
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
 
-        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId << ", trace_id: " << traceId);
+        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId
+            << ", sender: " << ev->Sender
+            << ", trace_id: " << traceId);
 
-        targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
+        const TActorId targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
         if (!targetId) {
             return;
         }
@@ -1172,6 +1199,8 @@ public:
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1320,11 +1349,16 @@ private:
 
     void RemoveSession(const TString& sessionId, const TActorId& workerId) {
         if (!sessionId.empty()) {
-            LocalSessions->Erase(sessionId);
+            auto nodeId = LocalSessions->Erase(sessionId);
             KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
             PublishResourceUsage();
             if (ShutdownRequested) {
                 ShutdownState->Update(LocalSessions->size());
+            }
+
+            // No more session with kqp proxy on this node
+            if (nodeId) {
+                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
             }
 
             return;
@@ -1383,6 +1417,29 @@ private:
 
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
         Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
+    }
+
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        TNodeId nodeId = ev->Get()->NodeId;
+        auto sessions = LocalSessions->FindSessions(nodeId);
+        if (sessions) {
+            KQP_PROXY_LOG_T("Got TEvNodeConnected event from node: " << nodeId
+                << ", has " << sessions.size() << " sessions");
+        } else {
+            KQP_PROXY_LOG_E("Got TEvNodeConnected event from node without sessions: " << nodeId);
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        TNodeId nodeId = ev->Get()->NodeId;
+        auto sessions = LocalSessions->FindSessions(nodeId);
+        KQP_PROXY_LOG_D("Node: " << nodeId << " disconnected, had " << sessions.size() << " sessions.");
+        const static auto IdleDurationAfterDisconnect = TDuration::Seconds(1);
+        // Just start standard idle check with small timeout
+        // It allows to use common code to close and delete expired session
+        for (const auto sessionInfo : sessions) {
+            LocalSessions->StartIdleCheck(sessionInfo, IdleDurationAfterDisconnect);
+        }
     }
 
 private:

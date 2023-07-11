@@ -78,6 +78,7 @@ private:
 
         if (CheckSession(sessionId, req)) {
             ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetExtIdleCheck(true);
             SessionId = sessionId;
         } else {
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST);

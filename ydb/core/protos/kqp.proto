@@ -325,6 +325,7 @@ message TEvCreateSessionResponse {
 message TPingSessionRequest {
     optional bytes SessionId = 1;
     optional uint32 TimeoutMs = 2 [default = 5000];
+    optional bool ExtIdleCheck = 3; //It disables kqp proxy idle check
 }
 
 message TEvPingSessionRequest {

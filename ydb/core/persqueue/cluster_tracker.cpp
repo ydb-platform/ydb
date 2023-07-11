@@ -45,6 +45,8 @@ public:
 
 private:
     void AddSubscriber(const TActorId subscriberId) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "Subscribers.size: " << Subscribers.size() << " AddSubscriber");
+
         Subscribers.insert(subscriberId);
     }
 
@@ -55,6 +57,8 @@ private:
     }
 
     void HandleWhileWaiting(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "AddSubscriber TEvSubscriber");
+
         AddSubscriber(ev->Sender);
 
         Become(&TThis::Working);
@@ -90,7 +94,7 @@ private:
     }
 
     void SendClustersList(TActorId subscriberId) {
-        LOG_DEBUG_S(Ctx(), NKikimrServices::PQ_METACACHE, "SendClustersList");
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "SendClustersList");
 
         auto ev = MakeHolder<TEvClusterTracker::TEvClustersUpdate>();
 
@@ -101,6 +105,8 @@ private:
     }
 
     void HandleWhileWorking(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvSubscribe Subscribers.size: " << Subscribers.size() << " ClustersList: " << (ClustersList == nullptr ? "null" : std::to_string(ClustersList->Clusters.size())));
+
         AddSubscriber(ev->Sender);
 
         // List may be null due to reinit
@@ -110,7 +116,10 @@ private:
     }
 
     void BroadcastClustersUpdate() {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "BroadcastClustersUpdate Subscribers.size: " << Subscribers.size());
+
         for (const auto& subscriberId : Subscribers) {
+            LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "BroadcastClustersUpdate subscriberId: " << subscriberId);
             SendClustersList(subscriberId);
         }
     }
@@ -132,8 +141,11 @@ private:
     }
 
     void HandleWhileWorking(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse");
+
         const auto& record = ev->Get()->Record.GetRef();
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS && record.GetResponse().GetResults(0).GetValue().GetStruct(0).ListSize()) {
+            LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse UpdateClustersList");
             UpdateClustersList(record);
 
             Y_VERIFY(ClustersList);

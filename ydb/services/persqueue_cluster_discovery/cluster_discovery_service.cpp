@@ -66,6 +66,7 @@ private:
     }
 
     void SubscribeToClusterTracker() {
+        LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TClusterDiscoveryServiceActor: send TEvClusterTracker::TEvSubscribe");
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
 

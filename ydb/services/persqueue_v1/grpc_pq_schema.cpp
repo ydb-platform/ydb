@@ -40,6 +40,8 @@ TPQSchemaService::TPQSchemaService(const TActorId& schemeCache,
 
 void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQSchemaService: send TEvClusterTracker::TEvSubscribe");
+
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }

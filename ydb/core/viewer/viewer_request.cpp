@@ -4,6 +4,7 @@
 #include "wb_req.h"
 
 #include "json_tabletinfo.h"
+#include "json_sysinfo.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -40,13 +41,24 @@ public:
         TBase::Bootstrap();
     }
 
+    template<typename ResponseType> void MergeWhiteboardResponses(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, ResponseType>& perNodeStateInfo, const TString& fields);
+
+    template<> void MergeWhiteboardResponses<NKikimrWhiteboard::TEvTabletStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse>& perNodeStateInfo, const TString& fields) {
+        NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableTabletResponse()), perNodeStateInfo, fields);
+    }
+
+    template<> void MergeWhiteboardResponses<NKikimrWhiteboard::TEvSystemStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse>& perNodeStateInfo, const TString& fields) {
+        NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableSystemResponse()), perNodeStateInfo, fields);
+    }
+
     void ReplyAndPassAway() {
         auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
         auto& locationResponded = (*response->Record.MutableLocationResponded());
         for (const auto& [nodeId, nodeResponse] : TBase::PerNodeStateInfo) {
             locationResponded.AddNodeId(nodeId);
         }
-        MergeWhiteboardResponses((*response->Record.MutableTabletResponse()), TBase::PerNodeStateInfo, TBase::RequestSettings.MergeFields); // PerNodeStateInfo will be invalidated
+
+        MergeWhiteboardResponses(response.Get(), TBase::PerNodeStateInfo, TBase::RequestSettings.MergeFields); // PerNodeStateInfo will be invalidated
 
         TBase::Send(Event->Sender, response.Release(), 0, Event->Cookie);
         TBase::PassAway();
@@ -57,6 +69,8 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr request) {
     switch (request->Get()->Record.GetRequestCase()) {
         case NKikimrViewer::TEvViewerRequest::kTabletRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kSystemRequest:
+            return new TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
             return nullptr;
     }

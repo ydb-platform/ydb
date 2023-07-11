@@ -497,6 +497,7 @@ message TEvViewerRequest {
     uint32 Timeout = 2; // ms
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
+        NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
     }
 }
 
@@ -504,6 +505,7 @@ message TEvViewerResponse {
     TNodeLocation LocationResponded = 2;
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
+        NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
     }
 }
 

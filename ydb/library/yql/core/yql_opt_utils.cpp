@@ -1743,12 +1743,10 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (auto c : constent) {
+                    for (const auto& c : constent) {
                         parent.Callable(index++, "Bool")
                             .Atom(0, ToString(c.second), TNodeFlags::Default)
                         .Seal();
-                        if (1U < c.first.front().size())
-                            break;
                     }
                     return parent;
                 })

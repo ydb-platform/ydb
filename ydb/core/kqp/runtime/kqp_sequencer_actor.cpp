@@ -38,7 +38,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         explicit TColumnSequenceInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto)
             : DefaultFromSequence(proto.GetDefaultFromSequence())
             , TypeInfo(static_cast<NScheme::TTypeId>(proto.GetTypeId()))
-        {   
+        {
         }
 
         bool IsAutoIncrement() const {
@@ -167,17 +167,19 @@ private:
 
             NUdf::TUnboxedValue* rowItems = nullptr;
             auto newValue = HolderFactory.CreateDirectArrayHolder(Settings.GetColumns().size(), rowItems);
-           
 
+            int inputColIdx = 0;
             for(int columnIdx = 0; columnIdx < Settings.GetColumns().size(); ++columnIdx) {
                 auto& columnInfo = ColumnSequenceInfo[columnIdx];
                 if (columnInfo.IsAutoIncrement()) {
-                    *rowItems++ = NUdf::TUnboxedValuePod(columnInfo.AcquireNextVal());
+                    i64 nextVal = columnInfo.AcquireNextVal();
+                    *rowItems++ = NUdf::TUnboxedValuePod(nextVal);
                     rowSize += sizeof(NUdf::TUnboxedValuePod);
                     hasSequences &= columnInfo.HasValues();
                 } else {
-                    *rowItems++ = currentValue.GetElement(columnIdx);
-                    rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(columnIdx), columnInfo.TypeInfo).AllocatedBytes;
+                    *rowItems++ = currentValue.GetElement(inputColIdx);
+                    rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(inputColIdx), columnInfo.TypeInfo).AllocatedBytes;
+                    ++inputColIdx;
                 }
             }
 

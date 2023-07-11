@@ -1309,6 +1309,7 @@ message TTableServiceConfig {
     optional bool EnableKqpImmediateEffects = 38 [default = true];
     optional bool EnableSequentialReads = 39 [default = false];
     optional bool EnablePreparedDdl = 42 [default = false];
+    optional bool EnableSequences = 43 [default = true];
 
     enum EBindingsMode {
         BM_ENABLED = 0;

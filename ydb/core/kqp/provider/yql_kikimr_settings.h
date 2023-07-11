@@ -144,6 +144,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpImmediateEffects = false;
     bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;
+    bool EnableSequences = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
 };
 

@@ -1027,9 +1027,9 @@ private:
                 sequencerProto.AddAutoIncrementColumns(column.StringValue());
             }
 
-            auto resultColumns = sequencer.Columns();
-            for(const auto& column: resultColumns) {
-                sequencerProto.AddColumns(column.StringValue());
+            YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
+            for(const auto* column: resultItemType->Cast<TStructExprType>()->GetItems()) {
+                sequencerProto.AddColumns(TString(column->GetName()));
             }
 
             return;

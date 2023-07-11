@@ -34,6 +34,7 @@ class TJsonQuery : public TActorBootstrapped<TJsonQuery> {
     TString Action;
     TString Stats;
     TString Schema = "classic";
+    TString Syntax;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -73,6 +74,7 @@ public:
         Stats = params.Get("stats");
         Action = params.Get("action");
         Schema = params.Get("schema");
+        Syntax = params.Get("syntax");
         if (Schema.empty()) {
             Schema = "classic";
         }
@@ -143,6 +145,11 @@ public:
         }
         if (!Event->Get()->UserToken.empty()) {
             event->Record.SetUserToken(Event->Get()->UserToken);
+        }
+        if (Syntax == "yql_v1") {
+            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
+        } else if (Syntax = "pg") {
+            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
@@ -414,10 +421,11 @@ struct TJsonRequestParameters<TJsonQuery> {
     static TString GetParameters() {
         return R"___([{"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
                       {"name":"query","in":"query","description":"query text","required":true,"type":"string"},
+                      {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
                       {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
                       {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
-                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, explain, explain-ast, explain-scan, explain-script)","required":false,"type":"string"},
+                      {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";
     }
 };

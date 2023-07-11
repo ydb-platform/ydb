@@ -3,6 +3,10 @@
 #include <array>
 
 #include <util/string/builder.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+
+#include <library/cpp/disjoint_sets/disjoint_sets.h>
 
 namespace NYql {
 
@@ -111,7 +115,7 @@ TString IOptimizer::TOutput::ToString() const {
     return b;
 }
 
-TString IOptimizer::TInput::ToString() {
+TString IOptimizer::TInput::ToString() const {
     TStringBuilder b;
     b << "Rels: [";
     for (ui32 i = 0; i < Rels.size(); ++i) {
@@ -137,6 +141,57 @@ TString IOptimizer::TInput::ToString() {
     }
     b << "]\n";
     return b;
+}
+
+void IOptimizer::TInput::Normalize() {
+    using TId = TDisjointSets::TElement;
+
+    THashMap<TVarId, TId> var2id;
+    std::vector<TVarId> id2var;
+    TId curId = 1;
+
+    for (auto& eq : EqClasses) {
+        for (auto& v : eq.Vars) {
+            auto& id = var2id[v];
+            if (id == 0) {
+                id = curId;
+                id2var.resize(curId + 1);
+                id2var[curId] = v;
+                ++curId;
+            }
+        }
+    }
+
+    TDisjointSets u(curId + 1);
+    for (auto& eq : EqClasses) {
+        Y_VERIFY(!eq.Vars.empty());
+
+        ui32 i = 0;
+        TId first = var2id[eq.Vars[i++]];
+        for (; i < eq.Vars.size(); ++i) {
+            TId id = var2id[eq.Vars[i]];
+            u.UnionSets(first, id);
+        }
+    }
+
+    THashMap<TId, THashSet<TId>> eqClasses;
+    for (auto& eq : EqClasses) {
+        for (auto& var : eq.Vars) {
+            auto id = var2id[var];
+            auto canonicalId = u.CanonicSetElement(id);
+            eqClasses[canonicalId].emplace(id);
+        }
+    }
+    EqClasses.clear();
+    for (auto& [_, ids]: eqClasses) {
+        TEq eqClass;
+        eqClass.Vars.reserve(ids.size());
+        for (auto id : ids) {
+            eqClass.Vars.emplace_back(id2var[id]);
+        }
+        std::sort(eqClass.Vars.begin(), eqClass.Vars.end());
+        EqClasses.emplace_back(std::move(eqClass));
+    }
 }
 
 } // namespace NYql

@@ -7,12 +7,11 @@
 
 
 
-add_library(yql-core-cbo)
-target_link_libraries(yql-core-cbo PUBLIC
+add_library(library-cpp-disjoint_sets)
+target_link_libraries(library-cpp-disjoint_sets PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-disjoint_sets
 )
-target_sources(yql-core-cbo PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/cbo/cbo_optimizer.cpp
+target_sources(library-cpp-disjoint_sets PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/disjoint_sets/disjoint_sets.cpp
 )

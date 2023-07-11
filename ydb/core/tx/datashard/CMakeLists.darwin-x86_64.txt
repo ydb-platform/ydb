@@ -147,6 +147,7 @@ target_link_libraries(core-tx-datashard PUBLIC
 target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_table_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_and_wait_dependencies_unit.cpp

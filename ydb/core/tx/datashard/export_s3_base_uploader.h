@@ -54,9 +54,9 @@ protected:
 
         Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
-        if (!SchemeUploaded) {
-            this->Become(&TDerived::StateUploadScheme);
-
+        if (!MetadataUploaded) {
+            UploadMetadata();
+        } else if (!SchemeUploaded) {
             UploadScheme();
         } else {
             this->Become(&TDerived::StateUploadData);
@@ -82,6 +82,21 @@ protected:
             .WithKey(Settings.GetSchemeKey())
             .WithStorageClass(Settings.GetStorageClass());
         this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+
+        this->Become(&TDerived::StateUploadScheme);
+    }
+
+    void UploadMetadata() {
+        Y_VERIFY(!MetadataUploaded);
+
+        Buffer = std::move(Metadata);
+
+        auto request = Aws::S3::Model::PutObjectRequest()
+            .WithKey(Settings.GetMetadataKey())
+            .WithStorageClass(Settings.GetStorageClass());
+        this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
+
+        this->Become(&TDerived::StateUploadMetadata);
     }
 
     void HandleScheme(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
@@ -104,6 +119,22 @@ protected:
         this->Become(&TDerived::StateUploadData);
     }
 
+    void HandleMetadata(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        EXPORT_LOG_D("HandleMetadata TEvExternalStorage::TEvPutObjectResponse"
+            << ": self# " << this->SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, TStringBuf("PutObject (metadata)"))) {
+            return;
+        }
+
+        MetadataUploaded = true;
+
+        UploadScheme();
+    }
+
     void Handle(TEvExportScan::TEvReady::TPtr& ev) {
         EXPORT_LOG_D("Handle TEvExportScan::TEvReady"
             << ": self# " << this->SelfId()
@@ -115,7 +146,7 @@ protected:
             return PassAway();
         }
 
-        if (ProxyResolved && SchemeUploaded) {
+        if (ProxyResolved && SchemeUploaded && MetadataUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -403,7 +434,8 @@ public:
     explicit TS3UploaderBase(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
-            TMaybe<Ydb::Table::CreateTableRequest>&& scheme)
+            TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+            TString&& metadata)
         : ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
         , Settings(TS3Settings::FromBackupTask(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
@@ -411,10 +443,12 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
+        , Metadata(std::move(metadata))
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
         , SchemeUploaded(task.GetShardNum() == 0 ? false : true)
+        , MetadataUploaded(task.GetShardNum() == 0 ? false : true)
     {
     }
 
@@ -448,6 +482,14 @@ public:
         }
     }
 
+    STATEFN(StateUploadMetadata) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadata);
+        default:
+            return StateBase(ev);
+        }
+    }
+
     STATEFN(StateUploadData) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBuffer, Handle);
@@ -474,6 +516,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TString Metadata;
 
     const ui32 Retries;
     ui32 Attempt;
@@ -481,6 +524,7 @@ private:
     TActorId Client;
     TDuration Delay;
     bool SchemeUploaded;
+    bool MetadataUploaded;
     bool MultiPart;
     bool Last;
 

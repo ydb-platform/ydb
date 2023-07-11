@@ -3,6 +3,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_path_describer.h"
+#include "schemeshard_types.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/metering/metering.h>
@@ -15,6 +17,7 @@ template <typename TKind>
 class TConfigurePart: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
+    const TVirtualTimestamp SnapshotTime;
 
     TString DebugHint() const override {
         return TStringBuilder()
@@ -23,9 +26,10 @@ class TConfigurePart: public TSubOperationState {
     }
 
 public:
-    TConfigurePart(TTxState::ETxType type, TOperationId id)
+    TConfigurePart(TTxState::ETxType type, TOperationId id, TVirtualTimestamp snapshotTime)
         : TxType(type)
         , OperationId(id)
+        , SnapshotTime(snapshotTime)
     {
         IgnoreMessages(DebugHint(), {});
     }
@@ -55,7 +59,11 @@ public:
         Y_VERIFY(txState->State == TTxState::ConfigureParts);
 
         txState->ClearShardsInProgress();
-        TKind::ProposeTx(OperationId, *txState, context);
+        if constexpr (TKind::NeedSnapshotTime()) {
+            TKind::ProposeTx(OperationId, *txState, context, SnapshotTime);
+        } else {
+            TKind::ProposeTx(OperationId, *txState, context);
+        }
         txState->UpdateShardsInProgress(TTxState::ConfigureParts);
 
         return false;
@@ -444,6 +452,7 @@ template <typename TKind, typename TEvCancel>
 class TBackupRestoreOperationBase: public TSubOperation {
     const TTxState::ETxType TxType;
     const TPathElement::EPathState Lock;
+    TVirtualTimestamp SnapshotTime;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -490,7 +499,7 @@ class TBackupRestoreOperationBase: public TSubOperation {
         case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigurePart<TKind>>(TxType, OperationId);
+            return MakeHolder<TConfigurePart<TKind>>(TxType, OperationId, SnapshotTime);
         case TTxState::Propose:
             return MakeHolder<TPropose<TKind>>(TxType, OperationId);
         case TTxState::ProposedWaitParts:
@@ -625,6 +634,13 @@ public:
         if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
+        }
+
+        if constexpr (TKind::NeedSnapshotTime()) {
+            TPathElement::TPtr targetPath = context.SS->PathsById.at(path.Base()->PathId);
+
+            SnapshotTime.SetStep(targetPath->StepCreated);
+            SnapshotTime.SetTxId(targetPath->CreateTxId);
         }
 
         PrepareChanges(path.Base(), context);

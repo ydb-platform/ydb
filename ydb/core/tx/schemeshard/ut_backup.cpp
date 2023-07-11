@@ -135,11 +135,11 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnLargeData) {
-        ShouldSucceedOnLargeData<Codec>(0, std::make_pair(101, 1));
+        ShouldSucceedOnLargeData<Codec>(0, std::make_pair(101, 2));
     }
 
     Y_UNIT_TEST(ShouldSucceedOnLargeData_MinWriteBatch) {
-        ShouldSucceedOnLargeData<ECompressionCodec::Zstd>(1 << 20, std::make_pair(0, 2));
+        ShouldSucceedOnLargeData<ECompressionCodec::Zstd>(1 << 20, std::make_pair(0, 3));
     }
 
 } // TBackupTests

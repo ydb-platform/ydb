@@ -230,7 +230,8 @@ statement stream query
 select first_value(max(x)) over w, y
   from (select unique1 as x, ten+four as y from tenk1)
   group by y
-  window w AS ();
+  window w AS ()
+  order by y desc;
 
 -- test non-default frame specifications
 statement stream query
@@ -238,7 +239,8 @@ SELECT four, ten,
 	sum(ten) over w,
 	last_value(ten) over w
 FROM (select distinct ten, four from tenk1)
-WINDOW w AS (partition by four order by ten);
+WINDOW w AS (partition by four order by ten)
+ORDER BY four;
 
 statement error
 SELECT four, ten,
@@ -267,6 +269,7 @@ SELECT four, ten/4 as two,
 	last_value(ten/4) over w
 FROM (select distinct ten, four from tenk1)
 WINDOW w AS (partition by four order by ten/4 rows between unbounded preceding and current row)
+ORDER BY four;
 
 statement error
 SELECT sum(unique1) over w,

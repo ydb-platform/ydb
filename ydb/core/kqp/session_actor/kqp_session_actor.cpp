@@ -56,6 +56,14 @@ namespace {
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 
+void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQueryResponse& resp) {
+    for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+        const auto& binding = phyQuery.GetResultBindings(i);
+        auto ydbRes = resp.AddYdbResults();
+        ydbRes->mutable_columns()->CopyFrom(binding.GetResultSetMeta().columns());
+    }
+}
+
 class TRequestFail : public yexception {
 public:
     Ydb::StatusIds::StatusCode Status;
@@ -1515,6 +1523,9 @@ public:
 
             response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
             response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+
+            const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            FillColumnsMeta(phyQuery, response);
         }
     }
 

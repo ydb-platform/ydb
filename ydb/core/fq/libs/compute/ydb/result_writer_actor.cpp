@@ -117,28 +117,30 @@ public:
 
         StartTime = TInstant::Now();
         FetchToken = response.NextFetchToken;
+        auto emptyResultSet = response.ResultSet->RowsCount() == 0;
         const auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
-        if (response.ResultSet->RowsCount() == 0 || !FetchToken) {
-            Fq::Private::PingTaskRequest pingTaskRequest;
-            pingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
-            pingTaskRequest.set_result_set_count(1);
-            auto& resultSetMeta = *pingTaskRequest.add_result_set_meta();
+
+        if (!emptyResultSet) {
+            auto chunk = CreateProtoRequestWithoutResultSet(Offset);
+            Offset += response.ResultSet->RowsCount();
+            *chunk.mutable_result_set() = resultSetProto;
+            auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT);
+            writeResultCounters->InFly->Inc();
+            Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)));
+        }
+
+        if (!FetchToken) {
+            PingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
+            PingTaskRequest.set_result_set_count(1);
+            auto& resultSetMeta = *PingTaskRequest.add_result_set_meta();
             resultSetMeta.set_rows_count(Offset);
             for (const auto& column: resultSetProto.columns()) {
                 *resultSetMeta.add_column() = column;
             }
-            auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
-            pingCounters->InFly->Inc();
-            Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
-            return;
+            if (emptyResultSet) {
+                SendFinalPingRequest();
+            }
         }
-
-        auto chunk = CreateProtoRequestWithoutResultSet(Offset);
-        Offset += response.ResultSet->RowsCount();
-        *chunk.mutable_result_set() = resultSetProto;
-        auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT);
-        writeResultCounters->InFly->Inc();
-        Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)));
     }
 
     void Handle(const NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
@@ -148,7 +150,11 @@ public:
         if (ev.Get()->Get()->Status.IsSuccess()) {
             writeResultCounters->Ok->Inc();
             LOG_I("Result successfully written for offset " << Offset);
-            SendFetchScriptResultRequest();
+            if (FetchToken) {
+                SendFetchScriptResultRequest();
+            } else {
+                SendFinalPingRequest();
+            }
         } else {
             writeResultCounters->Error->Inc();
             LOG_E("Error writing result for offset " << Offset);
@@ -162,6 +168,12 @@ public:
         fetchScriptResultCounters->InFly->Inc();
         StartTime = TInstant::Now();
         Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, TString, int64_t, TString>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, ExecutionId, 0, FetchToken));
+    }
+
+    void SendFinalPingRequest() {
+        auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
+        pingCounters->InFly->Inc();
+        Send(Pinger, new TEvents::TEvForwardPingRequest(PingTaskRequest));
     }
 
     Fq::Private::WriteTaskResultRequest CreateProtoRequestWithoutResultSet(ui64 startRowIndex) {
@@ -185,6 +197,7 @@ private:
     TInstant StartTime;
     int64_t Offset = 0;
     TString FetchToken;
+    Fq::Private::PingTaskRequest PingTaskRequest;
 };
 
 std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& params,

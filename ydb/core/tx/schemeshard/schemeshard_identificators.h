@@ -11,12 +11,10 @@ namespace NSchemeShard {
 
 constexpr TPathId InvalidPathId = TPathId();
 
-class TTabletIdTag {};
-using TTabletId = TUi64Id<TTabletIdTag, Max<ui64>()>;
+STRONG_UI64_TYPE_DEF_DV(TTabletId, Max<ui64>(), Max<ui64>());
 constexpr TTabletId InvalidTabletId = TTabletId();
 
-class TLocalShardIdxTag {};
-using TLocalShardIdx = TUi64Id<TLocalShardIdxTag, Max<ui64>()>;
+STRONG_UI64_TYPE_DEF_DV(TLocalShardIdx, Max<ui64>(), Max<ui64>());
 constexpr TLocalShardIdx InvalidLocalShardIdx = TLocalShardIdx();
 
 class TShardIdx: public std::pair<TOwnerId, TLocalShardIdx> {
@@ -42,12 +40,10 @@ public:
 };
 constexpr TShardIdx InvalidShardIdx = TShardIdx(InvalidOwnerId, InvalidLocalShardIdx);
 
-class TStepIdTag {};
-using TStepId = TUi64Id<TStepIdTag, 0>;
+STRONG_UI64_TYPE_DEF_DV(TStepId, 0, 0);
 constexpr TStepId InvalidStepId = TStepId();
 
-class TTxIdTag {};
-using TTxId = TUi64Id<TTxIdTag, 0>;
+STRONG_UI64_TYPE_DEF_DV(TTxId, 0, 0);
 constexpr TTxId InvalidTxId = TTxId();
 
 using TSubTxId = ui32;
@@ -108,8 +104,7 @@ constexpr TOperationId InvalidOperationId = TOperationId(InvalidTxId, InvalidSub
 NKikimrSchemeOp::TShardIdx AsProto(const TShardIdx& shardIdx);
 TShardIdx FromProto(const NKikimrSchemeOp::TShardIdx& shardIdx);
 
-class TIndexBuildIdTag {};
-using TIndexBuildId = TUi64Id<TIndexBuildIdTag, Max<ui64>()>;
+STRONG_UI64_TYPE_DEF_DV(TIndexBuildId, Max<ui64>(), Max<ui64>());
 constexpr TIndexBuildId InvalidIndexBuildId = TIndexBuildId();
 
 enum class EIndexColumnKind : ui8 {

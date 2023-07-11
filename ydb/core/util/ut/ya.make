@@ -38,8 +38,8 @@ SRCS(
     lf_stack_ut.cpp
     log_priority_mute_checker_ut.cpp
     lz4_data_generator_ut.cpp
-    operation_queue_ut.cpp
     operation_queue_priority_ut.cpp
+    operation_queue_ut.cpp
     page_map_ut.cpp
     queue_inplace_ut.cpp
     queue_oneone_inplace_ut.cpp
@@ -47,6 +47,7 @@ SRCS(
     stlog_ut.cpp
     time_series_vec_ut.cpp
     token_bucket_ut.cpp
+    ui64id_ut.cpp
     ulid_ut.cpp
     wildcard_ut.cpp
 )

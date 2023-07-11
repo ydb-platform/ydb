@@ -115,7 +115,7 @@ namespace {
 
             const auto & cell = cells[i];
             if (cell.Size() > 0) {
-                cell.CopyData(resultBufferData);
+                cell.CopyDataInto(resultBufferData);
             }
 
             if (resultCells) {

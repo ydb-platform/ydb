@@ -121,8 +121,8 @@ public:
     const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
 #endif
 
-    void CopyData(char * dst) const {
-        if (CanInline(DataSize_)) {
+    void CopyDataInto(char * dst) const {
+        if (IsInline_) {
             switch (DataSize_) {
                 case 8: memcpy(dst, &IntVal, 8); break;
                 case 7: memcpy(dst, &IntVal, 7); break;

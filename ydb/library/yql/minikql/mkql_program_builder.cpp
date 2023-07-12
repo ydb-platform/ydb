@@ -2023,6 +2023,44 @@ TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flow
 
 }
 
+TRuntimeNode TProgramBuilder::SelfJoin(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings ) {
+
+    if constexpr (RuntimeVersion < 40U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+
+
+    TRuntimeNode::TList leftKeyColumnsNodes,  rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
+
+    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
+    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
+
+    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
+    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(), std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
+
+    leftRenamesNodes.reserve(leftRenames.size());
+    std::transform(leftRenames.cbegin(), leftRenames.cend(), std::back_inserter(leftRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
+
+    rightRenamesNodes.reserve(rightRenames.size());
+    std::transform(rightRenames.cbegin(), rightRenames.cend(), std::back_inserter(rightRenamesNodes), [this](const ui32 idx) { return NewDataLiteral(idx); });
+
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(flowLeft);
+    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(leftRenamesNodes));
+    callableBuilder.Add(NewTuple(rightRenamesNodes));
+    callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+
+}
+
 
 TRuntimeNode TProgramBuilder::ToSortedDict(TRuntimeNode list, bool all, const TUnaryLambda& keySelector,
     const TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint) {

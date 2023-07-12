@@ -1227,7 +1227,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                 UNIT_ASSERT_C(getResult->Responses[0].Status == NKikimrProto::OK, "Status# " <<
                     NKikimrProto::EReplyStatus_Name(getResult->Responses[0].Status));
                 TString expectedData = data.substr(shift, size);
-                TString actualData = getResult->Responses[0].Buffer;
+                TString actualData = getResult->Responses[0].Buffer.ConvertToString();
                 UNIT_ASSERT_STRINGS_EQUAL_C(expectedData, actualData, "ExpectedSize# " << expectedData.size()
                     << " resultSize$ " << actualData.size() << " part# " << part << " disk# " << disk
                     << " expectedFirst# " << (ui32) (ui8) expectedData[0] << " actualFirst# " <<

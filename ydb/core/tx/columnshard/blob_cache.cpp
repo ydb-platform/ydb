@@ -520,7 +520,7 @@ private:
             if (res.Status == NKikimrProto::EReplyStatus::NODATA) {
                 fallbackRanges[blobRanges[i].BlobId].emplace_back(std::move(blobRanges[i]));
             } else {
-                ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer, ctx);
+                ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
             }
         }
 

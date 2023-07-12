@@ -294,7 +294,8 @@ public:
                         "readItem.ValueOffset# " << readItem.ValueOffset
                         << " readItem.BlobSize# " << readItem.BlobSize
                         << " read.ValueSize# " << read.ValueSize);
-                memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size());
+                Y_VERIFY(read.Value.IsDetached());
+                response.Buffer.begin().ExtractPlainDataAndAdvance(read.Value.Detach() + readItem.ValueOffset, response.Buffer.size());
                 IntermediateResult->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), batch.GroupId)] += response.Buffer.size();
                 // FIXME: count distinct blobs?" keyvalue_storage_request.cpp:279
                 IntermediateResult->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), batch.GroupId)] += 1;

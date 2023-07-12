@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         UNIT_ASSERT(getResult);
         UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, status);
-        UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer, data);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer.ConvertToString(), data);
     };
 
     void SendPatch(const TTestInfo &test, const TLogoBlobID &originalBlobId, const TLogoBlobID &patchedBlobId, ui32 mask,

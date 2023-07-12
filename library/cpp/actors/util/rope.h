@@ -455,6 +455,10 @@ public:
         return !Size;
     }
 
+    bool empty() const {
+        return IsEmpty();
+    }
+
     operator bool() const {
         return Chain;
     }
@@ -699,10 +703,7 @@ public:
 
     // Use this method carefully -- it may significantly reduce performance when misused.
     TString ConvertToString() const {
-        // TODO(innokentii): could be microoptimized for single TString case
-        TString res = TString::Uninitialized(GetSize());
-        Begin().ExtractPlainDataAndAdvance(res.Detach(), res.size());
-        return res;
+        return ExtractUnderlyingContainerOrCopy<TString>();
     }
 
     /**
@@ -710,14 +711,14 @@ public:
      */
     template <class TResult>
     TResult ExtractUnderlyingContainerOrCopy() const {
-        if (IsContiguous() && GetSize() != 0) {
-            const auto& chunk = Begin().GetChunk();
-            return chunk.ExtractUnderlyingContainerOrCopy<TResult>();
+        if (Chain.begin() != Chain.end() && ++Chain.begin() == Chain.end()) {
+            return Chain.GetFirstChunk().ExtractUnderlyingContainerOrCopy<TResult>();
         }
 
-        TResult res = TResult::Uninitialized(GetSize());
+        const size_t size = GetSize();
+        TResult res = TResult::Uninitialized(size);
         char* data = NContiguousDataDetails::TContainerTraits<TResult>::UnsafeGetDataMut(res);
-        Begin().ExtractPlainDataAndAdvance(data, res.size());
+        Begin().ExtractPlainDataAndAdvance(data, size);
         return res;
     }
 

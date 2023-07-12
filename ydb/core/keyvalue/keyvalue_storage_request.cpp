@@ -280,7 +280,7 @@ public:
         auto groupId = ev->Get()->GroupId;
         decltype(request.ReadQueue)::iterator it = request.ReadQueue.begin();
         for (ui32 i = 0, num = ev->Get()->ResponseSz; i < num; ++i, ++it) {
-            const auto& response = ev->Get()->Responses[i];
+            auto& response = ev->Get()->Responses[i];
             auto& read = *it->Read;
             auto& readItem = *it->ReadItem;
 
@@ -290,7 +290,8 @@ public:
                 }
                 Y_VERIFY(response.Buffer.size() == readItem.BlobSize);
                 Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
-                memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size());
+                Y_VERIFY(read.Value.IsDetached());
+                response.Buffer.begin().ExtractPlainDataAndAdvance(read.Value.Detach() + readItem.ValueOffset, response.Buffer.size());
                 IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
             } else {

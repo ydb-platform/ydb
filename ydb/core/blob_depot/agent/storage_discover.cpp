@@ -146,31 +146,28 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
+            void OnRead(ui64 /*tag*/, TReadOutcome&& outcome) override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Status, status));
+                    (QueryId, GetQueryId()), (Outcome, outcome));
 
-                switch (status) {
-                    case NKikimrProto::OK:
-                        Buffer = std::move(dataOrErrorReason);
+                std::visit(TOverloaded{
+                    [&](TReadOutcome::TOk& ok) {
+                        Buffer = ok.Data.ConvertToString();
                         DoneWithData = true;
                         CheckIfDone();
-                        break;
-
-                    case NKikimrProto::NODATA: {
+                    },
+                    [&](TReadOutcome::TNodata& /*nodata*/) {
                         // we are reading blob from the original group and it may be partially written -- it is totally
                         // okay to have some; we need to advance to the next readable blob
                         auto *range = Resolve.MutableItems(0)->MutableKeyRange();
                         range->SetEndingKey(Id.AsBinaryString());
                         range->ClearIncludeEnding();
                         IssueResolve();
-                        break;
+                    },
+                    [&](TReadOutcome::TError& error) {
+                        EndWithError(error.Status, error.ErrorReason);
                     }
-
-                    default:
-                        EndWithError(status, std::move(dataOrErrorReason));
-                        break;
-                }
+                }, outcome.Value);
             }
 
             void CheckIfDone() {

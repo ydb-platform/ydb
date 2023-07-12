@@ -532,7 +532,7 @@ public:
                     Y_VERIFY(response.Status == NKikimrProto::OK);
                     const auto it = Committed.find(response.Id);
                     Y_VERIFY(it != Committed.end());
-                    Y_VERIFY(it->second == response.Buffer);
+                    Y_VERIFY(it->second == response.Buffer.ConvertToString());
                     Committed.erase(it);
                 }
                 --readsInFlight;

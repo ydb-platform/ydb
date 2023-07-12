@@ -596,7 +596,7 @@ void EncryptInplace(TRope& rope, ui32 offset, ui32 size, const TLogoBlobID& id, 
 
 void Decrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
         const TBlobStorageGroupInfo &info);
-void DecryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
+void DecryptInplace(TRope& rope, ui32 offset, ui32 shift, ui32 size, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
 
 IActor* CreateBlobStorageGroupRangeRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,

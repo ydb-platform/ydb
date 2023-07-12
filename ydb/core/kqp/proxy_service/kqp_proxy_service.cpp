@@ -613,9 +613,9 @@ public:
         KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "TEvQueryRequest, set timer for: " << timerDuration << " timeout: " << timeout << " cancelAfter: " << cancelAfter);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
         KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
             << ", targetId: " << targetId << ", sessionId: " << sessionId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {

@@ -9,12 +9,20 @@
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+
+#include <ydb/library/yql/dq/tasks/dq_task_program.h>
+
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
 namespace NYql {
 namespace {
@@ -521,6 +529,68 @@ private:
 };
 
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
+
+private:
+
+    TString GetLambdaBody(TExprNode::TPtr resInput, NKikimrMiniKQL::TType& resultType, TExprContext& ctx) {
+
+        auto pos = resInput->Pos();
+        auto typeAnn = resInput->GetTypeAnn();
+
+        const auto kind = resInput->GetTypeAnn()->GetKind();
+        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::List && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
+        auto node = ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream",
+                        ctx.WrapByCallableIf(data, "Just", std::move(resInput)));
+
+        auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
+
+        auto input = Build<TDqPhyStage>(ctx, pos)
+            .Inputs()
+                .Build()
+            .Program<TCoLambda>()
+                .Args({})
+                .Body(node)
+            .Build()
+            .Settings().Build()
+        .Done().Ptr();
+
+        NCommon::TMkqlCommonCallableCompiler compiler;
+
+        auto programLambda = TDqPhyStage(input).Program();
+
+        TVector<TExprBase> fakeReads;
+        auto paramsType = NDq::CollectParameters(programLambda, ctx);
+        auto lambda = NDq::BuildProgram(
+            programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
+                *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
+                ctx, fakeReads);
+
+        NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv, 
+            *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry());
+
+        TStringStream errorStream;
+        auto type = NYql::NCommon::BuildType(*typeAnn, programBuilder, errorStream);
+        ExportTypeToProto(type, resultType);
+
+        return lambda;
+    }
+
+    TString EncodeResultToYson(const NKikimrMiniKQL::TResult& result, bool& truncated) {
+        TStringStream ysonStream;
+        NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Binary);
+        NYql::IDataProvider::TFillSettings fillSettings;
+        KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+
+        TStringStream out;
+        NYson::TYsonWriter writer2((IOutputStream*)&out);
+        writer2.OnBeginMap();
+        writer2.OnKeyedItem("Data");
+        writer2.OnRaw(ysonStream.Str()); 
+        writer2.OnEndMap();
+
+        return out.Str();
+    }
+
 public:
     TKiSourceCallableExecutionTransformer(TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx)
@@ -546,14 +616,40 @@ public:
         }
 
         if (input->Content() == "Result") {
-            auto resultInput = TExprBase(input->ChildPtr(0));
-            auto exec = resultInput.Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input();
-            YQL_ENSURE(exec.Maybe<TKiExecDataQuery>());
+            auto result = TMaybeNode<TResult>(input).Cast();
+            NKikimrMiniKQL::TType resultType;
+            auto program = GetLambdaBody(result.Input().Ptr(), resultType, ctx);
+            auto asyncResult = Gateway->ExecuteLiteral(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
 
-            ui32 index = FromString<ui32>(resultInput.Cast<TCoNth>().Index().Value());
-            YQL_ENSURE(index == 0);
+            return std::make_pair(IGraphTransformer::TStatus::Async, asyncResult.Apply(
+                [this](const NThreading::TFuture<IKikimrGateway::TExecuteLiteralResult>& future) {
+                    return TAsyncTransformCallback(
+                        [future, this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
 
-            return RunResOrPullForExec(TResOrPullBase(input), exec.Cast(), ctx, 0);
+                            const auto& literalResult = future.GetValueSync();
+
+                            if (!literalResult.Success()) {
+                                for (const auto& issue : literalResult.Issues()) {
+                                    ctx.AddError(issue);
+                                }
+                                input->SetState(TExprNode::EState::Error);
+                                return IGraphTransformer::TStatus::Error;
+                            }
+
+                            bool truncated = false;
+                            auto yson = this->EncodeResultToYson(literalResult.Result, truncated);
+                            if (truncated) {
+                                input->SetState(TExprNode::EState::Error);
+                                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+
+                            output = input;
+                            input->SetState(TExprNode::EState::ExecutionComplete);
+                            input->SetResult(ctx.NewAtom(input->Pos(), yson));
+                            return IGraphTransformer::TStatus::Ok;
+                        });
+                }));
         }
 
         if (input->Content() == ConfigureName) {

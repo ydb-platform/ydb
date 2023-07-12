@@ -630,6 +630,13 @@ public:
         return Gateway->GetCollectedSchemeData();
     }
 
+    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, 
+        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override 
+    {
+        return Gateway->ExecuteLiteral(program, resultType, txAlloc);
+    }
+
+
 private:
     bool IsPrepare() const {
         if (!SessionCtx) {

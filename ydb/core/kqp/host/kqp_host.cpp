@@ -1574,7 +1574,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
-            // TODO: .AddExpressionEvaluation(*FuncRegistry)
+            .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(), "FailExpressionEvaluation")
             .AddIOAnnotation()
             .AddTypeAnnotation()

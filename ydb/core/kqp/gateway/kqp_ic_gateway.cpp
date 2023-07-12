@@ -1777,6 +1777,55 @@ public:
         }
     }
 
+    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override {
+        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
+        NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
+
+        literalRequest.NeedTxId = false;
+        literalRequest.MaxAffectedShards = 0;
+        literalRequest.TotalReadSizeLimitBytes = 0;
+        literalRequest.MkqlMemoryLimit = 100_MB;
+
+        auto& transaction = *phyQuery.AddTransactions();
+        transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
+
+        auto& stage = *transaction.AddStages();
+        auto& stageProgram = *stage.MutableProgram();
+        stageProgram.SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
+        stageProgram.SetRaw(program);
+        stage.SetOutputsCount(1);
+
+        auto& taskResult = *transaction.AddResults();
+        *taskResult.MutableItemType() = resultType;
+        auto& taskConnection = *taskResult.MutableConnection();
+        taskConnection.SetStageIndex(0);
+        
+        NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
+
+        NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
+
+        literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
+
+        return ExecuteLiteral(std::move(literalRequest), params, 0).Apply([](const auto& future) {
+            const auto& result = future.GetValue();
+
+            TExecuteLiteralResult literalResult;
+
+            if (result.Success()) {
+                YQL_ENSURE(result.Results.size() == 1);
+                literalResult.SetSuccess();
+                literalResult.Result = result.Results[0];
+            } else {
+                literalResult.SetStatus(result.Status());
+                literalResult.AddIssues(result.Issues());
+            }
+
+            return literalResult;
+        });
+    }
+
+
     TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());

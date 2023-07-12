@@ -15,6 +15,7 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -689,6 +690,10 @@ public:
         google::protobuf::RepeatedPtrField<NKqpProto::TResultSetMeta> ResultSetsMeta;
     };
 
+    struct TExecuteLiteralResult : public TGenericResult {
+        NKikimrMiniKQL::TResult Result;
+    };
+
     struct TLoadTableMetadataSettings {
         TLoadTableMetadataSettings& WithTableStats(bool enable) {
             RequestStats_ = enable;
@@ -793,6 +798,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> DropExternalDataSource(const TString& cluster, const TDropExternalDataSourceSettings& settings) = 0;
 
     virtual TVector<TString> GetCollectedSchemeData() = 0;
+
+    virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

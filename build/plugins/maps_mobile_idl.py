@@ -360,7 +360,14 @@ class DefaultRule(BaseRule):
             result.add(self.context.runtime_include('bindings/flutter/exception.h'))
             result.add(self.context.runtime_include('bindings/flutter/export.h'))
             result.add(self.context.runtime_include('bindings/flutter/to_native.h'))
+            result.add(self.context.runtime_include('bindings/flutter/to_native_fwd.h'))
             result.add(self.context.runtime_include('bindings/flutter/to_platform.h'))
+            result.add(self.context.runtime_include('bindings/flutter/to_platform_fwd.h'))
+            result.add(self.context.runtime_include('bindings/flutter/vector.h'))
+            result.add(self.context.runtime_include('bindings/flutter/string_map.h'))
+            result.add(self.context.runtime_include('bindings/flutter/helper.h'))
+            result.add(self.context.runtime_include('bindings/flutter/meta_type.h'))
+            result.add(self.context.runtime_include('bindings/flutter/native.h'))
             return result
 
         result.add('yandex/maps/export.h')

@@ -30,6 +30,7 @@ struct TNodeInfo {
 
 protected:
     EVolatileState VolatileState;
+    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
 
 public:
     THive& Hive;

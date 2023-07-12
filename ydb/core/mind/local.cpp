@@ -193,8 +193,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         for (const auto& [tabletType, tabletInfo] : Config->TabletClassInfo) {
             NKikimrLocal::TTabletAvailability* tabletAvailability = request->Record.AddTabletAvailability();
             tabletAvailability->SetType(tabletType);
-            if (tabletInfo.MaxCount != 0) {
-                tabletAvailability->SetMaxCount(tabletInfo.MaxCount);
+            if (tabletInfo.MaxCount) {
+                tabletAvailability->SetMaxCount(*tabletInfo.MaxCount);
             }
             tabletAvailability->SetPriority(tabletInfo.Priority);
         }

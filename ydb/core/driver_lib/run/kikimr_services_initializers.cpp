@@ -1050,36 +1050,40 @@ void TLocalServiceInitializer::InitializeServices(
 
     // setup local
     TLocalConfig::TPtr localConfig(new TLocalConfig());
-    localConfig->TabletClassInfo[TTabletTypes::SchemeShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateFlatTxSchemeShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::DataShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateDataShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::KeyValue] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateKeyValueFlat, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::PersQueue] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreatePersQueue, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::PersQueueReadBalancer] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreatePersQueueReadBalancer, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::Coordinator] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateFlatTxCoordinator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::Mediator] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateTxMediator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::Kesus] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NKesus::CreateKesusTablet, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::Hive] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::SysViewProcessor] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::TestShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::ColumnShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&CreateColumnShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::SequenceShard] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::ReplicationController] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+
+    std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+    for (const auto& availability : Config.GetDynamicNodeConfig().GetTabletAvailability()) {
+        tabletAvailabilities.emplace(availability.GetType(), availability);
+    }
+
+    auto addToLocalConfig = [&localConfig, &tabletAvailabilities, tabletPool = appData->SystemPoolId](TTabletTypes::EType tabletType,
+                                                                                                      TTabletSetupInfo::TTabletCreationFunc op,
+                                                                                                      NActors::TMailboxType::EType mailboxType,
+                                                                                                      ui32 poolId) {
+        auto availIt = tabletAvailabilities.find(tabletType);
+        auto localIt = localConfig->TabletClassInfo.emplace(tabletType, new TTabletSetupInfo(op, mailboxType, poolId, TMailboxType::ReadAsFilled, tabletPool)).first;
+        if (availIt != tabletAvailabilities.end()) {
+            localIt->second.MaxCount = availIt->second.GetMaxCount();
+            localIt->second.Priority = availIt->second.GetPriority();
+        }
+    };
+
+    addToLocalConfig(TTabletTypes::SchemeShard, &CreateFlatTxSchemeShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::DataShard, &CreateDataShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::KeyValue, &CreateKeyValueFlat, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::PersQueue, &CreatePersQueue, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::PersQueueReadBalancer, &CreatePersQueueReadBalancer, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::Coordinator, &CreateFlatTxCoordinator, TMailboxType::Revolving, importantPoolId);
+    addToLocalConfig(TTabletTypes::Mediator, &CreateTxMediator, TMailboxType::Revolving, importantPoolId);
+    addToLocalConfig(TTabletTypes::Kesus, &NKesus::CreateKesusTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::Hive, &CreateDefaultHive, TMailboxType::ReadAsFilled, importantPoolId);
+    addToLocalConfig(TTabletTypes::SysViewProcessor, &NSysView::CreateSysViewProcessor, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::TestShard, &NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::ColumnShard, &CreateColumnShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::SequenceShard, &NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::ReplicationController, &NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::BlobDepot, &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->UserPoolId);
+
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled && !tenantPoolConfig->StaticSlots.empty())

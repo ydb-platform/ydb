@@ -12,6 +12,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/hive.proto";
 import "ydb/core/protos/kqp.proto";
+import "ydb/core/protos/local.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
@@ -700,6 +701,7 @@ message TDynamicNodeConfig {
     optional NKikimrNodeBroker.TNodeInfo NodeInfo = 4;
     optional string NodeAddress = 5; //DEPRECATED
     optional string NodeHost = 6; //DEPRECATED
+    repeated NKikimrLocal.TTabletAvailability TabletAvailability = 7;
 }
 
 message TFeatureFlags {
@@ -1561,7 +1563,7 @@ message TAuditConfig {
 
 message THiveTabletLimit {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
-    optional uint64 MaxCount = 2;
+    optional uint64 MaxCount = 2 [default = 1000000]; // Default value here should match the one in NkikimrLocal.TTabletAvailability
 }
 
 message THiveTabletPreference {

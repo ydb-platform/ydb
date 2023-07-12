@@ -1143,13 +1143,21 @@ public:
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(reqInfo->SessionId);
         if (msg->Round == 0 && info) {
-            TString message = TStringBuilder() << "request's " << (msg->Status == NYql::NDqProto::StatusIds::TIMEOUT ? "timeout" : "cancelAfter") << " exceeded";
+            TString message = TStringBuilder()
+                << "request's " << (msg->Status == NYql::NDqProto::StatusIds::TIMEOUT ? "timeout" : "cancelAfter")
+                << " exceeded";
+
             Send(info->WorkerId, new TEvKqp::TEvAbortExecution(msg->Status, message));
-            auto newEv = ev->Release().Release();
-            newEv->TickNextRound();
-            Schedule(newEv->Timeout, newEv);
+
+            // We must not reply before session actor in case of CANCEL AFTER settings
+            if (msg->Status != NYql::NDqProto::StatusIds::CANCELLED) {
+                auto newEv = ev->Release().Release();
+                newEv->TickNextRound();
+                Schedule(newEv->Timeout, newEv);
+            }
         } else {
-            TString message = TStringBuilder() << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
+            TString message = TStringBuilder()
+                << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
             ReplyProcessError(NYql::NDq::DqStatusToYdbStatus(msg->Status), message, requestId);
         }
     }

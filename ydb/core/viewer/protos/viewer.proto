@@ -474,6 +474,7 @@ message TComputeNodeInfo {
     optional uint64 MemoryLimit = 27;
     NKikimrTabletBase.TMetrics Metrics = 32;
     repeated TTabletStateInfo Tablets = 33;
+    optional string Tenant = 41; // for response without tenant groups
 }
 
 message TComputeTenantInfo {
@@ -486,6 +487,9 @@ message TComputeInfo {
     EFlag Overall = 1;
     repeated TComputeTenantInfo Tenants = 2;
     repeated string Errors = 3;
+    uint64 TotalNodes = 4;
+    uint64 FoundNodes = 5;
+    repeated TComputeNodeInfo Nodes = 6;
 }
 
 message TNodeLocation {

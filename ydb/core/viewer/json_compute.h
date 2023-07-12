@@ -34,6 +34,7 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     THashMap<TTabletId, THolder<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     NMon::TEvHttpInfo::TPtr Event;
     THashSet<TNodeId> NodeIds;
+    std::unordered_set<TNodeId> FoundNodeIds;
     THashMap<TNodeId, NKikimrWhiteboard::TEvSystemStateResponse> NodeSysInfo;
     TMap<TNodeId, NKikimrWhiteboard::TEvTabletStateResponse> NodeTabletInfo;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
@@ -50,6 +51,27 @@ class TJsonCompute : public TViewerPipeClient<TJsonCompute> {
     ui32 UptimeSeconds = 0;
     bool ProblemNodesOnly = false;
     TString Filter;
+
+    enum class EVersion {
+        v1,
+        v2 // only this works with sorting
+    };
+    enum class ESort {
+        NodeId,
+        Host,
+        DC,
+        Rack,
+        Version,
+        Uptime,
+        Memory,
+        CPU,
+        LoadAverage,
+    };
+    EVersion Version = EVersion::v1;
+    std::optional<ui32> Offset;
+    std::optional<ui32> Limit;
+    ESort Sort = ESort::NodeId;
+    bool ReverseSort = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -92,6 +114,44 @@ public:
         UptimeSeconds = FromStringWithDefault<ui32>(params.Get("uptime"), 0);
         ProblemNodesOnly = FromStringWithDefault<bool>(params.Get("problems_only"), ProblemNodesOnly);
         Filter = params.Get("filter");
+        if (params.Has("offset")) {
+            Offset = FromStringWithDefault<ui32>(params.Get("offset"), 0);
+        }
+        if (params.Has("limit")) {
+            Limit = FromStringWithDefault<ui32>(params.Get("limit"), std::numeric_limits<ui32>::max());
+        }
+        TString version = params.Get("version");
+        if (version == "v1") {
+            Version = EVersion::v1;
+        } else if (version == "v2") {
+            Version = EVersion::v2;
+        }
+        TStringBuf sort = params.Get("sort");
+        if (sort) {
+            if (sort.StartsWith("-") || sort.StartsWith("+")) {
+                ReverseSort = (sort[0] == '-');
+                sort.Skip(1);
+            }
+            if (sort == "NodeId") {
+                Sort = ESort::NodeId;
+            } else if (sort == "Host") {
+                Sort = ESort::Host;
+            } else if (sort == "DC") {
+                Sort = ESort::DC;
+            } else if (sort == "Rack") {
+                Sort = ESort::Rack;
+            } else if (sort == "Version") {
+                Sort = ESort::Version;
+            } else if (sort == "Uptime") {
+                Sort = ESort::Uptime;
+            } else if (sort == "Memory") {
+                Sort = ESort::Memory;
+            } else if (sort == "CPU") {
+                Sort = ESort::CPU;
+            } else if (sort == "LoadAverage") {
+                Sort = ESort::LoadAverage;
+            }
+        }
 
         SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
 
@@ -294,6 +354,87 @@ public:
         return true;
     }
 
+    static double GetCPU(const NKikimrViewer::TComputeNodeInfo& nodeInfo) {
+        double cpu = 0;
+        if (nodeInfo.PoolStatsSize() > 0) {
+            for (const auto& ps : nodeInfo.GetPoolStats()) {
+                cpu = std::max(cpu, ps.GetUsage());
+            }
+        }
+        return cpu;
+    }
+
+    static double GetLoadAverage(const NKikimrViewer::TComputeNodeInfo& nodeInfo) {
+        if (nodeInfo.LoadAverageSize() > 0) {
+            return nodeInfo.GetLoadAverage(0);
+        }
+        return 0;
+    }
+
+    void PaginateNodes(::google::protobuf::RepeatedPtrField<NKikimrViewer::TComputeNodeInfo>& nodes) {
+        bool reverse = ReverseSort;
+        switch (Sort) {
+            case ESort::NodeId:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (a.GetNodeId() < b.GetNodeId());
+                });
+                break;
+            case ESort::Host:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (a.GetHost() < b.GetHost());
+                });
+                break;
+            case ESort::DC:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (a.GetDataCenter() < b.GetDataCenter());
+                });
+                break;
+            case ESort::Rack:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (a.GetRack() < b.GetRack());
+                });
+                break;
+            case ESort::Version:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (a.GetVersion() < b.GetVersion());
+                });
+                break;
+            case ESort::Uptime:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ !(a.GetStartTime() < b.GetStartTime());
+                });
+                break;
+            case ESort::Memory:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (a.GetMemoryUsed() < b.GetMemoryUsed());
+                });
+                break;
+            case ESort::CPU:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (GetCPU(a) < GetCPU(b));
+                });
+                break;
+            case ESort::LoadAverage:
+                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
+                    return reverse ^ (GetLoadAverage(a) < GetLoadAverage(b));
+                });
+                break;
+        }
+
+        if (Offset.has_value()) {
+            if (size_t(nodes.size()) > Offset.value()) {
+                nodes.erase(nodes.begin(), std::next(nodes.begin(), Offset.value()));
+            } else {
+                nodes.Clear();
+            }
+        }
+        if (Limit.has_value()) {
+            if (size_t(nodes.size()) > Limit.value()) {
+                nodes.erase(std::next(nodes.begin(), Limit.value()), nodes.end());
+            }
+        }
+    }
+
     void ReplyAndPassAway() {
         THashMap<TNodeId, TVector<const NKikimrWhiteboard::TTabletStateInfo*>> tabletInfoIndex;
         NKikimrWhiteboard::TEvTabletStateResponse tabletInfo;
@@ -317,8 +458,12 @@ public:
         }
         for (const std::pair<const TString, NKikimrViewer::TTenant>& prTenant : TenantByPath) {
             const TString& path = prTenant.first;
-            NKikimrViewer::TComputeTenantInfo& computeTenantInfo = *Result.AddTenants();
-            computeTenantInfo.SetName(path);
+            if (Version == EVersion::v1) {
+                NKikimrViewer::TComputeTenantInfo& computeTenantInfo = *Result.AddTenants();
+                computeTenantInfo.SetName(path);
+                // TODO(xenoxeno)
+                computeTenantInfo.SetOverall(NKikimrViewer::EFlag::Green);
+            }
             auto itSubDomainKey = SubDomainKeyByPath.find(path);
             if (itSubDomainKey != SubDomainKeyByPath.end()) {
                 TPathId subDomainKey(itSubDomainKey->second);
@@ -326,7 +471,13 @@ public:
                 for (TNodeId nodeId : tenantBySubDomainKey.GetNodeIds()) {
                     if (!CheckNodeFilters(nodeId))
                         continue;
-                    NKikimrViewer::TComputeNodeInfo& computeNodeInfo = *computeTenantInfo.AddNodes();
+                    FoundNodeIds.insert(nodeId);
+                    NKikimrViewer::TComputeNodeInfo& computeNodeInfo = Version == EVersion::v1
+                        ? *Result.MutableTenants(Result.TenantsSize() - 1)->AddNodes()
+                        : *Result.AddNodes();
+                    if (Version == EVersion::v2) {
+                        computeNodeInfo.SetTenant(path);
+                    }
                     computeNodeInfo.SetNodeId(nodeId);
                     auto itSysInfo = NodeSysInfo.find(nodeId);
                     if (itSysInfo != NodeSysInfo.end()) {
@@ -407,13 +558,17 @@ public:
                     }
                 }
             }
-
-            // TODO(xenoxeno)
-            computeTenantInfo.SetOverall(NKikimrViewer::EFlag::Green);
         }
 
+        Result.SetTotalNodes(NodeIds.size());
+        Result.SetFoundNodes(FoundNodeIds.size());
         // TODO(xenoxeno)
         Result.SetOverall(NKikimrViewer::EFlag::Green);
+
+        if (Version == EVersion::v2) {
+            PaginateNodes(*Result.MutableNodes());
+        }
+
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
         Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -438,13 +593,17 @@ struct TJsonRequestSchema<TJsonCompute> {
 template <>
 struct TJsonRequestParameters<TJsonCompute> {
     static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
+        return R"___([{"name":"version","in":"query","description":"query version (v1, v2)","required":false,"type":"string"},
+                      {"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
                       {"name":"uptime","in":"query","description":"return only nodes with less uptime in sec.","required":false,"type":"integer"},
                       {"name":"problems_only","in":"query","description":"return only problem nodes","required":false,"type":"boolean"},
-                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"}])___";
+                      {"name":"filter","in":"query","description":"filter nodes by id or host","required":false,"type":"string"},
+                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
+                      {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
+                      {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"}])___";
     }
 };
 

@@ -1559,6 +1559,8 @@ private:
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
         apply("WatermarksIdlePartitions", "true");
+        apply("EnableChannelStats", "true");
+        apply("ExportStats", "true");
 
         switch (Params.QueryType) {
         case FederatedQuery::QueryContent::STREAMING: {

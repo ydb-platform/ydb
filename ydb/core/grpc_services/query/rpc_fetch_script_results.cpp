@@ -128,24 +128,12 @@ private:
     }
 
     bool GetExecutionIdFromRequest() {
-        switch (GetProtoRequest()->execution_case()) {
-        case Ydb::Query::FetchScriptResultsRequest::kExecutionId:
-            ExecutionId = GetProtoRequest()->execution_id();
-            break;
-        case Ydb::Query::FetchScriptResultsRequest::kOperationId:
-        {
-            TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
-            if (!executionId) {
-                Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
-                return false;
-            }
-            ExecutionId = *executionId;
-            break;
-        }
-        case Ydb::Query::FetchScriptResultsRequest::EXECUTION_NOT_SET:
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No execution id");
+        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
+        if (!executionId) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
             return false;
         }
+        ExecutionId = *executionId;
         return true;
     }
 

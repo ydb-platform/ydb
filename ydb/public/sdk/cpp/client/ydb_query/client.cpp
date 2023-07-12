@@ -72,16 +72,9 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId, int64_t resultSetId, const TFetchScriptResultsSettings& settings) {
+    TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TFetchScriptResultsSettings& settings) {
         auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
-        request.set_execution_id(executionId);
-        request.set_result_set_id(resultSetId);
-        return FetchScriptResultsImpl(std::move(request), settings);
-    }
-
-    TAsyncFetchScriptResultsResult FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation, int64_t resultSetId, const TFetchScriptResultsSettings& settings) {
-        auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
-        request.set_operation_id(NKikimr::NOperationId::ProtoToString(scriptExecutionOperation.Id()));
+        request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId));
         request.set_result_set_id(resultSetId);
         return FetchScriptResultsImpl(std::move(request), settings);
     }
@@ -174,16 +167,10 @@ NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const
     return Impl_->ExecuteScript(script, settings);
 }
 
-TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const TString& executionId, int64_t resultSetId,
+TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId,
     const TFetchScriptResultsSettings& settings)
 {
-    return Impl_->FetchScriptResults(executionId, resultSetId, settings);
-}
-
-TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation, int64_t resultSetId,
-    const TFetchScriptResultsSettings& settings)
-{
-    return Impl_->FetchScriptResults(scriptExecutionOperation, resultSetId, settings);
+    return Impl_->FetchScriptResults(operationId, resultSetId, settings);
 }
 
 } // namespace NYdb::NQuery

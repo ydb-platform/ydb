@@ -80,7 +80,7 @@ public:
         NYdb::NQuery::TFetchScriptResultsSettings settings;
         settings.FetchToken(ev->Get()->FetchToken);
         QueryClient
-            ->FetchScriptResults(ev->Get()->ExecutionId, ev->Get()->ResultSetId, settings)
+            ->FetchScriptResults(ev->Get()->OperationId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();

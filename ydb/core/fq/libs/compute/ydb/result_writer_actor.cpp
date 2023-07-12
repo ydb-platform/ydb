@@ -22,11 +22,11 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " ExecutionId: " << ExecutionId << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " ExecutionId: " << ExecutionId << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " ExecutionId: " << ExecutionId << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " ExecutionId: " << ExecutionId << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " ExecutionId: " << ExecutionId << " " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
 
 namespace NFq {
 
@@ -65,13 +65,13 @@ public:
         }
     };
 
-    TResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const TString& executionId, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TResultWriterActor(const TRunActorParams& params, const TActorId& parent, const TActorId& connector, const TActorId& pinger, const NKikimr::NOperationId::TOperationId& operationId, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "ResultWriter")
         , Params(params)
         , Parent(parent)
         , Connector(connector)
         , Pinger(pinger)
-        , ExecutionId(executionId)
+        , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
     {}
 
@@ -101,7 +101,7 @@ public:
         } else {
             pingCounters->Error->Inc();
             LOG_E("Move result error");
-            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Move result error. ExecutionId: " << ExecutionId}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Move result error. OperationId: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -167,7 +167,7 @@ public:
         auto fetchScriptResultCounters = Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT);
         fetchScriptResultCounters->InFly->Inc();
         StartTime = TInstant::Now();
-        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, TString, int64_t, TString>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, ExecutionId, 0, FetchToken));
+        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, NKikimr::NOperationId::TOperationId, int64_t, TString>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, OperationId, 0, FetchToken));
     }
 
     void SendFinalPingRequest() {
@@ -192,7 +192,7 @@ private:
     TActorId Parent;
     TActorId Connector;
     TActorId Pinger;
-    TString ExecutionId;
+    NKikimr::NOperationId::TOperationId OperationId;
     TCounters Counters;
     TInstant StartTime;
     int64_t Offset = 0;
@@ -204,9 +204,9 @@ std::unique_ptr<NActors::IActor> CreateResultWriterActor(const TRunActorParams& 
                                                          const TActorId& parent,
                                                          const TActorId& connector,
                                                          const TActorId& pinger,
-                                                         const TString& executionId,
+                                                         const NKikimr::NOperationId::TOperationId& operationId,
                                                          const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TResultWriterActor>(params, parent, connector, pinger, executionId, queryCounters);
+    return std::make_unique<TResultWriterActor>(params, parent, connector, pinger, operationId, queryCounters);
 }
 
 }

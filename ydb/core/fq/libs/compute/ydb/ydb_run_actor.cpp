@@ -92,7 +92,7 @@ public:
         ExecStatus = response.ExecStatus;
         LOG_I("StatusTrackerResponse (success) " << response.Status << " ExecStatus: " << static_cast<int>(response.ExecStatus) << " Issues: " << response.Issues.ToOneLineString());
         if (response.ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
-            Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.ExecutionId).release());
+            Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
         } else {
             Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
         }
@@ -163,7 +163,7 @@ public:
             break;
         case FederatedQuery::QueryMeta::COMPLETING:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
-                Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.ExecutionId).release());
+                Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
                 Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus).release());
             }

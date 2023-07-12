@@ -26,7 +26,7 @@ struct IActorFactory : public TThrRefBase {
     virtual std::unique_ptr<NActors::IActor> CreateResultWriter(const NActors::TActorId& parent,
                                                                 const NActors::TActorId& connector,
                                                                 const NActors::TActorId& pinger,
-                                                                const TString& executionId) const = 0;
+                                                                const NKikimr::NOperationId::TOperationId& operationId) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateResourcesCleaner(const NActors::TActorId& parent,
                                                                     const NActors::TActorId& connector,
                                                                     const NYdb::TOperation::TOperationId& operationId) const = 0;

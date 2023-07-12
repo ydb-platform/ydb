@@ -100,13 +100,13 @@ struct TEvYdbCompute {
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {
-        TEvFetchScriptResultRequest(TString executionId, int64_t resultSetId, const TString& fetchToken)
-            : ExecutionId(std::move(executionId))
+        TEvFetchScriptResultRequest(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TString& fetchToken)
+            : OperationId(operationId)
             , ResultSetId(resultSetId)
             , FetchToken(fetchToken)
         {}
 
-        TString ExecutionId;
+        NKikimr::NOperationId::TOperationId OperationId;
         int64_t ResultSetId = 0;
         TString FetchToken;
     };

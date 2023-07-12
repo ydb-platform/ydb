@@ -390,18 +390,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
 
-        auto checkFetch = [&](const auto& executionOrOperation) {
-            TFetchScriptResultsResult results = db.FetchScriptResults(executionOrOperation, 0).ExtractValueSync();
-            UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-            TResultSetParser resultSet(results.ExtractResultSet());
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-            UNIT_ASSERT(resultSet.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
-        };
-
-        checkFetch(scriptExecutionOperation.Metadata().ExecutionId);
-        checkFetch(scriptExecutionOperation);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
     }
 
     Y_UNIT_TEST(ExecuteMultiScript) {
@@ -421,7 +416,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42; SELECT 101;");
 
         {
-            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
             UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
             TResultSetParser resultSet(results.ExtractResultSet());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
@@ -430,7 +425,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
         }
         {
-            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 1).ExtractValueSync();
+            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 1).ExtractValueSync();
             UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
             TResultSetParser resultSet(results.ExtractResultSet());
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
@@ -537,7 +532,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ScriptContent.Syntax, ESyntax::Pg);
 
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         CompareYson(R"([
@@ -992,7 +987,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto settings = TFetchScriptResultsSettings();
         settings.FetchToken("?");
 
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(results.GetStatus(), EStatus::BAD_REQUEST);
     }
 
@@ -1006,7 +1001,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         auto settings = TFetchScriptResultsSettings();
         settings.RowsLimit(NUMBER_OF_ROWS);
 
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
         UNIT_ASSERT(results.GetNextFetchToken().Empty());
 
@@ -1027,7 +1022,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         constexpr size_t NUMBER_OF_TESTS = 3;
         for (size_t i = 0; i < NUMBER_OF_TESTS && (i + 1) * ROWS_LIMIT <= NUMBER_OF_ROWS; ++i) {
-            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0, settings).ExtractValueSync();
+            TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
             UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
             TResultSetParser resultSet(results.ExtractResultSet());

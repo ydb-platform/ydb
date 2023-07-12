@@ -42,10 +42,7 @@ public:
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 
-    TAsyncFetchScriptResultsResult FetchScriptResults(const TString& executionId, int64_t resultSetId,
-        const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
-
-    TAsyncFetchScriptResultsResult FetchScriptResults(const TScriptExecutionOperation& scriptExecutionOperation, int64_t resultSetId,
+    TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId,
         const TFetchScriptResultsSettings& settings = TFetchScriptResultsSettings());
 
 private:

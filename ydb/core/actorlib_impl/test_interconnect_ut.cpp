@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                     }
 
                     return TCompatibilityInfo::CheckCompatibility(current, &peerPB,
-                        (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                        NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                 };
         });
         runtime.Initialize(TAppPrepare().Unwrap());
@@ -823,7 +823,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                         }
 
                         return TCompatibilityInfo::CheckCompatibility(node0.get(), &peerPB,
-                            (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                            NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                     };
 
                 common->ValidateCompatibilityOldFormat =
@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                             return true;
                         }
                         return TCompatibilityInfo::CheckCompatibility(node0.get(), *peer,
-                            (ui32)NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
+                            NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                     };
             } else {
                 common->VersionInfo = TInterconnectProxyCommon::TVersionInfo{

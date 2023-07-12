@@ -310,10 +310,10 @@ namespace NKikimr {
     bool TSyncerData::CheckCompatibility(TString& errorReason) {
         if (StoredCompatibilityInfo) {
             return TCompatibilityInfo::CheckCompatibility(&*StoredCompatibilityInfo,
-                    (ui32)NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
+                    NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
         } else {
             return TCompatibilityInfo::CheckCompatibility(nullptr,
-                    (ui32)NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
+                    NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
         }
     }
 

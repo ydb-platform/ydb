@@ -2,6 +2,7 @@
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <google/protobuf/text_format.h>
 
 Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     using EComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
@@ -63,7 +64,9 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         auto oldInfo = oldInfoConstructor.ToPB();
         auto newInfo = newInfoConstructor.ToPB();
 
+        TCompatibilityInfo::Initialize();
         TCompatibilityInfoTest::Reset(&oldInfo);
+
         TEnvironmentSetup env{{
             .NodeCount = 1,
             .Erasure = TBlobStorageGroupType::ErasureNone,

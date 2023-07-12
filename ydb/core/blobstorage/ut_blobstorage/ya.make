@@ -24,6 +24,7 @@ SRCS(
     incorrect_queries.cpp
     main.cpp
     mirror3of4.cpp
+    recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
     snapshots.cpp
@@ -38,7 +39,6 @@ IF (BUILD_TYPE != "DEBUG")
         discover.cpp
         multiget.cpp
         patch.cpp
-        recovery.cpp
     )
 ELSE ()
     MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")

@@ -1956,6 +1956,7 @@ message TCompatibilityRule {
         PDisk = 4;
         VDisk = 5;
         BlobStorageController = 6;
+        ComponentsCount = 7;
     }
 
     optional string Build = 1;

@@ -24,12 +24,13 @@ using TStoredCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TStoredC
 Y_UNIT_TEST_SUITE(YdbVersion) {
 
     void Test(TCurrentCompatibilityInfo current, TCurrentCompatibilityInfo store, bool expected) {
+        TCompatibilityInfo::Initialize();
         TString errorReason;
         auto currentPB = current.ToPB();
         auto storePB = store.ToPB();
-        auto storedPB = TCompatibilityInfo::MakeStored((ui32)NKikimrConfig::TCompatibilityRule::Test1, &storePB);
+        auto storedPB = TCompatibilityInfo::MakeStored(EComponentId::Test1, &storePB);
         UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, &storedPB, 
-            (ui32)EComponentId::Test1, errorReason), expected, errorReason);
+            EComponentId::Test1, errorReason), expected, errorReason);
     }
 
     Y_UNIT_TEST(DefaultSameVersion) {
@@ -589,10 +590,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
 
 Y_UNIT_TEST_SUITE(OldFormat) {
     void TestOldFormat(TCurrentCompatibilityInfo current, TOldFormat stored, bool expected) {
+        TCompatibilityInfo::Initialize();
         TString errorReason;
         auto currentPB = current.ToPB();
         UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, stored, 
-            (ui32)EComponentId::Interconnect, errorReason), expected, errorReason);
+            EComponentId::Interconnect, errorReason), expected, errorReason);
     }
 
     Y_UNIT_TEST(SameVersion) {

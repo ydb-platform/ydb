@@ -200,6 +200,7 @@ private:
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         auto g = Stats.MakeGuard("ack");
+        Y_VERIFY(!AckReceivedInstant);
         AckReceivedInstant = TMonotonic::Now();
         if (!ComputeActorId) {
             ComputeActorId = ev->Sender;
@@ -208,6 +209,7 @@ private:
         Y_VERIFY(ev->Get()->Generation == ScanGen);
 
         ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
+        Y_VERIFY(ev->Get()->MaxChunksCount == 1);
         ACFL_DEBUG("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
         if (ScanIterator && !!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
             ScanCountersPool.OnEmptyAck();
@@ -315,6 +317,7 @@ private:
                 Result->ArrowBatch = batch;
                 Rows += batch->num_rows();
                 Bytes += NArrow::GetBatchDataSize(batch);
+                ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetBatchDataSize(batch))("num_rows", numRows)("batch_columns", JoinSeq(",", batch->schema()->field_names()));
                 break;
             }
         } // switch DataFormat
@@ -500,9 +503,6 @@ private:
             << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
             << " arrow schema:\n" << (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : ""));
 
-        Y_VERIFY(ChunksLimiter.Take(Bytes));
-        Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
-
         Finished = Result->Finished;
         if (Finished) {
             Stats.Finish();
@@ -513,10 +513,12 @@ private:
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
                 << " stats:" << Stats.DebugString();
         } else {
+            Y_VERIFY(ChunksLimiter.Take(Bytes));
+            Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
             Y_VERIFY(AckReceivedInstant);
             ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
-            AckReceivedInstant.reset();
         }
+        AckReceivedInstant.reset();
 
         Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
 

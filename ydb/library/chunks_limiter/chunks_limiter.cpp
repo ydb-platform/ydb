@@ -12,9 +12,6 @@ TString TChunksLimiter::DebugString() const {
 }
 
 bool TChunksLimiter::Take(const ui64 bytes) {
-    if (!bytes) {
-        return true;
-    }
     if (!HasMore()) {
         return false;
     }

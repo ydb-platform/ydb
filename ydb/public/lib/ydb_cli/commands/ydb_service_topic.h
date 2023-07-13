@@ -11,8 +11,8 @@
 
 namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs);
-    TVector<NYdb::NTopic::ECodec> InitAllowedCodecs();
-    const TVector<NYdb::NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
+    TVector<NTopic::ECodec> InitAllowedCodecs();
+    const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
 
     class TCommandWithSupportedCodecs {
     protected:

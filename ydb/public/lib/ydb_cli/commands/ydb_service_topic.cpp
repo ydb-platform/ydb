@@ -114,13 +114,14 @@ namespace {
         TString description = PrepareAllowedCodecsDescription("Comma-separated list of supported codecs", supportedCodecs);
         config.Opts->AddLongOption("supported-codecs", description)
             .RequiredArgument("STRING")
-            .StoreResult(&SupportedCodecsStr_);
+            .StoreResult(&SupportedCodecsStr_)
+            .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW));
         AllowedCodecs_ = supportedCodecs;
     }
 
     void TCommandWithSupportedCodecs::ParseCodecs() {
         if (SupportedCodecsStr_.empty()) {
-            return;
+            throw TMisuseException() << "You can't specify empty set of codecs";
         }
 
         TVector<NTopic::ECodec> parsedCodecs;
@@ -227,12 +228,7 @@ namespace {
         settings.PartitioningSettings(PartitionsCount_, PartitionsCount_);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
-        const auto codecs = GetCodecs();
-        if (!codecs.empty()) {
-            settings.SetSupportedCodecs(codecs);
-        } else {
-            settings.SetSupportedCodecs(AllowedCodecs);
-        }
+        settings.SetSupportedCodecs(GetCodecs());
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             settings.MeteringMode(GetMeteringMode());

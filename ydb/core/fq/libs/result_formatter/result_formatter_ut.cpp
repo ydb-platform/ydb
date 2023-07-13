@@ -60,6 +60,49 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         }
     }
 
+    Y_UNIT_TEST(Utf8WithQuotes) {
+        Ydb::ResultSet rs;
+        {
+            auto& column = *rs.add_columns();
+            column.set_name("column0");
+            auto& type = *column.mutable_type();
+            type.set_type_id(Ydb::Type::UTF8);
+        }
+        {
+            auto& value = *rs.add_rows();
+            value.add_items()->set_text_value("he\"llo");
+        }
+
+        {
+            NJson::TJsonValue root;
+            FormatResultSet(root, rs);
+
+            TStringStream stream;
+            NJson::WriteJson(&stream, &root);
+
+            // Cerr << stream.Str() << Endl;
+
+            TString expected = R"___({"data":[{"column0":"he\"llo"}],"columns":[{"name":"column0","type":["DataType","Utf8"]}]})___";
+
+            UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+        }
+
+        // pretty format
+        {
+            NJson::TJsonValue root;
+            FormatResultSet(root, rs, true, true);
+
+            TStringStream stream;
+            NJson::WriteJson(&stream, &root);
+
+            // Cerr << stream.Str() << Endl;
+
+            TString expected = R"___({"data":[["he\"llo"]],"columns":[{"name":"column0","type":"Utf8"}]})___";
+
+            UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+        }
+    }
+
     Y_UNIT_TEST(List) {
         Ydb::ResultSet rs;
         {

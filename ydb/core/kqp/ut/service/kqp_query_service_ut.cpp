@@ -915,7 +915,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         status = client.Cancel(scriptExecutionOperation.Id()).ExtractValueSync();
         UNIT_ASSERT_C(status.GetStatus() == NYdb::EStatus::NOT_FOUND, status.GetIssues().ToString());
 
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.GetStatus() == NYdb::EStatus::NOT_FOUND, results.GetIssues().ToString());
     }
 
@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
 
         WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
         TResultSetParser resultSet(results.ExtractResultSet());
         UNIT_ASSERT_C(resultSet.TryNextRow(), results.GetIssues().ToString());
@@ -941,7 +941,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
         while (results.GetStatus() != NYdb::EStatus::NOT_FOUND) {
             UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
-            results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+            results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
             Sleep(TDuration::MilliSeconds(10));
         }
 

@@ -4,6 +4,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/events.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <cmath>
@@ -42,6 +43,9 @@ extern const TString REQUEST_TIME_SENSOR_NAME = "RequestTimeMs";
 extern const TString DISCONNECTS_COUNTER_SENSOR_NAME = "Disconnects";
 
 constexpr double TICK_RATE_EPSILON = 0.0000000001;
+
+
+static_assert(EventSpaceBegin(NKikimr::TKikimrEvents::ES_QUOTA) == EventSpaceBegin(NKikimr::TEvQuota::ES_QUOTA), "quoter event ids mismatch");
 
 NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
     return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000});

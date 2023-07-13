@@ -1,16 +1,20 @@
 #pragma once
-#include "defs.h"
-#include "events.h"
 #include <library/cpp/actors/core/event_local.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
-#include <ydb/core/util/time_series_vec.h>
+#include <ydb/library/time_series_vec/time_series_vec.h>
+#include <library/cpp/actors/core/events.h>
 
 namespace NKikimr {
 
 struct TEvQuota {
+
+    enum EEventSpaceQuoter {
+         ES_QUOTA = 4177  // must be in sync with ydb/core/base/events.h
+    };
+
     enum EEv {
-        EvRequest = EventSpaceBegin(TKikimrEvents::ES_QUOTA),
+        EvRequest = EventSpaceBegin(EEventSpaceQuoter::ES_QUOTA),
         EvCancelRequest,
         EvClearance,
 
@@ -24,7 +28,7 @@ struct TEvQuota {
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_QUOTA), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_QUOTA)");
+    static_assert(EvEnd < EventSpaceEnd(EEventSpaceQuoter::ES_QUOTA), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_QUOTA)");
 
     struct TResourceLeaf {
         static constexpr ui64 QuoterSystem = Max<ui64>(); // use as quoter id for some embedded quoters
@@ -69,7 +73,7 @@ struct TEvQuota {
     };
 
     // event cookie + sender actorid would be used as id for cancel requests
-    struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
+    struct TEvRequest : public NActors::TEventLocal<TEvRequest, EvRequest> {
         const EResourceOperator Operator;
         const TVector<TResourceLeaf> Reqs;
         TDuration Deadline;
@@ -81,7 +85,7 @@ struct TEvQuota {
         {}
     };
 
-    struct TEvClearance : public TEventLocal<TEvClearance, EvClearance> {
+    struct TEvClearance : public NActors::TEventLocal<TEvClearance, EvClearance> {
         // clearance result, could be success or deadline, or one of error
         enum class EResult {
             GenericError,
@@ -97,12 +101,12 @@ struct TEvQuota {
 
     // when cookie present - cancel one request
     // when cookie omitted - cancel all requests from sender
-    struct TEvCancelRequest : public TEventLocal<TEvClearance, EvCancelRequest> {};
+    struct TEvCancelRequest : public NActors::TEventLocal<TEvClearance, EvCancelRequest> {};
 
     // b/w service and quoter proxy
 
     // initial request
-    struct TEvProxyRequest : public TEventLocal<TEvProxyRequest, EvProxyRequest> {
+    struct TEvProxyRequest : public NActors::TEventLocal<TEvProxyRequest, EvProxyRequest> {
         const TString Resource;
 
         TEvProxyRequest(const TString &resource)
@@ -117,7 +121,7 @@ struct TEvQuota {
         EveryActiveTick,
     };
 
-    struct TEvProxySession : public TEventLocal<TEvProxySession, EvProxySession> {
+    struct TEvProxySession : public NActors::TEventLocal<TEvProxySession, EvProxySession> {
         enum EResult {
             GenericError,
             UnknownResource,
@@ -166,7 +170,7 @@ struct TEvQuota {
         TProxyStat(const TProxyStat &x) = default;
     };
 
-    struct TEvProxyStats : public TEventLocal<TEvProxyStats, EvProxyStats> {
+    struct TEvProxyStats : public NActors::TEventLocal<TEvProxyStats, EvProxyStats> {
         const TDeque<TProxyStat> Stats;
 
         TEvProxyStats(TDeque<TProxyStat> &&stats)
@@ -174,7 +178,7 @@ struct TEvQuota {
         {}
     };
 
-    struct TEvProxyCloseSession : public TEventLocal<TEvProxyCloseSession, EvProxyCloseSession> {
+    struct TEvProxyCloseSession : public NActors::TEventLocal<TEvProxyCloseSession, EvProxyCloseSession> {
         const TString Resource;
         const ui64 ResourceId;
 
@@ -234,7 +238,7 @@ struct TEvQuota {
         {}
     };
 
-    struct TEvProxyUpdate : public TEventLocal<TEvProxyUpdate, EvProxyUpdate> {
+    struct TEvProxyUpdate : public NActors::TEventLocal<TEvProxyUpdate, EvProxyUpdate> {
         const ui64 QuoterId;
         TVector<TProxyResourceUpdate> Resources;
         const EUpdateState QuoterState;
@@ -249,6 +253,6 @@ struct TEvQuota {
 };
 
 //
-TActorId MakeQuoterServiceID();
+NActors::TActorId MakeQuoterServiceID();
 
 }

@@ -59,7 +59,6 @@ target_sources(ydb-core-util-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/queue_oneone_inplace_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/simple_cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/stlog_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/time_series_vec_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/token_bucket_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/ui64id_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/ulid_ut.cpp

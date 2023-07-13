@@ -4,9 +4,9 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/events.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 
+#include <library/cpp/actors/core/interconnect.h>
 
 namespace NYql::NDq {
 
@@ -54,16 +54,16 @@ private:
     void HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& ev);
     void HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr& ev);
     void HandleWork(TEvDqCompute::TEvRetryChannelDataAck::TPtr& ev);
-    void HandleWork(NKikimr::TEvents::TEvUndelivered::TPtr& ev);
-    void HandleWork(NKikimr::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
-    void HandleUndeliveredEvChannelData(ui64 channelId, NKikimr::TEvents::TEvUndelivered::EReason reason);
-    void HandleUndeliveredEvChannelDataAck(ui64 channelId, NKikimr::TEvents::TEvUndelivered::EReason reason);
+    void HandleWork(NActors::TEvents::TEvUndelivered::TPtr& ev);
+    void HandleWork(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+    void HandleUndeliveredEvChannelData(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason);
+    void HandleUndeliveredEvChannelDataAck(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason);
     template <typename TChannelState, typename TRetryEvent>
     bool ScheduleRetryForChannel(TChannelState& channel, TInstant now);
 
 private:
     STATEFN(DeadState);
-    void HandlePoison(NKikimr::TEvents::TEvPoison::TPtr&);
+    void HandlePoison(NActors::TEvents::TEvPoison::TPtr&);
 
 private:
     TInstant Now() const;

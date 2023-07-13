@@ -1,5 +1,5 @@
 #include "kqp_scan_compute_manager.h"
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NKqp::NScanPrivate {

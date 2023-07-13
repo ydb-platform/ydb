@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(public)
 add_subdirectory(quoter_service_bandwidth_test)
 add_subdirectory(ut)
 
@@ -20,6 +21,7 @@ target_link_libraries(ydb-core-quoter PUBLIC
   core-tx-scheme_cache
   ydb-core-util
   yql-public-issue
+  ydb-library-time_series_vec
 )
 target_sources(ydb-core-quoter PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/quoter/debug_info.cpp

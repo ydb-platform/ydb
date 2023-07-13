@@ -10,7 +10,7 @@
 #include "dq_compute_memory_quota.h"
 
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/dq/counters/counters.h>

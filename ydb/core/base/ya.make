@@ -39,8 +39,6 @@ SRCS(
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
-    quoter.cpp
-    quoter.h
     resource_profile.h
     row_version.cpp
     row_version.h
@@ -78,7 +76,6 @@ SRCS(
     tx_processing.cpp
     user_registry.h
     blobstorage_grouptype.cpp
-    wilson.h
 )
 
 PEERDIR(
@@ -108,8 +105,6 @@ PEERDIR(
     ydb/library/yql/minikql
     library/cpp/deprecated/atomic
 )
-
-GENERATE_ENUM_SERIALIZATION(quoter.h)
 
 END()
 

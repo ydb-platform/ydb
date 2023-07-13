@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 
 #include <library/cpp/lwtrace/all.h>
 

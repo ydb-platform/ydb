@@ -18,7 +18,7 @@
 #include <library/cpp/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/group_stat.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash_set.h>
 

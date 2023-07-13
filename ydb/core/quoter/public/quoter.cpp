@@ -2,9 +2,9 @@
 
 namespace NKikimr {
 
-TActorId MakeQuoterServiceID() {
+NActors::TActorId MakeQuoterServiceID() {
     char x[12] = { 'q', 'u', 'o', 't', 'e', 'r', 's', 'v', 'c' };
-    return TActorId(0, TStringBuf(x, 12));
+    return NActors::TActorId(0, TStringBuf(x, 12));
 }
 
 ui64 TEvQuota::TResourceLeaf::MakeTaggedRateRes(ui32 tag, ui32 rate) {

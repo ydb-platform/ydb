@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
 namespace NKqp {

@@ -98,7 +98,7 @@ struct TKikimrEvents : TEvents {
         ES_IAM_SERVICE,
         ES_FOLDER_SERVICE,
         ES_GRPC_MON,
-        ES_QUOTA,
+        ES_QUOTA, // must be in sync with ydb/core/quoter/public/quoter.h
         ES_COORDINATED_QUOTA,
         ES_ACCESS_SERVICE,
         ES_USER_ACCOUNT_SERVICE,

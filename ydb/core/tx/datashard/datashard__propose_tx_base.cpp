@@ -4,7 +4,7 @@
 #include "probes.h"
 
 #include <ydb/core/util/pb.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 LWTRACE_USING(DATASHARD_PROVIDER)
 

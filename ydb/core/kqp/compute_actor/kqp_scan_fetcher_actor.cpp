@@ -1,5 +1,5 @@
 #include "kqp_scan_fetcher_actor.h"
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/actorlib_impl/long_timer.h>

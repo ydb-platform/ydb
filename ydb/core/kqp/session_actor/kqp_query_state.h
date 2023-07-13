@@ -7,7 +7,7 @@
 #include <library/cpp/actors/wilson/wilson_trace.h>
 
 #include <ydb/core/base/cputime.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>

@@ -10,7 +10,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/actors/core/hfunc.h>

@@ -37,6 +37,7 @@ namespace NKikimr {
             hFunc(TEvNonrestoredCorruptedBlobNotify, Handle);
             hFunc(NPDisk::TEvLogResult, Handle);
             hFunc(NPDisk::TEvCutLog, Handle);
+            hFunc(TEvTakeHullSnapshotResult, Handle);
 
             case TEvents::TSystem::Poison:
                 throw TExPoison();

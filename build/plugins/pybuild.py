@@ -25,6 +25,9 @@ def is_extended_source_search_enabled(path, unit):
         return False
     if unit.get('NO_EXTENDED_SOURCE_SEARCH') == 'yes':
         return False
+    # contrib is unfriendly to extended source search
+    if unit.resolve_arc_path(path).startswith('$S/contrib/'):
+        return False
     return True
 
 

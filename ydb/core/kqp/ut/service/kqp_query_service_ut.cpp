@@ -389,6 +389,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecMode, EExecMode::Execute);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().truncated(), false);
+        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns(0).name(), "column0");
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns(0).type().type_id(), Ydb::Type::PrimitiveTypeId::Type_PrimitiveTypeId_INT32);
 
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
@@ -839,7 +844,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_C(readyOp.Ready(), readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT(readyOp.Metadata().ExecStatus == status);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, op.Metadata().ExecutionId);
-    } 
+    }
 
     void ExecuteScriptWithSettings(const TExecuteScriptSettings& settings, EExecStatus status, TString query = "SELECT 1;") {
         auto kikimr = DefaultKikimrRunner();
@@ -884,7 +889,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         settings = TExecuteScriptSettings().CancelAfterWithTimeout(TDuration::Seconds(100), TDuration::MilliSeconds(1));
         ExecuteScriptWithSettings(settings, EExecStatus::Failed, query);
     }
-    
+
     void CheckScriptOperationExpires(const TExecuteScriptSettings &settings) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -894,7 +899,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         )", settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
 
-        
+
         auto readyOp = WaitScriptExecutionFail(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_C(readyOp.Status().GetStatus() == EStatus::NOT_FOUND, readyOp.Status().GetStatus() << ":" << readyOp.Status().GetIssues().ToString());
 

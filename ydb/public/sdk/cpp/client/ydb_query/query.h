@@ -181,6 +181,7 @@ public:
         std::optional<TVersionedScriptId> ScriptId;
         TQueryContent ScriptContent;
         Ydb::TableStats::QueryStats ExecStats;
+        TVector<Ydb::Query::ResultSetMeta> ResultSetsMeta;
     };
 
     using TOperation::TOperation;

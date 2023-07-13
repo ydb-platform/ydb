@@ -33,6 +33,7 @@ struct TEvYdbCompute {
         EvCreateDatabaseRequest,
         EvCreateDatabaseResponse,
 
+        EvInitializerResponse,
         EvExecuterResponse,
         EvStatusTrackerResponse,
         EvResultWriterResponse,
@@ -201,6 +202,16 @@ struct TEvYdbCompute {
 
         FederatedQuery::Internal::ComputeDatabaseInternal Result;
         NYql::TIssues Issues;
+    };
+
+    struct TEvInitializerResponse : public NActors::TEventLocal<TEvInitializerResponse, EvInitializerResponse> {
+        TEvInitializerResponse(NYql::TIssues issues, NYdb::EStatus status)
+            : Issues(std::move(issues))
+            , Status(status)
+        {}
+
+        NYql::TIssues Issues;
+        NYdb::EStatus Status;
     };
 
     struct TEvExecuterResponse : public NActors::TEventLocal<TEvExecuterResponse, EvExecuterResponse> {

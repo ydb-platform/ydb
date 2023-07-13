@@ -38,6 +38,7 @@ target_sources(libs-compute-ydb PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/actors_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/executer_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/finalizer_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/initializer_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/resources_cleaner_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/result_writer_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/status_tracker_actor.cpp

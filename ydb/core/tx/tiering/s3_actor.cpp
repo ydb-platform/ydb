@@ -183,7 +183,7 @@ public:
 
         for (auto&& evict : forget.Event->Evicted) {
             if (!evict.ExternBlob.IsS3Blob()) {
-                LOG_S_ERROR("[S3] Forget not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
+                LOG_S_ERROR("[S3] Forget not exported '" << evict.Blob << "' at tablet " << TabletId);
                 continue;
             }
 
@@ -211,7 +211,7 @@ public:
     void Handle(TEvPrivate::TEvGetExported::TPtr& ev) {
         auto& evict = ev->Get()->Evicted;
         if (!evict.ExternBlob.IsS3Blob()) {
-            LOG_S_ERROR("[S3] Get not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
+            LOG_S_ERROR("[S3] Get not exported '" << evict.Blob << "' at tablet " << TabletId);
             return;
         }
 

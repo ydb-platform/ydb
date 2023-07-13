@@ -783,7 +783,15 @@ void TColumnShard::SetupCompaction() {
             break;
         }
 
-        BackgroundController.StartCompaction(planInfo);
+        THashSet<ui64> affectedPortions;
+        for (const auto& portionInfo : indexChanges->SwitchedPortions) {
+            affectedPortions.insert(portionInfo.Portion());
+        }
+        if (!BackgroundController.StartCompaction(planInfo, affectedPortions)) {
+            LOG_S_DEBUG("Compaction not started: ignore portions with other activities at tablet " << TabletID());
+            break;
+        }
+
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
             Settings.CacheDataAfterCompaction);
@@ -830,8 +838,8 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges;
-    indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
+    std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges =
+        TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
 
     if (!indexChanges) {
         LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());
@@ -844,7 +852,15 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     bool needWrites = !indexChanges->PortionsToEvict.empty();
     LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
-    BackgroundController.StartTtl();
+    THashSet<ui64> affectedPortions;
+    for (const auto& portionInfo : indexChanges->PortionsToDrop) {
+        affectedPortions.insert(portionInfo.Portion());
+    }
+    for (const auto& [portionInfo, _] : indexChanges->PortionsToEvict) {
+        affectedPortions.insert(portionInfo.Portion());
+    }
+
+    BackgroundController.StartTtl(std::move(affectedPortions));
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     ev->SetTiering(eviction);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
@@ -968,7 +984,7 @@ void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPriv
     if (auto s3 = GetS3ActorForTier(tierName)) {
         TStringBuilder strBlobs;
         for (auto& [blobId, _] : event->Blobs) {
-            strBlobs << "'" << blobId.ToStringNew() << "' ";
+            strBlobs << "'" << blobId << "' ";
         }
 
         event->DstActor = s3;
@@ -998,27 +1014,32 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashMap<TString,
         for (const auto& ev : evictSet) {
             auto& blobId = ev.Blob;
             if (BlobManager->BlobInUse(blobId)) {
-                LOG_S_DEBUG("Blob '" << blobId.ToStringNew() << "' is in use at tablet " << TabletID());
-                strBlobsDelayed << "'" << blobId.ToStringNew() << "' ";
+                LOG_S_DEBUG("Blob '" << blobId << "' is in use at tablet " << TabletID());
+                strBlobsDelayed << "'" << blobId << "' ";
                 continue;
             }
 
             TEvictMetadata meta;
             auto evict = BlobManager->GetDropped(blobId, meta);
+            if (!evict.Blob.IsValid()) {
+                LOG_S_INFO("Forget forgotten blob '" << blobId << "' at tablet " << TabletID());
+                continue;
+            }
             if (tierName != meta.GetTierName()) {
-                LOG_S_ERROR("Forget with unexpected tier name '" << meta.GetTierName() << "' at tablet " << TabletID());
+                LOG_S_ERROR("Forget blob '" << blobId << "' with unexpected tier name '"
+                    << meta.GetTierName() << "' at tablet " << TabletID());
                 continue;
             }
 
             if (evict.State == EEvictState::UNKNOWN) {
-                LOG_S_ERROR("Forget unknown blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
+                LOG_S_ERROR("Forget unknown blob '" << blobId << "' at tablet " << TabletID());
             } else if (NOlap::CouldBeExported(evict.State)) {
                 Y_VERIFY(evict.Blob == blobId);
-                strBlobs << "'" << blobId.ToStringNew() << "' ";
+                strBlobs << "'" << blobId << "' ";
                 tierBlobs.emplace_back(std::move(evict));
             } else {
                 Y_VERIFY(evict.Blob == blobId);
-                strBlobsDelayed << "'" << blobId.ToStringNew() << "' ";
+                strBlobsDelayed << "'" << blobId << "' ";
             }
         }
 

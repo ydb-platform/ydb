@@ -177,7 +177,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TAc
         }
 
         if (!evicted.Blob.IsValid() || !evicted.ExternBlob.IsValid()) {
-            LOG_S_NOTICE("No data for blobId " << evictedBlobId->ToStringNew() << " at tablet " << TabletID());
+            LOG_S_NOTICE("No data for blobId " << *evictedBlobId << " at tablet " << TabletID());
             auto result = MakeErrorResponse(msg, TabletID(), NKikimrProto::EReplyStatus::NODATA);
             ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
             return;

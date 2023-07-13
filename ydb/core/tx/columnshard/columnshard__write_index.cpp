@@ -154,7 +154,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                                 blobsToExport.emplace(blobId, evictionFeatures);
                             } else {
                                 // TODO: support S3 -> S3 eviction
-                                LOG_S_ERROR(TxPrefix() << "Prevent evict evicted blob '" << blobId.ToStringNew()
+                                LOG_S_ERROR(TxPrefix() << "Prevent evict evicted blob '" << blobId
                                     << "'" << TxSuffix());
                                 protectedBlobs.insert(blobId);
                             }
@@ -172,8 +172,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 } else if (!protectedBlobs.contains(blobId)) {
                     // We could drop the blob immediately
                     if (blobsToDrop.emplace(blobId).second) {
-                        LOG_S_TRACE(TxPrefix() << "Delete evicted blob '" << blobId.ToStringNew()
-                            << "'" << TxSuffix());
+                        LOG_S_TRACE(TxPrefix() << "Delete evicted blob '" << blobId << "'" << TxSuffix());
                     }
 
                 }
@@ -184,7 +183,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 for (const auto& rec : portionInfo.Records) {
                     const auto& blobId = rec.BlobRange.BlobId;
                     if (blobsToDrop.emplace(blobId).second) {
-                        LOG_S_TRACE(TxPrefix() << "Delete blob '" << blobId.ToStringNew() << "'" << TxSuffix());
+                        LOG_S_TRACE(TxPrefix() << "Delete blob '" << blobId << "'" << TxSuffix());
                     }
                 }
                 Self->IncCounter(COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
@@ -195,11 +194,12 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     TEvictMetadata meta;
                     auto evict = Self->BlobManager->GetDropped(blobId, meta);
                     Y_VERIFY(evict.State != EEvictState::UNKNOWN);
+                    Y_VERIFY(!meta.GetTierName().empty());
 
                     BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
 
                     if (NOlap::IsDeleted(evict.State)) {
-                        LOG_S_DEBUG(TxPrefix() << "Skip delete blob '" << blobId.ToStringNew() << "'" << TxSuffix());
+                        LOG_S_DEBUG(TxPrefix() << "Skip delete blob '" << blobId << "'" << TxSuffix());
                         continue;
                     }
                 }

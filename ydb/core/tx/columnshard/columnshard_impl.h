@@ -335,10 +335,17 @@ private:
         bool ActiveIndexing = false;
         TCurrentCompaction ActiveCompactionInfo;
         bool ActiveCleanup = false;
-        bool ActiveTtl = false;
+        THashSet<ui64> ActiveTtlPortions;
+
     public:
-        void StartCompaction(const NOlap::TPlanCompactionInfo& info) {
+        bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const THashSet<ui64>& portions) {
+            for (ui64 p : portions) {
+                if (ActiveTtlPortions.contains(p)) {
+                    return false;
+                }
+            }
             Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
+            return true;
         }
         void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
             Y_VERIFY(ActiveCompactionInfo.erase(info.GetPathId()));
@@ -374,16 +381,16 @@ private:
             return ActiveCleanup;
         }
 
-        void StartTtl() {
-            Y_VERIFY(!ActiveTtl);
-            ActiveTtl = true;
+        void StartTtl(THashSet<ui64>&& ttlPortions) {
+            Y_VERIFY(ActiveTtlPortions.empty());
+            ActiveTtlPortions.swap(ttlPortions);
         }
         void FinishTtl() {
-            Y_VERIFY(ActiveTtl);
-            ActiveTtl = false;
+            Y_VERIFY(!ActiveTtlPortions.empty());
+            ActiveTtlPortions.clear();
         }
         bool IsTtlActive() const {
-            return ActiveTtl;
+            return !ActiveTtlPortions.empty();
         }
 
         bool HasSplitCompaction(const ui64 pathId) const {

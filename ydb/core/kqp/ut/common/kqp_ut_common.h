@@ -267,11 +267,6 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
 
 void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true);
 
-// KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have
-// database name specified. Before that it returns errors.
-// This method retries a simple query until it succeeds.
-void WaitForKqpProxyInit(const NYdb::TDriver& driver);
-
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,

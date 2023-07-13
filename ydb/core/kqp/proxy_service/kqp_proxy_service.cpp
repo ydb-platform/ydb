@@ -233,8 +233,6 @@ public:
         AskSelfNodeInfo();
         SendWhiteboardRequest();
         ScheduleIdleSessionCheck(TDuration::Seconds(2));
-
-        CheckScriptExecutionsTablesExistence();
     }
 
     TDuration GetSessionIdleDuration() const {
@@ -619,18 +617,8 @@ public:
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
-        if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
-            if (ScriptExecutionsCreationStatus == EScriptExecutionsCreationStatus::Pending) {
-                NYql::TIssues issues;
-                issues.AddIssue("Not ready");
-                Send(ev->Sender, new TEvKqp::TEvScriptResponse(Ydb::StatusIds::UNAVAILABLE, std::move(issues)));
-            } else {
-                Register(CreateScriptExecutionCreatorActor(std::move(ev)));
-            }
-        } else {
-            NYql::TIssues issues;
-            issues.AddIssue("ExecuteScript feature is not enabled");
-            Send(ev->Sender, new TEvKqp::TEvScriptResponse(Ydb::StatusIds::UNSUPPORTED, std::move(issues)));
+        if (CheckScriptExecutionsTablesReady<TEvKqp::TEvScriptResponse>(ev)) {
+            Register(CreateScriptExecutionCreatorActor(std::move(ev)));
         }
     }
 
@@ -1399,32 +1387,64 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    void CheckScriptExecutionsTablesExistence() {
-        if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
-            Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()));
-        } else {
-            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+    template<typename TResponse, typename TEvent>
+    bool CheckScriptExecutionsTablesReady(TEvent& ev) {
+        if (!AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
+            NYql::TIssues issues;
+            issues.AddIssue("ExecuteScript feature is not enabled");
+            Send(ev->Sender, new TResponse(Ydb::StatusIds::UNSUPPORTED, std::move(issues)));
+            return false;
+        }
+
+        switch (ScriptExecutionsCreationStatus) {
+            case EScriptExecutionsCreationStatus::NotStarted:
+                ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
+                Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()));
+                [[fallthrough]];
+            case EScriptExecutionsCreationStatus::Pending:
+                if (DelayedEventsQueue.size() < 10000) {
+                    DelayedEventsQueue.emplace_back(std::move(ev));
+                } else {
+                    NYql::TIssues issues;
+                    issues.AddIssue("Too many queued requests");
+                    Send(ev->Sender, new TResponse(Ydb::StatusIds::OVERLOADED, std::move(issues)));
+                }
+                return false;
+            case EScriptExecutionsCreationStatus::Finished:
+                return true;
         }
     }
 
     void Handle(TEvPrivate::TEvScriptExecutionsTablesCreationFinished::TPtr&) {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+        while (!DelayedEventsQueue.empty()) {
+            Send(std::move(DelayedEventsQueue.front()));
+            DelayedEventsQueue.pop_front();
+        }
     }
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
-        Register(CreateForgetScriptExecutionOperationActor(std::move(ev)));
+        if (CheckScriptExecutionsTablesReady<TEvForgetScriptExecutionOperationResponse>(ev)) {
+            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)));
+        }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
-        Register(CreateGetScriptExecutionOperationActor(std::move(ev)));
+        if (CheckScriptExecutionsTablesReady<TEvGetScriptExecutionOperationResponse>(ev)) {
+            Register(CreateGetScriptExecutionOperationActor(std::move(ev)));
+        }
     }
 
-    void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
-        Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
+    void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {        
+        if (CheckScriptExecutionsTablesReady<TEvListScriptExecutionOperationsResponse>(ev)) {
+            Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
+        } 
     }
 
-    void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
-        Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
+    void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {        
+        if (CheckScriptExecutionsTablesReady<TEvCancelScriptExecutionOperationResponse>(ev)) {
+            Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
+        }
     }
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
@@ -1490,10 +1510,12 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {
+        NotStarted,
         Pending,
         Finished,
     };
-    EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
+    EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
+    std::deque<THolder<IEventHandle>> DelayedEventsQueue;
 };
 
 } // namespace

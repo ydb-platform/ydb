@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(SizeCalcer) {
             "field", NConstruction::TStringPoolFiller(1, 0));
         std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
         Cerr << GetBatchDataSize(batch) << Endl;
-        UNIT_ASSERT(GetBatchDataSize(batch) == 8 + 2048);
+        UNIT_ASSERT(GetBatchDataSize(batch) == 2048 + 4);
     }
 
     Y_UNIT_TEST(SimpleInt64) {

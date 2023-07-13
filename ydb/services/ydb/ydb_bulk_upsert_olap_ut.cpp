@@ -468,8 +468,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             auto bigBatch = TTestOlap::SampleBatch(true, 130000);
             ui32 batchSize = NArrow::GetBatchDataSize(bigBatch);
             Cerr << "rows: " << bigBatch->num_rows() << " batch size: " << batchSize << Endl;
-            UNIT_ASSERT(batchSize > 15 * 1024 * 1024);
-            UNIT_ASSERT(batchSize < 17 * 1024 * 1024);
+            UNIT_ASSERT(batchSize > 15 * 1024 * 1024 + 130000 * 4 * (ui32)bigBatch->num_columns());
+            UNIT_ASSERT(batchSize < 17 * 1024 * 1024 + 130000 * 4 * (ui32)bigBatch->num_columns());
 
             TString bigCsv = TTestOlap::ToCSV(bigBatch);
 
@@ -484,8 +484,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             auto bigBatch = TTestOlap::SampleBatch(true, 150000); // 2 shards, greater then 8 Mb per shard
             ui32 batchSize = NArrow::GetBatchDataSize(bigBatch);
             Cerr << "rows: " << bigBatch->num_rows() << " batch size: " << batchSize << Endl;
-            UNIT_ASSERT(batchSize > 16 * 1024 * 1024);
-            UNIT_ASSERT(batchSize < 20 * 1024 * 1024);
+            UNIT_ASSERT(batchSize > 16 * 1024 * 1024 + 150000 * 4 * (ui32)bigBatch->num_columns());
+            UNIT_ASSERT(batchSize < 20 * 1024 * 1024 + 150000 * 4 * (ui32)bigBatch->num_columns());
 
             TString bigCsv = TTestOlap::ToCSV(bigBatch);
 

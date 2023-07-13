@@ -182,7 +182,7 @@ public:
         auto serializedResultType = GetSerializedResultType(lambda);
         NYql::NDqs::TProtoBuilder protoBuilder(serializedResultType, columns);
 
-        result.Data = protoBuilder.BuildYson(rows);
+        result.Data = protoBuilder.BuildYson(std::move(rows));
 
         AddCounter("LocalRun", TInstant::Now() - t);
 

@@ -28,7 +28,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
     }
 }
 
-void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, const NDq::TDqSerializedBatch& rows) {
+void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch&& rows) {
     YQL_ENSURE(idx < TxResults.size());
     ResultRowsCount += rows.RowCount();
     ResultRowsBytes += rows.Size();
@@ -38,7 +38,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, const NDq::TDqSerialize
         NDq::TDqDataSerializer dataSerializer(
             AllocState->TypeEnv, AllocState->HolderFactory,
             static_cast<NDqProto::EDataTransportVersion>(rows.Proto.GetTransportVersion()));
-        dataSerializer.Deserialize(rows, result.MkqlItemType, result.Rows);
+        dataSerializer.Deserialize(std::move(rows), result.MkqlItemType, result.Rows);
     }
 }
 
@@ -50,7 +50,7 @@ TEvKqpExecuter::TEvTxResponse::~TEvTxResponse() {
     }
 }
 
-void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector& rows) {
+void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector&& rows) {
     YQL_ENSURE(idx < TxResults.size());
     ResultRowsCount += rows.size();
     auto& txResult = TxResults[idx];
@@ -63,7 +63,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnb
         emptyVector.swap(rows);
     }
 
-    serializer.Deserialize(buffer, txResult.MkqlItemType, txResult.Rows);
+    serializer.Deserialize(std::move(buffer), txResult.MkqlItemType, txResult.Rows);
 }
 
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,

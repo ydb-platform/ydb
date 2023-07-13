@@ -111,7 +111,8 @@ private:
         Finished = true;
         NYql::NDqProto::TQueryResponse queryResult(ev->Get()->Record);
 
-        *queryResult.MutableYson() = ResultBuilder->BuildYson(Head);
+        *queryResult.MutableYson() = ResultBuilder->BuildYson(std::move(Head));
+        Head.clear();
         if (!Issues.Empty()) {
             IssuesToMessage(Issues, queryResult.MutableIssues());
         }
@@ -271,8 +272,7 @@ private:
             return;
         }
 
-        TVector<NDq::TDqSerializedBatch> batch(1);
-        NDq::TDqSerializedBatch& data = batch.front();
+        NDq::TDqSerializedBatch data;
         data.Proto = std::move(*ev->Get()->Record.MutableChannelData()->MutableData());
         if (data.Proto.HasPayloadId()) {
             data.Payload = ev->Get()->GetPayload(data.Proto.GetPayloadId());
@@ -280,7 +280,7 @@ private:
 
         FreeSpace -= data.Size();
         OccupiedSpace += data.Size();
-        auto resultSet = ResultBuilder->BuildResultSet(batch);
+        auto resultSet = ResultBuilder->BuildResultSet({ data });
 
         if (OccupiedSpace > ResultBytesLimit) {
             TIssues issues;

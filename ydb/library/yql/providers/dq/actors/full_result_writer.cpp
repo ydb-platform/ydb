@@ -137,8 +137,7 @@ private:
 
         try {
             TFailureInjector::Reach("full_result_fail_on_write", [] { throw yexception() << "full_result_fail_on_write"; });
-            NDq::TDqSerializedBatch data = request.PullSerializedBatch();
-            ResultBuilder->WriteData(data, [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
+            ResultBuilder->WriteData(request.PullSerializedBatch(), [writer = FullResultWriter.Get()](const NUdf::TUnboxedValuePod& value) {
                 writer->AddRow(value);
                 return true;
             });

@@ -200,7 +200,7 @@ void TestSingleRead(TTestContext& ctx) {
     UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsOut);
 
     TUnboxedValueBatch buffer(ctx.GetOutputType());
-    ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
+    ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
 
     ValidateBatch(ctx, buffer, 0, 10);
     data.Clear();
@@ -234,19 +234,20 @@ void TestPartialRead(TTestContext& ctx) {
     while (readRows < 9) {
         TDqSerializedBatch data;
         UNIT_ASSERT(ch->Pop(data));
+        const auto rowCount = data.RowCount();
 
         ui32 v = expected[req];
         ++req;
 
-        UNIT_ASSERT_VALUES_EQUAL(v, data.RowCount());
+        UNIT_ASSERT_VALUES_EQUAL(v, rowCount);
         UNIT_ASSERT_VALUES_EQUAL(++readChunks, ch->GetStats()->Chunks);
         UNIT_ASSERT_VALUES_EQUAL(9, ch->GetStats()->RowsIn);
-        UNIT_ASSERT_VALUES_EQUAL(readRows + data.RowCount(), ch->GetStats()->RowsOut);
+        UNIT_ASSERT_VALUES_EQUAL(readRows + rowCount, ch->GetStats()->RowsOut);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
-        ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
-        ValidateBatch(ctx, buffer, readRows, data.RowCount());
-        readRows += data.RowCount();
+        ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
+        ValidateBatch(ctx, buffer, readRows, rowCount);
+        readRows += rowCount;
     }
 
     TDqSerializedBatch data;
@@ -306,7 +307,7 @@ void TestPopAll(TTestContext& ctx) {
 
     UNIT_ASSERT_VALUES_EQUAL(50, data.RowCount());
 
-    ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
+    ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
     ValidateBatch(ctx, buffer, 0, 50);
     data.Clear();
     UNIT_ASSERT(!ch->Pop(data));
@@ -348,7 +349,7 @@ void TestBigRow(TTestContext& ctx) {
         UNIT_ASSERT_VALUES_EQUAL(2, ch->GetStats()->RowsOut);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
-        ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
+        ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
 
         UNIT_ASSERT_VALUES_EQUAL(2, buffer.RowCount());
         ui32 i = 1;
@@ -380,7 +381,7 @@ void TestBigRow(TTestContext& ctx) {
         UNIT_ASSERT_VALUES_EQUAL(i, ch->GetStats()->RowsOut);
 
         TUnboxedValueBatch buffer(ctx.GetOutputType());
-        ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
+        ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
 
         UNIT_ASSERT_VALUES_EQUAL(1, buffer.RowCount());
 
@@ -428,10 +429,11 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
     TDqSerializedBatch data;
     while (ch->Pop(data)) {
+        const auto rowCount = data.RowCount();
         TUnboxedValueBatch buffer(ctx.GetOutputType());
-        ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
-        ValidateBatch(ctx, buffer, loadedRows, data.RowCount());
-        loadedRows += data.RowCount();
+        ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
+        ValidateBatch(ctx, buffer, loadedRows, rowCount);
+        loadedRows += rowCount;
     }
     UNIT_ASSERT_VALUES_EQUAL(35, loadedRows);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount());
@@ -450,10 +452,11 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
         TDqSerializedBatch data;
         while (ch->Pop(data)) {
+            const auto rowCount = data.RowCount();
             TUnboxedValueBatch buffer(ctx.GetOutputType());
-            ctx.Ds.Deserialize(data, ctx.GetOutputType(), buffer);
-            ValidateBatch(ctx, buffer, loadedRows + 100, data.RowCount());
-            loadedRows += data.RowCount();
+            ctx.Ds.Deserialize(std::move(data), ctx.GetOutputType(), buffer);
+            ValidateBatch(ctx, buffer, loadedRows + 100, rowCount);
+            loadedRows += rowCount;
         }
         UNIT_ASSERT_VALUES_EQUAL(5, loadedRows);
         UNIT_ASSERT_VALUES_EQUAL(0, ch->GetValuesCount());

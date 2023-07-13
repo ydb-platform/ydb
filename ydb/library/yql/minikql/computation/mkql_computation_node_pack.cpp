@@ -954,22 +954,10 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type)
 }
 
 template<bool Fast>
-NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TStringBuf buf, const THolderFactory& holderFactory) const {
-    TChunkedInputBuffer chunked(buf);
-    return DoUnpack<Fast>(Type_, chunked, buf.size(), holderFactory, State_);
-}
-
-template<bool Fast>
 NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TRope&& buf, const THolderFactory& holderFactory) const {
     const size_t totalSize = buf.GetSize();
     TChunkedInputBuffer chunked(std::move(buf));
     return DoUnpack<Fast>(Type_, chunked, totalSize, holderFactory, State_);
-}
-
-template<bool Fast>
-void TValuePackerTransport<Fast>::UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
-    TChunkedInputBuffer chunked(buf);
-    DoUnpackBatch<Fast>(Type_, chunked, buf.size(), holderFactory, IncrementalState_, result);
 }
 
 template<bool Fast>

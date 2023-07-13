@@ -12,17 +12,18 @@ private:
 
     void PushImpl(TDqSerializedBatch&& data) {
         const i64 space = data.Size();
+        const size_t rowCount = data.RowCount();
 
         NKikimr::NMiniKQL::TUnboxedValueBatch batch(InputType);
         if (Y_UNLIKELY(ProfileStats)) {
             auto startTime = TInstant::Now();
-            DataSerializer.Deserialize(data, InputType, batch);
+            DataSerializer.Deserialize(std::move(data), InputType, batch);
             ProfileStats->DeserializationTime += (TInstant::Now() - startTime);
         } else {
-            DataSerializer.Deserialize(data, InputType, batch);
+            DataSerializer.Deserialize(std::move(data), InputType, batch);
         }
 
-        YQL_ENSURE(batch.RowCount() == data.RowCount());
+        YQL_ENSURE(batch.RowCount() == rowCount);
         AddBatch(std::move(batch), space);
     }
 

@@ -39,6 +39,17 @@ struct TDqSerializedBatch {
     }
 
     void SetPayload(const NKikimr::NMiniKQL::TPagedBuffer::TPtr& buffer);
+
+    TRope PullPayload() {
+        TRope result;
+        if (IsOOB()) {
+            result = std::move(Payload);
+        } else {
+            result = TRope(std::move(*Proto.MutableRaw()));
+        }
+        Clear();
+        return result;
+    }
 };
 
 TRope SaveForSpilling(TDqSerializedBatch&& batch);

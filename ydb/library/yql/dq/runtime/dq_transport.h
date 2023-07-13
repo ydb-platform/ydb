@@ -46,9 +46,9 @@ public:
         YQL_ENSURE(false, "Unsupported TransportVersion");
     }
 
-    void Deserialize(const TDqSerializedBatch& data, const NKikimr::NMiniKQL::TType* itemType,
+    void Deserialize(TDqSerializedBatch&& data, const NKikimr::NMiniKQL::TType* itemType,
         NKikimr::NMiniKQL::TUnboxedValueBatch& buffer) const;
-    void Deserialize(const TDqSerializedBatch& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
+    void Deserialize(TDqSerializedBatch&& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
 
     struct TEstimateSizeSettings {
         bool WithHeaders;

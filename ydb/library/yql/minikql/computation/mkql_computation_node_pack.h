@@ -88,9 +88,7 @@ public:
 
     // Pack()/Unpack() will pack/unpack single value of type T
     TPagedBuffer::TPtr Pack(const NUdf::TUnboxedValuePod& value) const;
-    NUdf::TUnboxedValue Unpack(TStringBuf buf, const THolderFactory& holderFactory) const;
     NUdf::TUnboxedValue Unpack(TRope&& buf, const THolderFactory& holderFactory) const;
-    void UnpackBatch(TStringBuf buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
     void UnpackBatch(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
 private:
     void BuildMeta(TPagedBuffer::TPtr& buffer, bool addItemCount) const;

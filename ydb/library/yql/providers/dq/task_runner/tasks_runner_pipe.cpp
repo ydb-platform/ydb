@@ -1124,7 +1124,7 @@ public:
             TDqSerializedBatch serialized;
             serialized.Proto = std::move(*response.MutableData());
 
-            dataSerializer.Deserialize(serialized, GetOutputType(), batch);
+            dataSerializer.Deserialize(std::move(serialized), GetOutputType(), batch);
 
             return response.GetBytes();
         } catch (...) {

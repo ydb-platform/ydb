@@ -278,12 +278,7 @@ public:
             if (!this->Pop(chunk)) {
                 break;
             }
-            if (IsOOBTransport(TransportVersion)) {
-                Packer.UnpackBatch(std::move(chunk.Payload), HolderFactory, rows);
-            } else {
-                TStringBuf buf(chunk.Proto.GetRaw());
-                Packer.UnpackBatch(buf, HolderFactory, rows);
-            }
+            Packer.UnpackBatch(chunk.PullPayload(), HolderFactory, rows);
         }
 
         if (OutputType->IsMulti()) {

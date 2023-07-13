@@ -373,7 +373,7 @@ public:
                 if (request.GetString().empty() && request.GetChunks() == 0) {
                     NDq::TDqSerializedBatch batch;
                     batch.Proto = std::move(*request.MutableData());
-                    dataSerializer.Deserialize(batch, source->GetInputType(), buffer);
+                    dataSerializer.Deserialize(std::move(batch), source->GetInputType(), buffer);
                 } else if (!request.GetString().empty()) {
                     for (auto& row : request.GetString()) {
                         buffer.emplace_back(NKikimr::NMiniKQL::MakeString(row));

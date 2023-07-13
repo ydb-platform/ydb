@@ -59,13 +59,13 @@ bool TProtoBuilder::CanBuildResultSet() const {
     return ResultType->GetKind() == TType::EKind::Struct;
 }
 
-TString TProtoBuilder::BuildYson(const TVector<NYql::NDq::TDqSerializedBatch>& rows, ui64 maxBytesLimit) {
+TString TProtoBuilder::BuildYson(TVector<NYql::NDq::TDqSerializedBatch>&& rows, ui64 maxBytesLimit) {
     ui64 size = 0;
     TStringStream out;
     NYson::TYsonWriter writer((IOutputStream*)&out);
     writer.OnBeginList();
 
-    auto full = WriteData(rows, [&](const NYql::NUdf::TUnboxedValuePod& value) {
+    auto full = WriteData(std::move(rows), [&](const NYql::NUdf::TUnboxedValuePod& value) {
         auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
         writer.OnListItem();
         writer.OnRaw(rowYson);
@@ -81,14 +81,14 @@ TString TProtoBuilder::BuildYson(const TVector<NYql::NDq::TDqSerializedBatch>& r
     return out.Str();
 }
 
-bool TProtoBuilder::WriteYsonData(const NYql::NDq::TDqSerializedBatch& data, const std::function<bool(const TString& rawYson)>& func) {
-    return WriteData(data, [&](const NYql::NUdf::TUnboxedValuePod& value) {
+bool TProtoBuilder::WriteYsonData(NYql::NDq::TDqSerializedBatch&& data, const std::function<bool(const TString& rawYson)>& func) {
+    return WriteData(std::move(data), [&](const NYql::NUdf::TUnboxedValuePod& value) {
         auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
         return func(rowYson);
     });
 }
 
-bool TProtoBuilder::WriteData(const NYql::NDq::TDqSerializedBatch& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
+bool TProtoBuilder::WriteData(NYql::NDq::TDqSerializedBatch&& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
@@ -98,14 +98,14 @@ bool TProtoBuilder::WriteData(const NYql::NDq::TDqSerializedBatch& data, const s
 
     YQL_ENSURE(!ResultType->IsMulti());
     TUnboxedValueBatch buffer(ResultType);
-    dataSerializer.Deserialize(data, ResultType, buffer);
+    dataSerializer.Deserialize(std::move(data), ResultType, buffer);
 
     return buffer.ForEachRow([&func](const auto& value) {
         return func(value);
     });
 }
 
-bool TProtoBuilder::WriteData(const TVector<NYql::NDq::TDqSerializedBatch>& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
+bool TProtoBuilder::WriteData(TVector<NYql::NDq::TDqSerializedBatch>&& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
 
     TMemoryUsageInfo memInfo("ProtoBuilder");
@@ -115,9 +115,9 @@ bool TProtoBuilder::WriteData(const TVector<NYql::NDq::TDqSerializedBatch>& rows
 
     YQL_ENSURE(!ResultType->IsMulti());
 
-    for (const auto& part : rows) {
+    for (auto& part : rows) {
         TUnboxedValueBatch buffer(ResultType);
-        dataSerializer.Deserialize(part, ResultType, buffer);
+        dataSerializer.Deserialize(std::move(part), ResultType, buffer);
         if (!buffer.ForEachRow([&func](const auto& value) { return func(value); })) {
             return false;
         }
@@ -125,7 +125,7 @@ bool TProtoBuilder::WriteData(const TVector<NYql::NDq::TDqSerializedBatch>& rows
     return true;
 }
 
-Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDq::TDqSerializedBatch>& data) {
+Ydb::ResultSet TProtoBuilder::BuildResultSet(TVector<NYql::NDq::TDqSerializedBatch>&& data) {
     Ydb::ResultSet resultSet;
     auto structType = AS_TYPE(TStructType, ResultType);
     MKQL_ENSURE(structType, "Result is not a struct");
@@ -136,7 +136,7 @@ Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDq::TDqSeriali
         ExportTypeToProto(structType->GetMemberType(memberIndex), *column.mutable_type());
     }
 
-    WriteData(data, [&](const NYql::NUdf::TUnboxedValuePod& value) {
+    WriteData(std::move(data), [&](const NYql::NUdf::TUnboxedValuePod& value) {
         ExportValueToProto(ResultType, value, *resultSet.add_rows(), &ColumnOrder);
         return true;
     });

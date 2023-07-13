@@ -83,7 +83,8 @@ namespace NYql::NDqs::NExecutionHelpers {
                 bool exceedRows = false;
                 try {
                     TFailureInjector::Reach("result_actor_base_fail_on_response_write", [] { throw yexception() << "result_actor_base_fail_on_response_write"; });
-                    full = ResultBuilder->WriteYsonData(WriteQueue.back().Data, [this, &exceedRows](const TString& rawYson) {
+                    NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
+                    full = ResultBuilder->WriteYsonData(std::move(dataCopy), [this, &exceedRows](const TString& rawYson) {
                         if (RowsLimit && Rows + 1 > *RowsLimit) {
                             exceedRows = true;
                             return false;

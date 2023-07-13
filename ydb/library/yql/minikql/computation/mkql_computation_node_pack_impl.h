@@ -62,14 +62,12 @@ class TChunkedInputBuffer : private TNonCopyable {
 public:
     explicit TChunkedInputBuffer(TRope&& rope)
         : Rope_(std::move(rope))
-        , It_(Rope_.begin())
     {
         Next();
     }
 
     explicit TChunkedInputBuffer(TStringBuf input)
         : Rope_(TRope{})
-        , It_(Rope_.begin())
         , Data_(input.data())
         , Len_(input.size())
     {
@@ -112,15 +110,14 @@ public:
 
     void Next() {
         Y_VERIFY_DEBUG(Len_ == 0);
-        Len_ = 0;
-        Data_ = nullptr;
-        while (It_ != Rope_.end()) {
-            Len_ = It_.ContiguousSize();
-            Data_ = It_.ContiguousData();
-            ++It_;
-            if (Len_) {
-                break;
-            }
+        Rope_.EraseFront(OriginalLen_);
+        if (!Rope_.IsEmpty()) {
+            Len_ = OriginalLen_ = Rope_.begin().ContiguousSize();
+            Data_ = Rope_.begin().ContiguousData();
+            Y_VERIFY_DEBUG(Len_ > 0);
+        } else {
+            Len_ = OriginalLen_ = 0;
+            Data_ = nullptr;
         }
     }
 
@@ -140,9 +137,9 @@ private:
     }
 
     TRope Rope_;
-    TRope::TConstIterator It_;
     const char* Data_ = nullptr;
     size_t Len_ = 0;
+    size_t OriginalLen_ = 0;
 };
 
 template <typename T>

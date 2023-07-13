@@ -4905,11 +4905,8 @@ namespace {
 
         void ReadData(const TString& query, const TString& expected, const EStatus opStatus = EStatus::SUCCESS) {
             auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
-            const TString result = StreamResultToYson(it, false, opStatus);
-            Cerr << "STATUS: " << opStatus << Endl <<
-                "QUERY: " << query << Endl <<
-                result << " vs " << expected << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
+            TString result = StreamResultToYson(it, false, opStatus);
             if (opStatus == EStatus::SUCCESS) {
                 UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
             }
@@ -4937,7 +4934,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddColumnLongPk) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.FeatureFlags.SetForceColumnTablesCompositeMarks(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

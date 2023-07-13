@@ -216,6 +216,10 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
         node.Inner = MakeOutputJoin(output, jpath->innerjoinpath);
         node.Outer = MakeOutputJoin(output, jpath->outerjoinpath);
+
+        if (!bms_is_member(left->varno, jpath->outerjoinpath->parent->relids)) {
+            std::swap(node.LeftVar, node.RightVar);
+        }
     }
 
     output.Nodes[id] = node;

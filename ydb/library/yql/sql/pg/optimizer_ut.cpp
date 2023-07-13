@@ -37,7 +37,7 @@ Y_UNIT_TEST(PgJoinSearch2Rels) {
  Inner Join
  Loop Strategy
  Rels: [1,2]
- Op: a = b
+ Op: b = a
  {
   Node
   Rels: [2]

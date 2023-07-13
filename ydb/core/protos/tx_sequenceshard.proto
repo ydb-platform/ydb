@@ -1,5 +1,4 @@
 syntax = "proto3";
-import "ydb/core/protos/base.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 
 package NKikimrTxSequenceShard;

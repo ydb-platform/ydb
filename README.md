@@ -89,7 +89,3 @@ We are glad to welcome new contributors!
 ## Success Stories
 
 Take a look at YDB [web site](https://ydb.tech/) for the latest success stories and user scenarios.
-
-## Upcoming Events
-
-* [YDB v23.1 Release Webinar](https://yandex.zoom.us/webinar/register/5816883829437/WN_Z8g9lRusT2WMngZFSOtViQ)

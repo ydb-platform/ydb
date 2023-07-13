@@ -20,6 +20,8 @@ message TActivationPercentage {
     repeated string ExcludeUsers = 4;
     optional bool ExcludeRobots = 5 [default = true];
     repeated string Tags = 6;
+    repeated string IncludeGroups = 7;
+    repeated string ExcludeGroups = 8;
 }
 
 message TAttr {

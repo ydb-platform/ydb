@@ -10,11 +10,17 @@
 namespace NYql::NConfig {
 
 template <class TActivation>
-ui32 GetPercentage(const TActivation& activation, const TString& userName) {
+ui32 GetPercentage(const TActivation& activation, const TString& userName, const std::unordered_set<std::string_view>& groups) {
     if (AnyOf(activation.GetIncludeUsers(), [&](const auto& user) { return user == userName; })) {
         return 100;
     }
+    if (AnyOf(activation.GetIncludeGroups(), [&](const auto& includeGroup) { return groups.contains(includeGroup); })) {
+        return 100;
+    }
     if (AnyOf(activation.GetExcludeUsers(), [&](const auto& user) { return user == userName; })) {
+        return 0;
+    }
+    if (AnyOf(activation.GetExcludeGroups(), [&](const auto& excludeGroup) { return groups.contains(excludeGroup); })) {
         return 0;
     }
     if ((userName.StartsWith("robot-") || userName.StartsWith("zomb-")) && activation.GetExcludeRobots()) {
@@ -40,13 +46,13 @@ ui32 GetPercentage(const TActivation& activation, const TString& userName) {
 }
 
 template <class TActivation>
-bool Allow(const TActivation& activation, const TString& userName) {
-    ui32 percent = GetPercentage(activation, userName);
+bool Allow(const TActivation& activation, const TString& userName, const std::unordered_set<std::string_view>& groups) {
+    ui32 percent = GetPercentage(activation, userName, groups);
     const auto random = RandomNumber<ui8>(100);
     return random < percent;
 }
 
-template ui32 GetPercentage<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName);
-template bool Allow<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName);
+template ui32 GetPercentage<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
+template bool Allow<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
 
 } // namespace

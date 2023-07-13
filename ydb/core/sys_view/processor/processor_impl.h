@@ -28,7 +28,7 @@ public:
         return NKikimrServices::TActivity::SYSTEM_VIEW_PROCESSOR;
     }
 
-    TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode);
+    TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode);
 
 private:
     using Schema = TProcessorSchema;
@@ -173,7 +173,7 @@ private:
     static void EntryToProto(NKikimrSysView::TTopPartitionsEntry& dst, const NKikimrSysView::TTopPartitionsInfo& src);
 
     template <typename TResponse>
-    void ReplyOverloaded(const TActorId& sender);
+    void ReplyOverloaded(const NActors::TActorId& sender);
 
     template <typename TMap, typename TRequest, typename TResponse>
     void Reply(typename TRequest::TPtr& ev);

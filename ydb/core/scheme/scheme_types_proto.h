@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
-#include <ydb/core/protos/type_info.pb.h>
+#include <ydb/core/scheme/protos/type_info.pb.h>
 
 namespace NKikimr::NScheme {
 

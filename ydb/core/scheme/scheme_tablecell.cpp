@@ -1,6 +1,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 
+#include <library/cpp/actors/core/actorid.h>
 #include <util/string/escape.h>
 
 namespace NKikimr {
@@ -296,7 +297,7 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
             res += ToString(r.AsValue<double>());
             break;
         case NScheme::NTypeIds::ActorId:
-            res += ToString(r.AsValue<TActorId>());
+            res += ToString(r.AsValue<NActors::TActorId>());
             break;
         case NScheme::NTypeIds::Pg:
             // TODO: support pg types

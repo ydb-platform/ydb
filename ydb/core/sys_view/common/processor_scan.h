@@ -26,7 +26,7 @@ public:
     }
 
     TProcessorScan(
-        const TActorId& ownerId,
+        const NActors::TActorId& ownerId,
         ui32 scanId,
         const TTableId& tableId,
         const TTableRange& tableRange,

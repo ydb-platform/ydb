@@ -118,7 +118,6 @@ SRCS(
     tx_proxy.proto
     tx_scheme.proto
     tx_sequenceshard.proto
-    type_info.proto
     pdiskfit.proto
     pqconfig.proto
     auth.proto
@@ -139,6 +138,7 @@ GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
 PEERDIR(
     library/cpp/actors/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/scheme/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
     ydb/public/api/protos

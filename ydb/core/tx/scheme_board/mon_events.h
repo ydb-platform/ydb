@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/scheme_board_mon.pb.h>
 #include <ydb/library/services/services.pb.h>
 

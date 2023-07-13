@@ -2,7 +2,9 @@ option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
-import "ydb/core/protos/type_info.proto";
+import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/core/scheme/protos/key_range.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";

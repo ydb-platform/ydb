@@ -1,8 +1,10 @@
 #pragma once
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NDataShard {
 

@@ -3,7 +3,7 @@
 #include "sys_params.h"
 
 #include <ydb/core/base/defs.h>
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/ptr.h>
 

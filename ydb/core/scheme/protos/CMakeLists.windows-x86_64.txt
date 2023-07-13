@@ -7,6 +7,24 @@
 
 
 get_built_tool_path(
+  TOOL_grpc_cpp_bin
+  TOOL_grpc_cpp_dependency
+  contrib/tools/protoc/plugins/grpc_cpp
+  grpc_cpp
+)
+get_built_tool_path(
+  TOOL_protoc_bin
+  TOOL_protoc_dependency
+  contrib/tools/protoc/bin
+  protoc
+)
+get_built_tool_path(
+  TOOL_cpp_styleguide_bin
+  TOOL_cpp_styleguide_dependency
+  contrib/tools/protoc/plugins/cpp_styleguide
+  cpp_styleguide
+)
+get_built_tool_path(
   TOOL_protoc_bin
   TOOL_protoc_dependency
   contrib/tools/protoc/bin
@@ -31,19 +49,22 @@ get_built_tool_path(
   cpp_styleguide
 )
 
-add_library(core-tablet_flat-protos)
-target_link_libraries(core-tablet_flat-protos PUBLIC
+add_library(core-scheme-protos)
+set_property(TARGET core-scheme-protos PROPERTY
+  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
+)
+target_link_libraries(core-scheme-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-grpc
   contrib-libs-protobuf
-  ydb-core-protos
-  core-scheme-protos
 )
-target_proto_messages(core-tablet_flat-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/protos/flat_table_part.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/protos/flat_table_shard.proto
+target_proto_messages(core-scheme-protos PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/type_info.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/key_range.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/protos/pathid.proto
 )
-target_proto_addincls(core-tablet_flat-protos
+target_proto_addincls(core-scheme-protos
   ./
   ${CMAKE_SOURCE_DIR}/
   ${CMAKE_BINARY_DIR}
@@ -52,7 +73,11 @@ target_proto_addincls(core-tablet_flat-protos
   ${CMAKE_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
 )
-target_proto_outs(core-tablet_flat-protos
+target_proto_outs(core-scheme-protos
   --cpp_out=${CMAKE_BINARY_DIR}/
   --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
+target_proto_plugin(core-scheme-protos
+  grpc_cpp
+  grpc_cpp
 )

@@ -1,5 +1,6 @@
 #include "change_sender_monitoring.h"
 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>

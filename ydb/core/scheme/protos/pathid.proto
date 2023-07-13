@@ -1,0 +1,7 @@
+package NKikimrProto;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TPathID {
+    optional fixed64 OwnerId = 1;
+    optional uint64 LocalId = 2;
+}

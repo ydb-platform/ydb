@@ -1,8 +1,6 @@
 #pragma once
 
-#include "defs.h"
-
-#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/scheme/protos/pathid.pb.h>
 
 namespace NKikimr {
 

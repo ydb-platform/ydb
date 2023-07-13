@@ -1490,18 +1490,6 @@ get_built_tool_path(
   cpp_styleguide
 )
 get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
   tools/enum_parser/enum_parser
@@ -1525,6 +1513,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   tools-enum_parser-enum_serialization_runtime
   cpp-actors-protos
   libs-config-protos
+  core-scheme-protos
   library-login-protos
   library-mkql_proto-protos
   api-protos
@@ -1649,7 +1638,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_scheme.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/tx_sequenceshard.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/type_info.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/pdiskfit.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/pqconfig.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/auth.proto

@@ -1211,14 +1211,14 @@ private:
     static constexpr TDuration ProcessCountersInterval = TDuration::Seconds(5);
 };
 
-THolder<IActor> CreateSysViewService(
+THolder<NActors::IActor> CreateSysViewService(
     TExtCountersConfig&& config, bool hasExternalCounters)
 {
     return MakeHolder<TSysViewService>(
         std::move(config), hasExternalCounters, EProcessorMode::MINUTE);
 }
 
-THolder<IActor> CreateSysViewServiceForTests() {
+THolder<NActors::IActor> CreateSysViewServiceForTests() {
     return MakeHolder<TSysViewService>(
         TExtCountersConfig(), true, EProcessorMode::FAST);
 }

@@ -1,11 +1,25 @@
-#include "pathid.h"
+#include "scheme_pathid.h"
 
 #include <util/stream/str.h>
 
 namespace NKikimr {
 
+namespace {
+inline ui64 PathIdHash(ui64 a, ui64 b) noexcept {
+    const ui64 x1 = 0x001DFF3D8DC48F5Dull * (a & 0xFFFFFFFFull);
+    const ui64 x2 = 0x179CA10C9242235Dull * (a >> 32);
+    const ui64 x3 = 0x0F530CAD458B0FB1ull * (b & 0xFFFFFFFFull);
+    const ui64 x4 = 0xB5026F5AA96619E9ull * (b >> 32);
+
+    const ui64 sum = 0x06C9C021156EAA1Full + x1 + x2 + x3 + x4;
+
+    return (sum >> 32);
+}
+
+}
+
 ui64 TPathId::Hash() const {
-    return Hash128to32(OwnerId, LocalPathId);
+    return PathIdHash(OwnerId, LocalPathId);
 }
 
 TString TPathId::ToString() const {

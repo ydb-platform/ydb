@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
+TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 1 : 60))
@@ -490,7 +490,7 @@ void TSysViewProcessor::EntryToProto(NKikimrSysView::TTopPartitionsEntry& dst, c
 }
 
 template <typename TResponse>
-void TSysViewProcessor::ReplyOverloaded(const TActorId& sender) {
+void TSysViewProcessor::ReplyOverloaded(const NActors::TActorId& sender) {
     auto response = MakeHolder<TResponse>();
     response->Record.SetOverloaded(true);
     Send(sender, std::move(response));

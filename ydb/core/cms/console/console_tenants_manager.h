@@ -8,7 +8,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/location.h>
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/tenant_slot_broker.h>

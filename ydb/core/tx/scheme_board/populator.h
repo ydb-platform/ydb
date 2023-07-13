@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "two_part_description.h"
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/map.h>
 

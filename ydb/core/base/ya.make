@@ -37,7 +37,6 @@ SRCS(
     memobserver.h
     nameservice.h
     path.cpp
-    pathid.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
     quoter.cpp
@@ -99,6 +98,7 @@ PEERDIR(
     ydb/core/erasure
     ydb/core/protos
     ydb/core/protos/out
+    ydb/core/scheme
     ydb/library/aclib
     ydb/library/login
     ydb/library/pdisk_io

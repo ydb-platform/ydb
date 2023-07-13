@@ -5,8 +5,8 @@
 #include "events.h"
 #include "tablet_types.h"
 #include "logoblob.h"
-#include "pathid.h"
 
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>

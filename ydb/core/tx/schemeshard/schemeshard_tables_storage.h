@@ -1,7 +1,7 @@
 #pragma once
 #include "schemeshard_info_types.h"
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <util/digest/numeric.h>

@@ -1,4 +1,5 @@
 import "library/cpp/actors/protos/actors.proto";
+import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/protos/base.proto";
 import "google/protobuf/any.proto";
 
@@ -355,13 +356,6 @@ message TEvReadSetAck {
     optional uint32 Flags = 6;
     optional uint64 Seqno = 7; // Should be equal to TEvReadSet.Seqno which we are ACKing
 }
-
-message TKeyRange {
-    optional bytes From = 1;
-    optional bytes To = 2;
-    optional bool FromInclusive = 3;
-    optional bool ToInclusive = 4;
-};
 
 message TEvStreamClearanceRequest {
     optional uint64 TxId = 1;

@@ -1,5 +1,5 @@
 #pragma once
-#include "pathid.h"
+#include "ydb/core/scheme/scheme_pathid.h"
 #include "statestorage.h"
 
 namespace NKikimr {

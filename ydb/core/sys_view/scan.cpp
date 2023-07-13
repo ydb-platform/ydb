@@ -28,7 +28,7 @@ public:
     using TBase = TActor<TSysViewRangesReader>;
 
     TSysViewRangesReader(
-        const TActorId& ownerId,
+        const NActors::TActorId& ownerId,
         ui32 scanId,
         const TTableId& tableId,
         TVector<TSerializedTableRange> ranges,
@@ -140,7 +140,7 @@ private:
     TMaybe<TActorId> ScanActorId;
 };
 
-THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     TVector<TSerializedTableRange> ranges, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     if (ranges.size() == 1) {
@@ -150,7 +150,7 @@ THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const
     }
 }
 
-THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateSystemViewScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     if (tableId.SysViewInfo == PartitionStatsName) {

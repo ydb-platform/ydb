@@ -6,7 +6,7 @@ import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/library/services/services.proto";
-import "ydb/core/protos/type_info.proto";
+import "ydb/core/scheme/protos/type_info.proto";
 
 import "library/cpp/actors/protos/actors.proto";
 

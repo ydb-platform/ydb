@@ -37,6 +37,8 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
             return setting.data_streams().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kMonitoring:
             return setting.monitoring().auth().identity_case();
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            return setting.postgresql_cluster().auth().identity_case();
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
             return FederatedQuery::IamAuth::IDENTITY_NOT_SET;
     }

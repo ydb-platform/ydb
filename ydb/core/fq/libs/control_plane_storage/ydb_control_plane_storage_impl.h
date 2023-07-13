@@ -300,11 +300,11 @@ protected:
     bool IsSuperUser(const TString& user);
 
     template<typename T>
-    NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
+    NYql::TIssues ValidateConnection(T& ev, bool passwordRequired = true)
     {
         return ::NFq::ValidateConnection<T>(ev, Config->Proto.GetMaxRequestSize(),
                                   Config->AvailableConnections, Config->Proto.GetDisableCurrentIam(),
-                                  clickHousePasswordRequire);
+                                  passwordRequired);
     }
 
     template<typename T>

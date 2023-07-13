@@ -52,6 +52,9 @@ struct TTaskInternal {
         case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
             return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth());
         }
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
+            return GetServiceAccountId(c.content().setting().postgresql_cluster().auth());
+        }
         // Do not replace with default. Adding a new connection should cause a compilation error
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;

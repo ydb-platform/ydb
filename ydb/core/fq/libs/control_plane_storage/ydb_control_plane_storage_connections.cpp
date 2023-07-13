@@ -246,6 +246,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
                 auto& ch = *setting.mutable_clickhouse_cluster();
                 ch.set_password("");
             }
+            if (setting.has_postgresql_cluster()) {
+                auto& pg = *setting.mutable_postgresql_cluster();
+                pg.set_password("");
+            }
         }
 
         if (result.connection_size() == limit + 1) {
@@ -348,6 +352,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
             auto& ch = *setting.mutable_clickhouse_cluster();
             ch.set_password("");
         }
+        if (setting.has_postgresql_cluster()) {
+            auto& pg = *setting.mutable_postgresql_cluster();
+            pg.set_password("");
+        }
         return result;
     };
 
@@ -449,14 +457,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
         }
 
-        TString clickHousePassword;
+        // FIXME: this code needs better generalization
         if (request.content().setting().has_clickhouse_cluster()) {
-            clickHousePassword = request.content().setting().clickhouse_cluster().password();
+            auto clickHousePassword = request.content().setting().clickhouse_cluster().password();
             if (!clickHousePassword) {
                 clickHousePassword = content.setting().clickhouse_cluster().password();
             }
             content = request.content();
             content.mutable_setting()->mutable_clickhouse_cluster()->set_password(clickHousePassword);
+        } else if (request.content().setting().has_postgresql_cluster()) {
+            auto postgreSQLPassword = request.content().setting().postgresql_cluster().password();
+            if (!postgreSQLPassword) {
+                postgreSQLPassword = content.setting().postgresql_cluster().password();
+            }
+            content = request.content();
+            content.mutable_setting()->mutable_postgresql_cluster()->set_password(postgreSQLPassword);
         } else {
             content = request.content();
         }

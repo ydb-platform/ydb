@@ -474,6 +474,18 @@ message ObjectStorageConnection {
     IamAuth auth = 2;
 }
 
+message PostgreSQLCluster {
+    string database_id = 1 [(Ydb.length).le = 1024];
+    string login = 2 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    string password = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
+    IamAuth auth = 4;
+
+    // Just for the sake of simmetry with existing ClickHouse code
+    string host = 5 [(Ydb.length).le = 1024];
+    int32 port = 6 [(Ydb.value) = "[0; 65536]"];
+    bool secure = 7;
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -482,6 +494,7 @@ message ConnectionSetting {
         DATA_STREAMS = 3;
         OBJECT_STORAGE = 4;
         MONITORING = 5;
+        POSTGRESQL_CLUSTER = 6;
     }
 
     oneof connection {
@@ -490,6 +503,7 @@ message ConnectionSetting {
         DataStreams data_streams = 3;
         ObjectStorageConnection object_storage = 4;
         Monitoring monitoring = 5;
+        PostgreSQLCluster postgresql_cluster = 6;
     }
 }
 

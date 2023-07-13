@@ -63,6 +63,8 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "ObjectStorage";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kMonitoring:
         return "Monitoring";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kPostgresqlCluster:
+        return "PostgreSQLCluster";
     default:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }

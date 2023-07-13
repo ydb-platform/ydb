@@ -25,7 +25,6 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
-#include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>

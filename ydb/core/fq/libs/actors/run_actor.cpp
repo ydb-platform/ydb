@@ -2041,6 +2041,9 @@ private:
                 case FederatedQuery::ConnectionSetting::kMonitoring:
                     html << "MONITORING";
                     break;
+                case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+                    html << "POSTGRESQL";
+                    break;
                 default:
                     html << "UNDEFINED";
                     break;

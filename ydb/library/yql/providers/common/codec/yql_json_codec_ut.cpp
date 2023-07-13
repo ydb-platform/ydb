@@ -110,9 +110,9 @@ Y_UNIT_TEST_SUITE(SerializeJson) {
     Y_UNIT_TEST(ScalarJson) {
         TTestContext ctx;
         auto type = TDataType::Create(NUdf::TDataType<NUdf::TJson>::Id, ctx.TypeEnv);
-        auto value = ctx.Vb.NewString("\"some string с русскими йЁ\"");
+        auto value = ctx.Vb.NewString("\"some string с русскими йЁ");
         auto json = WriteValueToFuncJsonStr(value, type);
-        UNIT_ASSERT_VALUES_EQUAL(json, "\"\"some string с русскими йЁ\"\"");
+        UNIT_ASSERT_VALUES_EQUAL(json, "\"\\\"some string \xD1\x81 \xD1\x80\xD1\x83\xD1\x81\xD1\x81\xD0\xBA\xD0\xB8\xD0\xBC\xD0\xB8 \xD0\xB9\xD0\x81\"");
     }
 
     Y_UNIT_TEST(ComplexJson) {
@@ -125,11 +125,11 @@ Y_UNIT_TEST_SUITE(SerializeJson) {
 
         NUdf::TUnboxedValue* items;
         auto value = ctx.Vb.NewArray(2, items);
-        items[0] = ctx.Vb.NewString("{\"a\":500,\"b\":[1,2,3]}");
+        items[0] = ctx.Vb.NewString(R"({"a":500,"b":[1,2,3]})");
         items[1] = NUdf::TUnboxedValuePod(ui32(73));
 
         auto json = WriteValueToExportJsonStr(value, type);
-        UNIT_ASSERT_VALUES_EQUAL(json, "{\"X\":\"{\"a\":500,\"b\":[1,2,3]}\",\"Y\":73}");
+        UNIT_ASSERT_VALUES_EQUAL(json, R"({"X":"{\"a\":500,\"b\":[1,2,3]}","Y":73})");
     }
 }
 
@@ -672,9 +672,9 @@ Y_UNIT_TEST_SUITE(DeserializeNumbers) {
 Y_UNIT_TEST_SUITE(SerializeStringTypes) {
     Y_UNIT_TEST(Utf8) {
         TTestContext ctx;
-        auto value = ctx.Vb.NewString("aaaaabbbbbcccccc");
+        auto value = ctx.Vb.NewString("aaaaabbb \" ' ` bbcccccc");
         auto json = WriteValueToFuncJsonStr(value, TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv));
-        UNIT_ASSERT_VALUES_EQUAL(json, "\"aaaaabbbbbcccccc\"");
+        UNIT_ASSERT_VALUES_EQUAL(json, "\"aaaaabbb \\\" ' ` bbcccccc\"");
     }
 
     Y_UNIT_TEST(String) {

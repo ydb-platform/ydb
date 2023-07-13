@@ -2431,7 +2431,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
             ctx.Builder(node->Pos())
             .Callable("Nth")
                 .Add(0, node->ChildPtr(ascIndex))
-                .Atom(1, "0", TNodeFlags::Default)
+                .Atom(1, 0U)
             .Seal().Build();
         return ctx.ChangeChild(*node, ascIndex, {std::move(unpack)});
     }
@@ -2452,7 +2452,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
                         .Param("input")
                         .Callable("Nth")
                             .Apply(0, node->TailPtr()).With(0, "input").Seal()
-                            .Atom(1, "0", TNodeFlags::Default)
+                            .Atom(1, 0U)
                         .Seal()
                     .Seal().Build();
             return ctx.ChangeChild(*node, node->ChildrenSize() - 1U, {std::move(unpack)});
@@ -2569,10 +2569,92 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
             YQL_CLOG(DEBUG, Core) << node->Content() << " over input with " << *inputConstr;
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), TCoUnordered::CallableName(), {node->HeadPtr()}));
         }
-    } else if (!IsTop) {
+    } else if constexpr (!IsTop) {
         if (node->Head().IsCallable(node->Content())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
+        }
+    }
+
+    if constexpr (IsTop || IsSort) {
+        if (ETypeAnnotationKind::Struct == GetSeqItemType(*node->Head().GetTypeAnn()).GetKind()) {
+            std::set<ui32> indexes;
+            if (node->Tail().Tail().IsList())
+                for (auto i = 0U; i < node->Tail().Tail().ChildrenSize(); ++i)
+                    if (const auto key = node->Tail().Tail().Child(i); !key->IsCallable("Member") || &key->Head() != &node->Tail().Head().Head())
+                        indexes.emplace(i);
+
+            if (!indexes.empty() || !(node->Tail().Tail().IsList() || node->Tail().Tail().IsCallable("Member") && &node->Tail().Tail().Head() == &node->Tail().Head().Head())) {
+                YQL_CLOG(DEBUG, Core) << "Make system columns for " << node->Content() << " keys.";
+
+                auto argIn = ctx.NewArgument(node->Tail().Pos(), "row");
+                auto argOut = ctx.NewArgument(node->Tail().Pos(), "row");
+                auto bodyIn = argIn;
+                auto bodyOut = argOut;
+
+                auto selector = node->TailPtr();
+                if (indexes.empty()) {
+                    auto column = ctx.NewAtom(selector->Pos(), "_yql_sys_order_by", TNodeFlags::Default);
+                    bodyIn = ctx.Builder(bodyIn->Pos())
+                        .Callable("AddMember")
+                            .Add(0, std::move(bodyIn))
+                            .Add(1, column)
+                            .Apply(2, node->Tail())
+                                .With(0, argIn)
+                            .Seal()
+                        .Seal().Build();
+                    bodyOut = ctx.Builder(bodyOut->Pos())
+                        .Callable("RemoveMember")
+                            .Add(0, std::move(bodyOut))
+                            .Add(1, column)
+                        .Seal().Build();
+                    selector = ctx.Builder(selector->Pos())
+                        .Lambda()
+                            .Param("row")
+                            .Callable("Member")
+                                .Arg(0, "row")
+                                .Add(1, std::move(column))
+                            .Seal()
+                        .Seal().Build();
+                } else {
+                    auto items = selector->Tail().ChildrenList();
+                    for (const auto index : indexes) {
+                        auto column = ctx.NewAtom(items[index]->Pos(), TString("_yql_sys_order_by_") += ToString(index), TNodeFlags::Default);
+                        bodyIn = ctx.Builder(bodyIn->Pos())
+                            .Callable("AddMember")
+                                .Add(0, std::move(bodyIn))
+                                .Add(1, column)
+                                .ApplyPartial(2, node->Tail().HeadPtr(), std::move(items[index]))
+                                    .With(0, argIn)
+                                .Seal()
+                            .Seal().Build();
+                        bodyOut = ctx.Builder(bodyOut->Pos())
+                            .Callable("RemoveMember")
+                                .Add(0, std::move(bodyOut))
+                                .Add(1, column)
+                            .Seal().Build();
+                        items[index] = ctx.Builder(selector->Pos())
+                            .Callable("Member")
+                                .Add(0, selector->Head().HeadPtr())
+                                .Add(1, std::move(column))
+                            .Seal().Build();
+                    }
+                    selector = ctx.DeepCopyLambda(*selector, ctx.NewList(selector->Tail().Pos(), std::move(items)));
+                }
+
+                auto children = node->ChildrenList();
+                children.back() = std::move(selector);
+                children.front() = ctx.Builder(node->Pos())
+                        .Callable("OrderedMap")
+                            .Add(0, std::move(children.front()))
+                            .Add(1, ctx.NewLambda(node->Tail().Pos(), ctx.NewArguments(node->Tail().Head().Pos(), {std::move(argIn)}), std::move(bodyIn)))
+                        .Seal().Build();
+                return ctx.Builder(node->Pos())
+                        .Callable("OrderedMap")
+                            .Add(0, ctx.ChangeChildren(*node, std::move(children)))
+                            .Add(1, ctx.NewLambda(node->Tail().Pos(), ctx.NewArguments(node->Tail().Head().Pos(), {std::move(argOut)}), std::move(bodyOut)))
+                        .Seal().Build();
+            }
         }
     }
 

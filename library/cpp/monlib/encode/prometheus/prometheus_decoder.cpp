@@ -135,7 +135,7 @@ namespace NMonitoring {
                 Time_ = TInstant::Zero();
                 PrevBucket_ = ZERO_BUCKET;
                 Labels_.Clear();
-                auto snapshot = ExplicitHistogramSnapshot(Bounds_, Values_);
+                auto snapshot = ExplicitHistogramSnapshot(Bounds_, Values_, true);
 
                 Bounds_.clear();
                 Values_.clear();

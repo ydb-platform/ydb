@@ -88,12 +88,12 @@ public:
     virtual IAsyncQueryResultPtr ExplainYqlScript(const TKqpQueryRef& script) = 0;
     virtual TQueryResult SyncExplainYqlScript(const TKqpQueryRef& script) = 0;
 
-    virtual IAsyncQueryResultPtr ExecuteYqlScript(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    virtual IAsyncQueryResultPtr ExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const TExecScriptSettings& settings) = 0;
-    virtual TQueryResult SyncExecuteYqlScript(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    virtual TQueryResult SyncExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const TExecScriptSettings& settings) = 0;
 
-    virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 };
 

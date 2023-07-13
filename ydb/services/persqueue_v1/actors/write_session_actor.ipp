@@ -13,6 +13,7 @@
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <library/cpp/actors/core/log.h>
@@ -760,13 +761,23 @@ void TWriteSessionActor<UseMigrationProtocol>::SendSelectPartitionRequest(const 
     ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
-    NClient::TParameters parameters;
-    SetHashToTxParams(parameters, EncodedSourceId);
 
-    parameters["$Topic"] = topic;
-    parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
+    NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
 
-    ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
+    SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
+
+    paramsBuilder
+        .AddParam("$Topic")
+            .Utf8(topic)
+            .Build()
+        .AddParam("$SourceId")
+            .Utf8(EncodedSourceId.EscapedSourceId)
+            .Build();
+
+    NYdb::TParams params = paramsBuilder.Build();
+    
+    ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
+
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     SelectSrcIdsInflight++;
 }
@@ -950,16 +961,30 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor<UseMigrationProtocol>:
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
-    NClient::TParameters parameters;
-    SetHashToTxParams(parameters, EncodedSourceId);
-    //parameters["$Hash"] = hash;
-    parameters["$Topic"] = topic;
-    parameters["$SourceId"] = EncodedSourceId.EscapedSourceId;
+    NYdb::TParamsBuilder paramsBuilder = NYdb::TParamsBuilder();
 
-    parameters["$CreateTime"] = SourceIdCreateTime;
-    parameters["$AccessTime"] = TInstant::Now().MilliSeconds();
-    parameters["$Partition"] = Partition;
-    ev->Record.MutableRequest()->MutableParameters()->Swap(&parameters);
+    SetHashToTParamsBuilder(paramsBuilder, EncodedSourceId);
+
+    paramsBuilder
+        .AddParam("$Topic")
+            .Utf8(topic)
+            .Build()
+        .AddParam("$SourceId")
+            .Utf8(EncodedSourceId.EscapedSourceId)
+            .Build()
+        .AddParam("$CreateTime")
+            .Uint64(SourceIdCreateTime)
+            .Build()
+        .AddParam("$AccessTime")
+            .Uint64(TInstant::Now().MilliSeconds())
+            .Build()
+        .AddParam("$Partition")
+            .Uint32(Partition)
+            .Build();
+
+    NYdb::TParams params = paramsBuilder.Build();
+    
+    ev->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
 
     return ev;
 }

@@ -229,10 +229,17 @@ private:
             req->Record.MutableRequest()->SetQuery(VersionQuery);
         } else {
             req->Record.MutableRequest()->SetQuery(TopicsQuery);
-            NClient::TParameters params;
-            params["$Path"] = LastTopicKey.Path;
-            params["$Cluster"] = LastTopicKey.Cluster;
-            req->Record.MutableRequest()->MutableParameters()->Swap(&params);
+
+            NYdb::TParams params = NYdb::TParamsBuilder()
+                .AddParam("$Path")
+                    .Utf8(LastTopicKey.Path)
+                    .Build()
+                .AddParam("$Cluster")
+                    .Utf8(LastTopicKey.Cluster)
+                    .Build()
+                .Build();
+
+            req->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
         }
         Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), req.Release(), 0, Generation->Val());
     }

@@ -83,7 +83,7 @@ message TQueryRequest {
     reserved 4; // (deprecated) KqlSettings
     optional bool KeepSession = 5;
     reserved 6; // (deprecated) Cluster
-    optional NKikimrMiniKQL.TParams Parameters = 7;
+    reserved 7; // (deprecated) Parameters
     reserved 8; // (deprecated) SqlAutoCommit
     optional EQueryAction Action = 9;
     reserved 10; // (deprecated) Profile

@@ -115,10 +115,6 @@ public:
         return RequestCtx ? YqlText : Record.GetRequest().GetQuery();
     }
 
-    const ::NKikimrMiniKQL::TParams& GetParameters() const {
-        return Record.GetRequest().GetParameters();
-    }
-
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestCtx ? *TxControl : Record.GetRequest().GetTxControl();
     }
@@ -229,7 +225,6 @@ public:
             return ParametersSize;
         }
 
-        ParametersSize += Record.GetRequest().GetParameters().ByteSizeLong();
         for (const auto& [name, param] : GetYdbParameters()) {
             ParametersSize += name.size();
             ParametersSize += param.ByteSizeLong();

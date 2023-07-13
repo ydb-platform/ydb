@@ -23,6 +23,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
@@ -1874,7 +1875,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        FillParameters(params, *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(params, ev->Record.MutableRequest()->MutableYdbParameters());
 
         return SendKqpScanQueryRequest(ev.Release(), rowsLimit,
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
@@ -1906,7 +1907,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
@@ -1947,7 +1948,7 @@ public:
         );
 
         // TODO: Rewrite CollectParameters at kqp_host
-        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
@@ -2005,7 +2006,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
@@ -2287,25 +2288,13 @@ private:
         }
     }
 
-    static void FillParameters(TQueryData::TPtr params, NKikimrMiniKQL::TParams& output) {
+    static void FillParameters(TQueryData::TPtr params, ::google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>* output) {
         if (!params) {
             return;
         }
 
-        if (params->GetParams().empty()) {
-            return;
-        }
-
-        output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-        auto type = output.MutableType()->MutableStruct();
-        auto value = output.MutableValue();
-        for (auto& pair : params->GetParams()) {
-            auto typeMember = type->AddMember();
-            typeMember->SetName(pair.first);
-
-            typeMember->MutableType()->CopyFrom(pair.second.GetType());
-            value->AddStruct()->CopyFrom(pair.second.GetValue());
-        }
+        auto& paramsMap = params->GetParamsProtobuf();
+        output->insert(paramsMap.begin(), paramsMap.end());
     }
 
     static bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,

@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -94,7 +95,7 @@ private:
     void RunEventsCleanup(const TActorContext& ctx);
     void OnCleanupQueryComplete(const TActorContext&ctx);
 
-    void RunQuery(const TString& query, NKikimr::NClient::TParameters* params, bool readonly,
+    void RunQuery(const TString& query, NYdb::TParams* params, bool readonly,
                   const TActorContext& ctx);
 
     void ProcessEventsQueue(const TActorContext& ctx);

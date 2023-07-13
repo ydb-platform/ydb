@@ -332,10 +332,6 @@ public:
         return RequestEv->GetTxControl();
     }
 
-    const ::NKikimrMiniKQL::TParams& GetParameters() const {
-        return RequestEv->GetParameters();
-    }
-
     // validate the compiled query response and ensure that all table versions are not
     // changed since the last compilation.
      bool EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& response);

@@ -2,7 +2,9 @@
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/core/ymq/base/counters.h>
+
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

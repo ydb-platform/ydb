@@ -189,26 +189,7 @@ public:
             Settings.Service, std::move(id));
     }
 
-    bool ConvertParameters() {
-        auto& proto = QueryState->RequestEv->Record;
-
-        if (!proto.GetRequest().HasParameters() && QueryState->RequestEv->GetYdbParameters().size()) {
-            try {
-                ConvertYdbParamsToMiniKQLParams(QueryState->RequestEv->GetYdbParameters(), *proto.MutableRequest()->MutableParameters());
-            } catch (const std::exception& ex) {
-                TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
-                ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        if (!ConvertParameters())
-            return;
-
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
                 HttpGateway, ModuleResolverState, Counters));
@@ -699,7 +680,6 @@ public:
         }
 
         try {
-            QueryState->QueryData->ParseParameters(QueryState->GetParameters());
             QueryState->QueryData->ParseParameters(QueryState->GetYdbParameters());
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();

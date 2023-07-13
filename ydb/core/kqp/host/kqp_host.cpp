@@ -988,30 +988,30 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr ExecuteYqlScript(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    IAsyncQueryResultPtr ExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const TExecScriptSettings& settings) override
     {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &script, parameters = std::move(parameters), settings] (TExprContext& ctx) mutable {
-                return ExecuteYqlScriptInternal(script, std::move(parameters), settings, ctx);
+            [this, &script, parameters, settings] (TExprContext& ctx) mutable {
+                return ExecuteYqlScriptInternal(script, parameters, settings, ctx);
             });
     }
 
-    TQueryResult SyncExecuteYqlScript(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    TQueryResult SyncExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const TExecScriptSettings& settings) override
     {
         return CheckedSyncProcessQuery(
-            [this, &script, parameters = std::move(parameters), settings] () mutable {
-                return ExecuteYqlScript(script, std::move(parameters), settings);
+            [this, &script, parameters, settings] () mutable {
+                return ExecuteYqlScript(script, parameters, settings);
             });
     }
 
-    IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    IAsyncQueryResultPtr StreamExecuteYqlScript(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const NActors::TActorId& target, const TExecScriptSettings& settings) override
     {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &script, parameters = std::move(parameters), target, settings](TExprContext& ctx) mutable {
-            return StreamExecuteYqlScriptInternal(script, std::move(parameters), target, settings, ctx);
+            [this, &script, parameters, target, settings](TExprContext& ctx) mutable {
+            return StreamExecuteYqlScriptInternal(script, parameters, target, settings, ctx);
         });
     }
 
@@ -1401,7 +1401,7 @@ private:
             SessionCtx, *ExecuteCtx);
     }
 
-    IAsyncQueryResultPtr ExecuteYqlScriptInternal(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    IAsyncQueryResultPtr ExecuteYqlScriptInternal(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const TExecScriptSettings& settings, TExprContext& ctx)
     {
         SetupYqlTransformer(EKikimrQueryType::YqlScript);
@@ -1417,15 +1417,13 @@ private:
             return nullptr;
         }
 
-        if (!ParseParameters(std::move(parameters), *(SessionCtx->Query().QueryData), ctx)) {
-            return nullptr;
-        }
+        (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
         return MakeIntrusive<TAsyncExecuteYqlResult>(scriptExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion);
     }
 
-    IAsyncQueryResultPtr StreamExecuteYqlScriptInternal(const TKqpQueryRef& script, NKikimrMiniKQL::TParams&& parameters,
+    IAsyncQueryResultPtr StreamExecuteYqlScriptInternal(const TKqpQueryRef& script, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         const NActors::TActorId& target,const TExecScriptSettings& settings, TExprContext& ctx)
     {
         SetupYqlTransformer(EKikimrQueryType::YqlScriptStreaming);
@@ -1443,9 +1441,7 @@ private:
             return nullptr;
         }
 
-        if (!ParseParameters(std::move(parameters), *(SessionCtx->Query().QueryData), ctx)) {
-            return nullptr;
-        }
+        (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
         return MakeIntrusive<TAsyncExecuteYqlResult>(scriptExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion);

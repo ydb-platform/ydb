@@ -21,6 +21,7 @@ SRCS(
     retry_func.cpp
     root.cpp
     scheme_printers.cpp
+    sys.cpp
     tabbed_table.cpp
     ydb_updater.cpp
     yt.cpp

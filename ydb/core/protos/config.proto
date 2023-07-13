@@ -610,6 +610,7 @@ message TConveyorConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
+    optional double DefaultFractionOfThreadsCount = 4;
 }
 
 message TExternalIndexConfig {
@@ -1927,11 +1928,12 @@ message TAppConfig {
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
     optional TExternalIndexConfig ExternalIndexConfig = 63;
     optional bool YamlConfigEnabled = 64;
-    optional TConveyorConfig ConveyorConfig = 65;
+    optional TConveyorConfig ScanConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
     optional TLocalPgWireConfig LocalPgWireConfig = 69;
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
+    optional TConveyorConfig CompConveyorConfig = 72;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

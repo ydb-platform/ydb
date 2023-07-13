@@ -4,10 +4,6 @@
 
 namespace NKikimr::NConveyor {
 
-NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
-    return new TDistributor(config, "common", conveyorSignals);
-}
-
 TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
     , ConveyorName(conveyorName)
@@ -17,9 +13,8 @@ TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, T
 }
 
 void TDistributor::Bootstrap() {
-    const ui32 workersCount = Config.GetWorkersCountDef(NKqp::TStagePredictor::GetUsableThreads());
+    const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
     ALS_NOTICE(NKikimrServices::TX_CONVEYOR) << "action=conveyor_registered;actor_id=" << SelfId() << ";workers_count=" << workersCount << ";limit=" << Config.GetQueueSizeLimit();
-    TServiceOperator::Register(Config);
     for (ui32 i = 0; i < workersCount; ++i) {
         Workers.emplace_back(Register(new TWorker()));
     }

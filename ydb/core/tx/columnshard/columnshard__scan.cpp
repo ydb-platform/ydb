@@ -57,7 +57,7 @@ private:
     const TActorIdentity OwnerActorId;
 protected:
     virtual bool DoAdd(IDataTasksProcessor::ITask::TPtr task) override {
-        OwnerActorId.Send(NConveyor::MakeServiceId(OwnerActorId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
+        OwnerActorId.Send(NConveyor::TScanServiceOperator::MakeServiceId(OwnerActorId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
         return true;
     }
 public:
@@ -119,7 +119,7 @@ public:
 
 private:
     IDataTasksProcessor::TPtr MakeTasksProcessor() const {
-        if (NConveyor::TServiceOperator::IsEnabled()) {
+        if (NConveyor::TScanServiceOperator::IsEnabled()) {
             return std::make_shared<TLocalDataTasksProcessor>(SelfId());
         } else {
             return nullptr;

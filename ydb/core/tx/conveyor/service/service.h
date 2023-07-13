@@ -70,6 +70,4 @@ public:
     void Bootstrap();
 };
 
-NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
-
 }

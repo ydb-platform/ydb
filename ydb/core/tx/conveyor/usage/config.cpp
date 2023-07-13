@@ -14,6 +14,20 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config)
     if (config.HasWorkersCount()) {
         WorkersCount = config.GetWorkersCount();
     }
+    if (config.HasDefaultFractionOfThreadsCount()) {
+        DefaultFractionOfThreadsCount = config.GetDefaultFractionOfThreadsCount();
+    }
     return true;
 }
+
+ui32 TConfig::GetWorkersCountForConveyor(const ui32 poolThreadsCount) const {
+    if (WorkersCount) {
+        return *WorkersCount;
+    } else if (DefaultFractionOfThreadsCount) {
+        return Max<ui32>(1, *DefaultFractionOfThreadsCount * poolThreadsCount);
+    } else {
+        return poolThreadsCount;
+    }
+}
+
 }

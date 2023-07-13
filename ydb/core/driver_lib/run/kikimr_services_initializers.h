@@ -389,9 +389,15 @@ private:
     IGlobalObjectStorage& GlobalObjects;
 };
 
-class TConveyorInitializer: public IKikimrServicesInitializer {
+class TCompConveyorInitializer: public IKikimrServicesInitializer {
 public:
-    TConveyorInitializer(const TKikimrRunConfig& runConfig);
+    TCompConveyorInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TScanConveyorInitializer: public IKikimrServicesInitializer {
+public:
+    TScanConveyorInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

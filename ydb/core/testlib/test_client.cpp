@@ -734,12 +734,12 @@ namespace Tests {
         }
         if (Settings->IsEnableMetadataProvider()) {
             auto* actor = NMetadata::NProvider::CreateService(NMetadata::NProvider::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableBackgroundTasks()) {
             auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableExternalIndex()) {
@@ -748,9 +748,14 @@ namespace Tests {
             Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyor::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NConveyor::TCompServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NConveyor::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

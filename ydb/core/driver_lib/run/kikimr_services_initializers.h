@@ -85,8 +85,10 @@ public:
 };
 
 class TSharedCacheInitializer : public IKikimrServicesInitializer {
+    TIntrusivePtr<TMemObserver> MemObserver;
+
 public:
-    TSharedCacheInitializer(const TKikimrRunConfig& runConfig);
+    TSharedCacheInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
@@ -354,8 +356,10 @@ public:
 };
 
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
+    TIntrusivePtr<TMemObserver> MemObserver;
+
 public:
-    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig);
+    TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<TMemObserver> memObserver);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

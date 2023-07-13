@@ -34,6 +34,7 @@ SRCS(
     location.h
     logoblob.cpp
     logoblob.h
+    memobserver.h
     nameservice.h
     path.cpp
     pathid.cpp

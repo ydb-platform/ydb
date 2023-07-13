@@ -369,6 +369,7 @@ TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     , PollerThreads(new NInterconnect::TPollerThreads)
+    , MemObserver(MakeIntrusive<TMemObserver>())
 {
 }
 
@@ -1397,7 +1398,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
-        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig));
+        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemObserver));
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
@@ -1494,7 +1495,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
+    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, MemObserver));
 
 #if defined(ENABLE_MEMORY_TRACKING)
     sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));

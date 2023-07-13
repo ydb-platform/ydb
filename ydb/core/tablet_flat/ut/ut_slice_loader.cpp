@@ -74,7 +74,7 @@ namespace {
         {
             const auto array = Part->Store->PageCollectionArray(Room);
 
-            return { ui32(array.at(page).size()), ui32(EPage::Undef) };
+            return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
         NPageCollection::TBorder Bounds(ui32) const noexcept override

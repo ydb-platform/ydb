@@ -4460,7 +4460,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       SourceIdLifetimeSeconds: 1382400
       WriteSpeedInBytesPerSecond: 123
       BurstSize: 1000
-      NumChannels: 10
       ExplicitChannelProfiles {
         PoolKind: "test"
       }

@@ -102,7 +102,7 @@ void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
 
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-                       const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace,
+                       const NKikimrPQ::TPQTabletConfig& tabletConfig, const TTabletCountersBase& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        bool newPartition,
                        TVector<TTransaction> distrTxs)
     : Initializer(this)
@@ -143,6 +143,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , ReservedSize(0)
     , Channel(0)
+    , NumChannels(numChannels)
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
 {
@@ -246,7 +247,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
     bool haveChanges = CleanUp(request.Get(), ctx);
     if (DiskIsFull) {
-        AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
+        AddCheckDiskRequest(request.Get(), NumChannels);
         haveChanges = true;
     }
 
@@ -2264,7 +2265,7 @@ ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
     };
 
     ui32 res = Channel;
-    Channel = (Channel + 1) % Config.GetPartitionConfig().GetNumChannels();
+    Channel = (Channel + 1) % NumChannels;
 
     return res;
 }

@@ -327,7 +327,7 @@ public:
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                bool newPartition = false,
                TVector<TTransaction> distrTxs = {});
 
@@ -637,6 +637,7 @@ private:
     std::deque<THolder<TEvPQ::TEvReserveBytes>> ReserveRequests;
 
     ui32 Channel;
+    ui32 NumChannels;
     TVector<ui32> TotalChannelWritesByHead;
 
     TWorkingTimeCounter WriteBufferIsFullCounter;

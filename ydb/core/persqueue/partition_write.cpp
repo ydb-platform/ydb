@@ -1395,7 +1395,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 
     if (!Requests.empty() && DiskIsFull) {
         CancelAllWritesOnIdle(ctx);
-        AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
+        AddCheckDiskRequest(request.Get(), NumChannels);
         haveCheckDisk = true;
     } else {
         haveData = ProcessWrites(request.Get(), now, ctx);

@@ -671,7 +671,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         const auto& channelProfiles = pqConfig.GetChannelProfiles();
         if (channelProfiles.size() > 2) {
-            partConfig->SetNumChannels(channelProfiles.size() - 2); // channels 0,1 are reserved in tablet
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (settings.max_partition_storage_size() < 0) {
@@ -993,7 +992,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         const auto& channelProfiles = pqConfig.GetChannelProfiles();
         if (channelProfiles.size() > 2) {
-            partConfig->SetNumChannels(channelProfiles.size() - 2); // channels 0,1 are reserved in tablet
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (request.has_retention_period()) {

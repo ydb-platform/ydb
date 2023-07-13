@@ -221,7 +221,7 @@ TInitDiskStatusStep::TInitDiskStatusStep(TInitializer* initializer)
 void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
-    AddCheckDiskRequest(request.Get(), Partition()->Config.GetPartitionConfig().GetNumChannels());
+    AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
 
     ctx.Send(Partition()->Tablet, request.Release());
 }
@@ -691,7 +691,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
                                       FolderId);
-    TotalChannelWritesByHead.resize(Config.GetPartitionConfig().GetNumChannels());
+    TotalChannelWritesByHead.resize(NumChannels);
 
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();

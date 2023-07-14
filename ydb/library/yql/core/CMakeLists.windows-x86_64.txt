@@ -21,6 +21,7 @@ add_subdirectory(services)
 add_subdirectory(sql_types)
 add_subdirectory(type_ann)
 add_subdirectory(user_data)
+add_subdirectory(ut)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

@@ -1774,4 +1774,17 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
     return res;
 }
 
+bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
+    if (joinTree.IsAtom()) {
+        return true;
+    }
+
+    YQL_ENSURE(joinTree.Child(0)->IsAtom());
+    if (joinTree.Child(0)->Content() != joinType) {
+        return false;
+    }
+
+    return HasOnlyOneJoinType(*joinTree.Child(1), joinType) && HasOnlyOneJoinType(*joinTree.Child(2), joinType);
+}
+
 }

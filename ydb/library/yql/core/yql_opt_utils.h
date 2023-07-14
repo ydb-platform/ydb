@@ -23,6 +23,8 @@ bool IsPassthroughFlatMap(const NNodes::TCoFlatMapBase& flatmap, TMaybe<THashSet
 bool IsPassthroughLambda(const NNodes::TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember = false);
 bool IsTablePropsDependent(const TExprNode& node);
 
+bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType);
+
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx);
 
 // returns true if usedFields contains subset of fields

@@ -96,7 +96,13 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        // This test expects SourceRead is enabled for ScanQuery
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
+
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
@@ -115,7 +121,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 Sleep(TDuration::Seconds(1));
             }
 
-            UNIT_ASSERT_C(count, "Unable to wait second session actor (executing compiled program) start");
+            UNIT_ASSERT_C(count,
+                "Unable to wait second session actor (executing compiled program) start, cur count: "
+                << counters.GetActiveSessionActors()->Val());
         }
 
         NDataShard::gSkipRepliesFailPoint.Disable();

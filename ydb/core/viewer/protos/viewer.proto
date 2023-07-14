@@ -391,6 +391,7 @@ message TStorageInfo {
     repeated TStoragePoolInfo StoragePools = 2;
     uint64 TotalGroups = 3;
     uint64 FoundGroups = 4;
+    repeated TStorageGroupInfo StorageGroups = 5;
 }
 
 message TNodeInfo {

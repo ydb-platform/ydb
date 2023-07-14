@@ -155,7 +155,7 @@ private:
     TDistributedWrites DistributedWrites;
     NTable::ITransactionObserverPtr TxObserver;
     std::vector<TRollbackOp> RollbackOps;
-    bool RollbackAllowed = false;
+    bool RollbackAllowed = true;
 };
 
 class TConflictsCache {

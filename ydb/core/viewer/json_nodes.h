@@ -67,6 +67,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
         NodeId,
         Host,
         DC,
+        Rack,
         Version,
         Uptime,
         Memory,
@@ -149,6 +150,8 @@ public:
                 Sort = ESort::Host;
             } else if (sort == "DC") {
                 Sort = ESort::DC;
+            } else if (sort == "Rack") {
+                Sort = ESort::Rack;
             } else if (sort == "Version") {
                 Sort = ESort::Version;
             } else if (sort == "Uptime") {
@@ -646,6 +649,11 @@ public:
                 case ESort::DC:
                     // already sorted
                     break;
+                case ESort::Rack:
+                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
+                        return reverse ^ (a.GetSystemState().GetRack() < b.GetSystemState().GetRack());
+                    });
+                    break;
                 case ESort::Version:
                     ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
                         return reverse ^ (a.GetSystemState().GetVersion() < b.GetSystemState().GetVersion());
@@ -723,7 +731,7 @@ struct TJsonRequestParameters<TJsonNodes> {
                       {"name":"type","in":"query","description":"nodes type to get (static,dynamic,any)","required":false,"type":"string"},
                       {"name":"storage","in":"query","description":"return storage info","required":false,"type":"boolean"},
                       {"name":"tablets","in":"query","description":"return tablets info","required":false,"type":"boolean"},
-                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
+                      {"name":"sort","in":"query","description":"sort by (NodeId,Host,DC,Rack,Version,Uptime,Memory,CPU,LoadAverage)","required":false,"type":"string"},
                       {"name":"offset","in":"query","description":"skip N nodes","required":false,"type":"integer"},
                       {"name":"limit","in":"query","description":"limit to N nodes","required":false,"type":"integer"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},

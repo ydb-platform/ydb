@@ -325,7 +325,7 @@ private:
                 .Primitive(NYdb::EPrimitiveType::Date)
                 .Build(),
             NYdb::TTypeBuilder{}
-                .Primitive(NYdb::EPrimitiveType::Date)
+                .Primitive(NYdb::EPrimitiveType::Datetime)
                 .Build()
         };
         return ValidateProjectionType(columnType, columnName, availableTypes);

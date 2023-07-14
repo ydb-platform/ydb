@@ -1,0 +1,14 @@
+language: C++
+dist: bionic
+script:
+  - ./build-all.sh
+  - env SKIP=8bit_encoding ./tests.py
+addons:
+  apt:
+    packages:
+      - g++
+      - cmake
+      - python3-pexpect
+sudo: false
+cache:
+  ccache: true

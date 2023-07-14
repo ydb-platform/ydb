@@ -63,6 +63,14 @@ target_sources(yql-sql-v1 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/select.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_call_expr.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_expression.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_group_by.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_into_tables.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_select.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_translation.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_values.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/object_processing.cpp
 )

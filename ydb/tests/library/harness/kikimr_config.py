@@ -225,15 +225,17 @@ class KikimrConfigGenerator(object):
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 
+        if "table_service_config" not in self.yaml_config:
+            self.yaml_config["table_service_config"] = {}
+
+        if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
+            self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
+
         if disable_iterator_reads:
-            if "table_service_config" not in self.yaml_config:
-                self.yaml_config["table_service_config"] = {}
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
             self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False
 
         if disable_iterator_lookups:
-            if "table_service_config" not in self.yaml_config:
-                self.yaml_config["table_service_config"] = {}
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
             self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
 

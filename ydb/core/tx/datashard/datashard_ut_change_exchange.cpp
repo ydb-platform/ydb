@@ -826,6 +826,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return streamDesc;
     }
 
+    TCdcStream WithResolvedTimestamps(TDuration interval, TCdcStream streamDesc) {
+        streamDesc.ResolvedTimestamps = interval;
+        return streamDesc;
+    }
+
     TCdcStream WithInitialScan(TCdcStream streamDesc) {
         streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
         return streamDesc;
@@ -1582,7 +1587,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
             if (records.size() == expected.size()) {
                 for (ui32 i = 0; i < expected.size(); ++i) {
-                    UNIT_ASSERT_VALUES_EQUAL(expected.at(i), records.at(i).second);
+                    UNIT_ASSERT_C(AreJsonsEqual(records.at(i).second, expected.at(i)), TStringBuilder()
+                        << records.at(i).second << " != " << expected.at(i));
                 }
 
                 break;
@@ -2693,6 +2699,43 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         checkAwsRegion("/Root/Table/Stream1", "defaultRegion");
         checkAwsRegion("/Root/Table/Stream2", "customRegion");
+    }
+
+    Y_UNIT_TEST(ResolvedTimestamps) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(5), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
     }
 
 } // Cdc

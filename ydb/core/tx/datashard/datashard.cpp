@@ -2192,7 +2192,7 @@ void TDataShard::SendImmediateReadResult(
     SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
-void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
+void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx) {
     for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
         const ui64 step = it->first.Step;
 
@@ -2207,7 +2207,7 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
         if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
             MediatorTimeCastWaitingSteps.insert(step);
             Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
         }
         break;
     }
@@ -2215,6 +2215,8 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
     if (IsMvccEnabled()) {
         PromoteFollowerReadEdge();
     }
+
+    EmitHeartbeats(ctx);
 }
 
 void TDataShard::CheckMediatorStateRestored() {
@@ -3012,7 +3014,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     MediatorTimeCastEntry = ev->Get()->Entry;
     Y_VERIFY(MediatorTimeCastEntry);
 
-    SendAfterMediatorStepActivate(MediatorTimeCastEntry->Get(TabletID()));
+    SendAfterMediatorStepActivate(MediatorTimeCastEntry->Get(TabletID()), ctx);
 
     Pipeline.ActivateWaitingTxOps(ctx);
 
@@ -3049,7 +3051,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
     for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end() && *it <= step;)
         it = MediatorTimeCastWaitingSteps.erase(it);
 
-    SendAfterMediatorStepActivate(step);
+    SendAfterMediatorStepActivate(step, ctx);
 
     Pipeline.ActivateWaitingTxOps(ctx);
 

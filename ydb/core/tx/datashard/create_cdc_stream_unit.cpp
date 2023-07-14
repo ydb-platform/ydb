@@ -58,6 +58,10 @@ public:
                 pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId()));
         }
 
+        if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
+            DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
+        }
+
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(
             pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
         ));
@@ -71,6 +75,7 @@ public:
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
         if (AddSender) {
             ctx.Send(DataShard.GetChangeSender(), AddSender.Release());
+            DataShard.EmitHeartbeats(ctx);
         }
     }
 };

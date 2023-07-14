@@ -156,6 +156,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_kqp_data_tx_out_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_scheme_tx_out_rs_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/cdc_stream_heartbeat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/cdc_stream_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_async_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_collector_base.cpp

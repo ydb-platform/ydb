@@ -61,6 +61,8 @@ public:
             scanManager.Complete(streamPathId);
         }
 
+        DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
+
         RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(streamPathId));
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

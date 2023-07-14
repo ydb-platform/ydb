@@ -12,6 +12,7 @@ SRCS(
     build_index.cpp
     build_kqp_data_tx_out_rs_unit.cpp
     build_scheme_tx_out_rs_unit.cpp
+    cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
     change_collector_async_index.cpp
     change_collector_base.cpp

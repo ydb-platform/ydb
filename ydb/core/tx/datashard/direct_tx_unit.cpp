@@ -80,6 +80,7 @@ public:
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
         Pipeline.RemoveCommittingOp(op);
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
+        DataShard.EmitHeartbeats(ctx);
 
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
         Y_VERIFY(tx != nullptr);

@@ -441,6 +441,7 @@ struct TShardedTableOptions {
         EFormat Format;
         TMaybe<EState> InitialState;
         bool VirtualTimestamps = false;
+        TMaybe<TDuration> ResolvedTimestamps;
         TMaybe<TString> AwsRegion;
     };
 

@@ -2020,14 +2020,6 @@ public:
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
         Become(&TThis::StateWork);
 
-        while (!InitQueue.empty()) {
-            TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-                (Event, ev->ToString()));
-            TActivationContext::Send(ev.Release());
-            InitQueue.pop_front();
-        }
-
         ValidateInternalState();
         UpdatePDisksCounters();
         IssueInitialGroupContent();
@@ -2040,6 +2032,13 @@ public:
             if (info->VirtualGroupState) {
                 StartVirtualGroupSetupMachine(info.Get());
             }
+        }
+
+        for (; !InitQueue.empty(); InitQueue.pop_front()) {
+            TAutoPtr<IEventHandle> &ev = InitQueue.front();
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
+                (Event, ev->ToString()));
+            StateWork(ev);
         }
     }
 
@@ -2227,7 +2226,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    void OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
+    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
     void OnWardenConnected(TNodeId nodeId);
     void OnWardenDisconnected(TNodeId nodeId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);

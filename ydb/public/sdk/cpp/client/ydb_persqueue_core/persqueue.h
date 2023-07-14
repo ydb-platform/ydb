@@ -1446,7 +1446,7 @@ struct TPersQueueClientSettings : public TCommonClientSettingsBase<TPersQueueCli
     FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 
     //! Manages cluster discovery mode.
-    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::On);
+    FLUENT_SETTING_DEFAULT(EClusterDiscoveryMode, ClusterDiscoveryMode, EClusterDiscoveryMode::Auto);
 };
 
 // PersQueue client.

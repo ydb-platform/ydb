@@ -65,7 +65,8 @@ public:
         TWriteSessionSettings settings;
         settings
                 .Path(GetTestTopic())
-                .MessageGroupId(GetTestMessageGroupId());
+                .MessageGroupId(GetTestMessageGroupId())
+                .ClusterDiscoveryMode(EClusterDiscoveryMode::On);
         return settings;
     }
 };

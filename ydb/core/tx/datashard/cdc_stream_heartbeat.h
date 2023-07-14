@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/row_version.h>
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/datetime/base.h>

@@ -155,7 +155,7 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
     }
 }
 
-static void SerializeVirtualTimestamp(NJson::TJsonValue& value, const TVector<ui64>& vt) {
+static void SerializeVirtualTimestamp(NJson::TJsonValue& value, std::initializer_list<ui64> vt) {
     for (auto v : vt) {
         value.AppendValue(v);
     }

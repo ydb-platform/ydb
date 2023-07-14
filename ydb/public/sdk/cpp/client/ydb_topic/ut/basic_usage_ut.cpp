@@ -19,6 +19,39 @@
 namespace NYdb::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+    Y_UNIT_TEST(WriteRead) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicClient client(setup->GetDriver());
+
+        auto writeSettings = TWriteSessionSettings()
+            .Path(setup->GetTestTopic())
+            .MessageGroupId("group_id");
+        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+        TString message = "message";
+        UNIT_ASSERT(writeSession->Write(message));
+        writeSession->Close();
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName("shared/user")
+            .AppendTopics(setup->GetTestTopic());
+        auto readSession = client.CreateReadSession(readSettings);
+
+        auto event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+        startPartitionSession.Confirm();
+
+        event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+        dataReceived.Commit();
+
+        auto& messages = dataReceived.GetMessages();
+        UNIT_ASSERT(messages.size() == 1);
+        UNIT_ASSERT(messages[0].GetData() == message);
+    }
 
     Y_UNIT_TEST(MaxByteSizeEqualZero) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);

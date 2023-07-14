@@ -44,6 +44,7 @@ target_link_options(ydb-public-sdk-cpp-client-ydb_topic-ut PRIVATE
 )
 target_sources(ydb-public-sdk-cpp-client-ydb_topic-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/ut/basic_usage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/ut/describe_topic_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/ut/managed_executor.cpp
 )
 set_property(

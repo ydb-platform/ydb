@@ -98,6 +98,11 @@ public:
         return LocalDC;
     }
 
+    TString GetTestTopicPath() const
+    {
+        return Server.ServerSettings.PQConfig.GetRoot() + "/" + ::NPersQueue::BuildFullTopicName(GetTestTopic(), LocalDC);
+    }
+
     ui16 GetGrpcPort() const {
         return Server.GrpcPort;
     }

@@ -580,6 +580,7 @@ public:
     ,   HaveMoreRightRows(std::make_unique<bool>(true))
     ,   JoinedTuple(std::make_unique<std::vector<NUdf::TUnboxedValue*>>() )
     ,   IsSelfJoin_(isSelfJoin)
+    ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
     {
         if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
@@ -606,6 +607,7 @@ private:
     const std::unique_ptr<bool> HaveMoreRightRows;
     const std::unique_ptr<std::vector<NUdf::TUnboxedValue*>> JoinedTuple;
     const bool IsSelfJoin_;
+    const bool SelfJoinSameKeys_;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {
@@ -818,6 +820,10 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
                 if (IsSelfJoin_) {
                     resultRight = resultLeft;
+                    if (!SelfJoinSameKeys_) {
+                        std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
+                    }
+                    
                 } else {
                     resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
                 }
@@ -835,7 +841,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                         RightPacker->StartTime = std::chrono::system_clock::now();
                     }
 
-                    if ( !IsSelfJoin_ ) {
+                    if ( !SelfJoinSameKeys_ ) {
                         RightPacker->Pack();
                         RightPacker->TablePtr->AddTuple(RightPacker->TupleIntVals.data(), RightPacker->TupleStrings.data(), RightPacker->TupleStrSizes.data(), RightPacker->IColumnsHolder.data());
                     }
@@ -873,7 +879,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     *PartialJoinCompleted = true;
                     LeftPacker->StartTime = std::chrono::system_clock::now();
                     RightPacker->StartTime = std::chrono::system_clock::now();
-                    if ( IsSelfJoin_ ) {
+                    if ( SelfJoinSameKeys_ ) {
                         JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     } else {
                         JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows); 
@@ -1055,7 +1061,7 @@ IComputationNode* WrapSelfJoin(TCallable& callable, const TComputationNodeFactor
 
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Number of key columns for self join should be equal");  
 
-    MKQL_ENSURE(leftKeyColumns == rightKeyColumns, "Key columns for self join should be equal");      
+//    MKQL_ENSURE(leftKeyColumns == rightKeyColumns, "Key columns for self join should be equal");      
 
     rightRenames.reserve(rightRenamesNode->GetValuesCount());
     for (ui32 i = 0; i < rightRenamesNode->GetValuesCount(); ++i) {

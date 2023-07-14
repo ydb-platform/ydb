@@ -20,6 +20,8 @@ target_link_libraries(ydbd PUBLIC
   run
   ydb-core-protos
   ydb-core-security
+  core-ymq-actor
+  core-ymq-base
   library-folder_service-mock
   ydb-library-keys
   ydb-library-pdisk_io
@@ -51,7 +53,6 @@ target_link_libraries(ydbd PUBLIC
 )
 target_sources(ydbd PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/sqs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
 )
 target_allocator(ydbd

@@ -34,6 +34,7 @@ target_link_libraries(core-ymq-base PUBLIC
   cpp-monlib-dynamic_counters
   library-cpp-scheme
   cpp-string_utils-base64
+  library-cpp-unified_agent_client
   ydb-core-base
   ydb-core-protos
   core-ymq-proto
@@ -49,6 +50,7 @@ target_sources(core-ymq-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/dlq_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/events_writer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_attributes.cpp

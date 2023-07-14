@@ -19,8 +19,6 @@ ENDIF()
 SRCS(
     export.cpp
     export.h
-    sqs.cpp
-    sqs.h
     main.cpp
 )
 
@@ -34,6 +32,8 @@ PEERDIR(
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
+    ydb/core/ymq/actor
+    ydb/core/ymq/base
     ydb/library/folder_service/mock
     ydb/library/keys
     ydb/library/pdisk_io

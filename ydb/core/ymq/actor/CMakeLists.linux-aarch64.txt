@@ -84,6 +84,8 @@ target_link_libraries(core-ymq-actor PUBLIC
 target_sources(core-ymq-actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/auth_factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/auth_mocks.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/auth_multi_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/attributes_md5.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/cfg.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/change_visibility.cpp

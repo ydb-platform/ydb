@@ -323,7 +323,7 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
 }
 
 struct TKeyPayloadPairLess {
-    TKeyPayloadPairLess(const TKeyTypes& types, bool isTuple, NUdf::ICompare::TPtr compare)
+    TKeyPayloadPairLess(const TKeyTypes& types, bool isTuple, const NUdf::ICompare* compare)
         : Types(&types)
         , IsTuple(isTuple)
         , Compare(compare)
@@ -339,11 +339,11 @@ struct TKeyPayloadPairLess {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::ICompare::TPtr Compare;
+    const NUdf::ICompare* Compare;
 };
 
 struct TKeyPayloadPairEqual {
-    TKeyPayloadPairEqual(const TKeyTypes& types, bool isTuple, NUdf::IEquate::TPtr equate)
+    TKeyPayloadPairEqual(const TKeyTypes& types, bool isTuple, const NUdf::IEquate* equate)
         : Types(&types)
         , IsTuple(isTuple)
         , Equate(equate)
@@ -359,11 +359,11 @@ struct TKeyPayloadPairEqual {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::IEquate* Equate;
 };
 
 struct TValueEqual {
-    TValueEqual(const TKeyTypes& types, bool isTuple, NUdf::IEquate::TPtr equate)
+    TValueEqual(const TKeyTypes& types, bool isTuple, const NUdf::IEquate* equate)
         : Types(&types)
         , IsTuple(isTuple)
         , Equate(equate)
@@ -379,11 +379,11 @@ struct TValueEqual {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::IEquate* Equate;
 };
 
 struct TValueLess {
-    TValueLess(const TKeyTypes& types, bool isTuple, NUdf::ICompare::TPtr compare)
+    TValueLess(const TKeyTypes& types, bool isTuple, const NUdf::ICompare* compare)
         : Types(&types)
         , IsTuple(isTuple)
         , Compare(compare)
@@ -399,13 +399,13 @@ struct TValueLess {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::ICompare::TPtr Compare;
+    const NUdf::ICompare* Compare;
 };
 
 constexpr NUdf::THashType HashOfNull = ~0ULL;
 
 struct TValueHasher {
-    TValueHasher(const TKeyTypes& types, bool isTuple, NUdf::IHash::TPtr hash)
+    TValueHasher(const TKeyTypes& types, bool isTuple, const NUdf::IHash* hash)
         : Types(&types)
         , IsTuple(isTuple)
         , Hash(hash)
@@ -442,7 +442,7 @@ struct TValueHasher {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::IHash::TPtr Hash;
+    const NUdf::IHash* Hash;
 };
 
 template<typename T>

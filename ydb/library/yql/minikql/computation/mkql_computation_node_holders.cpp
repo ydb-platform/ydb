@@ -947,7 +947,7 @@ private:
         }
 
         return BinarySearch(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key),
-            TValueLess(Types, IsTuple, Compare));
+            TValueLess(Types, IsTuple, Compare.Get()));
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -957,8 +957,8 @@ private:
             encodedKey = MakeString(Packer->Encode(key, false));
         }
 
-        const auto it = LowerBound(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key), TValueLess(Types, IsTuple, Compare));
-        if (it == Items.end() || !TValueEqual(Types, IsTuple, Equate)(*it, NUdf::TUnboxedValuePod(Packer ? encodedKey : key)))
+        const auto it = LowerBound(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key), TValueLess(Types, IsTuple, Compare.Get()));
+        if (it == Items.end() || !TValueEqual(Types, IsTuple, Equate.Get())(*it, NUdf::TUnboxedValuePod(Packer ? encodedKey : key)))
             return NUdf::TUnboxedValuePod();
 
         return it->MakeOptional();
@@ -998,8 +998,8 @@ private:
 
         switch (Mode) {
         case EDictSortMode::RequiresSorting:
-            StableSort(Items.begin(), Items.end(), TValueLess(Types, IsTuple, Compare));
-            Items.erase(Unique(Items.begin(), Items.end(), TValueEqual(Types, IsTuple, Equate)), Items.end());
+            StableSort(Items.begin(), Items.end(), TValueLess(Types, IsTuple, Compare.Get()));
+            Items.erase(Unique(Items.begin(), Items.end(), TValueEqual(Types, IsTuple, Equate.Get())), Items.end());
             break;
         case EDictSortMode::SortedUniqueAscending:
             break;
@@ -1019,7 +1019,7 @@ private:
     }
 
     bool IsSortedUnique() const {
-        TValueLess less(Types, IsTuple, Compare);
+        TValueLess less(Types, IsTuple, Compare.Get());
         for (size_t i = 1, e = Items.size(); i < e; ++i) {
             if (!less(Items[i - 1], Items[i]))
                 return false;
@@ -1149,7 +1149,7 @@ private:
         }
 
         return BinarySearch(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValuePod()),
-            TKeyPayloadPairLess(Types, IsTuple, Compare));
+            TKeyPayloadPairLess(Types, IsTuple, Compare.Get()));
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -1159,8 +1159,8 @@ private:
             encodedKey = MakeString(Packer->Encode(key, false));
         }
 
-        const auto it = LowerBound(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValue()), TKeyPayloadPairLess(Types, IsTuple, Compare));
-        if (it == Items.end() || !TKeyPayloadPairEqual(Types, IsTuple, Equate)({it->first, it->second}, TKeyPayloadPair(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), {})))
+        const auto it = LowerBound(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValue()), TKeyPayloadPairLess(Types, IsTuple, Compare.Get()));
+        if (it == Items.end() || !TKeyPayloadPairEqual(Types, IsTuple, Equate.Get())({it->first, it->second}, TKeyPayloadPair(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), {})))
             return NUdf::TUnboxedValuePod();
 
         return it->second.MakeOptional();
@@ -1200,8 +1200,8 @@ private:
 
         switch (Mode) {
         case EDictSortMode::RequiresSorting:
-            StableSort(Items.begin(), Items.end(), TKeyPayloadPairLess(Types, IsTuple, Compare));
-            Items.erase(Unique(Items.begin(), Items.end(), TKeyPayloadPairEqual(Types, IsTuple, Equate)), Items.end());
+            StableSort(Items.begin(), Items.end(), TKeyPayloadPairLess(Types, IsTuple, Compare.Get()));
+            Items.erase(Unique(Items.begin(), Items.end(), TKeyPayloadPairEqual(Types, IsTuple, Equate.Get())), Items.end());
             break;
         case EDictSortMode::SortedUniqueAscending:
             break;
@@ -1221,7 +1221,7 @@ private:
     }
 
     bool IsSortedUnique() const {
-        TKeyPayloadPairLess less(Types, IsTuple, Compare);
+        TKeyPayloadPairLess less(Types, IsTuple, Compare.Get());
         for (size_t i = 1, e = Items.size(); i < e; ++i) {
             if (!less(Items[i - 1], Items[i]))
                 return false;
@@ -1307,7 +1307,7 @@ public:
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
-        , Set(0, TValueHasher(Types, isTuple, hash), TValueEqual(Types, isTuple, equate))
+        , Set(0, TValueHasher(Types, isTuple, hash.Get()), TValueEqual(Types, isTuple, equate.Get()))
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -2095,7 +2095,7 @@ public:
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
-        , Map(0, TValueHasher(Types, isTuple, hash), TValueEqual(Types, isTuple, equate))
+        , Map(0, TValueHasher(Types, isTuple, hash.Get()), TValueEqual(Types, isTuple, equate.Get()))
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -3270,14 +3270,14 @@ private:
             }
         }
 
-        StableSort(localValues.begin(), localValues.end(), TKeyPayloadPairLess(Types_, IsTuple_, Compare_));
+        StableSort(localValues.begin(), localValues.end(), TKeyPayloadPairLess(Types_, IsTuple_, Compare_.Get()));
 
         TKeyPayloadPairVector groups;
         groups.reserve(localValues.size());
         if (!localValues.empty()) {
             TDefaultListRepresentation currentList(std::move(localValues.begin()->second));
             auto lastKey = std::move(localValues.begin()->first);
-            TValueEqual eqPredicate(Types_, IsTuple_, Equate_);
+            TValueEqual eqPredicate(Types_, IsTuple_, Equate_.Get());
             for (auto it = localValues.begin() + 1; it != localValues.end(); ++it) {
                 if (eqPredicate(lastKey, it->first)) {
                     currentList = currentList.Append(std::move(it->second));

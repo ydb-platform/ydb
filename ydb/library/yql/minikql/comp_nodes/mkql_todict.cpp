@@ -43,7 +43,7 @@ public:
     THashedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
         NUdf::ICompare::TPtr compare, NUdf::IEquate::TPtr equate, NUdf::IHash::TPtr hash, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Hash(hash), Equate(equate)
-        , Map(0, TValueHasher(KeyTypes, isTuple, hash), TValueEqual(KeyTypes, isTuple, equate))
+        , Map(0, TValueHasher(KeyTypes, isTuple, hash.Get()), TValueEqual(KeyTypes, isTuple, equate.Get()))
     {
         Y_UNUSED(compare);
         if (encoded) {
@@ -96,7 +96,7 @@ public:
     THashedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
         NUdf::ICompare::TPtr compare, NUdf::IEquate::TPtr equate, NUdf::IHash::TPtr hash, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Hash(hash), Equate(equate)
-        , Map(0, TValueHasher(KeyTypes, isTuple, hash), TValueEqual(KeyTypes, isTuple, equate))
+        , Map(0, TValueHasher(KeyTypes, isTuple, hash.Get()), TValueEqual(KeyTypes, isTuple, equate.Get()))
     {
         Y_UNUSED(compare);
         if (encoded) {
@@ -235,8 +235,8 @@ public:
 
     THashedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
         NUdf::ICompare::TPtr compare, NUdf::IEquate::TPtr equate, NUdf::IHash::TPtr hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Set(0, TValueHasher(KeyTypes, isTuple, hash),
-        TValueEqual(KeyTypes, isTuple, equate)), Hash(hash), Equate(equate)
+        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Set(0, TValueHasher(KeyTypes, isTuple, hash.Get()),
+        TValueEqual(KeyTypes, isTuple, equate.Get())), Hash(hash), Equate(equate)
     {
         Y_UNUSED(compare);
         if (encoded) {
@@ -603,8 +603,8 @@ public:
     NUdf::TUnboxedValue Build()
     {
         const TSortedSetFiller filler = [this](TUnboxedValueVector& values) {
-            std::stable_sort(Items.begin(), Items.end(), TValueLess(KeyTypes, IsTuple, Compare));
-            Items.erase(std::unique(Items.begin(), Items.end(), TValueEqual(KeyTypes, IsTuple, Equate)), Items.end());
+            std::stable_sort(Items.begin(), Items.end(), TValueLess(KeyTypes, IsTuple, Compare.Get()));
+            Items.erase(std::unique(Items.begin(), Items.end(), TValueEqual(KeyTypes, IsTuple, Equate.Get())), Items.end());
             values = std::move(Items);
         };
 
@@ -703,14 +703,14 @@ public:
     NUdf::TUnboxedValue Build()
     {
         const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) {
-            std::stable_sort(Items.begin(), Items.end(), TKeyPayloadPairLess(KeyTypes, IsTuple, Compare));
+            std::stable_sort(Items.begin(), Items.end(), TKeyPayloadPairLess(KeyTypes, IsTuple, Compare.Get()));
 
             TKeyPayloadPairVector groups;
             groups.reserve(Items.size());
             if (!Items.empty()) {
                 TDefaultListRepresentation currentList(std::move(Items.begin()->second));
                 auto lastKey = std::move(Items.begin()->first);
-                TValueEqual eqPredicate(KeyTypes, IsTuple, Equate);
+                TValueEqual eqPredicate(KeyTypes, IsTuple, Equate.Get());
                 for (auto it = Items.begin() + 1; it != Items.end(); ++it) {
                     if (eqPredicate(lastKey, it->first)) {
                         currentList = currentList.Append(std::move(it->second));

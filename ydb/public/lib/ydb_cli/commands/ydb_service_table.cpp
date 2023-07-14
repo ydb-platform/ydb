@@ -629,6 +629,14 @@ TCommandExplain::TCommandExplain()
     : TTableCommand("explain", {}, "Explain query")
 {}
 
+TCommandExplain::TCommandExplain(TString query, TString queryType, bool printAst)
+    : TTableCommand("explain", {}, "Explain query")
+{
+    Query = std::move(query);
+    QueryType = std::move(queryType);
+    PrintAst = printAst;
+}
+
 void TCommandExplain::Config(TConfig& config) {
     TTableCommand::Config(config);
 
@@ -685,7 +693,7 @@ int TCommandExplain::Run(TConfig& config) {
                 }
                 ThrowOnError(tablePart);
             }
-            if (tablePart.HasQueryStats() ) {
+            if (tablePart.HasQueryStats()) {
                 auto proto = NYdb::TProtoAccessor::GetProto(tablePart.GetQueryStats());
                 planJson = proto.query_plan();
                 ast = proto.query_ast();

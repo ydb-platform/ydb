@@ -4,8 +4,6 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
-#include <ydb/public/lib/ydb_cli/common/interactive.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 #include <util/generic/queue.h>
 
 namespace NYdb {
@@ -14,6 +12,13 @@ namespace NConsoleClient {
 TCommandYql::TCommandYql()
     : TYdbOperationCommand("yql", {}, "Execute YQL script (streaming)")
 {}
+
+TCommandYql::TCommandYql(TString script, TString collectStatsMode)
+    : TYdbOperationCommand("yql", {}, "Execute YQL script (streaming)")
+{
+    Script = std::move(script);
+    CollectStatsMode = std::move(collectStatsMode);
+}
 
 void TCommandYql::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
@@ -59,15 +64,6 @@ void TCommandYql::Config(TConfig& config) {
 void TCommandYql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
-    if (!Script && !ScriptFile) {
-#ifdef _win32_
-        throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
-            << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided. "
-            << "Interactive CLI is not supported on Windows.";
-#else
-        Interactive = true;
-#endif
-    }
     if (Script && ScriptFile) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
@@ -79,53 +75,7 @@ void TCommandYql::Parse(TConfig& config) {
 }
 
 int TCommandYql::Run(TConfig& config) {
-    if (Interactive) {
-        // run interactive cli
-
-        class TLogic : public TInteractiveCli::ILogic {
-        public:
-            TLogic(TCommandYql *base, TConfig& config)
-                : Base(base)
-                , Config(config)
-            {}
-
-            virtual bool Ready(const std::string &text) override {
-                bool done = text.find(';') != std::string::npos;
-                return done;
-            }
-
-            virtual void Run(const std::string &text, const std::string &stat) override {
-                Y_UNUSED(stat);
-                try {
-                    Base->RunCommand(Config, TString(text.c_str()));
-                } catch (TYdbErrorException &error) {
-                    Cerr << error;
-                }
-                TTerminalOutput::Print("\n");
-            }
-
-        private:
-            TCommandYql* Base;
-            TConfig& Config;
-        };
-
-
-        TTerminalOutput::Print("\033[32mYDB Interactive CLI \033[0m");
-        TTerminalOutput::Print("\033[31m(experimental, no compatibility guarantees)\033[0m\n\n");
-        TInteractiveCli::TConfig interactiveCfg;
-        interactiveCfg.Prompt = "\033[32m=> \033[0m";
-        TInteractiveCli cli(std::make_shared<TLogic>(this, config), std::move(interactiveCfg));
-        cli.Run();
-        while(true) {
-            // blocking until input
-            auto action = GetKeyboardAction();
-            cli.HandleInput(action);
-        }
-
-        return EXIT_SUCCESS;
-    } else {
-        return RunCommand(config, Script);
-    }
+    return RunCommand(config, Script);
 }
 
 int TCommandYql::RunCommand(TConfig& config, const TString &script) {
@@ -135,11 +85,9 @@ int TCommandYql::RunCommand(TConfig& config, const TString &script) {
     NScripting::TExecuteYqlRequestSettings settings;
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
 
-    if (!Interactive) {
-        SetInterruptHandlers();
-    }
+    SetInterruptHandlers();
 
-    if (!Parameters.empty() || !IsStdinInteractive()) {
+    if (!Parameters.empty()) {
         ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
             ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
         THolder<TParamsBuilder> paramBuilder;

@@ -16,6 +16,7 @@ class TCommandYql : public TYdbOperationCommand, public TCommandWithParameters,
 {
 public:
     TCommandYql();
+    TCommandYql(TString script, TString collectStatsMode);
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
@@ -27,7 +28,6 @@ private:
     TString CollectStatsMode;
     TString Script;
     TString ScriptFile;
-    bool Interactive = false;
 };
 
 }

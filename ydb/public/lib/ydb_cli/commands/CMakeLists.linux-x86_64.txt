@@ -47,10 +47,11 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_topic
   ydb_types-credentials-login
   library-cpp-resource
+  replxx
 )
 target_sources(clicommands PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/line_reader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/term_io.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/benchmark_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/click_bench.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/kv_workload.cpp

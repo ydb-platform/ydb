@@ -94,6 +94,7 @@ private:
 class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
 public:
     TCommandList();
+    TCommandList(TString path);
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

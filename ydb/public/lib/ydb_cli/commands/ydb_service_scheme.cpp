@@ -849,6 +849,12 @@ TCommandList::TCommandList()
     : TYdbOperationCommand("ls", std::initializer_list<TString>(), "Show information about objects inside given directory")
 {}
 
+TCommandList::TCommandList(TString path)
+    : TYdbOperationCommand("ls", std::initializer_list<TString>(), "Show information about objects inside given directory")
+{
+    Path = std::move(path);
+}
+
 void TCommandList::Config(TConfig& config) {
     TYdbOperationCommand::Config(config);
 

@@ -834,10 +834,12 @@ public:
             NYdb::TTypeParser typeParser(column.type());
             auto node = MakeType(typeParser, context);
             auto typeName = NYql::FormatType(node);
+            const TString notNull = (node->GetKind() == NYql::ETypeAnnotationKind::Optional) ? "" : "NOT NULL";
             return fmt::format(
-                "    {columnName} {columnType}",
+                "    {columnName} {columnType} {notNull}",
                 "columnName"_a = EncloseAndEscapeString(column.name(), '`'),
-                "columnType"_a = typeName
+                "columnType"_a = typeName,
+                "notNull"_a = notNull
             );
         };
         auto columnsBegin =
@@ -861,7 +863,7 @@ public:
             withOptions.insert(
                 {EncloseAndEscapeString(kv.first, '`'),
                  EncloseAndEscapeString(kv.second, '"')});
-        };
+        }
 
         if (!subset.partitioned_by().empty()) {
             auto stringEscapeMapper = [](const TString& value) {
@@ -870,33 +872,19 @@ public:
 
             auto partitionBy =
                 TStringBuilder{}
-                << '['
+                << "\"["
                 << JoinRange(
                        ", ",
                        MakeMappedIterator(subset.partitioned_by().begin(), stringEscapeMapper),
                        MakeMappedIterator(subset.partitioned_by().end(), stringEscapeMapper))
-                << ']';
+                << "]\"";
             withOptions.insert({"PARTITIONED_BY", partitionBy});
         }
 
-        if (!subset.projection().empty()) {
-            auto keyValueToStringMapper =
-                [](const std::pair<TString, TString>& kv) -> TString {
-                return fmt::format(
-                    "   {propertyName}={propertyValue}",
-                    "propertyName"_a = EncloseAndEscapeString(kv.first, '"'),
-                    "propertyValue"_a = EncloseAndEscapeString(kv.second, '"'));
-            };
-
-            auto projection =
-                TStringBuilder{}
-                << "{\n"
-                << JoinRange(
-                       ",\n",
-                       MakeMappedIterator(subset.projection().begin(), keyValueToStringMapper),
-                       MakeMappedIterator(subset.projection().end(), keyValueToStringMapper))
-                << "\n}";
-            withOptions.insert({"PROJECTION", projection});
+        for (auto& kv : subset.projection()) {
+            withOptions.insert(
+                {EncloseAndEscapeString(kv.first, '`'),
+                 EncloseAndEscapeString(kv.second, '"')});
         }
 
         auto concatEscapedKeyValueMapper =

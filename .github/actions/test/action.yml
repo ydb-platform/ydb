@@ -117,6 +117,8 @@ runs:
         --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
+      echo "[Test history](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
+
   - name: Run unit tests
     id: ctest
     if: inputs.run_unit_tests == 'true'
@@ -125,7 +127,6 @@ runs:
       cd $WORKDIR/../build/ydb
 
       echo "[Stdout unittest/ctest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.logfilename}})" >> $GITHUB_STEP_SUMMARY
-      echo "[Testmo](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       

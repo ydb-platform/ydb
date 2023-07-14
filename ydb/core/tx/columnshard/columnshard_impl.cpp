@@ -756,7 +756,7 @@ void TColumnShard::SetupCompaction() {
 
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto limits = CompactionLimits.Get();
-        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits);
+        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits, BackgroundController.GetActiveTtlGranules());
         if (!compactionInfo) {
             if (!BackgroundController.GetCompactionsCount()) {
                 LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
@@ -783,11 +783,7 @@ void TColumnShard::SetupCompaction() {
             break;
         }
 
-        THashSet<ui64> affectedPortions;
-        for (const auto& portionInfo : indexChanges->SwitchedPortions) {
-            affectedPortions.insert(portionInfo.Portion());
-        }
-        if (!BackgroundController.StartCompaction(planInfo, affectedPortions)) {
+        if (!BackgroundController.StartCompaction(planInfo)) {
             LOG_S_DEBUG("Compaction not started: ignore portions with other activities at tablet " << TabletID());
             break;
         }
@@ -852,15 +848,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     bool needWrites = !indexChanges->PortionsToEvict.empty();
     LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
-    THashSet<ui64> affectedPortions;
-    for (const auto& portionInfo : indexChanges->PortionsToDrop) {
-        affectedPortions.insert(portionInfo.Portion());
-    }
-    for (const auto& [portionInfo, _] : indexChanges->PortionsToEvict) {
-        affectedPortions.insert(portionInfo.Portion());
-    }
-
-    BackgroundController.StartTtl(std::move(affectedPortions));
+    BackgroundController.StartTtl(*indexChanges);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     ev->SetTiering(eviction);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);

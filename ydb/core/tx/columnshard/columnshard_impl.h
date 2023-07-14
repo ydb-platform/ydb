@@ -335,15 +335,14 @@ private:
         bool ActiveIndexing = false;
         TCurrentCompaction ActiveCompactionInfo;
         bool ActiveCleanup = false;
-        THashSet<ui64> ActiveTtlPortions;
+        THashSet<ui64> ActiveTtlGranules;
 
     public:
-        bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const THashSet<ui64>& portions) {
-            for (ui64 p : portions) {
-                if (ActiveTtlPortions.contains(p)) {
-                    return false;
-                }
-            }
+        const THashSet<ui64>& GetActiveTtlGranules() const {
+            return ActiveTtlGranules;
+        }
+
+        bool StartCompaction(const NOlap::TPlanCompactionInfo& info) {
             Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
             return true;
         }
@@ -381,16 +380,22 @@ private:
             return ActiveCleanup;
         }
 
-        void StartTtl(THashSet<ui64>&& ttlPortions) {
-            Y_VERIFY(ActiveTtlPortions.empty());
-            ActiveTtlPortions.swap(ttlPortions);
+        void StartTtl(const NOlap::TColumnEngineChanges& changes) {
+            Y_VERIFY(ActiveTtlGranules.empty());
+
+            for (const auto& portionInfo : changes.PortionsToDrop) {
+                ActiveTtlGranules.emplace(portionInfo.Granule());
+            }
+            for (const auto& [portionInfo, _] : changes.PortionsToEvict) {
+                ActiveTtlGranules.emplace(portionInfo.Granule());
+            }
         }
         void FinishTtl() {
-            Y_VERIFY(!ActiveTtlPortions.empty());
-            ActiveTtlPortions.clear();
+            Y_VERIFY(!ActiveTtlGranules.empty());
+            ActiveTtlGranules.clear();
         }
         bool IsTtlActive() const {
-            return !ActiveTtlPortions.empty();
+            return !ActiveTtlGranules.empty();
         }
 
         bool HasSplitCompaction(const ui64 pathId) const {

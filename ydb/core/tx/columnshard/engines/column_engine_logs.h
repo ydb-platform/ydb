@@ -249,7 +249,7 @@ public:
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
                                         const TPKRangesFilter& pkRangesFilter) const override;
-    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits) override;
+    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) override;
 
 private:
     using TMarksMap = std::map<TMark, ui64, TMark::TCompare>;

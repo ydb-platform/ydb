@@ -397,7 +397,8 @@ std::vector<TPartialReadResult> TIndexedReadData::MakeResult(std::vector<std::ve
                 auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
                 batch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
             }
-            std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard = std::make_shared<TScanMemoryLimiter::TGuard>(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady());
+            std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard = std::make_shared<TScanMemoryLimiter::TGuard>(
+                GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady());
             memGuard->Take(NArrow::GetBatchMemorySize(batch));
 
             std::vector<std::shared_ptr<arrow::RecordBatch>> splitted = SliceBatch(batch, maxRowsInBatch);

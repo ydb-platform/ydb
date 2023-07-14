@@ -1202,13 +1202,12 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     return out;
 }
 
-std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompactionLimits& limits) {
+std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) {
     const auto filter = [&](const ui64 granuleId) {
-        std::shared_ptr<TGranuleMeta> compactGranule = GetGranulePtrVerified(granuleId);
-        if (!compactGranule->NeedCompaction(limits)) {
+        if (busyGranuleIds.contains(granuleId)) {
             return false;
         }
-        return true;
+        return GetGranulePtrVerified(granuleId)->NeedCompaction(limits);
     };
     auto gCompaction = GranulesStorage->GetGranuleForCompaction(filter);
     if (!gCompaction) {

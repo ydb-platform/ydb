@@ -54,12 +54,12 @@ def columns_to_string(columns):
     return list_to_string(columns, lambda col: col.name + ":" + str(col.type.item).strip())
 
 
-def create_table_with_data(session, path):
+def create_table_with_data(session, path, not_null = False):
     path = "/Root/" + path
     session.create_table(
         path,
         ydb.TableDescription()
-        .with_column(ydb.Column("id", ydb.OptionalType(ydb.PrimitiveType.Uint32)))
+        .with_column(ydb.Column("id", ydb.PrimitiveType.Uint32 if not_null else ydb.OptionalType(ydb.PrimitiveType.Uint32)))
         .with_column(ydb.Column("number", ydb.OptionalType(ydb.PrimitiveType.Uint64)))
         .with_column(ydb.Column("string", ydb.OptionalType(ydb.PrimitiveType.String)))
         .with_column(ydb.Column("fixed_point", ydb.OptionalType(ydb.DecimalType())))
@@ -207,6 +207,22 @@ class TestBackupSingle(BaseTestBackupInFiles):
         # Create table
         path = "table"
         create_table_with_data(session, path)
+
+        # Backup table
+        self.create_backup(path, [path], False)
+
+        assert_that(
+            [child.name for child in self.driver.scheme_client.list_directory("/Root").children],
+            is_(["table", ".sys"])
+        )
+
+
+class TestBackupSingleNotNull(BaseTestBackupInFiles):
+    def test_single_table_backup(self):
+        session = self.driver.table_client.session().create()
+        # Create table
+        path = "table"
+        create_table_with_data(session, path, True)
 
         # Backup table
         self.create_backup(path, [path], False)
@@ -375,20 +391,23 @@ class TestRecursiveConsistent(BaseTestBackupInFiles):
 
 class TestSingleBackupRestore(BaseTestBackupInFiles):
     def test_single_table_with_data_backup_restore(self):
-        self.test_single_table_with_data_backup_restore_impl(False)
-        self.test_single_table_with_data_backup_restore_impl(True)
+        self.test_single_table_with_data_backup_restore_impl(False, False)
+        self.test_single_table_with_data_backup_restore_impl(False, True)
+        self.test_single_table_with_data_backup_restore_impl(True, False)
+        self.test_single_table_with_data_backup_restore_impl(True, True)
 
     @classmethod
-    def test_single_table_with_data_backup_restore_impl(self, use_bulk_upsert):
+    def test_single_table_with_data_backup_restore_impl(self, use_bulk_upsert, not_null):
         self.driver.scheme_client.make_directory(
             '/Root/folder'
         )
         postfix = '_bulk_upsert' if use_bulk_upsert else ''
+        postfix += '_not_null' if not_null else ''
 
         session = self.driver.table_client.session().create()
 
         # Create table and fill with data
-        create_table_with_data(session, "folder/table")
+        create_table_with_data(session, "folder/table", not_null)
 
         # Backup table
         backup_files_dir = output_path(self.test_name, 'test_single_table_with_data_backup_restore' + postfix, "backup_files_dir")

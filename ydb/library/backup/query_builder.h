@@ -29,7 +29,6 @@ public:
 
     void Begin();
     void AddLine(TStringBuf line);
-    TValue GetLinesAsValue();
     TValue EndAndGetResultingValue();
     TParams EndAndGetResultingParams();
     TString GetQueryString() const;

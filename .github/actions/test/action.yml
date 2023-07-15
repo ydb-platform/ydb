@@ -117,6 +117,9 @@ runs:
         --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
+  - name: Print test history link
+    shell: bash
+    run: |
       echo "[Test history](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
 
   - name: Run unit tests

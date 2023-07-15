@@ -18,8 +18,9 @@ class TQueryBuilder {
     TValueBuilder Value;
 
     TString BuildQuery(const TString& path);
-    void AddMemberFromString(const TColumn& col, TStringBuf ss);
+    void AddMemberFromString(TTypeParser& type, const TString& name, TStringBuf ss);
     void AddPrimitiveMember(EPrimitiveType type, TStringBuf buf);
+    static void CheckNull(const TString& name, TStringBuf buf);
 
 public:
     TQueryBuilder(const TString& path, TVector<TColumn> columns)

@@ -174,38 +174,35 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
     }
 }
 
-void TQueryBuilder::AddMemberFromString(const TColumn &col, TStringBuf buf) {
-    TTypeParser type(col.Type);
-    bool isOptional = false;
-    if (type.GetKind() == TTypeParser::ETypeKind::Optional) {
-        type.OpenOptional();
-        isOptional = true;
-    }
-
-    Value.AddMember(col.Name);
+void TQueryBuilder::CheckNull(const TString& name, TStringBuf buf) {
     if (buf == "null") {
-        if (!isOptional) {
-            throw yexception() << "Wrong value \"null\" for non-optional column: " << col.Name;
-        }
-        Value.EmptyOptional();
-        return;
+        throw yexception() << "Wrong value \"null\" for non-optional column: " << name;
     }
+}
 
-    if (isOptional) {
-        Value.BeginOptional();
-    }
+void TQueryBuilder::AddMemberFromString(TTypeParser& type, const TString& name, TStringBuf buf) {
     switch (type.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
+            CheckNull(name, buf);
             AddPrimitiveMember(type.GetPrimitive(), buf);
             break;
+        case TTypeParser::ETypeKind::Optional:
+            type.OpenOptional();
+            if (buf == "null") {
+                Value.EmptyOptional();
+            } else {
+                Value.BeginOptional();
+                AddMemberFromString(type, name, buf);
+                Value.EndOptional();
+            }
+            type.CloseOptional();
+            break;
         case TTypeParser::ETypeKind::Decimal:
+            CheckNull(name, buf);
             Value.Decimal(TDecimalValue(TString(buf), type.GetDecimal().Precision, type.GetDecimal().Scale));
             break;
         default:
-            throw yexception() << "Wrong type \"" << col.Type << "\" for column: " << col.Name;
-    }
-    if (isOptional) {
-        Value.EndOptional();
+            throw yexception() << "Unsupported type for column: " << name;
     }
 }
 
@@ -219,7 +216,9 @@ void TQueryBuilder::AddLine(TStringBuf line) {
     for (const auto& col : Columns) {
         TStringBuf tok = line.NextTok(',');
         Y_ENSURE(tok, "Empty token on line");
-        AddMemberFromString(col, tok);
+        TTypeParser type(col.Type);
+        Value.AddMember(col.Name);
+        AddMemberFromString(type, col.Name, tok);
     }
     Value.EndStruct();
 }

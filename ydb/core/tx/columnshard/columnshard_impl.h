@@ -161,8 +161,6 @@ class TColumnShard
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
 
-    void OverloadWriteFail(const TString& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
-
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
 
@@ -211,6 +209,19 @@ class TColumnShard
     }
 
     void ActivateTiering(const ui64 pathId, const TString& useTiering);
+
+public:
+    enum class EOverloadStatus {
+        Shard /* "shard" */,
+        Granule /* "granule" */,
+        InsertTable /* "insert_table" */,
+        Disk /* "disk" */,
+        None
+    };
+
+private:
+    void OverloadWriteFail(const EOverloadStatus& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
+    EOverloadStatus CheckOverloaded(const ui64 tableId, const ui64 dataSize) const;
 
 protected:
     STFUNC(StateInit) {

@@ -19,6 +19,12 @@ get_built_tool_path(
   tools/enum_parser/enum_parser
   enum_parser
 )
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(core-tx-columnshard)
 target_compile_options(core-tx-columnshard PRIVATE
@@ -90,4 +96,9 @@ generate_enum_serilization(core-tx-columnshard
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.h
   INCLUDE_HEADERS
   ydb/core/tx/columnshard/columnshard.h
+)
+generate_enum_serilization(core-tx-columnshard
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/columnshard_impl.h
 )

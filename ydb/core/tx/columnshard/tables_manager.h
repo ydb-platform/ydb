@@ -195,7 +195,7 @@ public:
     ui64 GetMemoryUsage() const;
 
     bool HasTable(const ui64 pathId) const;
-    bool IsWritableTable(const ui64 pathId) const;
+    bool IsReadyForWrite(const ui64 pathId) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const ui64 pathId, const TRowVersion& version, NIceDb::TNiceDb& db);

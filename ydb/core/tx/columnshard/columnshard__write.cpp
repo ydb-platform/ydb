@@ -59,62 +59,59 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(logoBlobId.IsValid());
 
     bool ok = false;
-    if (!Self->TablesManager.HasPrimaryIndex() || !Self->TablesManager.IsWritableTable(tableId)) {
-        status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
+    Y_VERIFY(Self->TablesManager.IsReadyForWrite(tableId));
+    if (record.HasLongTxId()) {
+        Y_VERIFY(metaShard == 0);
+        auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
+        writeId = (ui64)Self->GetLongTxWrite(db, longTxId, record.GetWritePartId());
+    }
+
+    ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
+    TInstant time = TInstant::Seconds(writeUnixTime);
+
+    // First write wins
+    TBlobGroupSelector dsGroupSelector(Self->Info());
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+
+    const auto& snapshotSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
+    NOlap::TInsertedData insertData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time, snapshotSchema->GetSnapshot());
+    ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
+    if (ok) {
+        THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
+        Self->TryAbortWrites(db, dbTable, std::move(writesToAbort));
+
+        // TODO: It leads to write+erase for aborted rows. Abort() inserts rows, EraseAborted() erases them.
+        // It's not optimal but correct.
+        TBlobManagerDb blobManagerDb(txc.DB);
+        auto allAborted = Self->InsertTable->GetAborted(); // copy (src is modified in cycle)
+        for (auto& [abortedWriteId, abortedData] : allAborted) {
+            Self->InsertTable->EraseAborted(dbTable, abortedData);
+            Self->BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb);
+        }
+
+        // Put new data into blob cache
+        Y_VERIFY(logoBlobId.BlobSize() == data.size());
+        NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
+
+        // Put new data into batch cache
+        Y_VERIFY(Ev->Get()->WrittenBatch);
+        Self->BatchCache.Insert(TWriteId(writeId), logoBlobId, Ev->Get()->WrittenBatch);
+
+        Self->UpdateInsertTableCounters();
+
+        ui64 blobsWritten = Ev->Get()->BlobBatch.GetBlobCount();
+        ui64 bytesWritten = Ev->Get()->BlobBatch.GetTotalSize();
+        Self->IncCounter(COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
+        Self->IncCounter(COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
+        Self->IncCounter(COUNTER_RAW_BYTES_UPSERTED, meta.GetRawBytes());
+        Self->IncCounter(COUNTER_WRITE_SUCCESS);
+
+        Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
     } else {
-        if (record.HasLongTxId()) {
-            Y_VERIFY(metaShard == 0);
-            auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
-            writeId = (ui64)Self->GetLongTxWrite(db, longTxId, record.GetWritePartId());
-        }
+        LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << writeId << TxSuffix());
 
-        ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
-        TInstant time = TInstant::Seconds(writeUnixTime);
-
-        // First write wins
-        TBlobGroupSelector dsGroupSelector(Self->Info());
-        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-
-        const auto& snapshotSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
-        NOlap::TInsertedData insertData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time, snapshotSchema->GetSnapshot());
-        ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
-        if (ok) {
-            THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
-            Self->TryAbortWrites(db, dbTable, std::move(writesToAbort));
-
-            // TODO: It leads to write+erase for aborted rows. Abort() inserts rows, EraseAborted() erases them.
-            // It's not optimal but correct.
-            TBlobManagerDb blobManagerDb(txc.DB);
-            auto allAborted = Self->InsertTable->GetAborted(); // copy (src is modified in cycle)
-            for (auto& [abortedWriteId, abortedData] : allAborted) {
-                Self->InsertTable->EraseAborted(dbTable, abortedData);
-                Self->BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb);
-            }
-
-            // Put new data into blob cache
-            Y_VERIFY(logoBlobId.BlobSize() == data.size());
-            NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
-
-            // Put new data into batch cache
-            Y_VERIFY(Ev->Get()->WrittenBatch);
-            Self->BatchCache.Insert(TWriteId(writeId), logoBlobId, Ev->Get()->WrittenBatch);
-
-            Self->UpdateInsertTableCounters();
-
-            ui64 blobsWritten = Ev->Get()->BlobBatch.GetBlobCount();
-            ui64 bytesWritten = Ev->Get()->BlobBatch.GetTotalSize();
-            Self->IncCounter(COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-            Self->IncCounter(COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-            Self->IncCounter(COUNTER_RAW_BYTES_UPSERTED, meta.GetRawBytes());
-            Self->IncCounter(COUNTER_WRITE_SUCCESS);
-
-            Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
-        } else {
-            LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << writeId << TxSuffix());
-
-            // Return EResultStatus::SUCCESS for dups
-            Self->IncCounter(COUNTER_WRITE_DUPLICATE);
-        }
+        // Return EResultStatus::SUCCESS for dups
+        Self->IncCounter(COUNTER_WRITE_DUPLICATE);
     }
 
     if (status != NKikimrTxColumnShard::EResultStatus::SUCCESS) {
@@ -134,9 +131,15 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     ctx.Send(Ev->Get()->GetSource(), Result.release());
 }
 
-void TColumnShard::OverloadWriteFail(const TString& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::OverloadWriteFail(const EOverloadStatus& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    Y_VERIFY(overloadReason != EOverloadStatus::None);
+
     IncCounter(COUNTER_WRITE_FAIL);
-    IncCounter(COUNTER_WRITE_OVERLOAD);
+    if (overloadReason == EOverloadStatus::Disk) {
+        IncCounter(COUNTER_OUT_OF_SPACE);
+    } else {
+        IncCounter(COUNTER_WRITE_OVERLOAD);
+    }
 
     const auto& record = Proto(ev->Get());
     const auto& data = record.GetData();
@@ -154,6 +157,24 @@ void TColumnShard::OverloadWriteFail(const TString& overloadReason, TEvColumnSha
     ctx.Send(ev->Get()->GetSource(), result.release());
 }
 
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId, const ui64 dataSize) const {
+    if (IsAnyChannelYellowStop()) {
+        return EOverloadStatus::Disk;
+    }
+
+    if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
+        CSCounters.OnOverloadInsertTable(dataSize);
+        return EOverloadStatus::InsertTable;
+    } else if (TablesManager.IsOverloaded(tableId)) {
+        CSCounters.OnOverloadGranule(dataSize);;
+        return EOverloadStatus::Granule;
+    } else if (ShardOverloaded()) {
+        CSCounters.OnOverloadShard(dataSize);
+        return EOverloadStatus::Shard;
+    }
+    return EOverloadStatus::None;
+}
+
 // EvWrite -> WriteActor (attach BlobId without proto changes) -> EvWrite
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LastAccessTime = TAppData::TimeProvider->Now();
@@ -168,15 +189,14 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     const TString dedupId = record.GetDedupId();
     const auto putStatus = ev->Get()->GetPutStatus();
 
-    bool isWritable = TablesManager.IsWritableTable(tableId);
-    bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !TablesManager.HasPrimaryIndex() || !isWritable;
+    bool error = data.empty() || data.size() > TLimits::GetMaxBlobSize() || !TablesManager.IsReadyForWrite(tableId);
     bool errorReturned = (putStatus != NKikimrProto::OK) && (putStatus != NKikimrProto::UNKNOWN);
-    bool isOutOfSpace = IsAnyChannelYellowStop();
 
+    auto overloadStatus = CheckOverloaded(tableId, data.size());
     if (error || errorReturned) {
         LOG_S_NOTICE("Write (fail) " << data.size() << " bytes into pathId " << tableId
             << ", status " << putStatus
-            << (TablesManager.HasPrimaryIndex()? "": ", no index") << (isWritable? "": ", ro")
+            << (TablesManager.HasPrimaryIndex()? "": ", no index")
             << " at tablet " << TabletID());
 
         IncCounter(COUNTER_WRITE_FAIL);
@@ -206,24 +226,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         WritesSizeInFlight -= ev->Get()->ResourceUsage.SourceMemorySize;
         Y_VERIFY(putStatus == NKikimrProto::OK);
         Execute(new TTxWrite(this, ev), ctx);
-    } else if (isOutOfSpace) {
-        IncCounter(COUNTER_WRITE_FAIL);
-        IncCounter(COUNTER_OUT_OF_SPACE);
-        LOG_S_ERROR("Write (out of disk space) " << data.size() << " bytes into pathId " << tableId
-            << " at tablet " << TabletID());
-
-        auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
-            TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
-        ctx.Send(ev->Get()->GetSource(), result.release());
-    } else if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
-        CSCounters.OnOverloadInsertTable(data.size());
-        OverloadWriteFail("insert_table", ev, ctx);
-    } else if (TablesManager.IsOverloaded(tableId)) {
-        CSCounters.OnOverloadGranule(data.size());
-        OverloadWriteFail("granule", ev, ctx);
-    } else if (ShardOverloaded()) {
-        CSCounters.OnOverloadShard(data.size());
-        OverloadWriteFail("shard", ev, ctx);
+    } else if (overloadStatus != EOverloadStatus::None) {
+        OverloadWriteFail(overloadStatus, ev, ctx);
     } else {
         if (record.HasLongTxId()) {
             // TODO: multiple blobs in one longTx ({longTxId, dedupId} -> writeId)

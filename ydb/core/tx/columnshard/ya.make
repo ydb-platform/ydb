@@ -38,6 +38,7 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)
+GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
     library/cpp/actors/core

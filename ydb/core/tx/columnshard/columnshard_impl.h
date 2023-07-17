@@ -117,7 +117,6 @@ class TColumnShard
     friend class TTxNotifyTxCompletion;
     friend class TTxPlanStep;
     friend class TTxWrite;
-    friend class TTxCleanInserted;
     friend class TTxReadBase;
     friend class TTxRead;
     friend class TTxScan;

@@ -108,7 +108,8 @@ public:
         } catch (...) {
             auto msg = CurrentExceptionMessage();
             LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);
-            InternalError(TStringBuilder() << "Unexpected exception: " << msg);
+            CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
+                YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, msg));
         }
 
         return std::move(ResponseEv);

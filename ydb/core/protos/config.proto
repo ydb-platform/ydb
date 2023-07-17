@@ -1124,7 +1124,7 @@ message TTableServiceConfig {
         reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
-        optional uint64 MinChannelBufferSize = 12 [default = 2097152];          // 2 MB
+        optional uint64 MinChannelBufferSize = 12 [default = 2048];          // 2 KB
 
         reserved 13;
         reserved 14;

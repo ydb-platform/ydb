@@ -419,9 +419,16 @@ private:
             auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
             YQL_ENSURE(taskCtx.TaskId != 0);
 
-            memoryLimits.ChannelBufferSize = taskCtx.ChannelSize;
-            Y_VERIFY_DEBUG(memoryLimits.ChannelBufferSize >= Config.GetMinChannelBufferSize(),
-                "actual size: %ld, min: %ld", memoryLimits.ChannelBufferSize, Config.GetMinChannelBufferSize());
+            {
+                ui32 inputChannelsCount = 0;
+                for (auto&& i : dqTask.GetInputs()) {
+                    inputChannelsCount += i.ChannelsSize();
+                }
+                memoryLimits.ChannelBufferSize = std::max<ui32>(taskCtx.ChannelSize / std::max<ui32>(1, inputChannelsCount), Config.GetMinChannelBufferSize());
+                AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
+                    ("ch_size", taskCtx.ChannelSize)("ch_count", taskCtx.Channels)("ch_limit", memoryLimits.ChannelBufferSize)
+                    ("inputs", dqTask.InputsSize())("input_channels_count", inputChannelsCount);
+            }
 
             auto& taskOpts = dqTask.GetProgram().GetSettings();
             auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/

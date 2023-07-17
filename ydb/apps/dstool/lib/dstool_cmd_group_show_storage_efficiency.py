@@ -3,14 +3,16 @@ import ydb.apps.dstool.lib.table as table
 import re
 import multiprocessing
 import sys
+import itertools
 from collections import defaultdict
 
 description = 'Estimate storage efficiency of VDisks and pools'
 
 
 def create_table_output():
-    size_cols = ['IdxSize', 'InplaceSize', 'HugeSize', 'CompIdxSize', 'CompInplaceSize', 'CompHugeSize', 'Size', 'CompSize']
-    columns = ['StoragePool', 'GroupId', 'Blobs', 'CompBlobs', *size_cols, 'Efficiency']
+    size_cols = ['IdxSize', 'InplaceSize', 'HugeSize', 'CompIdxSize', 'CompInplaceSize', 'CompHugeSize', 'Size', 'CompSize',
+                 'HugeHeapTotalSize', 'HugeHeapUsedSize', 'HugeHeapFreeSize', 'HugeHeapWasteSize', 'HugeHeapDefragSize']
+    columns = ['StoragePool', 'GroupId', 'Blobs', 'CompBlobs', *size_cols, 'Efficiency', 'HugeHeapEfficiency']
 
     def aggr_size(d, rg):
         for row in rg:
@@ -18,6 +20,8 @@ def create_table_output():
                 d[key_col] = d.get(key_col, 0) + row[key_col]
         if d['Size']:
             d['Efficiency'] = d['CompSize'] / d['Size']
+        if d['HugeHeapTotalSize']:
+            d['HugeHeapEfficiency'] = d['HugeHeapDefragSize'] / d['HugeHeapTotalSize']
         return d
 
     aggregations = {
@@ -26,8 +30,8 @@ def create_table_output():
     return table.TableOutput(
         cols_order=columns,
         aggregations=aggregations,
-        aggr_drop={'Blobs', 'CompBlobs', *size_cols, 'Efficiency'},
-        col_units=dict([(x, 'bytes') for x in size_cols] + [('Efficiency', '%')])
+        aggr_drop={'Blobs', 'CompBlobs', *size_cols, 'Efficiency', 'HugeHeapEfficiency'},
+        col_units=dict([(x, 'bytes') for x in size_cols] + [('Efficiency', '%')] + [('HugeHeapEfficiency', '%')])
     )
 
 
@@ -73,10 +77,54 @@ def parse_vdisk_storage_efficiency(host, node_id, pdisk_id, vslot_id):
                 else:
                     assert sizes[2] == 0
             count_items = False
+
+        slot_count = defaultdict(int)
+        used_slot_count = defaultdict(int)
+
+        huge_useful_bytes = 0
+        if heap_usage := re.search("<div id='hugeheapusageid' class='collapse'>(.*?)</div>", data):
+            if heap_usage := re.search('<tbody>(.*?)</tbody>', heap_usage.group(0)):
+                for row in re.finditer(r'<tr><td>(\d+)</td><td>(\d+)</td><td>(\d+)</td></tr>', heap_usage.group(1)):
+                    slot_size, num_slots_per_chunk, allocated = map(int, row.group(1, 2, 3))
+                    huge_useful_bytes += slot_size * allocated
+                    slot_count[slot_size, num_slots_per_chunk] += allocated
+                    used_slot_count[slot_size, num_slots_per_chunk] += allocated
+
+        huge_unused_bytes = 0
+        if heap_state := re.search("<div id='hugeheapstateid' class='collapse'>(.*?)</div>", data):
+            if heap_state := re.search('<tbody>(.*?)</tbody>', heap_state.group(0)):
+                for row in re.finditer(r'<tr><td>(\d+) / (\d+)</td><td>(.*?)</td></tr>', heap_state.group(1)):
+                    slot_size = int(row.group(1))
+                    num_slots_per_chunk = int(row.group(2))
+                    for item in re.finditer(r'\[\d+ (\d+)]', row.group(3)):
+                        num_free_slots = int(item.group(1))
+                        slot_count[slot_size, num_slots_per_chunk] += num_free_slots
+                        huge_unused_bytes += slot_size * num_free_slots
+
+        huge_waste_bytes = 0
+        huge_defrag_bytes = 0
+        if m := re.search(r'<tr><td>ChunkSize</td><td>(\d+)</td></tr>', data):
+            chunk_size = int(m.group(1))
+            for (slot_size, num_slots_per_chunk), num_slots in slot_count.items():
+                assert num_slots % num_slots_per_chunk == 0
+                num_chunks = num_slots // num_slots_per_chunk
+                huge_waste_bytes += num_chunks * (chunk_size - slot_size * num_slots_per_chunk)
+                huge_defrag_bytes += (used_slot_count[slot_size, num_slots_per_chunk] + num_slots_per_chunk - 1) // num_slots_per_chunk * chunk_size
     except Exception as e:
         print('Failed to process VDisk %s: %s' % (page, e))
         return None
-    return idx_size, inplace_size, huge_size, comp_idx_size, comp_inplace_size, comp_huge_size, items, comp_items
+    return idx_size, inplace_size, huge_size, comp_idx_size, comp_inplace_size, comp_huge_size, items, comp_items, \
+        huge_useful_bytes, huge_unused_bytes, huge_waste_bytes, huge_defrag_bytes
+
+
+def fetcher(args):
+    host, items = args
+    res_q = []
+    for group_id, node_id, pdisk_id, vslot_id in items:
+        row = parse_vdisk_storage_efficiency(host, node_id, pdisk_id, vslot_id)
+        if row is not None:
+            res_q.append((group_id, row))
+    return res_q
 
 
 def add_options(p):
@@ -111,36 +159,18 @@ def do(args):
             host = node_fqdn_map[vslot.NodeId]
             host_requests_map[host].append((group.GroupId, vslot.NodeId, vslot.PDiskId, vslot.VSlotId))
 
-    def fetcher(host, items, res_q):
-        for group_id, node_id, pdisk_id, vslot_id in items:
-            row = parse_vdisk_storage_efficiency(host, node_id, pdisk_id, vslot_id)
-            if row is not None:
-                res_q.put((group_id, *row))
-        res_q.put(None)
-
-    processes = []
-    res_q = multiprocessing.Queue()
-    for key, value in host_requests_map.items():
-        processes.append(multiprocessing.Process(target=fetcher, kwargs=dict(host=key, items=value, res_q=res_q), daemon=True))
-    for p in processes:
-        p.start()
-    num_q = len(processes)
-    results = defaultdict(list)
+    results = {}
     found = defaultdict(int)
-    while num_q:
-        item = res_q.get()
-        if item is None:
-            num_q -= 1
-            continue
-        r = results[item[0]]
-        if not r:
-            r.extend(item[1:])
-        else:
-            for i, value in enumerate(item[1:]):
-                r[i] += value
-        found[item[0]] += 1
-    for p in processes:
-        p.join()
+
+    with multiprocessing.Pool(128) as pool:
+        for group_id, stats in itertools.chain.from_iterable(pool.imap_unordered(fetcher, host_requests_map.items())):
+            if r := results.get(group_id):
+                assert len(stats) == len(r)
+                for i, value in enumerate(stats):
+                    r[i] += value
+            else:
+                results[group_id] = list(stats)
+            found[group_id] += 1
 
     rows = []
     for group_id, values in results.items():
@@ -160,8 +190,15 @@ def do(args):
             CompSize=values[3] + values[4] + values[5],
             Blobs=values[6],
             CompBlobs=values[7],
+            HugeHeapTotalSize=values[8] + values[9] + values[10],
+            HugeHeapUsedSize=values[8],
+            HugeHeapFreeSize=values[9],
+            HugeHeapWasteSize=values[10],
+            HugeHeapDefragSize=values[11],
         ))
         if rows[-1]['Size']:
             rows[-1]['Efficiency'] = rows[-1]['CompSize'] / rows[-1]['Size']
+        if rows[-1]['HugeHeapTotalSize']:
+            rows[-1]['HugeHeapEfficiency'] = rows[-1]['HugeHeapDefragSize'] / rows[-1]['HugeHeapTotalSize']
 
     table_output.dump(rows, args)

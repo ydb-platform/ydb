@@ -173,6 +173,4 @@ private:
 
 }; // TGuardian
 
-IActor* CreateBSCClientActor(const TCmsStatePtr& cmsState);
-
 } // namespace NKikimr::NCms::NSentinel

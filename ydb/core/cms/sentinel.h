@@ -14,10 +14,7 @@ struct TEvSentinel {
         EvUpdateState,
         EvStateUpdated,
 
-        EvStatusChanged,
-
         EvTimeout,
-
         EvBSCPipeDisconnected,
 
         EvEnd,
@@ -32,18 +29,6 @@ struct TEvSentinel {
     struct TEvStateUpdated: public TEventLocal<TEvStateUpdated, EvStateUpdated> {};
 
     struct TEvTimeout: public TEventLocal<TEvTimeout, EvTimeout> {};
-
-    struct TEvStatusChanged: public TEventLocal<TEvStatusChanged, EvStatusChanged> {
-        TPDiskID Id;
-        bool Success;
-
-        explicit TEvStatusChanged(const TPDiskID& id, bool success)
-            : Id(id)
-            , Success(success)
-        {
-        }
-    };
-
     struct TEvBSCPipeDisconnected: public TEventLocal<TEvBSCPipeDisconnected, EvBSCPipeDisconnected> {};
 
 }; // TEvSentinel

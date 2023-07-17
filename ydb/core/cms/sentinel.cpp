@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
@@ -287,6 +288,18 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     return result;
 }
 
+/// Misc
+
+IActor* CreateBSControllerPipe(TCmsStatePtr cmsState) {
+    auto domains = AppData()->DomainsInfo;
+    const ui32 domainUid = domains->GetDomainUidByTabletId(cmsState->CmsTabletId);
+    const ui64 bscId = MakeBSControllerID(domains->GetDefaultStateStorageGroup(domainUid));
+
+    NTabletPipe::TClientConfig config;
+    config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    return NTabletPipe::CreateClient(cmsState->CmsActorId, bscId, config);
+}
+
 /// Actors
 
 template <typename TDerived>
@@ -375,7 +388,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             << ": attempt# " << SentinelState->ConfigUpdaterState.BSCAttempt);
 
         if (!CmsState->BSControllerPipe) {
-            CmsState->BSControllerPipe = this->Register(CreateBSCClientActor(CmsState));
+            CmsState->BSControllerPipe = this->Register(CreateBSControllerPipe(CmsState));
         }
 
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -948,7 +961,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         if (!CmsState->BSControllerPipe) {
-            CmsState->BSControllerPipe = Register(CreateBSCClientActor(CmsState));
+            CmsState->BSControllerPipe = Register(CreateBSControllerPipe(CmsState));
         }
 
         LOG_D("Change pdisk status"
@@ -1064,13 +1077,18 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         const auto& response = ev->Get()->Record.GetResponse();
 
         LOG_D("Handle TEvBlobStorage::TEvControllerConfigResponse"
-            << ": response# " << response.ShortDebugString());
+            << ": response# " << response.ShortDebugString()
+            << ", cookie# " << ev->Cookie);
 
         if (ev->Cookie != SentinelState->ChangeRequestId) {
+            LOG_W("Ignore TEvBlobStorage::TEvControllerConfigResponse"
+                << ": cookie# " << ev->Cookie
+                << ", expected# " << SentinelState->ChangeRequestId);
             return;
         }
 
         if (SentinelState->ChangeRequests.empty()) {
+            LOG_W("Ignore TEvBlobStorage::TEvControllerConfigResponse: empty queue");
             return;
         }
 
@@ -1211,16 +1229,6 @@ private:
     TSentinelState::TPtr SentinelState;
 
 }; // TSentinel
-
-IActor* CreateBSCClientActor(const TCmsStatePtr& cmsState) {
-    auto domains = AppData()->DomainsInfo;
-    const ui32 domainUid = domains->GetDomainUidByTabletId(cmsState->CmsTabletId);
-    const ui64 bscId = MakeBSControllerID(domains->GetDefaultStateStorageGroup(domainUid));
-
-    NTabletPipe::TClientConfig config;
-    config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    return NTabletPipe::CreateClient(cmsState->CmsActorId, bscId, config);
-}
 
 } // NSentinel
 

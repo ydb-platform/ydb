@@ -5,8 +5,8 @@ namespace NKikimr::NTestShard {
 
     void TLoadActor::GenerateKeyValue(TString *key, TString *value, bool *isInline) {
         const size_t len = GenerateRandomSize(Settings.GetSizes(), isInline);
-        const ui64 id = TAppData::RandomProvider->GenRand64();
-        const ui64 seed = TAppData::RandomProvider->GenRand64();
+        const ui64 id = RandomNumber<ui64>();
+        const ui64 seed = RandomNumber<ui64>();
         *key = TStringBuilder() << len << ',' << seed << ',' << id;
         *value = FastGenDataForLZ4(len, seed);
     }
@@ -47,7 +47,7 @@ namespace NKikimr::NTestShard {
             const TDuration latency = TDuration::Seconds(info.Timer.Passed());
             STLOG(PRI_DEBUG, TEST_SHARD, TS29, "data written", (TabletId, TabletId), (Key, info.KeysInQuery),
                 (Latency, latency));
-            WriteLatency.Add(latency);
+            WriteLatency.Add(TActivationContext::Monotonic(), latency);
             Y_VERIFY(info.KeysInQuery.size() == (size_t)results.size(), "%zu/%d", info.KeysInQuery.size(), results.size());
             for (size_t i = 0; i < info.KeysInQuery.size(); ++i) {
                 const auto& res = results[i];

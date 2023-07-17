@@ -154,6 +154,22 @@ namespace NKikimr::NTestShard {
                                     output(self->StateServerWriteLatency, "StateServerWriteLatency");
                                     output(self->WriteLatency, "WriteLatency");
                                     output(self->ReadLatency, "ReadLatency");
+
+                                    std::vector<TDuration> intervals;
+                                    intervals.reserve(30);
+                                    for (ui32 i = 0; i < 29; ++i) {
+                                        const double seconds = 1e-5 * round(100 * pow(10, i / 7.0));
+                                        intervals.push_back(TDuration::Seconds(seconds));
+                                    }
+                                    intervals.push_back(TDuration::Max());
+
+                                    auto res = self->WriteLatency.Intervals(intervals);
+                                    for (size_t i = 0; i < res.size(); ++i) {
+                                        TABLER() {
+                                            TABLED() { str << "W " << intervals[i]; }
+                                            TABLED() { str << res[i]; }
+                                        }
+                                    }
                                 }
                             }
                         }

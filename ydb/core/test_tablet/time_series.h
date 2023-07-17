@@ -3,33 +3,46 @@
 namespace NKikimr {
 
     class TTimeSeries {
-        const size_t NumItems;
-        std::vector<TDuration> Queue;
-        size_t Index = 0;
+        const TDuration Window;
+        std::deque<std::tuple<TMonotonic, TDuration>> Queue;
 
     public:
-        TTimeSeries(size_t numItems)
-            : NumItems(numItems)
-        {
-            Queue.reserve(NumItems);
-        }
+        TTimeSeries(TDuration window)
+            : Window(window)
+        {}
 
-        void Add(TDuration value) {
-            if (Index == Queue.size()) {
-                Queue.push_back(value);
-            } else {
-                Queue[Index] = value;
-            }
-            ++Index %= NumItems;
+        void Add(TMonotonic now, TDuration value) {
+            Queue.emplace_back(now, value);
+            auto it = std::upper_bound(Queue.begin(), Queue.end(), std::make_tuple(now - Window, TDuration::Zero()));
+            Queue.erase(Queue.begin(), it);
         }
 
         std::vector<TDuration> Percentiles(const std::vector<double>& ps) const {
-            std::vector<TDuration> q = Queue;
+            std::vector<TDuration> q;
+            q.reserve(Queue.size());
+            for (const auto& [_, duration] : Queue) {
+                q.push_back(duration);
+            }
             std::sort(q.begin(), q.end());
             std::vector<TDuration> res;
             res.reserve(ps.size());
             for (double p : ps) {
-                res.push_back(q.empty() ? TDuration::Zero() : q[Min<size_t>(q.size() - 1, q.size() * p)]);
+                if (q.empty()) {
+                    res.emplace_back();
+                } else {
+                    const size_t index = Min<size_t>(q.size() - 1, static_cast<size_t>((q.size() - 0.5) * p + 0.5));
+                    res.push_back(q[index]);
+                }
+            }
+            return res;
+        }
+
+        std::vector<ui32> Intervals(const std::vector<TDuration>& ps) const {
+            std::vector<ui32> res(ps.size());
+            for (const auto& [_, duration] : Queue) {
+                const size_t index = std::lower_bound(ps.begin(), ps.end(), duration) - ps.begin();
+                Y_VERIFY(index < ps.size());
+                ++res[index];
             }
             return res;
         }

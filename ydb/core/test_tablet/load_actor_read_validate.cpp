@@ -688,7 +688,7 @@ namespace NKikimr::NTestShard {
                     "TabletId# " << TabletId << " Key# " << key << " value mismatch"
                     << " value.size# " << value.size() << " offset# " << offset << " size# " << size);
 
-                ReadLatency.Add(now - timestamp);
+                ReadLatency.Add(TActivationContext::Monotonic(), now - timestamp);
                 ReadSpeed.Add(TActivationContext::Now(), size);
             }
         }

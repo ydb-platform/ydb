@@ -69,7 +69,7 @@ namespace NKikimr::NTestShard {
         key.second.ConfirmedState = key.second.PendingState;
         if (auto& r = key.second.Request) {
             if (const auto it = WritesInFlight.find(r->Record.GetCookie()); it != WritesInFlight.end()) {
-                StateServerWriteLatency.Add(TDuration::Seconds(it->second.Timer.PassedReset()));
+                StateServerWriteLatency.Add(TActivationContext::Monotonic(), TDuration::Seconds(it->second.Timer.PassedReset()));
             }
             Send(TabletActorId, r.release());
         }

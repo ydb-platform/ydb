@@ -114,11 +114,14 @@ namespace NKikimr::NTestShard {
         ui32 KeysWritten = 0;
         static constexpr TDuration WriteSpeedWindow = TDuration::Seconds(10);
         static constexpr TDuration ReadSpeedWindow = TDuration::Seconds(10);
+        static constexpr TDuration StateServerWriteLatencyWindow = TDuration::Seconds(10);
+        static constexpr TDuration WriteLatencyWindow = TDuration::Seconds(10);
+        static constexpr TDuration ReadLatencyWindow = TDuration::Seconds(10);
         TSpeedMeter WriteSpeed{WriteSpeedWindow};
         TSpeedMeter ReadSpeed{ReadSpeedWindow};
-        TTimeSeries StateServerWriteLatency;
-        TTimeSeries WriteLatency;
-        TTimeSeries ReadLatency;
+        TTimeSeries StateServerWriteLatency{StateServerWriteLatencyWindow};
+        TTimeSeries WriteLatency{WriteLatencyWindow};
+        TTimeSeries ReadLatency{ReadLatencyWindow};
         TMonotonic NextWriteTimestamp;
         bool WriteOnTimeScheduled = false;
         bool DoSomeActionInFlight = false;
@@ -150,7 +153,6 @@ namespace NKikimr::NTestShard {
         std::unordered_map<ui64, TDeleteInfo> DeletesInFlight; // cookie -> TDeleteInfo
         ui32 KeysDeleted = 0;
 
-        std::optional<TString> FindKeyToDelete();
         void IssueDelete();
         void ProcessDeleteResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TDeleteRangeResult>& results);
 
@@ -182,7 +184,7 @@ namespace NKikimr::NTestShard {
                 w += interval.GetWeight();
                 cw.push_back(w);
             }
-            const size_t num = std::upper_bound(cw.begin(), cw.end(), TAppData::RandomProvider->Uniform(w)) - cw.begin();
+            const size_t num = std::upper_bound(cw.begin(), cw.end(), RandomNumber(w)) - cw.begin();
             Y_VERIFY(num < cw.size());
             return num;
         }

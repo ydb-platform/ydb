@@ -8,9 +8,6 @@ namespace NKikimr::NTestShard {
         , Generation(generation)
         , Tablet(tablet)
         , Settings(settings)
-        , StateServerWriteLatency(1024)
-        , WriteLatency(1024)
-        , ReadLatency(1024)
     {}
 
     void TLoadActor::Bootstrap(const TActorId& parentId) {

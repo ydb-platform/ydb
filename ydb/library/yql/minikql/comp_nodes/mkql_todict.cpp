@@ -794,15 +794,16 @@ public:
         , ItemsCountHint(itemsCountHint)
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
+
+        Compare = UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr;
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if constexpr (IsStream) {
             return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key,
-                TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded,
-                    UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-                    UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-                    UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
+                TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
                     ctx, ItemsCountHint), ctx);
         }
 
@@ -815,10 +816,7 @@ public:
                 return ctx.HolderFactory.GetEmptyContainer();
         }
 
-        TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded,
-            UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-            UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-            UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
+        TSetAccumulator accumulator(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
             ctx, itemsCountHint);
 
         TThresher<false>::DoForEachItem(list,
@@ -847,6 +845,10 @@ private:
     bool IsTuple;
     bool Encoded;
     bool UseIHash;
+
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -907,6 +909,10 @@ public:
         , ItemsCountHint(itemsCountHint)
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
+
+        Compare = UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr;
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -1030,10 +1036,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded,
-            UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-            UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-            UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
-            ctx, ItemsCountHint));
+            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1052,6 +1055,10 @@ private:
     bool IsTuple;
     bool Encoded;
     bool UseIHash;
+
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
 };
 
 template <typename TSetAccumulator>
@@ -1088,6 +1095,10 @@ public:
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
+
+        Compare = UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr;
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -1221,10 +1232,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(TSetAccumulator(KeyType, KeyTypes, IsTuple, Encoded,
-            UseIHash && TSetAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-            UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-            UseIHash && !TSetAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
-            ctx, ItemsCountHint));
+            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1247,6 +1255,10 @@ private:
     const std::optional<size_t> PasstroughKey;
 
     const ui32 WideFieldsIndex;
+
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
 };
 
 template <typename TMapAccumulator, bool IsStream>
@@ -1312,15 +1324,16 @@ public:
         , ItemsCountHint(itemsCountHint)
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
+
+        Compare = UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr;
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if constexpr (IsStream) {
             return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key, Payload,
-                TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-                    UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-                    UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-                    UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
+                TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
                     ctx, ItemsCountHint), ctx);
         }
 
@@ -1335,10 +1348,7 @@ public:
         }
 
         TMapAccumulator accumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-            UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-            UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-            UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
-            ctx, itemsCountHint);
+            Compare.Get(), Equate.Get(), Hash.Get(), ctx, itemsCountHint);
 
         TThresher<false>::DoForEachItem(list,
             [this, &accumulator, &ctx] (NUdf::TUnboxedValue&& item) {
@@ -1369,7 +1379,10 @@ private:
     bool IsTuple;
     bool Encoded;
     bool UseIHash;
-};
+
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;};
 
 template <typename TMapAccumulator>
 class TSqueezeMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper<TMapAccumulator>> {
@@ -1406,6 +1419,10 @@ public:
         , ItemsCountHint(itemsCountHint)
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
+
+        Compare = UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr;
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -1530,10 +1547,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-            UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-            UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-            UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
-            ctx, ItemsCountHint));
+            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1555,6 +1569,10 @@ private:
     bool IsTuple;
     bool Encoded;
     bool UseIHash;
+
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
 };
 
 template <typename TMapAccumulator>
@@ -1595,6 +1613,10 @@ public:
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
+
+        Compare = UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr;
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -1730,10 +1752,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(TMapAccumulator(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-            UseIHash && TMapAccumulator::IsSorted ? MakeCompareImpl(KeyType) : nullptr,
-            UseIHash ? MakeEquateImpl(KeyType) : nullptr,
-            UseIHash && !TMapAccumulator::IsSorted ? MakeHashImpl(KeyType) : nullptr,
-            ctx, ItemsCountHint));
+            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1761,6 +1780,10 @@ private:
 
     mutable std::vector<NUdf::TUnboxedValue*> Fields;
     const ui32 WideFieldsIndex;
+
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
 };
 
 template <typename TAccumulator>

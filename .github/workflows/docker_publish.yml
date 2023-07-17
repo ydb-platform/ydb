@@ -10,11 +10,6 @@ on:
         required: true
         default: main
         description: "Git branch/tag revision to build"
-      dockerfile_branch:
-        type: string
-        required: true
-        default: main
-        description: "Git branch for getting Dockerfile"
       image_tag:
         type: string
         required: true

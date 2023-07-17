@@ -15,7 +15,16 @@ COPY ydb/ /ydbwork/ydb/
 
 COPY ydb/ /ydbwork/ydb/
 
-WORKDIR /ydbwork/
+WORKDIR /ydbwork
+
+ARG GIT_REPO=https://github.com/ydb-platform/ydb.git
+ARG GIT_REF=main
+
+ENV GIT_REPO=$GIT_REPO
+ENV GIT_REF=$GIT_REF
+
+RUN mkdir ydb \
+    && git clone --depth=1 -b "${GIT_REF?}" ${GIT_REPO?}
 
 RUN --mount=type=secret,id=ccache_remote_storage \
     mkdir build && cd build \
@@ -23,8 +32,6 @@ RUN --mount=type=secret,id=ccache_remote_storage \
     && export CCACHE_BASEDIR=/ydbwork/ \
     && export CCACHE_SLOPPINESS=locale \
     && export CCACHE_REMOTE_STORAGE="$(cat /run/secrets/ccache_remote_storage)" \
-    && export CC=/usr/bin/clang-14 \
-    && export CC_FOR_BUILD=$CC \
     && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \

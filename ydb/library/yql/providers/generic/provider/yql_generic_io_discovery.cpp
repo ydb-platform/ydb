@@ -26,7 +26,7 @@ namespace NYql {
                 if (ctx.Step.IsDone(TExprStep::DiscoveryIO))
                     return TStatus::Ok;
 
-                if (!State_->DbResolver)
+                if (!State_->DatabaseResolver)
                     return TStatus::Ok;
 
                 THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> ids;
@@ -53,8 +53,8 @@ namespace NYql {
                         if (databaseId) {
                             YQL_CLOG(DEBUG, ProviderGeneric) << "found database id: " << databaseId;
                             const auto idKey = std::make_pair(databaseId, DataSourceKindToDatabaseType(cluster.GetKind()));
-                            const auto iter = State_->DatabaseIds.find(idKey);
-                            if (iter != State_->DatabaseIds.end()) {
+                            const auto iter = State_->DatabaseAuth.find(idKey);
+                            if (iter != State_->DatabaseAuth.end()) {
                                 YQL_CLOG(DEBUG, ProviderGeneric) << "resolve database id: " << databaseId;
                                 ids[idKey] = iter->second;
                             }
@@ -70,7 +70,7 @@ namespace NYql {
                 // FIXME: overengineered code - instead of using weak_ptr, directly copy shared_ptr in callback in this way:
                 // Apply([response = DbResolverResponse_](...))
                 const std::weak_ptr<NYql::TDatabaseResolverResponse> response = DbResolverResponse_;
-                AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future) {
+                AsyncFuture_ = State_->DatabaseResolver->ResolveIds(ids).Apply([response](auto future) {
                     if (const auto res = response.lock()) {
                         *res = std::move(future.ExtractValue());
                     }

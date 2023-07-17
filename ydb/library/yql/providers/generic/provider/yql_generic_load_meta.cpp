@@ -39,8 +39,7 @@ namespace NYql {
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
-        using TMapType =
-            std::unordered_map<std::pair<TString, TString>, TGenericTableDescription, THash<std::pair<TString, TString>>>;
+        using TMapType = std::unordered_map<TGenericState::TTableAddress, TGenericTableDescription, THash<TGenericState::TTableAddress>>;
 
     public:
         TGenericLoadTableMetadataTransformer(TGenericState::TPtr state, NConnector::IClient::TPtr client)
@@ -57,27 +56,26 @@ namespace NYql {
             }
 
             std::unordered_set<TMapType::key_type, TMapType::hasher> pendingTables;
-            if (const auto& reads = FindNodes(input,
-                                              [&](const TExprNode::TPtr& node) {
-                                                  if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
-                                                      return maybeRead.Cast().DataSource().Category().Value() ==
-                                                             GenericProviderName;
-                                                  }
-                                                  return false;
-                                              });
-                !reads.empty()) {
+            const auto& reads = FindNodes(input,
+                                          [&](const TExprNode::TPtr& node) {
+                                              if (const auto maybeRead = TMaybeNode<TGenRead>(node)) {
+                                                  return maybeRead.Cast().DataSource().Category().Value() == GenericProviderName;
+                                              }
+                                              return false;
+                                          });
+            if (!reads.empty()) {
                 for (const auto& r : reads) {
                     const TGenRead read(r);
                     if (!read.FreeArgs().Get(2).Ref().IsCallable("MrTableConcat")) {
                         ctx.AddError(
-                            TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), TStringBuilder() << "Expected Key"));
+                            TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), TStringBuilder() << "Expected key"));
                         return TStatus::Error;
                     }
 
                     const auto maybeKey = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Maybe<TCoKey>();
                     if (!maybeKey) {
                         ctx.AddError(
-                            TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), TStringBuilder() << "Expected Key"));
+                            TIssue(ctx.GetPosition(read.FreeArgs().Get(0).Pos()), TStringBuilder() << "Expected key"));
                         return TStatus::Error;
                     }
 
@@ -89,11 +87,11 @@ namespace NYql {
                         return TStatus::Error;
                     }
 
-                    const auto cluster = read.DataSource().Cluster().StringValue();
+                    const auto clusterName = read.DataSource().Cluster().StringValue();
                     const auto tableName = TString(keyArg.Tail().Head().Content());
-                    if (pendingTables.insert(std::make_pair(cluster, tableName)).second) {
+                    if (pendingTables.insert(TGenericState::TTableAddress(clusterName, tableName)).second) {
                         YQL_CLOG(INFO, ProviderGeneric)
-                            << "Load table meta for: `" << cluster << "`.`" << tableName << "`";
+                            << "Loading table meta for: `" << clusterName << "`.`" << tableName << "`";
                     }
                 }
             }
@@ -107,7 +105,7 @@ namespace NYql {
 
                 const auto& clusterName = item.first;
                 const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
-                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found:" << clusterName);
+                YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
 
                 const auto& clusterConfig = it->second;
 
@@ -162,36 +160,36 @@ namespace NYql {
 
             for (const auto& r : reads) {
                 const TGenRead read(r);
-                const auto cluster = read.DataSource().Cluster().StringValue();
+                const auto clusterName = read.DataSource().Cluster().StringValue();
                 const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
-                const auto table = TString(keyArg.Tail().Head().Content());
+                const auto tableName = TString(keyArg.Tail().Head().Content());
 
-                const auto it = Results_.find(std::make_pair(cluster, table));
+                const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
                 if (Results_.cend() != it) {
                     const auto& result = it->second.Result;
                     const auto& error = result->Error;
                     if (NConnector::ErrorIsSuccess(error)) {
-                        TGenericState::TTableMeta meta;
-                        meta.Schema = result->Schema;
-                        meta.DataSourceInstance = it->second.DataSourceInstance;
+                        TGenericState::TTableMeta tableMeta;
+                        tableMeta.Schema = result->Schema;
+                        tableMeta.DataSourceInstance = it->second.DataSourceInstance;
 
-                        const auto& parse = ParseTableMeta(meta.Schema, cluster, table, ctx, meta.ColumnOrder);
+                        const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
 
                         if (parse.first) {
-                            meta.ItemType = parse.first;
+                            tableMeta.ItemType = parse.first;
                             State_->Timezones[read.DataSource().Cluster().Value()] = ctx.AppendString(parse.second);
                             if (const auto ins = replaces.emplace(read.Raw(), TExprNode::TPtr()); ins.second) {
                                 // clang-format off
                                 ins.first->second = Build<TGenReadTable>(ctx, read.Pos())
                                     .World(read.World())
                                     .DataSource(read.DataSource())
-                                    .Table().Value(table).Build()
+                                    .Table().Value(tableName).Build()
                                     .Columns<TCoVoid>().Build()
                                     .Timezone().Value(parse.second).Build()
                                 .Done().Ptr();
                                 // clang-format on
                             }
-                            State_->Tables.emplace(it->first, meta);
+                            State_->AddTable(clusterName, tableName, std::move(tableMeta));
                         } else {
                             hasErrors = true;
                             break;
@@ -199,13 +197,13 @@ namespace NYql {
                     } else {
                         NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
                                                    TStringBuilder()
-                                                       << "loading metadata for table: " << cluster << '.' << table);
+                                                       << "Loading metadata for table: " << clusterName << '.' << tableName);
                         hasErrors = true;
                         break;
                     }
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
-                                        TStringBuilder() << "Not found result for " << cluster << '.' << table));
+                                        TStringBuilder() << "Not found result for " << clusterName << '.' << tableName));
                     hasErrors = true;
                     break;
                 }

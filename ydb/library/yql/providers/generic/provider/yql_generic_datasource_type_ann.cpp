@@ -9,6 +9,11 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+// You may want to change AST, graph nodes, types, but finally you'll
+// return to the existing structure, inherited from ClickHouse and S3 providers.
+// In this case please increment this counter:
+// Hours wasted: 5
+
 namespace NYql {
 
     using namespace NNodes;
@@ -25,7 +30,11 @@ namespace NYql {
         }
 
         TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-            if (!EnsureArgsCount(*input, 3U, ctx)) {
+            if (!EnsureArgsCount(*input, 4, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(*input->Child(TGenSourceSettings::idx_Cluster), ctx)) {
                 return TStatus::Error;
             }
 
@@ -40,33 +49,35 @@ namespace NYql {
                 return TStatus::Error;
             }
 
+            // Find requested table metadata
+            TString clusterName{input->Child(TGenSourceSettings::idx_Cluster)->Content()};
+            TString tableName{input->Child(TGenSourceSettings::idx_Table)->Content()};
+
+            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
+            if (issue.has_value()) {
+                ctx.AddError(issue.value());
+                return TStatus::Error;
+            }
+
             // Create type annotation
-            const TTypeAnnotationNode* structExprType = nullptr;
             TVector<const TItemExprType*> blockRowTypeItems;
 
-            for (const auto& table : State_->Tables) {
-                const auto structExprType = table.second.ItemType;
-                for (const auto& item : structExprType->GetItems()) {
-                    blockRowTypeItems.push_back(
-                        ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(item->GetItemType())));
-                }
-
-                // FIXME: YQ-2190
-                // Clickhouse provider used to work with multiple tables simultaneously;
-                // I don't know what to do with others.
-                break;
+            const auto structExprType = tableMeta.value()->ItemType;
+            for (const auto& item : structExprType->GetItems()) {
+                blockRowTypeItems.push_back(
+                    ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(item->GetItemType())));
             }
 
             blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(
                 BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
-            structExprType = ctx.MakeType<TStructExprType>(blockRowTypeItems);
+            const TTypeAnnotationNode* typeAnnotationNode = ctx.MakeType<TStructExprType>(blockRowTypeItems);
 
             // Struct column order
             YQL_CLOG(INFO, ProviderGeneric)
                 << "StructExprType column order:"
-                << (static_cast<const TStructExprType*>(structExprType))->ToString();
+                << (static_cast<const TStructExprType*>(typeAnnotationNode))->ToString();
 
-            auto streamExprType = ctx.MakeType<TStreamExprType>(structExprType);
+            auto streamExprType = ctx.MakeType<TStreamExprType>(typeAnnotationNode);
             input->SetTypeAnn(streamExprType);
 
             return TStatus::Ok;
@@ -116,17 +127,17 @@ namespace NYql {
                 }
             }
 
-            TString cluster{input->Child(TGenReadTable::idx_DataSource)->Child(1)->Content()};
-            TString table{input->Child(TGenReadTable::idx_Table)->Content()};
-            auto found = State_->Tables.FindPtr(std::make_pair(cluster, table));
-            if (!found) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                                    TStringBuilder() << "No metadata for table: `" << cluster << "`.`" << table << "`"));
+            TString clusterName{input->Child(TGenReadTable::idx_DataSource)->Child(1)->Content()};
+            TString tableName{input->Child(TGenReadTable::idx_Table)->Content()};
+
+            auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
+            if (issue.has_value()) {
+                ctx.AddError(issue.value());
                 return TStatus::Error;
             }
 
-            auto itemType = found->ItemType;
-            auto columnOrder = found->ColumnOrder;
+            auto itemType = tableMeta.value()->ItemType;
+            auto columnOrder = tableMeta.value()->ColumnOrder;
 
             YQL_CLOG(INFO, ProviderGeneric) << "Custom column order:" << StateColumnOrderToString(columnOrder);
 

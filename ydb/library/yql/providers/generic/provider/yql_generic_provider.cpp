@@ -25,9 +25,9 @@ namespace NYql {
 
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
-            state->DbResolver = dbResolver;
+            state->DatabaseResolver = dbResolver;
             if (gatewaysConfig) {
-                state->Configuration->Init(gatewaysConfig->GetGeneric(), state->DbResolver, state->DatabaseIds, typeCtx->Credentials);
+                state->Configuration->Init(gatewaysConfig->GetGeneric(), state->DatabaseResolver, state->DatabaseAuth, typeCtx->Credentials);
             }
 
             TDataProviderInfo info;

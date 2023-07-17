@@ -436,6 +436,65 @@ private:
 
     TTablesManager TablesManager;
 
+    class TWritesMonitor {
+    private:
+        TColumnShard& Owner;
+        ui64 WritesInFlight = 0;
+        ui64 WritesSizeInFlight = 0;
+
+    public:
+        class TGuard: public TNonCopyable {
+            friend class TWritesMonitor;
+        private:
+            TWritesMonitor& Owner;
+
+            explicit TGuard(TWritesMonitor& owner)
+                : Owner(owner)
+            {}
+
+        public:
+            ~TGuard() {
+                Owner.UpdateCounters();
+            }
+        };
+
+        TWritesMonitor(TColumnShard& owner)
+            : Owner(owner)
+        {}
+
+        TGuard RegisterWrite(const ui64 dataSize) {
+            ++WritesInFlight;
+            WritesSizeInFlight += dataSize;
+            return TGuard(*this);
+        }
+
+        TGuard FinishWrite(const ui64 dataSize) {
+            Y_VERIFY(WritesInFlight > 0);
+            Y_VERIFY(WritesSizeInFlight >= dataSize);
+            --WritesInFlight;
+            WritesSizeInFlight -= dataSize;
+            return TGuard(*this);
+        }
+
+        bool ShardOverloaded() const {
+            ui64 txLimit = Owner.Settings.OverloadTxInFlight;
+            ui64 writesLimit = Owner.Settings.OverloadWritesInFlight;
+            ui64 writesSizeLimit = Owner.Settings.OverloadWritesSizeInFlight;
+            return  (txLimit && Owner.Executor()->GetStats().TxInFly > txLimit) ||
+                    (writesLimit && WritesInFlight > writesLimit) ||
+                    (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() << "TWritesMonitor: inflight " << WritesInFlight << " (" << WritesSizeInFlight << " bytes)";
+        }
+
+    private:
+        void UpdateCounters() {
+            Owner.SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);
+        }
+    };
+
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
@@ -443,8 +502,7 @@ private:
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
     ui64 LastExportNo = 0;
-    ui64 WritesInFlight = 0;
-    ui64 WritesSizeInFlight = 0;
+
     ui64 OwnerPathId = 0;
     ui64 TabletTxCounter = 0;
     ui64 StatsReportRound = 0;
@@ -480,6 +538,7 @@ private:
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
 
     const TCSCounters CSCounters;
+    TWritesMonitor WritesMonitor;
 
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
@@ -514,15 +573,6 @@ private:
     ui64 GetOutdatedStep() const;
     ui64 GetAllowedStep() const;
     bool HaveOutdatedTxs() const;
-
-    bool ShardOverloaded() const {
-        ui64 txLimit = Settings.OverloadTxInFlight;
-        ui64 writesLimit = Settings.OverloadWritesInFlight;
-        ui64 writesSizeLimit = Settings.OverloadWritesSizeInFlight;
-        return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
-           (writesLimit && WritesInFlight > writesLimit) ||
-           (writesSizeLimit && WritesSizeInFlight > writesSizeLimit);
-    }
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);

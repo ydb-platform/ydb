@@ -150,7 +150,7 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId, 
     } else if (TablesManager.IsOverloaded(tableId)) {
         CSCounters.OnOverloadGranule(dataSize);;
         return EOverloadStatus::Granule;
-    } else if (ShardOverloaded()) {
+    } else if (WritesMonitor.ShardOverloaded()) {
         CSCounters.OnOverloadShard(dataSize);
         return EOverloadStatus::Shard;
     }
@@ -162,8 +162,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     OnYellowChannels(putResult);
     const auto& writeMeta = ev->Get()->GetWriteMeta();
 
-    --WritesInFlight;
-    WritesSizeInFlight -= putResult.GetResourceUsage().SourceMemorySize;
+    auto wg = WritesMonitor.FinishWrite(putResult.GetResourceUsage().SourceMemorySize);
 
     if (putResult.GetPutStatus() != NKikimrProto::OK) {
         IncCounter(COUNTER_WRITE_FAIL);
@@ -179,7 +178,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
         auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
         ctx.Send(writeMeta.GetSource(), result.release());
-        SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);
         return;
     }
 
@@ -189,7 +187,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : "") << " at tablet " << TabletID());
 
     Execute(new TTxWrite(this, ev), ctx);
-    SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -249,19 +246,17 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             }
         }
 
-        ++WritesInFlight;
-        WritesSizeInFlight += writeData.GetSize();
+        auto wg = WritesMonitor.RegisterWrite(writeData.GetSize());
 
         LOG_S_DEBUG("Write (blob) " << writeData.GetSize() << " bytes into pathId " << writeMeta.GetTableId()
-            << (writeMeta.GetWriteId()? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : "")
-            << " inflight " << WritesInFlight << " (" << WritesSizeInFlight << " bytes)"
+            << (writeMeta.GetWriteId()? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : " ")
+            << WritesMonitor.DebugString()
             << " at tablet " << TabletID());
 
         const auto& snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
         auto writeController = std::make_shared<NOlap::TIndexedWriteController>(ctx.SelfID, writeData, snapshotSchema);
         ctx.Register(CreateWriteActor(TabletID(), writeController, BlobManager->StartBlobBatch(), TInstant::Max(), Settings.MaxSmallBlobSize));
     }
-    SetCounter(COUNTER_WRITES_IN_FLY, WritesInFlight);
 }
 
 }

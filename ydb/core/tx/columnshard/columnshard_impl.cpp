@@ -132,6 +132,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , ReadCounters("Read")
     , ScanCounters("Scan")
+    , WritesMonitor(*this)
 {
     TabletCountersPtr.reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,

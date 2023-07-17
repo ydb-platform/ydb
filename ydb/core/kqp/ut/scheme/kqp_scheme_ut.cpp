@@ -3451,6 +3451,136 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(SerialTypeNegative1) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableNeg1` (
+                    Key SerialUnknown,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }        
+    }
+
+    Y_UNIT_TEST(SerialTypeNegative2) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableNeg2` (
+                    Key Uint32,
+                    Value Serial,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }        
+    }
+
+    void TestSerialType(TString serialType) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTable%s` (
+                    Key %s,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )", serialType.c_str(), serialType.c_str());
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        {
+            TString query = Sprintf(R"(
+                UPSERT INTO `/Root/SerialTable%s` (Value) VALUES ("New");
+            )", serialType.c_str());
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+        {
+            TString query = Sprintf(R"(
+                SELECT * FROM `/Root/SerialTable%s`;
+            )", serialType.c_str());
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+            CompareYson(R"(
+                    [
+                        [[1];["New"]]
+                    ]
+                )",
+                NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(SerialTypeSmallSerial) {
+        TestSerialType("SmallSerial");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial2) {
+        TestSerialType("serial2");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial) {
+        TestSerialType("Serial");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial4) {
+        TestSerialType("Serial4");
+    }
+
+    Y_UNIT_TEST(SerialTypeBigSerial) {
+        TestSerialType("BigSerial");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial8) {
+        TestSerialType("serial8");
+    }
+
     Y_UNIT_TEST(ChangefeedRetentionPeriod) {
         using namespace NTopic;
 

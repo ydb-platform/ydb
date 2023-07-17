@@ -198,6 +198,7 @@ protected:
     TNodePtr IntegerOrBind(const TRule_integer_or_bind& node);
     TNodePtr TypeNameTag(const TRule_type_name_tag& node);
     TNodePtr TypeNodeOrBind(const TRule_type_name_or_bind& node);
+    TNodePtr SerialTypeNode(const TRule_type_name_or_bind& node);
     TNodePtr TypeNode(const TRule_type_name& node);
     TNodePtr TypeNode(const TRule_type_name_composite& node);
     TNodePtr ValueConstructorLiteral(const TRule_value_constructor_literal& node);

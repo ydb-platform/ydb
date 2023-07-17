@@ -1198,7 +1198,11 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     const bool nullable = !node.HasBlock4() || !node.GetBlock4().HasBlock1();
     const TString name(Id(node.GetRule_an_id_schema1(), *this));
     const TPosition pos(Context().Pos());
-    const auto type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
+    TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
+    const bool serial = (type != nullptr);
+    if (!type) {
+        type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
+    }
     if (!type) {
         return {};
     }
@@ -1207,7 +1211,43 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         const auto& familyRelation = node.GetBlock3().GetRule_family_relation1();
         families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
     }
-    return TColumnSchema(pos, name, type, nullable, families);
+    return TColumnSchema(pos, name, type, nullable, families, serial);
+}
+
+TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
+    if (node.Alt_case() != TRule_type_name_or_bind::kAltTypeNameOrBind1) {
+        return nullptr;
+    }
+
+    TPosition pos = Ctx.Pos();
+
+    auto typeNameNode = node.GetAlt_type_name_or_bind1().GetRule_type_name1();
+    if (typeNameNode.Alt_case() != TRule_type_name::kAltTypeName2) {
+        return nullptr;   
+    }
+
+    auto alt = typeNameNode.GetAlt_type_name2();
+    auto& block = alt.GetBlock1();
+    if (block.Alt_case() != TRule_type_name::TAlt2::TBlock1::kAlt2) {
+        return nullptr;
+    }
+    
+    auto alt2 = block.GetAlt2().GetRule_type_name_simple1();
+    const TString name = Id(alt2.GetRule_an_id_pure1(), *this);
+    if (name.empty()) {
+        return nullptr;
+    }
+
+    const auto res = to_lower(name);
+    if (res == "bigserial" || res == "serial8") {
+        return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Int64", TNodeFlags::Default) });
+    } else if (res == "serial" || res == "serial4") {
+        return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Int32", TNodeFlags::Default) });
+    } else if (res == "smallserial" || res == "serial2") {
+        return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Int16", TNodeFlags::Default) });
+    }
+
+    return nullptr;
 }
 
 bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family) {

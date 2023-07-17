@@ -619,6 +619,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             notNullColumns.emplace(column.Value());
         }
 
+        THashSet<TString> serialColumns;
+        for(const auto& column : create.SerialColumns()) {
+            serialColumns.emplace(column.Value());
+        }
+
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
@@ -639,6 +644,14 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             } else {
                 notNull = !isOptional;
             }
+
+            auto scIt = serialColumns.find(columnName);
+            bool isSerial = false;
+            if (scIt != serialColumns.end()) {
+                // notNull = true;
+                isSerial = true;
+            }
+
             if (actualType->GetKind() != ETypeAnnotationKind::Data
                 && actualType->GetKind() != ETypeAnnotationKind::Pg
             ) {
@@ -657,6 +670,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
             columnMeta.Type = GetColumnTypeName(actualType);
+            if (isSerial) {
+                columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
+            }
+
             if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
                 auto pgTypeId = actualType->Cast<TPgExprType>()->GetId();
                 columnMeta.TypeInfo = NKikimr::NScheme::TTypeInfo(

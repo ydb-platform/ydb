@@ -53,12 +53,13 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 }
 
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-        TVector<TIdentifier> families)
+        TVector<TIdentifier> families, bool serial)
     : Pos(pos)
     , Name(name)
     , Type(type)
     , Nullable(nullable)
     , Families(families)
+    , Serial(serial)
 {
 }
 

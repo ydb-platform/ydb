@@ -259,6 +259,17 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
     return true;
 }
 
+THashMap<TString, TString> GetDefaultFromSequences(NYql::TKikimrTableMetadataPtr metadata) {
+    THashMap<TString, TString> sequences;
+    for(const auto& [name, column]: metadata->Columns) {
+        const auto& seq = column.DefaultFromSequence;
+        if (!seq.empty()) {
+            sequences.emplace(seq, column.Type);
+        }
+    }
+    return sequences;
+}
+
 void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, const TString& name,
     NYql::TKikimrTableMetadataPtr metadata)
 {
@@ -275,6 +286,11 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         columnDesc.SetNotNull(columnIt->second.NotNull);
         if (columnIt->second.Families) {
             columnDesc.SetFamilyName(*columnIt->second.Families.begin());
+        }
+
+        const auto& seq = columnIt->second.DefaultFromSequence;
+        if (!seq.empty()) {
+            columnDesc.SetDefaultFromSequence(seq);
         }
     }
 
@@ -419,9 +435,10 @@ public:
 
                 NKikimrSchemeOp::TModifyScheme schemeTx;
                 schemeTx.SetWorkingDir(pathPair.first);
+                const auto sequences = GetDefaultFromSequences(metadata);
 
                 NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
-                if (!metadata->Indexes.empty()) {
+                if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
                     for (const auto& index : metadata->Indexes) {
@@ -445,6 +462,21 @@ public:
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
+                    for(const auto& [seq, seqType]: sequences) {
+                        auto seqDesc = schemeTx.MutableCreateIndexedTable()->MutableSequenceDescription()->Add();
+                        seqDesc->SetName(seq);
+                        const auto type = to_lower(seqType);
+                        seqDesc->SetMinValue(1);
+                        if (type == "int64") {
+                            seqDesc->SetMaxValue(9223372036854775807);
+                        } else if (type == "int32") {
+                            seqDesc->SetMaxValue(2147483647);
+                        } else if (type == "int16") {
+                            seqDesc->SetMaxValue(32767);
+                        }
+                        seqDesc->SetCycle(false);
+                    }
+
                 } else {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
                     tableDesc = schemeTx.MutableCreateTable();

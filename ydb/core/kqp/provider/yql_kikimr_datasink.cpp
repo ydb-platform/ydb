@@ -585,6 +585,10 @@ public:
                         settings.NotNullColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
+                    if (!settings.SerialColumns.IsValid()) {
+                        settings.SerialColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
+                    }
+
                     return Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
@@ -592,6 +596,7 @@ public:
                         .Columns(settings.Columns.Cast())
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .NotNullColumns(settings.NotNullColumns.Cast())
+                        .SerialColumns(settings.SerialColumns.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())

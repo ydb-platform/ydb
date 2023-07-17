@@ -556,9 +556,10 @@ namespace NSQLTranslationV1 {
         TNodePtr Type;
         bool Nullable;
         TVector<TIdentifier> Families;
+        bool Serial;
 
         TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-            TVector<TIdentifier> families);
+            TVector<TIdentifier> families, bool serial);
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {

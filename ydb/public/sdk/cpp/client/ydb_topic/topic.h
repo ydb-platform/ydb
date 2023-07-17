@@ -24,6 +24,10 @@ namespace NYdb {
     namespace NScheme {
         struct TPermissions;
     }
+
+    namespace NTable {
+        class TTransaction;
+    }
 }
 
 namespace NYdb::NTopic {
@@ -1535,6 +1539,15 @@ public:
     virtual ~IWriteSession() = default;
 };
 
+struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSessionGetEventSettings> {
+    using TSelf = TReadSessionGetEventSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, Block, false);
+    FLUENT_SETTING_OPTIONAL(size_t, MaxEventsCount);
+    FLUENT_SETTING_DEFAULT(size_t, MaxByteSize, std::numeric_limits<size_t>::max());
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<NTable::TTransaction>, Tx);
+};
+
 class IReadSession {
 public:
     //! Main reader loop.
@@ -1554,9 +1567,13 @@ public:
     virtual TVector<TReadSessionEvent::TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(),
                                                          size_t maxByteSize = std::numeric_limits<size_t>::max()) = 0;
 
+    virtual TVector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) = 0;
+
     //! Get single event.
     virtual TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block = false,
                                                        size_t maxByteSize = std::numeric_limits<size_t>::max()) = 0;
+
+    virtual TMaybe<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) = 0;
 
     //! Close read session.
     //! Waits for all commit acknowledgments to arrive.

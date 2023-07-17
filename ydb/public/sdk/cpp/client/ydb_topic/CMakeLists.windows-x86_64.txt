@@ -29,6 +29,7 @@ target_link_libraries(cpp-client-ydb_topic PUBLIC
   api-grpc
   api-grpc-draft
   api-protos
+  cpp-client-ydb_table
 )
 target_sources(cpp-client-ydb_topic PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/proto_accessor.cpp

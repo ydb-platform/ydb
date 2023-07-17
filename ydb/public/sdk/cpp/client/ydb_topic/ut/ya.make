@@ -33,6 +33,7 @@ SRCS(
     describe_topic_ut.cpp
     managed_executor.h
     managed_executor.cpp
+    topic_to_table_ut.cpp
 )
 
 END()

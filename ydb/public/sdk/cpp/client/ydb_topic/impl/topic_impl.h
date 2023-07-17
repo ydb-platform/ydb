@@ -14,6 +14,25 @@
 
 namespace NYdb::NTopic {
 
+struct TOffsetsRange {
+    ui64 Start;
+    ui64 End;
+};
+
+struct TPartitionOffsets {
+    ui64 PartitionId;
+    TVector<TOffsetsRange> Offsets;
+};
+
+struct TTopicOffsets {
+    TString Path;
+    TVector<TPartitionOffsets> Partitions;
+};
+
+struct TUpdateOffsetsInTransactionSettings : public TOperationRequestSettings<TUpdateOffsetsInTransactionSettings> {
+    using TOperationRequestSettings<TUpdateOffsetsInTransactionSettings>::TOperationRequestSettings;
+};
+
 class TTopicClient::TImpl : public TClientImplCommon<TTopicClient::TImpl> {
 public:
     // Constructor for main client.
@@ -244,6 +263,41 @@ public:
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncCommitOffset,
             TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncStatus UpdateOffsetsInTransaction(const NTable::TTransaction& tx,
+                                            const TVector<TTopicOffsets>& topics,
+                                            const TString& consumerName,
+                                            const TUpdateOffsetsInTransactionSettings& settings)
+    {
+        auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
+
+        request.mutable_tx()->set_id(tx.GetId());
+        request.mutable_tx()->set_session(tx.GetSession().GetId());
+
+        for (auto& t : topics) {
+            auto* topic = request.mutable_topics()->Add();
+            topic->set_path(t.Path);
+
+            for (auto& p : t.Partitions) {
+                auto* partition = topic->mutable_partitions()->Add();
+                partition->set_partition_id(p.PartitionId);
+
+                for (auto& r : p.Offsets) {
+                    auto *range = partition->mutable_partition_offsets()->Add();
+                    range->set_start(r.Start);
+                    range->set_end(r.End);
+                }
+            }
+        }
+
+        request.set_consumer(consumerName);
+
+        return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::UpdateOffsetsInTransactionRequest, Ydb::Topic::UpdateOffsetsInTransactionResponse>(
+            std::move(request),
+            &Ydb::Topic::V1::TopicService::Stub::AsyncUpdateOffsetsInTransaction,
+            TRpcRequestSettings::Make(settings)
+        );
     }
 
     // Runtime API.

@@ -1,5 +1,6 @@
 #include "sql_group_by.h"
 #include "sql_expression.h"
+#include "source.h"
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 namespace NSQLTranslationV1 {

@@ -32,6 +32,7 @@ SRCS(
     list_builtin.cpp
     node.cpp
     select.cpp
+    source.cpp
     sql.cpp
     sql_call_expr.cpp
     sql_expression.cpp

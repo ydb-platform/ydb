@@ -4,6 +4,7 @@
 #include "sql_query.h"
 #include "sql_values.h"
 #include "sql_select.h"
+#include "source.h"
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <util/generic/scope.h>

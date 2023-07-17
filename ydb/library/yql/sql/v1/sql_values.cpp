@@ -3,6 +3,7 @@
 #include "sql_query.h"
 #include "sql_select.h"
 #include "sql_expression.h"
+#include "source.h"
 
 namespace NSQLTranslationV1 {
 

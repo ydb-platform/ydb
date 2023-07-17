@@ -2737,11 +2737,26 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"resolved":"***"})",
         });
 
+        // split table
         const auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
         SetSplitMergePartCountLimit(&runtime, -1);
         WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", tabletIds.at(0), 2));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+        });
+
+        // disable stream
+        WaitTxNotification(server, edgeActor, AsyncAlterDisableStream(server, "/Root", "Table", "Stream"));
+        SimulateSleep(server, TDuration::Seconds(5));
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"resolved":"***"})",

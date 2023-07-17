@@ -42,6 +42,7 @@ public:
         switch (state) {
         case NKikimrSchemeOp::ECdcStreamStateDisabled:
             tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
+            DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
             break;
 
         case NKikimrSchemeOp::ECdcStreamStateReady:

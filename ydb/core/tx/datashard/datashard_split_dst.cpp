@@ -55,6 +55,12 @@ public:
                 const ui64 txId = Ev->Get()->Record.GetOperationCookie();
                 Self->AddSchemaSnapshot(tableId, info->GetTableSchemaVersion(), 0, txId, txc, ctx);
             }
+
+            for (const auto& [streamId, stream] : info->CdcStreams) {
+                if (const auto heartbeatInterval = stream.ResolvedTimestampsInterval) {
+                    Self->GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, tableId, streamId, heartbeatInterval);
+                }
+            }
         }
 
         Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());

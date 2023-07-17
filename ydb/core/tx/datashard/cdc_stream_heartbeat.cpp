@@ -76,6 +76,10 @@ public:
 }; // TTxCdcStreamEmitHeartbeats
 
 void TDataShard::EmitHeartbeats(const TActorContext& ctx) {
+    if (State != TShardState::Ready) {
+        return;
+    }
+
     const auto lowest = CdcStreamHeartbeatManager.LowestVersion();
     if (lowest.IsMax()) {
         return;

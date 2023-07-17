@@ -2716,7 +2716,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
 
         WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
-            WithResolvedTimestamps(TDuration::Seconds(5), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"resolved":"***"})",
@@ -2734,6 +2734,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
+
+        const auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+        WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", tabletIds.at(0), 2));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
             R"({"resolved":"***"})",
         });
     }

@@ -263,12 +263,11 @@ namespace {
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
             auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-            auto dataType = actualType->Cast<TDataExprType>();
+            auto actualType = RemoveAllOptionals(type);
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = dataType->GetName();
+            columnMeta.Type = FormatType(actualType);
             columnMeta.NotNull = notNull;
 
             out.ColumnOrder.push_back(columnName);

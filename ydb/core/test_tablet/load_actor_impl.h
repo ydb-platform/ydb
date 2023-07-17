@@ -31,6 +31,7 @@ namespace NKikimr::NTestShard {
         enum {
             EvValidationFinished = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvDoSomeAction,
+            EvWriteOnTime,
         };
 
         struct TEvValidationFinished : TEventLocal<TEvValidationFinished, EvValidationFinished> {
@@ -62,7 +63,8 @@ namespace NKikimr::NTestShard {
             hFunc(TEvStateServerStatus, Handle);
             hFunc(TEvStateServerWriteResult, Handle);
             hFunc(TEvValidationFinished, Handle);
-            cFunc(EvDoSomeAction, Action);
+            cFunc(EvDoSomeAction, HandleDoSomeAction);
+            cFunc(EvWriteOnTime, HandleWriteOnTime);
             cFunc(TEvents::TSystem::Poison, PassAway);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         )
@@ -117,11 +119,16 @@ namespace NKikimr::NTestShard {
         TTimeSeries StateServerWriteLatency;
         TTimeSeries WriteLatency;
         TTimeSeries ReadLatency;
+        TMonotonic NextWriteTimestamp;
+        bool WriteOnTimeScheduled = false;
+        bool DoSomeActionInFlight = false;
 
         void GenerateKeyValue(TString *key, TString *value, bool *isInline);
         void IssueWrite();
         void ProcessWriteResult(ui64 cookie, const google::protobuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TWriteResult>& results);
         void TrimBytesWritten(TInstant now);
+        void HandleWriteOnTime();
+        void HandleDoSomeAction();
 
         std::unordered_map<ui64, std::tuple<TString, ui32, ui32, TMonotonic>> ReadsInFlight;
         std::unordered_map<TString, ui32> KeysBeingRead;

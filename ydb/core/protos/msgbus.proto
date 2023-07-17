@@ -760,6 +760,8 @@ message TTestShardControlRequest {
         optional uint64 MinDataBytes = 4; // then random keys are collected until total length drops below MinDataBytes
         optional uint32 MaxInFlight = 5;
         optional uint64 ValidateAfterBytes = 9; // number of bytes to write before starting automatic validation
+        optional uint32 MaxReadsInFlight = 10;
+        optional bool ResetWritePeriodOnFull = 11; // restart write periods when inflight is full
         repeated TSizeInterval Sizes = 6; // distrubution of generated value size
         repeated TTimeInterval WritePeriods = 7; // time between two events
         repeated TTimeInterval RestartPeriods = 8; // time between automatic restarts

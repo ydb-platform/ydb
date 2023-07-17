@@ -23,7 +23,8 @@ constexpr TDuration CLOUD_AUTH_RETRY_PERIOD = TDuration::MilliSeconds(10);
 constexpr TDuration CLOUD_AUTH_MAX_RETRY_PERIOD = TDuration::Seconds(5);
 
 constexpr ui64 AUTHENTICATE_WAKEUP_TAG = 1;
-constexpr ui64 FOLDER_SERVICE_REQUEST_WAKEUP_TAG = 2;
+constexpr ui64 AUTHORIZATION_WAKEUP_TAG = 2;
+constexpr ui64 FOLDER_SERVICE_REQUEST_WAKEUP_TAG = 3;
 
 static const std::pair<EAction, TStringBuf> Action2Permission[] = {
     {EAction::ChangeMessageVisibility, "ymq.messages.changeVisibility"},
@@ -214,8 +215,12 @@ public:
             || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE;
     }
 
+    bool CanRetry() const {
+        return TActivationContext::Now() < StartTime_ + CLOUD_AUTH_TIMEOUT;
+    }
+
     bool CanRetry(const NGrpc::TGrpcStatus& status) const {
-        return TActivationContext::Now() < StartTime_ + CLOUD_AUTH_TIMEOUT && IsTemporaryError(status);
+        return CanRetry() && IsTemporaryError(status);
     }
 
     void ScheduleRetry(TDuration& duration, ui64 wakeupTag) {
@@ -223,6 +228,10 @@ public:
 
         // Next period
         duration = Min(duration * 2, CLOUD_AUTH_MAX_RETRY_PERIOD);
+    }
+
+    void ScheduleAuthorizationRetry() {
+        ScheduleRetry(AuthorizeRetryPeriod_, AUTHORIZATION_WAKEUP_TAG);
     }
 
     void ScheduleAuthenticateRetry() {
@@ -285,9 +294,16 @@ public:
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
 
         if (result.Error) {
-            RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
-            SetError(NErrors::ACCESS_DENIED, "IAM authorization error.");
-            SendReplyAndDie();
+            if (CanRetry() && result.Error.Retryable) {
+                ScheduleAuthorizationRetry();
+            } else {
+                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
+                SetError(
+                    result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
+                    "IAM authorization error."
+                );
+                SendReplyAndDie();
+            }
             return;
         }
 
@@ -325,6 +341,9 @@ public:
 
     void HandleWakeup(TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
+        case AUTHORIZATION_WAKEUP_TAG:
+            Authorize();
+            break;
         case AUTHENTICATE_WAKEUP_TAG:
             Authenticate();
             break;
@@ -418,6 +437,10 @@ public:
             TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
             if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
                 result.Error.Message = "mocked_auth_error: empty access key";
+                result.Error.Retryable = false;
+            } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
+                result.Error.Message = "mocked_auth_error: correct process retries";
+                result.Error.Retryable = true;
             } else {
                 result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
             }

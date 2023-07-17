@@ -101,6 +101,24 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         assert_that(r.status_code, equal_to(400))
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_retryable_iam_error(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
+        url = self._make_server_url()
+
+        boto_client = self._make_boto_client('TEST_ID_FOR_RETRYIES', 'SECRET', url)
+
+        def list_queues():
+            boto_client.list_queues()
+
+        assert_that(
+            list_queues,
+            raises(
+                botocore.exceptions.ClientError,
+                pattern='ServiceUnavailable.+IAM authorization error'
+            )
+        )
+
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_empty_access_key_id(self, tables_format):
         self._init_with_params(tables_format=tables_format)
         url = self._make_server_url()

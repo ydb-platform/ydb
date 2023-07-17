@@ -224,8 +224,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         Die(ctx);
     }
 
-    void DefaultSignalTabletActive(const TActorContext &ctx) override {
-        Y_UNUSED(ctx); //TODO: this is signal that tablet is ready for work
+    void DefaultSignalTabletActive(const TActorContext &) override {
+        // must be empty
     }
 
     void InitDone(const TActorContext &ctx) {

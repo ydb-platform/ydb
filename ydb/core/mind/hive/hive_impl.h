@@ -445,7 +445,6 @@ protected:
     void Handle(TEvLocal::TEvTabletStatus::TPtr&);
     void Handle(TEvLocal::TEvRegisterNode::TPtr&);
     void Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr&);
-    void Handle(TEvents::TEvPoisonPill::TPtr&);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr&);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr&);

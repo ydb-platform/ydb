@@ -64,8 +64,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     //when partition is ready it's sends event to tablet
     void Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext&);
 
-    void DefaultSignalTabletActive(const TActorContext&) override;
-
     //partitions will send some times it's counters
     void Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext&);
 

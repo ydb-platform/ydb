@@ -402,6 +402,11 @@ ui64 TTenantSlotBroker::Generation() const {
     return Executor()->Generation();
 }
 
+void TTenantSlotBroker::DefaultSignalTabletActive(const TActorContext &)
+{
+    // must be empty
+}
+
 void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
 {
     RequestId = Now().GetValue();
@@ -414,8 +419,6 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
     auto tabletCounters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
     tabletCounters->RemoveSubgroup("type", "TENANT_SLOT_BROKER");
     Counters = new TCounters(tabletCounters->GetSubgroup("type", "TENANT_SLOT_BROKER"));
-
-    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem}, ctx.SelfID);
 
     ProcessTx(CreateTxInitScheme(), ctx);
 }
@@ -435,14 +438,6 @@ void TTenantSlotBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &,
         Counters->Counters->ResetCounters();
 
     Die(ctx);
-}
-
-void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev)
-{
-    LOG_DEBUG(*TlsActivationContext, NKikimrServices::TENANT_SLOT_BROKER,
-              "Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-              TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
-    InitQueue.push_back(ev);
 }
 
 bool TTenantSlotBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
@@ -627,16 +622,12 @@ void TTenantSlotBroker::LoadConfigFromProto(const NKikimrTenantSlotBroker::TConf
     PendingTimeout = TDuration::MicroSeconds(config.GetPendingSlotTimeout());
 }
 
-void TTenantSlotBroker::ProcessEnqueuedEvents(const TActorContext &ctx)
+void TTenantSlotBroker::SwitchToWork(const TActorContext &ctx)
 {
-    while (!InitQueue.empty()) {
-        TAutoPtr<IEventHandle> &ev = InitQueue.front();
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                  "Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-                  TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
-        ctx.ExecutorThread.Send(ev.Release());
-        InitQueue.pop_front();
-    }
+    Become(&TTenantSlotBroker::StateWork);
+    SignalTabletActive(ctx);
+
+    NConsole::SubscribeViaConfigDispatcher(ctx, {(ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem}, ctx.SelfID);
 }
 
 void TTenantSlotBroker::ClearState()
@@ -1648,13 +1639,6 @@ void TTenantSlotBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse
 
     LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                 "Got config subscription id=" << ConfigSubscriptionId);
-}
-
-void TTenantSlotBroker::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                               const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
 void TTenantSlotBroker::Handle(TEvents::TEvUndelivered::TPtr &ev,

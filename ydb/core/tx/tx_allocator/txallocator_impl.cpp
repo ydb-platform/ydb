@@ -50,14 +50,6 @@ void TTxAllocator::InitCounters(const TActorContext &ctx) {
         MonCounters.AllocationsPresence = MonCounters.AllocatorCounters->GetCounter("AllocationPresence", true);
 }
 
-void TTxAllocator::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_ALLOCATOR, "tablet# " << TabletID() << " HANDLE TEvPoisonPill Sender# " << ev->Sender.ToString());
-
-    Become(&TThis::StateBroken);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TTxAllocator::Handle(TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorContext &ctx) {
     MonCounters.AllocationsPresence->Inc();
 

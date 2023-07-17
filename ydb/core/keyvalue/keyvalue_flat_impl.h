@@ -261,6 +261,10 @@ protected:
         HandleDie(ctx);
     }
 
+    void DefaultSignalTabletActive(const TActorContext &) final {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext &ctx) override {
         Executor()->RegisterExternalTabletCounters(State.TakeTabletCounters());
         State.SetupResourceMetrics(Executor()->GetResourceMetrics());
@@ -484,7 +488,7 @@ public:
 
     virtual void CreatedHook(const TActorContext &ctx)
     {
-        Y_UNUSED(ctx);
+        SignalTabletActive(ctx);
     }
 
     virtual bool HandleHook(STFUNC_SIG)

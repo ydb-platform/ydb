@@ -85,12 +85,10 @@ namespace NSequenceShard {
 
     private:
         STFUNC(StateInit);
-        STFUNC(StateZombie);
         STFUNC(StateWork);
 
         void SwitchToWork(const TActorContext& ctx);
 
-        void Handle(TEvents::TEvPoison::TPtr& ev);
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
         void Handle(TEvSequenceShard::TEvMarkSchemeShardPipe::TPtr& ev, const TActorContext& ctx);

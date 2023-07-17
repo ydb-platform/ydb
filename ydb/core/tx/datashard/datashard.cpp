@@ -2370,12 +2370,6 @@ void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
     Actors.erase(ev->Sender);
 }
 
-void TDataShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvents::TEvPoisonPill");
-    Y_UNUSED(ev);
-    BecomeBroken(ctx);
-}
-
 void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx) {
     Execute(new TTxGetShardState(this, ev), ctx);
 }
@@ -2693,7 +2687,7 @@ void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorCont
         LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "tablet " << TabletID() <<
                    " receive PlanStep " << ev->Get()->Record.GetStep() <<
                    " from unauthorized mediator " << srcMediatorId);
-        BecomeBroken(ctx);
+        HandlePoison(ctx);
         return;
     }
 

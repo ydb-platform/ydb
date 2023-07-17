@@ -2450,9 +2450,15 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 namespace {
 
 class TConfigProxy : public TActor<TConfigProxy>, public TTabletExecutedFlat {
+    void DefaultSignalTabletActive(const TActorContext &) override
+    {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext &ctx) override
     {
         Become(&TThis::StateWork);
+        SignalTabletActive(ctx);
         ctx.Send(Sink, new TEvents::TEvWakeup);
     }
 
@@ -2481,11 +2487,7 @@ public:
 
     STFUNC(StateInit)
     {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
-        default:
-            StateInitImpl(ev, SelfId());
-        }
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork)

@@ -44,8 +44,13 @@ namespace NKikimr {
             return config;
         }
 
+        void DefaultSignalTabletActive(const TActorContext &) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext &ctx) final {
             Become(&TFakeCoordinator::StateWork);
+            SignalTabletActive(ctx);
             SendQueued(ctx);
         }
 

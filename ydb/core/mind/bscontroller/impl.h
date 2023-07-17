@@ -1760,7 +1760,6 @@ private:
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -1984,7 +1983,6 @@ public:
             fFunc(NSysView::TEvSysView::EvGetStorageStatsRequest, ForwardToSystemViewsCollector);
             fFunc(TEvPrivate::EvUpdateSystemViews, EnqueueIncomingEvent);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(TEvents::TEvPoisonPill, Handle);
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             fFunc(TEvPrivate::EvUpdateSelfHealCounters, EnqueueIncomingEvent);
@@ -2010,10 +2008,6 @@ public:
             STLOG(PRI_ERROR, BS_CONTROLLER, BSC00, "StateWork event processing took too much time", (Type, type),
                 (Duration, time));
         }
-    }
-
-    STFUNC(StateBroken) {
-        HandleDefaultEvents(ev, SelfId());
     }
 
     void LoadFinished() {

@@ -753,13 +753,6 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
     ProcessTx(0, CreateTxUpdateConfigSubscription(ev), ctx);
 }
 
-void TNodeBroker::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                         const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                          const TActorContext &)
 {

@@ -12,6 +12,11 @@
 
 namespace NKikimr::NConsole {
 
+void TConsole::DefaultSignalTabletActive(const TActorContext &)
+{
+    // must be empty
+}
+
 void TConsole::OnActivateExecutor(const TActorContext &ctx)
 {
     auto domains = AppData(ctx)->DomainsInfo;

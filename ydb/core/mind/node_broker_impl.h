@@ -178,7 +178,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFuncTraced(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvNodeBroker::TEvListNodes, Handle);
             HFuncTraced(TEvNodeBroker::TEvResolveNode, Handle);
             HFuncTraced(TEvNodeBroker::TEvRegistrationRequest, Handle);
@@ -280,8 +279,6 @@ private:
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
-                const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                 const TActorContext &ctx);

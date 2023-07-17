@@ -1185,10 +1185,6 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     }
 }
 
-void TPersQueue::DefaultSignalTabletActive(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
-}
-
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
 {
 

@@ -484,8 +484,13 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         ctx.Send(Sender, new TEvents::TEvGone);
     }
 
+    void DefaultSignalTabletActive(const TActorContext&) override {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext&) override {
         Become(&TThis::StateWork);
+        SignalTabletActive(SelfId());
         Send(Sender, new TEvents::TEvWakeup);
     }
 

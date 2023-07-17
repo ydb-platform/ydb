@@ -413,11 +413,6 @@ void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorCo
     DoConfiguration(*ev->Get(), ctx, ev->Sender);
 }
 
-void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    Become(&TThis::StateBroken);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TTxCoordinator::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
     auto res = PipeServers.emplace(
         std::piecewise_construct,

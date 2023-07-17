@@ -52,11 +52,15 @@ void TPQTabletMock::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActo
     Die(ctx);
 }
 
+void TPQTabletMock::DefaultSignalTabletActive(const TActorContext &)
+{
+    // must be empty
+}
+
 void TPQTabletMock::OnActivateExecutor(const TActorContext &ctx)
 {
-    Y_UNUSED(ctx);
-
     Become(&TThis::StateWork);
+    SignalTabletActive(ctx);
 }
 
 void TPQTabletMock::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)

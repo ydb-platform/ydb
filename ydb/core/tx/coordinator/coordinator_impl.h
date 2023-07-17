@@ -659,7 +659,6 @@ private:
     void Handle(TEvTxCoordinator::TEvCoordinatorConfirmPlan::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
 
@@ -703,7 +702,6 @@ public:
 
     // no incomming pipes is allowed in StateInit
     STFUNC_TABLET_INIT(StateInit,
-                HFunc(TEvents::TEvPoisonPill, Handle);
             )
 
     STFUNC_TABLET_DEF(StateSync,
@@ -715,7 +713,6 @@ public:
                 HFunc(TEvTxProxy::TEvUnsubscribeReadStep, Handle);
                 hFunc(TEvTxProxy::TEvSubscribeLastStep, Handle);
                 hFunc(TEvTxProxy::TEvUnsubscribeLastStep, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvPrivate::TEvRestoredProcessingParams, Handle);
@@ -735,7 +732,6 @@ public:
                 HFunc(TEvTxCoordinator::TEvMediatorQueueRestart, Handle);
                 HFunc(TEvTxCoordinator::TEvMediatorQueueStop, Handle);
                 HFunc(TEvTxCoordinator::TEvCoordinatorConfirmPlan, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvPrivate::TEvRestoredProcessingParams, Handle);

@@ -334,7 +334,6 @@ class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTab
     void Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
 
     void DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
@@ -389,11 +388,9 @@ public:
     TTxMediator(TTabletStorageInfo *info, const TActorId &tablet);
 
     // no incomming pipes is allowed in StateInit
-    STFUNC_TABLET_INIT(StateInit,
-            HFunc(TEvents::TEvPoisonPill, Handle))
+    STFUNC_TABLET_INIT(StateInit,)
 
     STFUNC_TABLET_DEF(StateSync,
-                     HFunc(TEvents::TEvPoisonPill, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorSync, HandleEnqueue)
                      HFunc(TEvSubDomain::TEvConfigure, Handle)
                      HFunc(TEvMediatorTimecast::TEvWatch, HandleEnqueue)
@@ -401,7 +398,6 @@ public:
                      IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
 
     STFUNC_TABLET_DEF(StateWork,
-                     HFunc(TEvents::TEvPoisonPill, Handle)
                      HFunc(TEvSubDomain::TEvConfigure, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorStep, Handle)
                      HFunc(TEvTxCoordinator::TEvCoordinatorSync, Handle)

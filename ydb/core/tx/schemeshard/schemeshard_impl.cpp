@@ -4201,7 +4201,6 @@ void TSchemeShard::Enqueue(STFUNC_SIG) {
 void TSchemeShard::StateInit(STFUNC_SIG) {
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
-        HFuncTraced(TEvents::TEvPoisonPill, Handle);
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         //console configs
@@ -4219,7 +4218,6 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
-        HFuncTraced(TEvents::TEvPoisonPill, Handle);
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
@@ -4262,7 +4260,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
-        HFuncTraced(TEvents::TEvPoisonPill, Handle);
         HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
 
@@ -5811,11 +5808,6 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
             PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Data, msgCookie.second);
         }
     }
-}
-
-void TSchemeShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
-    BreakTabletAndRestart(ctx);
 }
 
 void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {

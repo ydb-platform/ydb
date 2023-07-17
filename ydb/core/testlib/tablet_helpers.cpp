@@ -172,6 +172,9 @@ namespace NKikimr {
                     if (ENABLE_REBOOT_DISPATCH_LOG) {
                         Cerr << "Leader for TabletID " << info->TabletID << " is " << info->CurrentLeaderTablet << " sender: " << event->Sender << " recipient: " << event->Recipient << Endl;
                     }
+                    if (info->CurrentLeader) {
+                        TabletSys[info->TabletID] = info->CurrentLeader;
+                    }
                     if (info->CurrentLeaderTablet) {
                         TabletLeaders[info->TabletID] = info->CurrentLeaderTablet;
                     } else {
@@ -197,6 +200,10 @@ namespace NKikimr {
             if (it != TabletRelatedActors.end()) {
                 TabletRelatedActors.insert(std::make_pair(actorId, it->second));
             }
+        }
+
+        const TMap<ui64, TActorId>& GetTabletSys() const {
+            return TabletSys;
         }
 
         const TMap<ui64, TActorId>& GetTabletLeaders() const {
@@ -255,6 +262,7 @@ namespace NKikimr {
         }
 
     protected:
+        TMap<ui64, TActorId> TabletSys;
         TMap<ui64, TActorId> TabletLeaders;
         TMap<TActorId, ui64> TabletRelatedActors;
         TSet<ui64> DeletedTablets;
@@ -325,8 +333,10 @@ namespace NKikimr {
             if (ENABLE_REBOOT_DISPATCH_LOG)
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") on event " << eventType << " !\n";
 
-            // Wait for the tablet to boot or to become deleted
+            // Synchronously kill both system and user parts of the tablet
+            runtime.Send(new IEventHandle(TabletSys.at(TabletId), TActorId(), new TEvents::TEvPoisonPill()));
             runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
+            // Wait for the tablet to boot or to become deleted
             TDispatchOptions rebootOptions;
             rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
             rebootOptions.CustomFinalCondition = [this]() -> bool {
@@ -1100,14 +1110,13 @@ namespace NKikimr {
         {
         }
 
+        void DefaultSignalTabletActive(const TActorContext &) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext &ctx) final {
             Become(&TFakeHive::StateWork);
-
-            while (!InitialEventsQueue.empty()) {
-                TAutoPtr<IEventHandle> &ev = InitialEventsQueue.front();
-                ctx.ExecutorThread.Send(ev.Release());
-                InitialEventsQueue.pop_front();
-            }
+            SignalTabletActive(ctx);
 
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] started, primary subdomain " << PrimarySubDomainKey);
         }
@@ -1119,10 +1128,6 @@ namespace NKikimr {
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
             Y_UNUSED(ev);
             Die(ctx);
-        }
-
-        void Enqueue(STFUNC_SIG) override {
-            InitialEventsQueue.push_back(ev);
         }
 
         void StateInit(STFUNC_SIG) {
@@ -1464,7 +1469,6 @@ namespace NKikimr {
     private:
         TState::TPtr State;
         TGetTabletCreationFunc GetTabletCreationFunc;
-        TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
         TSubDomainKey PrimarySubDomainKey;
     };
 

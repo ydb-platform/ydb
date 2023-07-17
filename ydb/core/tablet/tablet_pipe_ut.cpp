@@ -170,9 +170,13 @@ namespace NKikimr {
             return Die(ctx);
         }
 
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext &ctx) override {
-            Y_UNUSED(ctx);
             Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
             Cout << "Producer loaded\n";
         }
 
@@ -219,9 +223,14 @@ namespace NKikimr {
         }
 
     private:
-        void OnActivateExecutor(const TActorContext&) override {
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
+        void OnActivateExecutor(const TActorContext& ctx) override {
             Become(&TThis::StateWork);
             Cout << "Consumer loaded\n";
+            SignalTabletActive(ctx);
             PipeConnectAcceptor->Activate(SelfId(), SelfId());
         }
 
@@ -342,9 +351,13 @@ namespace NKikimr {
         }
 
     private:
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext& ctx) override {
-            Y_UNUSED(ctx);
             Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
             Cout << "Consumer loaded\n";
         }
 
@@ -1067,9 +1080,13 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         }
 
     private:
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext& ctx) override {
-            Y_UNUSED(ctx);
             Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
         }
 
         STFUNC(StateInit) {

@@ -10,16 +10,21 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::BecomeBroken(const TActorContext& ctx)
+void TColumnShard::CleanupActors(const TActorContext& ctx)
 {
-    Become(&TThis::StateBroken);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     ctx.Send(IndexingActor, new TEvents::TEvPoisonPill);
     ctx.Send(CompactionActor, new TEvents::TEvPoisonPill);
     ctx.Send(EvictionActor, new TEvents::TEvPoisonPill);
     if (Tiers) {
         Tiers->Stop();
     }
+}
+
+void TColumnShard::BecomeBroken(const TActorContext& ctx)
+{
+    Become(&TThis::StateBroken);
+    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
+    CleanupActors(ctx);
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
@@ -47,12 +52,6 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
 
     Execute(CreateTxInitSchema(), ctx);
-}
-
-void TColumnShard::Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-    LOG_S_DEBUG("Handle TEvents::TEvPoisonPill");
-    Y_UNUSED(ev);
-    BecomeBroken(ctx);
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {

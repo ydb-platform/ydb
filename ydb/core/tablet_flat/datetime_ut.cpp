@@ -284,8 +284,13 @@ Y_UNIT_TEST_SUITE(TFlatTableDatetime) {
             }
         };
 
+        void DefaultSignalTabletActive(const TActorContext &) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext &ctx) override {
             Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
             Execute(new TTxSchema(*this), ctx);
         }
 

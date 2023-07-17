@@ -33,11 +33,17 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
+void TCms::DefaultSignalTabletActive(const TActorContext &)
+{
+    // must be empty
+}
+
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
     if (AppData(ctx)->DomainsInfo->Domains.size() > 1) {
         NotSupportedReason = "Multiple domains are not supported.";
         Become(&TThis::StateNotSupported);
+        SignalTabletActive(ctx);
         return;
     }
 

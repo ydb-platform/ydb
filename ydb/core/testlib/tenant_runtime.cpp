@@ -173,9 +173,15 @@ class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecuted
         }
     }
 
+    void DefaultSignalTabletActive(const TActorContext &) override
+    {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext &) override
     {
         Become(&TThis::StateWork);
+        SignalTabletActive(SelfId());
     }
 
     void OnDetach(const TActorContext &ctx) override
@@ -229,9 +235,15 @@ public:
 };
 
 class TFakeBSController : public TActor<TFakeBSController>, public TTabletExecutedFlat {
+    void DefaultSignalTabletActive(const TActorContext &) override
+    {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext &) override
     {
         Become(&TThis::StateWork);
+        SignalTabletActive(SelfId());
     }
 
     void OnDetach(const TActorContext &ctx) override
@@ -263,9 +275,15 @@ public:
 };
 
 class TFakeTenantSlotBroker : public TActor<TFakeTenantSlotBroker>, public TTabletExecutedFlat {
+    void DefaultSignalTabletActive(const TActorContext &) override
+    {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext &) override
     {
         Become(&TThis::StateWork);
+        SignalTabletActive(SelfId());
     }
 
     void OnDetach(const TActorContext &ctx) override
@@ -616,9 +634,15 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         ctx.Send(Sender, new TEvTest::TEvHiveStateHit);
     }
 
+    void DefaultSignalTabletActive(const TActorContext &) override
+    {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext &) override
     {
         Become(&TThis::StateWork);
+        SignalTabletActive(SelfId());
     }
 
     void OnDetach(const TActorContext &ctx) override

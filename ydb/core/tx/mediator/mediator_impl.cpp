@@ -305,13 +305,6 @@ void TTxMediator::Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorCo
     ctx.ExecutorThread.Send(ev->Forward(ExecQueue));
 }
 
-void TTxMediator::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " HANDLE TEvPoisonPill");
-    Become(&TThis::StateBroken);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 TTxMediator::TTxMediator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)

@@ -1222,7 +1222,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
     if (!numWrites) {
-        numWrites = 4 * NOlap::TCompactionLimits().GranuleExpectedSize / triggerData.size();
+        numWrites = NOlap::TCompactionLimits().GranuleOverloadSize / triggerData.size();
     }
 
     ++planStep;

@@ -254,7 +254,7 @@ void AddIdsToBlobs(const std::vector<TString>& srcBlobs, std::vector<TPortionInf
 TCompactionLimits TestLimits() {
     TCompactionLimits limits;
     limits.GranuleBlobSplitSize = 1024;
-    limits.GranuleExpectedSize = 400 * 1024;
+    limits.GranuleSizeForOverloadPrevent = 400 * 1024;
     limits.GranuleOverloadSize = 800 * 1024;
     return limits;
 }
@@ -289,7 +289,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT(!!compactionInfo);
     UNIT_ASSERT(!compactionInfo->InGranule());
 
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TSnapshot::Zero(), TestLimits());
+    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 

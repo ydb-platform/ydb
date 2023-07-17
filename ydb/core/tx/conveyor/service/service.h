@@ -27,6 +27,9 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitWorkerRate;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UseWorkerRate;
 
+    const ::NMonitoring::THistogramPtr WaitingHistogram;
+    const ::NMonitoring::THistogramPtr ExecuteHistogram;
+
     TCounters(const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
         : TBase("Conveyor/" + conveyorName, baseSignals)
         , WaitingQueueSize(TBase::GetValue("WaitingQueueSize"))
@@ -38,7 +41,32 @@ public:
         , OverlimitRate(TBase::GetDeriviative("Overlimit"))
         , WaitWorkerRate(TBase::GetDeriviative("WaitWorker"))
         , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
-    {
+        , WaitingHistogram(TBase::GetHistogram("Waiting", NMonitoring::ExponentialHistogram(20, 2)))
+        , ExecuteHistogram(TBase::GetHistogram("Execute", NMonitoring::ExponentialHistogram(20, 2))) {
+    }
+};
+
+class TDequePriorityFIFO {
+private:
+    std::map<ui32, std::deque<TWorkerTask>> Tasks;
+    ui32 Size = 0;
+public:
+    void push(const TWorkerTask& task) {
+        Tasks[(ui32)task.GetTask()->GetPriority()].emplace_back(task);
+        ++Size;
+    }
+    TWorkerTask pop() {
+        Y_VERIFY(Size);
+        auto result = Tasks.rbegin()->second.front();
+        Tasks.rbegin()->second.pop_front();
+        if (Tasks.rbegin()->second.size() == 0) {
+            Tasks.erase(--Tasks.end());
+        }
+        --Size;
+        return result;
+    }
+    ui32 size() const {
+        return Size;
     }
 };
 
@@ -46,8 +74,8 @@ class TDistributor: public TActorBootstrapped<TDistributor> {
 private:
     const TConfig Config;
     const TString ConveyorName = "common";
+    TDequePriorityFIFO Waiting;
     std::vector<TActorId> Workers;
-    std::priority_queue<TWorkerTask> Waiting;
     TCounters Counters;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);

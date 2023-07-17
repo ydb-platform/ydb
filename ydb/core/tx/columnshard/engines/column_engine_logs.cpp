@@ -15,10 +15,8 @@ namespace NKikimr::NOlap {
 namespace {
 
 TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& portions, const TCompactionLimits& limits,
-                        const TSnapshot& snap, TColumnEngineForLogs::TMarksGranules& marksGranules) {
-    ui64 oldTimePlanStep = snap.GetPlanStep() - TDuration::Seconds(limits.InGranuleCompactSeconds).MilliSeconds();
+                        TColumnEngineForLogs::TMarksGranules& marksGranules) {
     ui32 insertedCount = 0;
-    ui32 insertedNew = 0;
 
     THashSet<ui64> filtered;
     THashSet<ui64> goodCompacted;
@@ -29,9 +27,6 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
         for (const auto& portionInfo : portions) {
             if (portionInfo.IsInserted()) {
                 ++insertedCount;
-                if (portionInfo.GetSnapshot().GetPlanStep() > oldTimePlanStep) {
-                    ++insertedNew;
-                }
             } else if (portionInfo.BlobsSizes().second >= limits.GoodBlobSize) {
                 goodCompacted.insert(portionInfo.Portion());
             }
@@ -83,10 +78,6 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
     }
 
     Y_VERIFY(insertedCount);
-    // Trigger compaction if we have lots of inserted or if all inserted are old enough
-    if (insertedNew && insertedCount < limits.InGranuleCompactInserts) {
-        return TConclusionStatus::Fail("not enough inserted portions (" + ::ToString(insertedNew) + ")");
-    }
 
     // Nothing to filter. Leave portions as is, no borders needed.
     if (filtered.empty() && goodCompacted.empty()) {
@@ -450,7 +441,6 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(const TC
 }
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std::unique_ptr<TCompactionInfo>&& info,
-                                                                            const TSnapshot& outdatedSnapshot,
                                                                             const TCompactionLimits& limits) {
     Y_VERIFY(info);
 
@@ -479,10 +469,9 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
     Y_VERIFY(changes->SrcGranule);
 
     if (changes->CompactionInfo->InGranule()) {
-        const TSnapshot completedSnap = std::max(LastSnapshot, outdatedSnapshot);
-        auto mergeInitResult = InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, limits, completedSnap, changes->MergeBorders);
+        auto mergeInitResult = InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, limits, changes->MergeBorders);
         if (!mergeInitResult) {
-            // Return granule to Compaction list. This is equal to single compaction worker behaviour.
+            // Return granule to Compaction list. This is equal to single compaction worker behavior.
             changes->CompactionInfo->CompactionCanceled("cannot init in granule merge: " + mergeInitResult.GetErrorMessage());
             return {};
         }
@@ -560,7 +549,8 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
                 changes->NeedRepeat = true;
                 break;
             }
-        } else if (portionInfo->CheckForCleanup()) {
+        } else {
+            Y_VERIFY(portionInfo->CheckForCleanup());
             ++it;
         }
     }
@@ -1213,18 +1203,26 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompaction
     if (compactGranule->IsOverloaded(limits)) {
         SignalCounters.CompactOverloadGranulesSelection->Add(1);
     }
-    if (compactGranule->NeedSplitCompaction(limits)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString())("compaction", "split");
-        SignalCounters.SplitCompactGranulesSelection->Add(1);
-    } else if (compactGranule->NeedInternalCompaction(limits)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString())("compaction", "internal");
-        SignalCounters.InternalCompactGranulesSelection->Add(1);
-    } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString())("compaction", "no_need");
-        SignalCounters.NoCompactGranulesSelection->Add(1);
-        return {};
+    const auto compactionType = compactGranule->GetCompactionType(limits);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString())("compaction", compactionType);
+    switch (compactionType) {
+        case TGranuleAdditiveSummary::ECompactionClass::NoCompaction:
+        case TGranuleAdditiveSummary::ECompactionClass::WaitInternal:
+        {
+            SignalCounters.NoCompactGranulesSelection->Add(1);
+            return {};
+        }
+        case TGranuleAdditiveSummary::ECompactionClass::Split:
+        {
+            SignalCounters.SplitCompactGranulesSelection->Add(1);
+            return std::make_unique<TCompactionInfo>(compactGranule, false);
+        }
+        case TGranuleAdditiveSummary::ECompactionClass::Internal:
+        {
+            SignalCounters.InternalCompactGranulesSelection->Add(1);
+            return std::make_unique<TCompactionInfo>(compactGranule, true);
+        }
     }
-    return std::make_unique<TCompactionInfo>(compactGranule, compactGranule->NeedInternalCompaction(limits));
 }
 
 } // namespace NKikimr::NOlap

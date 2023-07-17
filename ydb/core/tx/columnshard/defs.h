@@ -62,36 +62,37 @@ struct TCompactionLimits {
 
     TControlWrapper GoodBlobSize;
     ui32 GranuleBlobSplitSize;
-    TControlWrapper GranuleExpectedSize;
     TControlWrapper GranuleOverloadSize;
-    TControlWrapper InGranuleCompactInserts; // Trigger in-granule compaction to reduce count of portions' records
     TControlWrapper InGranuleCompactSeconds; // Trigger in-granule comcation to guarantee no PK intersections
+
+    TControlWrapper GranuleIndexedPortionsSizeLimit;
+    TControlWrapper GranuleIndexedPortionsCountLimit;
 
     TCompactionLimits()
         : GoodBlobSize(TBase::MIN_GOOD_BLOB_SIZE, TBase::MIN_GOOD_BLOB_SIZE, TBase::MAX_BLOB_SIZE)
         , GranuleBlobSplitSize(TBase::MAX_BLOB_SIZE)
-        , GranuleExpectedSize(5 * TBase::MAX_BLOB_SIZE, TBase::MAX_BLOB_SIZE, 100 * TBase::MAX_BLOB_SIZE)
         , GranuleOverloadSize(20 * TBase::MAX_BLOB_SIZE, TBase::MAX_BLOB_SIZE, 100 * TBase::MAX_BLOB_SIZE)
-        , InGranuleCompactInserts(100, 10, 1000)
         , InGranuleCompactSeconds(2 * 60, 10, 3600)
+        , GranuleIndexedPortionsSizeLimit(TBase::WARNING_INSERTED_PORTIONS_SIZE)
+        , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT)
     {}
 
     void RegisterControls(TControlBoard& icb) {
         icb.RegisterSharedControl(GoodBlobSize, "ColumnShardControls.IndexGoodBlobSize");
-        icb.RegisterSharedControl(GranuleExpectedSize, "ColumnShardControls.GranuleTargetBytes");
         icb.RegisterSharedControl(GranuleOverloadSize, "ColumnShardControls.GranuleOverloadBytes");
-        icb.RegisterSharedControl(InGranuleCompactInserts, "ColumnShardControls.MaxPortionsInGranule");
         icb.RegisterSharedControl(InGranuleCompactSeconds, "ColumnShardControls.CompactionDelaySec");
+        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, "ColumnShardControls.GranuleIndexedPortionsSizeLimit");
+        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, "ColumnShardControls.GranuleIndexedPortionsCountLimit");
     }
 
     NOlap::TCompactionLimits Get() const {
         return NOlap::TCompactionLimits{
             .GoodBlobSize = (ui32)GoodBlobSize,
             .GranuleBlobSplitSize = GranuleBlobSplitSize,
-            .GranuleExpectedSize = (ui32)GranuleExpectedSize,
+            .InGranuleCompactSeconds = (ui32)InGranuleCompactSeconds,
             .GranuleOverloadSize = (ui32)GranuleOverloadSize,
-            .InGranuleCompactInserts = (ui32)InGranuleCompactInserts,
-            .InGranuleCompactSeconds = (ui32)InGranuleCompactSeconds
+            .GranuleIndexedPortionsSizeLimit = (ui32)GranuleIndexedPortionsSizeLimit,
+            .GranuleIndexedPortionsCountLimit = (ui32)GranuleIndexedPortionsCountLimit
         };
     }
 };

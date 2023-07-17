@@ -15,7 +15,18 @@ class TWorkerTask {
 private:
     YDB_READONLY_DEF(ITask::TPtr, Task);
     YDB_READONLY_DEF(NActors::TActorId, OwnerId);
+    YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
+    std::optional<TMonotonic> StartInstant;
 public:
+    void OnBeforeStart() {
+        StartInstant = TMonotonic::Now();
+    }
+
+    TMonotonic GetStartInstant() const {
+        Y_VERIFY(!!StartInstant);
+        return *StartInstant;
+    }
+
     TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId)
         : Task(task)
         , OwnerId(ownerId) {
@@ -56,16 +67,19 @@ struct TEvInternal {
         public TConclusion<ITask::TPtr> {
     private:
         using TBase = TConclusion<ITask::TPtr>;
+        YDB_READONLY_DEF(TMonotonic, StartInstant);
         YDB_READONLY_DEF(NActors::TActorId, OwnerId);
     public:
-        TEvTaskProcessedResult(const NActors::TActorId& ownerId, const TString& errorMessage)
+        TEvTaskProcessedResult(const TWorkerTask& originalTask, const TString& errorMessage)
             : TBase(TConclusionStatus::Fail(errorMessage))
-            , OwnerId(ownerId) {
+            , StartInstant(originalTask.GetStartInstant())
+            , OwnerId(originalTask.GetOwnerId()) {
 
         }
-        TEvTaskProcessedResult(const NActors::TActorId& ownerId, ITask::TPtr result)
+        TEvTaskProcessedResult(const TWorkerTask& originalTask, ITask::TPtr result)
             : TBase(result)
-            , OwnerId(ownerId) {
+            , StartInstant(originalTask.GetStartInstant())
+            , OwnerId(originalTask.GetOwnerId()) {
 
         }
     };

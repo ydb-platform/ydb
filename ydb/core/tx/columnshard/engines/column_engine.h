@@ -25,14 +25,27 @@ struct TCompactionLimits {
     static constexpr const ui64 EVICT_HOT_PORTION_BYTES = 1 * 1024 * 1024;
     static constexpr const ui64 DEFAULT_EVICTION_BYTES = 64 * 1024 * 1024;
     static constexpr const ui64 MAX_BLOBS_TO_DELETE = 10000;
+
     static constexpr const ui64 OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID = 1024 * MAX_BLOB_SIZE;
+    static constexpr const ui64 WARNING_INSERT_TABLE_SIZE_BY_PATH_ID = 0.3 * OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
+    static constexpr const ui64 WARNING_INSERT_TABLE_COUNT_BY_PATH_ID = 100;
+
+    static constexpr const ui64 OVERLOAD_GRANULE_SIZE = 20 * MAX_BLOB_SIZE;
+    static constexpr const ui64 WARNING_OVERLOAD_GRANULE_SIZE = 0.25 * OVERLOAD_GRANULE_SIZE;
+
+    static constexpr const ui64 WARNING_INSERTED_PORTIONS_SIZE = 0.5 * WARNING_OVERLOAD_GRANULE_SIZE;
+    static constexpr const ui64 WARNING_INSERTED_PORTIONS_COUNT = 100;
+    static constexpr const TDuration CompactionTimeout = TDuration::Seconds(120);
 
     ui32 GoodBlobSize{MIN_GOOD_BLOB_SIZE};
     ui32 GranuleBlobSplitSize{MAX_BLOB_SIZE};
-    ui32 GranuleExpectedSize{5 * MAX_BLOB_SIZE};
-    ui32 GranuleOverloadSize{20 * MAX_BLOB_SIZE};
-    ui32 InGranuleCompactInserts{100}; // Trigger in-granule compaction to reduce count of portions' records
-    ui32 InGranuleCompactSeconds{2 * 60}; // Trigger in-granule comcation to guarantee no PK intersections
+
+    ui32 InGranuleCompactSeconds = 2 * 60; // Trigger in-granule compaction to guarantee no PK intersections
+
+    ui32 GranuleOverloadSize = OVERLOAD_GRANULE_SIZE;
+    ui32 GranuleSizeForOverloadPrevent = WARNING_OVERLOAD_GRANULE_SIZE;
+    ui32 GranuleIndexedPortionsSizeLimit = WARNING_INSERTED_PORTIONS_SIZE;
+    ui32 GranuleIndexedPortionsCountLimit = WARNING_INSERTED_PORTIONS_COUNT;
 };
 
 class TMark {
@@ -171,6 +184,14 @@ public:
     bool IsCleanup() const noexcept { return Type == CLEANUP; }
     bool IsTtl() const noexcept { return Type == TTL; }
 
+    bool IsMovedPortion(const TPortionInfo& info) {
+        for (auto&& i : PortionsToMove) {
+            if (i.first.GetAddress() == info.GetAddress()) {
+                return true;
+            }
+        }
+        return false;
+    }
     const char * TypeString() const {
         switch (Type) {
             case UNSPECIFIED:
@@ -575,7 +596,7 @@ public:
     virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                                  const TSnapshot& outdatedSnapshot, const TCompactionLimits& limits) = 0;
+                                                                  const TCompactionLimits& limits) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
                                                                ui32 maxRecords) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,

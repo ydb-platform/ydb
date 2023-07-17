@@ -155,7 +155,7 @@ public:
         ui32 NumSplitInto(const ui32 srcRows) const {
             Y_VERIFY(srcRows > 1);
             const ui64 totalBytes = TotalBlobsSize();
-            const ui32 numSplitInto = (totalBytes / Limits.GranuleExpectedSize) + 1;
+            const ui32 numSplitInto = (totalBytes / Limits.GranuleSizeForOverloadPrevent) + 1;
             return std::max<ui32>(2, numSplitInto);
         }
 
@@ -230,8 +230,7 @@ public:
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
 
     std::shared_ptr<TColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) override;
-    std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                          const TSnapshot& outdatedSnapshot, const TCompactionLimits& limits) override;
+    std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo, const TCompactionLimits& limits) override;
     std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
                                                        ui32 maxRecords) override;
     std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,

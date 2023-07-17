@@ -26,9 +26,12 @@ void TDistributor::Bootstrap() {
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     Counters.SolutionsRate->Inc();
+    Counters.ExecuteHistogram->Collect((TMonotonic::Now() - ev->Get()->GetStartInstant()).MilliSeconds());
     if (Waiting.size()) {
-        Send(ev->Sender, new TEvInternal::TEvNewTask(Waiting.top()));
-        Waiting.pop();
+        auto task = Waiting.pop();
+        task.OnBeforeStart();
+        Counters.WaitingHistogram->Collect((TMonotonic::Now() - task.GetCreateInstant()).MilliSeconds());
+        Send(ev->Sender, new TEvInternal::TEvNewTask(task));
     } else {
         Workers.emplace_back(ev->Sender);
     }
@@ -47,11 +50,14 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::TX_CONVEYOR) << "action=add_task;owner=" << ev->Sender << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
     Counters.IncomingRate->Inc();
     if (Workers.size()) {
-        Send(Workers.back(), new TEvInternal::TEvNewTask(TWorkerTask(ev->Get()->GetTask(), ev->Sender)));
+        Counters.WaitingHistogram->Collect(0);
+        TWorkerTask wTask(ev->Get()->GetTask(), ev->Sender);
+        wTask.OnBeforeStart();
+        Send(Workers.back(), new TEvInternal::TEvNewTask(wTask));
         Workers.pop_back();
         Counters.UseWorkerRate->Inc();
     } else if (Waiting.size() < Config.GetQueueSizeLimit()) {
-        Waiting.emplace(ev->Get()->GetTask(), ev->Sender);
+        Waiting.push(TWorkerTask(ev->Get()->GetTask(), ev->Sender));
         Counters.WaitWorkerRate->Inc();
     } else {
         ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=overlimit;sender=" << ev->Sender << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();

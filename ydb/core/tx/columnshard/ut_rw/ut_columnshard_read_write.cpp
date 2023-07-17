@@ -1160,7 +1160,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
 
     // inserts triggered by size
     NOlap::TCompactionLimits engineLimits;
-    ui32 numTxs = engineLimits.GranuleExpectedSize / triggerData.size() + 1;
+    ui32 numTxs = engineLimits.GranuleSizeForOverloadPrevent / triggerData.size() + 1;
 
     for (ui32 i = 0; i < numTxs; ++i, ++writeId, ++planStep, ++txId) {
         UNIT_ASSERT(write(runtime, sender, metaShard, writeId, tableId, triggerData));
@@ -1202,7 +1202,8 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         UNIT_ASSERT(readStats.GetIndexBatches() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-        UNIT_ASSERT(readStats.GetIndexPortions() <= 2); // got compaction
+        UNIT_ASSERT(readStats.GetIndexPortions() > 0); // got compaction
+        UNIT_ASSERT(readStats.GetIndexPortions() <= 5); // got compaction
 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
@@ -2370,7 +2371,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT(readStats.GetIndexBatches() > 0);
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0); // TODO
                     UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
+//                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 3); // got 2 split compactions
                     //UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexPortions(), x);
                 }
 
@@ -2476,8 +2477,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                 if (pathId == tableId) {
-                    if (kind == 2) {
-                        UNIT_ASSERT_VALUES_EQUAL(numRows, (triggerPortionSize - overlapSize) * numWrites + overlapSize);
+                    if (kind == 3) {
+                        UNIT_ASSERT(numRows <= (triggerPortionSize - overlapSize) * numWrites + overlapSize);
+                        UNIT_ASSERT(numRows > 0.7 * (triggerPortionSize - overlapSize) * numWrites + overlapSize);
                         UNIT_ASSERT(numBytes > numRows);
                         //UNIT_ASSERT(numRawBytes > numBytes);
                     }
@@ -2721,18 +2723,23 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         << " old portions:";
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : msg->IndexChanges->SwitchedPortions) {
+                        const bool moved = msg->IndexChanges->IsMovedPortion(portionInfo);
                         ui64 granule = portionInfo.Granule();
                         UNIT_ASSERT(!srcGranule || srcGranule == granule);
                         srcGranule = granule;
                         ui64 portionId = portionInfo.Portion();
-                        Cerr << " " << portionId;
-                        oldPortions.insert(portionId);
+                        if (moved) {
+                            Cerr << " MOVED: " << portionId;
+                        } else {
+                            Cerr << " " << portionId;
+                            oldPortions.insert(portionId);
+                        }
                     }
                     Cerr << Endl;
                 }
                 if (!msg->IndexChanges->PortionsToDrop.empty()) {
                     ++cleanupsHappened;
-                    Cerr << "Cleanup older than snaphsot "<< msg->IndexChanges->InitSnapshot
+                    Cerr << "Cleanup older than snapshot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
                     for (const auto& portion : msg->IndexChanges->PortionsToDrop) {
                         ui64 portionId = portion.Records[0].Portion;
@@ -2837,7 +2844,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         --planStep;
         --txId;
 
-        UNIT_ASSERT_VALUES_EQUAL(compactionsHappened, 3); // we catch it three times per action
+        UNIT_ASSERT_GE(compactionsHappened, 3); // we catch it three times per action
 
         ui64 previousCompactionsHappened = compactionsHappened;
         ui64 previousCleanupsHappened = cleanupsHappened;
@@ -2891,7 +2898,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;
         Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl;
 
-        // Check that GC happened but it didn't collect some old poritons
+        // Check that GC happened but it didn't collect some old portions
         UNIT_ASSERT_GT(compactionsHappened, previousCompactionsHappened);
         UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
         UNIT_ASSERT_GT_C(oldPortions.size(), deletedPortions.size(), "Some old portions must not be deleted because the are in use by read");
@@ -2908,7 +2915,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         // Advance the time and trigger some more compactions and cleanups
-        planStep += 2*delay.MilliSeconds();
+        planStep += 2 * delay.MilliSeconds();
         numWrites = 2;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));

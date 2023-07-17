@@ -21,7 +21,7 @@ protected:
         Summary.Clear();
     }
 public:
-    const std::map<ui64, std::set<const TPathInfo*>>& GetPathPriorities() const {
+    const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
     }
 

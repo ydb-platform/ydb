@@ -490,6 +490,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
 
         auto& runtime = *server->GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
@@ -541,6 +542,10 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
 
+        {
+            TAtomic unusedPrev;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
+        }
         for (ui32 i = 0; i < 4; ++i) {
             lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
         }

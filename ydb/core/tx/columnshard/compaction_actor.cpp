@@ -16,10 +16,6 @@ private:
     const TIndexationCounters InternalCounters = TIndexationCounters("InternalCompaction");
     const TIndexationCounters SplitCounters = TIndexationCounters("SplitCompaction");
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
-    }
-
     TCompactionActor(ui64 tabletId, const TActorId& parent)
         : TabletId(tabletId)
         , Parent(parent)
@@ -37,18 +33,18 @@ public:
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
         Y_VERIFY(indexChanges->CompactionInfo);
-
         LOG_S_DEBUG("Granules compaction: " << *indexChanges << " at tablet " << TabletId);
 
         for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
-            Y_VERIFY(!ranges.empty());
+            Y_VERIFY(ranges.size());
 
             for (const auto& blobRange : ranges) {
                 Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
                 GetCurrentCounters().ReadBytes->Add(blobRange.Size);
             }
-            SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
+            NBlobCache::TReadBlobRangeOptions readOpts{ .CacheAfterRead = false, .ForceFallback = event.Externals.contains(blobId), .IsBackgroud = true };
+            Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
         }
     }
 
@@ -100,7 +96,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvCompaction, Handle);
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
-            hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, Handle)
+            hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, Handle);
             default:
                 break;
         }
@@ -128,13 +124,6 @@ private:
         } else {
             return InternalCounters;
         }
-    }
-
-    void SendReadRequest(std::vector<NBlobCache::TBlobRange>&& ranges, bool isExternal) {
-        Y_VERIFY(!ranges.empty());
-
-        NBlobCache::TReadBlobRangeOptions readOpts{.CacheAfterRead = false, .ForceFallback = isExternal, .IsBackgroud = true};
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
     }
 
     class TConveyorTask: public NConveyor::ITask {
@@ -187,14 +176,12 @@ private:
             txEvent->SetPutStatus(NKikimrProto::ERROR);
             Send(Parent, txEvent.release());
         } else {
+            ACFL_DEBUG("event", "task_finished")("new_blobs", txEvent->Blobs.size());
             if (txEvent->Blobs.empty()) {
                 txEvent->SetPutStatus(NKikimrProto::OK); // nothing to write, commit
             }
             txEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
-            ui32 blobsSize = txEvent->Blobs.size();
             Send(Parent, txEvent.release());
-
-            LOG_S_DEBUG("Granules compaction finished (" << blobsSize << " new blobs) at tablet " << TabletId);
         }
     }
 };

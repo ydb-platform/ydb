@@ -1,6 +1,7 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include "common/owner.h"
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -22,6 +23,10 @@ public:
     }
     i64 GetPortionsCount() const {
         return PortionsCount;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "size:" << PortionsSize << ";count:" << PortionsCount << ";";
     }
 };
 

@@ -351,6 +351,15 @@ private:
             return ActiveTtlGranules;
         }
 
+        void CheckDeadlines() {
+            for (auto&& i : ActiveCompactionInfo) {
+                if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
+                    AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction");
+                    Y_VERIFY(false);
+                }
+            }
+        }
+
         bool StartCompaction(const NOlap::TPlanCompactionInfo& info) {
             Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
             return true;

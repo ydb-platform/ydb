@@ -3,15 +3,23 @@
 
 namespace NKikimr::NOlap {
 
-bool TGranuleMeta::NeedSplit(const TCompactionLimits& limits, bool& inserted) const {
-    inserted = GetAdditiveSummary().GetInserted().GetPortionsCount();
-    bool differentBorders = GetHardSummary().GetDifferentBorders();
-    if (GetAdditiveSummary().GetActivePortionsCount() < 2) {
-        inserted = false;
-        return false;
+TGranuleAdditiveSummary::ECompactionClass TGranuleMeta::GetCompactionType(const TCompactionLimits& limits) const {
+    const TGranuleAdditiveSummary::ECompactionClass classActual = GetAdditiveSummary().GetCompactionClass(
+        limits, ModificationLastTime, TMonotonic::Now());
+    switch (classActual) {
+        case TGranuleAdditiveSummary::ECompactionClass::Split:
+        {
+            if (GetHardSummary().GetDifferentBorders()) {
+                return TGranuleAdditiveSummary::ECompactionClass::Split;
+            } else {
+                return TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
+            }
+        }
+        case TGranuleAdditiveSummary::ECompactionClass::WaitInternal:
+        case TGranuleAdditiveSummary::ECompactionClass::Internal:
+        case TGranuleAdditiveSummary::ECompactionClass::NoCompaction:
+            return classActual;
     }
-    return differentBorders && (GetAdditiveSummary().GetMaxColumnsSize() >= limits.GranuleBlobSplitSize ||
-        GetAdditiveSummary().GetGranuleSize() >= limits.GranuleOverloadSize);
 }
 
 ui64 TGranuleMeta::Size() const {
@@ -52,6 +60,7 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TColumnRec
 }
 
 void TGranuleMeta::OnAfterChangePortion() {
+    ModificationLastTime = TMonotonic::Now();
     Owner->UpdateGranuleInfo(*this);
 }
 

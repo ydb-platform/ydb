@@ -616,6 +616,7 @@ void TColumnShard::ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly) {
 }
 
 void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivity activity) {
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
     if (periodic) {
         if (LastPeriodicBackActivation > TInstant::Now() - ActivationPeriod) {
             CSCounters.OnTooEarly();
@@ -685,9 +686,6 @@ void TColumnShard::SetupIndexation() {
                 Y_VERIFY(dataSize);
 
                 size += dataSize;
-                if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
-                    continue;
-                }
                 if (granulesOverloaded) {
                     ++ignored;
                     CSCounters.SkipIndexationInputDueToGranuleOverload(dataSize);
@@ -701,7 +699,16 @@ void TColumnShard::SetupIndexation() {
                 ++blobs;
                 bytesToIndex += dataSize;
                 dataToIndex.push_back(&data);
+                if (bytesToIndex >= (ui64)Limits.MaxInsertBytes) {
+                    break;
+                }
             }
+            if (bytesToIndex >= (ui64)Limits.MaxInsertBytes) {
+                break;
+            }
+        }
+        if (bytesToIndex >= (ui64)Limits.MaxInsertBytes) {
+            break;
         }
     }
 
@@ -754,6 +761,7 @@ void TColumnShard::SetupIndexation() {
 void TColumnShard::SetupCompaction() {
     CSCounters.OnSetupCompaction();
 
+    BackgroundController.CheckDeadlines();
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto limits = CompactionLimits.Get();
         auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits, BackgroundController.GetActiveTtlGranules());
@@ -773,9 +781,8 @@ void TColumnShard::SetupCompaction() {
             CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
         }
 
-        ui64 outdatedStep = GetOutdatedStep();
         const NOlap::TPlanCompactionInfo planInfo = compactionInfo->GetPlanCompaction();
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), NOlap::TSnapshot(outdatedStep, 0), limits);
+        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), limits);
         if (!indexChanges) {
             if (!BackgroundController.GetCompactionsCount()) {
                 LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
@@ -897,12 +904,6 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-#if 0 // No need for now
-    if (Tiers) {
-        ...
-    }
-#endif
-
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 

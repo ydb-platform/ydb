@@ -46,6 +46,7 @@ private:
 
 
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID()));
     Y_VERIFY(Ev);
     Y_VERIFY(Self->InsertTable);
     Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
@@ -293,6 +294,7 @@ void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWri
     TablesManager.MutablePrimaryIndex().FreeLocks(changes);
 
     if (changes->IsInsert()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "FinishWriteIndex")("type", "Insert");
         BackgroundController.FinishIndexing();
 
         IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
@@ -300,6 +302,7 @@ void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWri
         IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
         IncCounter(COUNTER_INDEXING_TIME, ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCompaction()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "FinishWriteIndex")("type", "Compaction");
         Y_VERIFY(changes->CompactionInfo);
         BackgroundController.FinishCompaction(changes->CompactionInfo->GetPlanCompaction());
 
@@ -314,10 +317,12 @@ void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWri
         }
         IncCounter(COUNTER_COMPACTION_TIME, ev->Get()->Duration.MilliSeconds());
     } else if (changes->IsCleanup()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "FinishWriteIndex")("type", "Cleanup");
         BackgroundController.FinishCleanup();
 
         IncCounter(ok ? COUNTER_CLEANUP_SUCCESS : COUNTER_CLEANUP_FAIL);
     } else if (changes->IsTtl()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "FinishWriteIndex")("type", "Ttl");
         BackgroundController.FinishTtl();
 
         IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);

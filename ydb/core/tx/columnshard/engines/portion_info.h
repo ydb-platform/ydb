@@ -87,6 +87,10 @@ public:
     bool operator<(const TPortionAddress& item) const {
         return std::tie(GranuleId, PortionId) < std::tie(item.GranuleId, item.PortionId);
     }
+
+    bool operator==(const TPortionAddress& item) const {
+        return std::tie(GranuleId, PortionId) == std::tie(item.GranuleId, item.PortionId);
+    }
 };
 
 struct TPortionInfo {

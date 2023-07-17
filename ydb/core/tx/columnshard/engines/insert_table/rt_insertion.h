@@ -22,7 +22,7 @@ private:
     THashMap<TWriteId, TInsertedData> Inserted;
     THashMap<TWriteId, TInsertedData> Aborted;
 
-    std::map<ui64, std::set<const TPathInfo*>> Priorities;
+    std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>> Priorities;
     THashMap<ui64, TPathInfo> PathInfo;
     void RemovePriority(const TPathInfo& pathInfo) noexcept;
     void AddPriority(const TPathInfo& pathInfo) noexcept;
@@ -72,7 +72,7 @@ public:
 
 
 
-    const std::map<ui64, std::set<const TPathInfo*>>& GetPathPriorities() const {
+    const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;
     }
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
@@ -130,6 +131,41 @@ private:
     TDataClassSummary Other;
     friend class TGranuleMeta;
 public:
+    enum class ECompactionClass: ui32 {
+        Split = 100,
+        Internal = 50,
+        WaitInternal = 30,
+        NoCompaction = 0
+    };
+
+    ECompactionClass GetCompactionClass(const TCompactionLimits& limits, const TMonotonic lastModification, const TMonotonic now) const {
+        if (GetActivePortionsCount() <= 1) {
+            return ECompactionClass::NoCompaction;
+        }
+        if (GetMaxColumnsSize() >= limits.GranuleBlobSplitSize ||
+            GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
+        {
+            return ECompactionClass::Split;
+        }
+
+        if (now - lastModification > TDuration::Seconds(limits.InGranuleCompactSeconds)) {
+            if (GetInserted().GetPortionsCount()) {
+                return ECompactionClass::Internal;
+            }
+        } else {
+            if (GetInserted().GetPortionsCount() > 1 &&
+                (GetInserted().GetPortionsSize() >= limits.GranuleIndexedPortionsSizeLimit ||
+                    GetInserted().GetPortionsCount() >= limits.GranuleIndexedPortionsCountLimit)) {
+                return ECompactionClass::Internal;
+            }
+            if (GetInserted().GetPortionsCount()) {
+                return ECompactionClass::WaitInternal;
+            }
+        }
+
+        return ECompactionClass::NoCompaction;
+    }
+
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
@@ -159,46 +195,39 @@ public:
             Other.RemovePortion(info);
         }
     }
+    TString DebugString() const {
+        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Other.DebugString() << "); ";
+    }
 };
 
 class TCompactionPriority: public TCompactionPriorityInfo {
+public:
+    TGranuleAdditiveSummary::ECompactionClass GetPriorityClass() const {
+        return GranuleSummary.GetCompactionClass(TCompactionLimits(), LastModification, ConstructionInstant);
+    }
+
 private:
     using TBase = TCompactionPriorityInfo;
     TGranuleAdditiveSummary GranuleSummary;
-
-    enum class EProblemPriorityPrediction: ui32 {
-        GranuleOverload = 100,
-        BigInsertedSize = 90,
-        ManyInsertedPortions = 80,
-        Other = 0
-    };
-
-    EProblemPriorityPrediction GetPriorityClass() const {
-        if (GranuleSummary.GetActivePortionsCount() <= 1) {
-            return EProblemPriorityPrediction::Other;
-        }
-        if (GranuleSummary.GetGranuleSize() > TCompactionLimits::MAX_BLOB_SIZE * 10) {
-            return EProblemPriorityPrediction::GranuleOverload;
-        } else if (GranuleSummary.GetInserted().GetPortionsSize() > (i64)TCompactionLimits::MAX_BLOB_SIZE * 5) {
-            return EProblemPriorityPrediction::BigInsertedSize;
-        } else if (GranuleSummary.GetInserted().GetPortionsCount() > 50) {
-            return EProblemPriorityPrediction::ManyInsertedPortions;
-        } else {
-            return EProblemPriorityPrediction::Other;
-        }
-
-    }
+    TMonotonic LastModification;
+    TMonotonic ConstructionInstant = TMonotonic::Now();
 
     ui64 GetWeightCorrected() const {
-        if (GranuleSummary.GetActivePortionsCount() <= 1) {
-            return 0;
+        switch (GetPriorityClass()) {
+            case TGranuleAdditiveSummary::ECompactionClass::Split:
+                return GranuleSummary.GetGranuleSize();
+            case TGranuleAdditiveSummary::ECompactionClass::Internal:
+            case TGranuleAdditiveSummary::ECompactionClass::WaitInternal:
+                return GranuleSummary.GetInserted().GetPortionsSize();
+            case TGranuleAdditiveSummary::ECompactionClass::NoCompaction:
+                return GranuleSummary.GetGranuleSize() * GranuleSummary.GetActivePortionsCount() * GranuleSummary.GetActivePortionsCount();
         }
-        return GranuleSummary.GetGranuleSize() * GranuleSummary.GetActivePortionsCount() * GranuleSummary.GetActivePortionsCount();
     }
 public:
-    TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleAdditiveSummary& granuleSummary)
+    TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleAdditiveSummary& granuleSummary, const TMonotonic lastModification)
         : TBase(data)
         , GranuleSummary(granuleSummary)
+        , LastModification(lastModification)
     {
 
     }
@@ -207,21 +236,27 @@ public:
             < std::tuple((ui32)item.GetPriorityClass(), item.GetWeightCorrected(), item.GranuleSummary.GetActivePortionsCount(), NextAttemptInstant);
     }
 
+    TString DebugString() const {
+        return TStringBuilder() << "summary:(" << GranuleSummary.DebugString() << ");";
+    }
+
 };
 
 class TGranuleMeta: public ICompactionObjectCallback, TNonCopyable {
-private:
-    THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
-    mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
-    mutable std::optional<TGranuleHardSummary> HardSummaryCache;
-    bool NeedSplit(const TCompactionLimits& limits, bool& inserted) const;
-    void RebuildHardMetrics() const;
-    void RebuildAdditiveMetrics() const;
-
+public:
     enum class EActivity {
         SplitCompaction,
         InternalCompaction,
     };
+
+private:
+    TMonotonic ModificationLastTime = TMonotonic::Now();
+    THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
+    mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
+    mutable std::optional<TGranuleHardSummary> HardSummaryCache;
+
+    void RebuildHardMetrics() const;
+    void RebuildAdditiveMetrics() const;
 
     std::set<EActivity> Activity;
     TCompactionPriorityInfo CompactionPriorityInfo;
@@ -233,6 +268,7 @@ private:
     void OnAfterChangePortion();
     void OnAdditiveSummaryChange() const;
 public:
+    TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleHardSummary& GetHardSummary() const {
         if (!HardSummaryCache) {
             RebuildHardMetrics();
@@ -241,7 +277,7 @@ public:
     }
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
     TCompactionPriority GetCompactionPriority() const {
-        return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary());
+        return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary(), ModificationLastTime);
     }
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
@@ -249,7 +285,7 @@ public:
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_skipped_by_state")("granule_id", GetGranuleId())("granule_size", Size());
             return false;
         }
-        return NeedSplitCompaction(limits) || NeedInternalCompaction(limits);
+        return GetCompactionType(limits) != TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
     }
 
     bool InCompaction() const {
@@ -330,14 +366,6 @@ public:
     ui64 Size() const;
     bool IsOverloaded(const TCompactionLimits& limits) const {
         return Size() >= limits.GranuleOverloadSize;
-    }
-    bool NeedSplitCompaction(const TCompactionLimits& limits) const {
-        bool inserted = false;
-        return NeedSplit(limits, inserted);
-    }
-    bool NeedInternalCompaction(const TCompactionLimits& limits) const {
-        bool inserted = false;
-        return !NeedSplit(limits, inserted) && inserted;
     }
 };
 

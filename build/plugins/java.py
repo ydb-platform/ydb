@@ -475,4 +475,5 @@ def on_setup_project_coords_if_needed(unit, *args):
         value = '\\"{}\\"'.format(_maven_coords_for_project(unit, project_dir).rstrip(':'))
     else:
         value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
-    unit.set(['_EXPORT_GRADLE_PROJECT_COORDS', value])
+    unit.set(['EXPORT_GRADLE_PROJECT_COORDS', value])
+    unit.set(['EXPORT_GRADLE_PROJECT_COORDS_GLOBAL', value])

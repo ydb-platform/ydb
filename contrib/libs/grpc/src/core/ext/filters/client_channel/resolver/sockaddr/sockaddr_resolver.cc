@@ -21,9 +21,7 @@
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <utility>
-#include <vector>
 
-#include "y_absl/memory/memory.h"
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/str_split.h"
 #include "y_absl/strings/string_view.h"
@@ -38,7 +36,6 @@
 #include "src/core/lib/iomgr/resolved_address.h"
 #include "src/core/lib/resolver/resolver.h"
 #include "src/core/lib/resolver/resolver_factory.h"
-#include "src/core/lib/resolver/resolver_registry.h"
 #include "src/core/lib/resolver/server_address.h"
 #include "src/core/lib/uri/uri_parser.h"
 
@@ -180,14 +177,14 @@ class UnixAbstractResolverFactory : public ResolverFactory {
 
 void RegisterSockaddrResolver(CoreConfiguration::Builder* builder) {
   builder->resolver_registry()->RegisterResolverFactory(
-      y_absl::make_unique<IPv4ResolverFactory>());
+      std::make_unique<IPv4ResolverFactory>());
   builder->resolver_registry()->RegisterResolverFactory(
-      y_absl::make_unique<IPv6ResolverFactory>());
+      std::make_unique<IPv6ResolverFactory>());
 #ifdef GRPC_HAVE_UNIX_SOCKET
   builder->resolver_registry()->RegisterResolverFactory(
-      y_absl::make_unique<UnixResolverFactory>());
+      std::make_unique<UnixResolverFactory>());
   builder->resolver_registry()->RegisterResolverFactory(
-      y_absl::make_unique<UnixAbstractResolverFactory>());
+      std::make_unique<UnixAbstractResolverFactory>());
 #endif
 }
 

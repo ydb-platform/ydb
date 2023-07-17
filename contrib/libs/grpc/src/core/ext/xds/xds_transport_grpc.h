@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef GRPC_CORE_EXT_XDS_XDS_TRANSPORT_GRPC_H
-#define GRPC_CORE_EXT_XDS_XDS_TRANSPORT_GRPC_H
+#ifndef GRPC_SRC_CORE_EXT_XDS_XDS_TRANSPORT_GRPC_H
+#define GRPC_SRC_CORE_EXT_XDS_XDS_TRANSPORT_GRPC_H
 
 #include <grpc/support/port_platform.h>
 
@@ -26,7 +26,7 @@
 
 #include "y_absl/status/status.h"
 
-#include <grpc/impl/codegen/grpc_types.h>
+#include <grpc/grpc.h>
 #include <grpc/slice.h>
 #include <grpc/status.h>
 
@@ -133,4 +133,4 @@ class GrpcXdsTransportFactory::GrpcXdsTransport::GrpcStreamingCall
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_EXT_XDS_XDS_TRANSPORT_GRPC_H
+#endif  // GRPC_SRC_CORE_EXT_XDS_XDS_TRANSPORT_GRPC_H

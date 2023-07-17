@@ -20,7 +20,6 @@
 
 #include <memory>
 
-#include "y_absl/memory/memory.h"
 #include "y_absl/strings/string_view.h"
 
 #include <grpc/grpc.h>
@@ -71,11 +70,11 @@ class FakeChannelCredsFactory : public ChannelCredsFactory<> {
 
 void RegisterChannelDefaultCreds(CoreConfiguration::Builder* builder) {
   builder->channel_creds_registry()->RegisterChannelCredsFactory(
-      y_absl::make_unique<GoogleDefaultChannelCredsFactory>());
+      std::make_unique<GoogleDefaultChannelCredsFactory>());
   builder->channel_creds_registry()->RegisterChannelCredsFactory(
-      y_absl::make_unique<InsecureChannelCredsFactory>());
+      std::make_unique<InsecureChannelCredsFactory>());
   builder->channel_creds_registry()->RegisterChannelCredsFactory(
-      y_absl::make_unique<FakeChannelCredsFactory>());
+      std::make_unique<FakeChannelCredsFactory>());
 }
 
 }  // namespace grpc_core

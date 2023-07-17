@@ -16,9 +16,10 @@
 
 #include <grpc/support/port_platform.h>
 
-// IWYU pragma: no_include <bits/struct_stat.h>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 
-#include <string.h>
+// IWYU pragma: no_include <bits/struct_stat.h>
 
 #include "y_absl/status/status.h"
 #include "y_absl/strings/string_view.h"
@@ -31,6 +32,7 @@
 #include <grpc/support/log.h>
 
 #include "src/core/lib/gprpp/stat.h"
+#include "src/core/lib/gprpp/strerror.h"
 
 namespace grpc_core {
 
@@ -39,9 +41,9 @@ y_absl::Status GetFileModificationTime(const char* filename, time_t* timestamp) 
   GPR_ASSERT(timestamp != nullptr);
   struct stat buf;
   if (stat(filename, &buf) != 0) {
-    const char* error_msg = strerror(errno);
+    TString error_msg = StrError(errno);
     gpr_log(GPR_ERROR, "stat failed for filename %s with error %s.", filename,
-            error_msg);
+            error_msg.c_str());
     return y_absl::Status(y_absl::StatusCode::kInternal, error_msg);
   }
   // Last file/directory modification time.

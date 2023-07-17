@@ -5,8 +5,6 @@
 #include <grpc++/impl/codegen/proto_utils.h>
 #include <grpc++/impl/grpc_library.h>
 
-static ::grpc::internal::GrpcLibraryInitializer grpcInitializer;
-
 using namespace NGrpc;
 
 using google::protobuf::Duration;

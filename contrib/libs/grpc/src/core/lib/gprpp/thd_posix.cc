@@ -1,27 +1,26 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+//
+//
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//
 
-/* Posix implementation for gpr threads. */
+// Posix implementation for gpr threads.
 
 #include <grpc/support/port_platform.h>
 #include <util/system/thread.h>
 
-#include <grpc/impl/codegen/gpr_types.h>
 #include <grpc/support/time.h>
 
 #ifdef GPR_POSIX_SYNC
@@ -45,9 +44,9 @@ class ThreadInternalsPosix;
 
 struct thd_arg {
   ThreadInternalsPosix* thread;
-  void (*body)(void* arg); /* body of a thread */
-  void* arg;               /* argument to a thread */
-  const char* name;        /* name of thread. Can be nullptr. */
+  void (*body)(void* arg);  // body of a thread
+  void* arg;                // argument to a thread
+  const char* name;         // name of thread. Can be nullptr.
   bool joinable;
   bool tracked;
 };
@@ -80,8 +79,8 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
     gpr_mu_init(&mu_);
     gpr_cv_init(&ready_);
     pthread_attr_t attr;
-    /* don't use gpr_malloc as we may cause an infinite recursion with
-     * the profiling code */
+    // don't use gpr_malloc as we may cause an infinite recursion with
+    // the profiling code
     thd_arg* info = static_cast<thd_arg*>(malloc(sizeof(*info)));
     GPR_ASSERT(info != nullptr);
     info->thread = this;
@@ -139,7 +138,7 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
     GPR_ASSERT(pthread_attr_destroy(&attr) == 0);
 
     if (!(*success)) {
-      /* don't use gpr_free, as this was allocated using malloc (see above) */
+      // don't use gpr_free, as this was allocated using malloc (see above)
       free(info);
       if (options.tracked()) {
         Fork::DecThreadCount();
@@ -197,4 +196,4 @@ gpr_thd_id gpr_thd_currentid(void) {
   return (gpr_thd_id)pthread_self();
 }
 
-#endif /* GPR_POSIX_SYNC */
+#endif  // GPR_POSIX_SYNC

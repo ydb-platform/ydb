@@ -16,8 +16,8 @@
 //
 //
 
-#ifndef GRPC_CORE_LIB_SECURITY_CREDENTIALS_TLS_TLS_UTILS_H
-#define GRPC_CORE_LIB_SECURITY_CREDENTIALS_TLS_TLS_UTILS_H
+#ifndef GRPC_SRC_CORE_LIB_SECURITY_CREDENTIALS_TLS_TLS_UTILS_H
+#define GRPC_SRC_CORE_LIB_SECURITY_CREDENTIALS_TLS_TLS_UTILS_H
 
 #include <grpc/support/port_platform.h>
 
@@ -49,4 +49,4 @@ std::vector<y_absl::string_view> GetAuthPropertyArray(grpc_auth_context* context
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_LIB_SECURITY_CREDENTIALS_TLS_TLS_UTILS_H
+#endif  // GRPC_SRC_CORE_LIB_SECURITY_CREDENTIALS_TLS_TLS_UTILS_H

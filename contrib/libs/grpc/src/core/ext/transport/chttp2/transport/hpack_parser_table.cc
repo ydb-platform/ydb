@@ -1,20 +1,20 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+//
+//
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//
 
 #include <grpc/support/port_platform.h>
 
@@ -25,18 +25,19 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <initializer_list>
 #include <utility>
 
+#include "y_absl/status/status.h"
 #include "y_absl/strings/str_format.h"
 #include "y_absl/strings/string_view.h"
 
 #include <grpc/support/log.h>
 
 #include "src/core/ext/transport/chttp2/transport/hpack_constants.h"
+#include "src/core/ext/transport/chttp2/transport/http_trace.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/slice/slice.h"
-
-extern grpc_core::TraceFlag grpc_http_trace;
 
 namespace grpc_core {
 
@@ -78,11 +79,11 @@ void HPackTable::MementoRingBuffer::Rebuild(uint32_t max_entries) {
   entries_.swap(entries);
 }
 
-/* Evict one element from the table */
+// Evict one element from the table
 void HPackTable::EvictOne() {
   auto first_entry = entries_.PopOne();
-  GPR_ASSERT(first_entry.transport_size() <= mem_used_);
-  mem_used_ -= first_entry.transport_size();
+  GPR_ASSERT(first_entry.md.transport_size() <= mem_used_);
+  mem_used_ -= first_entry.md.transport_size();
 }
 
 void HPackTable::SetMaxBytes(uint32_t max_bytes) {
@@ -100,10 +101,10 @@ void HPackTable::SetMaxBytes(uint32_t max_bytes) {
 
 grpc_error_handle HPackTable::SetCurrentTableSize(uint32_t bytes) {
   if (current_table_bytes_ == bytes) {
-    return GRPC_ERROR_NONE;
+    return y_absl::OkStatus();
   }
   if (bytes > max_bytes_) {
-    return GRPC_ERROR_CREATE_FROM_CPP_STRING(y_absl::StrFormat(
+    return y_absl::InternalError(y_absl::StrFormat(
         "Attempt to make hpack table %d bytes when max is %d bytes", bytes,
         max_bytes_));
   }
@@ -117,19 +118,19 @@ grpc_error_handle HPackTable::SetCurrentTableSize(uint32_t bytes) {
   uint32_t new_cap = std::max(hpack_constants::EntriesForBytes(bytes),
                               hpack_constants::kInitialTableEntries);
   entries_.Rebuild(new_cap);
-  return GRPC_ERROR_NONE;
+  return y_absl::OkStatus();
 }
 
 grpc_error_handle HPackTable::Add(Memento md) {
   if (current_table_bytes_ > max_bytes_) {
-    return GRPC_ERROR_CREATE_FROM_CPP_STRING(y_absl::StrFormat(
+    return GRPC_ERROR_CREATE(y_absl::StrFormat(
         "HPACK max table size reduced to %d but not reflected by hpack "
         "stream (still at %d)",
         max_bytes_, current_table_bytes_));
   }
 
   // we can't add elements bigger than the max table size
-  if (md.transport_size() > current_table_bytes_) {
+  if (md.md.transport_size() > current_table_bytes_) {
     // HPACK draft 10 section 4.4 states:
     // If the size of the new entry is less than or equal to the maximum
     // size, that entry is added to the table.  It is not an error to
@@ -140,19 +141,19 @@ grpc_error_handle HPackTable::Add(Memento md) {
     while (entries_.num_entries()) {
       EvictOne();
     }
-    return GRPC_ERROR_NONE;
+    return y_absl::OkStatus();
   }
 
   // evict entries to ensure no overflow
-  while (md.transport_size() >
+  while (md.md.transport_size() >
          static_cast<size_t>(current_table_bytes_) - mem_used_) {
     EvictOne();
   }
 
   // copy the finalized entry in
-  mem_used_ += md.transport_size();
+  mem_used_ += md.md.transport_size();
   entries_.Put(std::move(md));
-  return GRPC_ERROR_NONE;
+  return y_absl::OkStatus();
 }
 
 namespace {
@@ -227,12 +228,14 @@ const StaticTableEntry kStaticTable[hpack_constants::kLastStaticEntry] = {
 
 HPackTable::Memento MakeMemento(size_t i) {
   auto sm = kStaticTable[i];
-  return grpc_metadata_batch::Parse(
-      sm.key, Slice::FromStaticString(sm.value),
-      strlen(sm.key) + strlen(sm.value) + hpack_constants::kEntryOverhead,
-      [](y_absl::string_view, const Slice&) {
-        abort();  // not expecting to see this
-      });
+  return HPackTable::Memento{
+      grpc_metadata_batch::Parse(
+          sm.key, Slice::FromStaticString(sm.value),
+          strlen(sm.key) + strlen(sm.value) + hpack_constants::kEntryOverhead,
+          [](y_absl::string_view, const Slice&) {
+            abort();  // not expecting to see this
+          }),
+      y_absl::OkStatus()};
 }
 
 }  // namespace

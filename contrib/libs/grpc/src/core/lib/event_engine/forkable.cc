@@ -15,6 +15,7 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/event_engine/forkable.h"
+#include "src/core/lib/gprpp/fork.h"
 
 #ifdef GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
 
@@ -31,8 +32,15 @@ namespace experimental {
 namespace {
 grpc_core::NoDestruct<grpc_core::Mutex> g_mu;
 bool g_registered Y_ABSL_GUARDED_BY(g_mu){false};
-grpc_core::NoDestruct<y_absl::flat_hash_set<Forkable*>> g_forkables
-    Y_ABSL_GUARDED_BY(g_mu);
+
+// This must be ordered because there are ordering dependencies between
+// certain fork handlers.
+grpc_core::NoDestruct<std::vector<Forkable*>> g_forkables Y_ABSL_GUARDED_BY(g_mu);
+
+bool IsForkEnabled() {
+  return grpc_core::Fork::Enabled();
+}
+
 }  // namespace
 
 Forkable::Forkable() { ManageForkable(this); }
@@ -40,41 +48,72 @@ Forkable::Forkable() { ManageForkable(this); }
 Forkable::~Forkable() { StopManagingForkable(this); }
 
 void RegisterForkHandlers() {
-  grpc_core::MutexLock lock(g_mu.get());
-  if (!std::exchange(g_registered, true)) {
-    pthread_atfork(PrepareFork, PostforkParent, PostforkChild);
+  if (IsForkEnabled()) {
+      grpc_core::MutexLock lock(g_mu.get());
+      if (!std::exchange(g_registered, true)) {
+#ifdef GRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK
+          pthread_atfork(PrepareFork, PostforkParent, PostforkChild);
+#endif
+      }
   }
 };
 
 void PrepareFork() {
-  grpc_core::MutexLock lock(g_mu.get());
-  for (auto* forkable : *g_forkables) {
-    forkable->PrepareFork();
+  if (IsForkEnabled()) {
+      grpc_core::MutexLock lock(g_mu.get());
+      for (auto forkable_iter = g_forkables->rbegin();
+           forkable_iter != g_forkables->rend(); ++forkable_iter) {
+          (*forkable_iter)->PrepareFork();
+      }
   }
 }
 void PostforkParent() {
-  grpc_core::MutexLock lock(g_mu.get());
-  for (auto* forkable : *g_forkables) {
-    forkable->PostforkParent();
+  if (IsForkEnabled()) {
+      grpc_core::MutexLock lock(g_mu.get());
+      for (auto* forkable : *g_forkables) {
+          forkable->PostforkParent();
+      }
   }
 }
 
+bool skip_postfork_child = false;
+
+void SetSkipPostForkChild() {
+  skip_postfork_child = true;
+}
+
 void PostforkChild() {
-  y_absl::ResetDeadlockGraphMu();
-  grpc_core::MutexLock lock(g_mu.get());
-  for (auto* forkable : *g_forkables) {
-    forkable->PostforkChild();
+  if (IsForkEnabled()) {
+      y_absl::ResetDeadlockGraphMu();
+      if (skip_postfork_child) {
+          return;
+      }
+      grpc_core::MutexLock lock(g_mu.get());
+      for (auto* forkable : *g_forkables) {
+          forkable->PostforkChild();
+      }
   }
 }
 
 void ManageForkable(Forkable* forkable) {
-  grpc_core::MutexLock lock(g_mu.get());
-  g_forkables->insert(forkable);
+  if (IsForkEnabled()) {
+      grpc_core::MutexLock lock(g_mu.get());
+      g_forkables->push_back(forkable);
+  }
 }
 
 void StopManagingForkable(Forkable* forkable) {
-  grpc_core::MutexLock lock(g_mu.get());
-  g_forkables->erase(forkable);
+  if (IsForkEnabled()) {
+      grpc_core::MutexLock lock(g_mu.get());
+      auto iter = std::find(g_forkables->begin(), g_forkables->end(), forkable);
+      // We've faced with the issue that destructor for TimerManager object is called
+      // between PrepareFork and PostforkParent.
+      // In result in PostforkParent we try to access not valid object via forkable ptr.
+      // https://github.com/grpc/grpc/issues/33516
+      if (iter != g_forkables->end()) {
+          g_forkables->erase(iter);
+      }
+  }
 }
 
 }  // namespace experimental

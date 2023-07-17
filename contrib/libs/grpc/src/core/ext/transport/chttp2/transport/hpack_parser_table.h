@@ -1,29 +1,31 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+//
+//
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//
 
-#ifndef GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_TABLE_H
-#define GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_TABLE_H
+#ifndef GRPC_SRC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_TABLE_H
+#define GRPC_SRC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_TABLE_H
 
 #include <grpc/support/port_platform.h>
 
 #include <stdint.h>
 
 #include <vector>
+
+#include "y_absl/status/status.h"
 
 #include "src/core/ext/transport/chttp2/transport/hpack_constants.h"
 #include "src/core/lib/gprpp/no_destruct.h"
@@ -45,7 +47,10 @@ class HPackTable {
   void SetMaxBytes(uint32_t max_bytes);
   grpc_error_handle SetCurrentTableSize(uint32_t bytes);
 
-  using Memento = ParsedMetadata<grpc_metadata_batch>;
+  struct Memento {
+    ParsedMetadata<grpc_metadata_batch> md;
+    y_absl::Status parse_status;
+  };
 
   // Lookup, but don't ref.
   const Memento* Lookup(uint32_t index) const {
@@ -67,6 +72,9 @@ class HPackTable {
 
   // Current entry count in the table.
   uint32_t num_entries() const { return entries_.num_entries(); }
+
+  // Current size of the table.
+  uint32_t test_only_table_size() const { return mem_used_; }
 
  private:
   struct StaticMementos {
@@ -134,4 +142,4 @@ class HPackTable {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_TABLE_H */
+#endif  // GRPC_SRC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_TABLE_H

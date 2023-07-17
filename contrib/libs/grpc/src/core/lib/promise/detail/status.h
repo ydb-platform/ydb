@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef GRPC_CORE_LIB_PROMISE_DETAIL_STATUS_H
-#define GRPC_CORE_LIB_PROMISE_DETAIL_STATUS_H
+#ifndef GRPC_SRC_CORE_LIB_PROMISE_DETAIL_STATUS_H
+#define GRPC_SRC_CORE_LIB_PROMISE_DETAIL_STATUS_H
 
 #include <grpc/support/port_platform.h>
 
@@ -45,6 +45,34 @@ inline y_absl::Status IntoStatus(y_absl::Status* status) {
 // can participate in TrySeq as result types that affect control flow.
 inline bool IsStatusOk(const y_absl::Status& status) { return status.ok(); }
 
+template <typename To, typename From>
+struct StatusCastImpl;
+
+template <typename To>
+struct StatusCastImpl<To, To> {
+  static To Cast(To&& t) { return std::move(t); }
+};
+
+template <typename To>
+struct StatusCastImpl<To, const To&> {
+  static To Cast(const To& t) { return t; }
+};
+
+template <typename T>
+struct StatusCastImpl<y_absl::StatusOr<T>, y_absl::Status> {
+  static y_absl::StatusOr<T> Cast(y_absl::Status&& t) { return std::move(t); }
+};
+
+template <typename T>
+struct StatusCastImpl<y_absl::StatusOr<T>, const y_absl::Status&> {
+  static y_absl::StatusOr<T> Cast(const y_absl::Status& t) { return t; }
+};
+
+template <typename To, typename From>
+To StatusCast(From&& from) {
+  return StatusCastImpl<To, From>::Cast(std::forward<From>(from));
+}
+
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_LIB_PROMISE_DETAIL_STATUS_H
+#endif  // GRPC_SRC_CORE_LIB_PROMISE_DETAIL_STATUS_H

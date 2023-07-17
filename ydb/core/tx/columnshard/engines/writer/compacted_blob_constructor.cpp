@@ -6,29 +6,23 @@
 
 namespace NKikimr::NOlap {
 
-TCompactedBlobsConstructor::TCompactedBlobsConstructor(TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeIndexEv, bool blobGrouppingEnabled)
-    : WriteIndexEv(writeIndexEv)
-    , IndexChanges(*WriteIndexEv->IndexChanges)
-    , Blobs(WriteIndexEv->Blobs)
+TCompactedWriteController::TBlobsConstructor::TBlobsConstructor(TCompactedWriteController& owner, bool blobGrouppingEnabled)
+    : Owner(owner)
+    , IndexChanges(*Owner.WriteIndexEv->IndexChanges)
+    , Blobs(Owner.WriteIndexEv->Blobs)
     , BlobGrouppingEnabled(blobGrouppingEnabled)
-    , CacheData(WriteIndexEv->CacheData)
-    , IsEviction(IndexChanges.PortionsToEvict.size() > 0)
+    , CacheData(Owner.WriteIndexEv->CacheData)
+    , EvictionFlag(IndexChanges.PortionsToEvict.size() > 0)
 {
-    if (IsEviction) {
-        Y_VERIFY(IndexChanges.AppendedPortions.empty());
-        LastPortion = IndexChanges.PortionsToEvict.size();
-    } else {
-        Y_VERIFY(IndexChanges.PortionsToEvict.empty());
-        LastPortion = IndexChanges.AppendedPortions.size();
-    }
+    LastPortion = IndexChanges.AppendedPortions.size() + IndexChanges.PortionsToEvict.size();
     Y_VERIFY(Blobs.size() > 0);
 }
 
-const TString& TCompactedBlobsConstructor::GetBlob() const {
+const TString& TCompactedWriteController::TBlobsConstructor::GetBlob() const {
     return AccumulatedBlob;
 }
 
-bool TCompactedBlobsConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
+bool TCompactedWriteController::TBlobsConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
     Y_VERIFY(AccumulatedBlob.size() > 0);
     Y_VERIFY(RecordsInBlob.size() > 0);
 
@@ -45,17 +39,17 @@ bool TCompactedBlobsConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
         if (CacheData) {
             // Save original (non-accumulted) blobs with the corresponding TBlobRanges in order to
             // put them into cache at commit time
-            WriteIndexEv->IndexChanges->Blobs[blobRange] = recData;
+            Owner.WriteIndexEv->IndexChanges->Blobs[blobRange] = recData;
         }
     }
     return true;
 }
 
-IBlobConstructor::EStatus TCompactedBlobsConstructor::BuildNext() {
+IBlobConstructor::EStatus TCompactedWriteController::TBlobsConstructor::BuildNext() {
     AccumulatedBlob.clear();
     RecordsInBlob.clear();
 
-    if (IsEviction && CurrentPortionRecord == 0) {
+    if (EvictionFlag && CurrentPortionRecord == 0) {
         // Skip portions without data changes
         for (; CurrentPortion < LastPortion; ++CurrentPortion) {
             if (IndexChanges.PortionsToEvict[CurrentPortion].second.DataChanges) {
@@ -100,36 +94,37 @@ IBlobConstructor::EStatus TCompactedBlobsConstructor::BuildNext() {
     return AccumulatedBlob.empty() ? EStatus::Finished : EStatus::Ok;
 }
 
-TAutoPtr<IEventBase> TCompactedBlobsConstructor::BuildResult(NKikimrProto::EReplyStatus status,
-                                                            NColumnShard::TBlobBatch&& blobBatch,
-                                                            THashSet<ui32>&& yellowMoveChannels,
-                                                            THashSet<ui32>&& yellowStopChannels)
-{
-    for (ui64 index = 0; index < PortionUpdates.size(); ++index) {
-        const auto& portionInfo = PortionUpdates[index];
-        if (IsEviction) {
-            Y_VERIFY(index < IndexChanges.PortionsToEvict.size());
-            WriteIndexEv->IndexChanges->PortionsToEvict[index].first = portionInfo;
-        } else {
-            Y_VERIFY(index < IndexChanges.AppendedPortions.size());
-            WriteIndexEv->IndexChanges->AppendedPortions[index] = portionInfo;
-        }
-    }
-
-    WriteIndexEv->ResourceUsage.Add(ResourceUsage);
-    WriteIndexEv->SetPutStatus(status, std::move(yellowMoveChannels), std::move(yellowStopChannels));
-    WriteIndexEv->BlobBatch = std::move(blobBatch);
-    return WriteIndexEv.Release();
-}
-
-const NOlap::TPortionInfo& TCompactedBlobsConstructor::GetPortionInfo(const ui64 index) const {
-    if (IsEviction) {
+const NOlap::TPortionInfo& TCompactedWriteController::TBlobsConstructor::GetPortionInfo(const ui64 index) const {
+    if (EvictionFlag) {
         Y_VERIFY(index < IndexChanges.PortionsToEvict.size());
         return IndexChanges.PortionsToEvict[index].first;
     } else {
         Y_VERIFY(index < IndexChanges.AppendedPortions.size());
         return IndexChanges.AppendedPortions[index];
     }
+}
+
+TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool blobGrouppingEnabled)
+    : WriteIndexEv(writeEv)
+    , BlobConstructor(std::make_shared<TBlobsConstructor>(*this, blobGrouppingEnabled))
+    , DstActor(dstActor)
+{}
+
+void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
+    WriteIndexEv->PutResult = putResult;
+    const auto& indexChanges = *WriteIndexEv->IndexChanges;
+
+    for (ui64 index = 0; index < BlobConstructor->GetPortionUpdates().size(); ++index) {
+        const auto& portionInfo = BlobConstructor->GetPortionUpdates()[index];
+        if (BlobConstructor->IsEviction()) {
+            Y_VERIFY(index < indexChanges.PortionsToEvict.size());
+            WriteIndexEv->IndexChanges->PortionsToEvict[index].first = portionInfo;
+        } else {
+            Y_VERIFY(index < indexChanges.AppendedPortions.size());
+            WriteIndexEv->IndexChanges->AppendedPortions[index] = portionInfo;
+        }
+    }
+    ctx.Send(DstActor, WriteIndexEv.Release());
 }
 
 }

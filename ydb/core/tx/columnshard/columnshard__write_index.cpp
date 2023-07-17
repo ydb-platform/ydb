@@ -4,6 +4,8 @@
 #include "blob_manager_db.h"
 #include "blob_cache.h"
 
+#include <ydb/core/tx/columnshard/engines/writer/compacted_blob_constructor.h>
+
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
@@ -208,10 +210,10 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
             }
 
-            blobsWritten = Ev->Get()->BlobBatch.GetBlobCount();
-            bytesWritten = Ev->Get()->BlobBatch.GetTotalSize();
+            blobsWritten = Ev->Get()->PutResult->GetBlobBatch().GetBlobCount();
+            bytesWritten = Ev->Get()->PutResult->GetBlobBatch().GetTotalSize();
             if (blobsWritten) {
-                Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
+                Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->PutResult->ReleaseBlobBatch()), blobManagerDb);
             }
 
             Self->UpdateIndexCounters();
@@ -323,7 +325,7 @@ void TColumnShard::FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWri
         IncCounter(COUNTER_EVICTION_BYTES_WRITTEN, bytesWritten);
     }
 
-    UpdateResourceMetrics(ctx, ev->Get()->ResourceUsage);
+    UpdateResourceMetrics(ctx, ev->Get()->PutResult->GetResourceUsage());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
@@ -342,8 +344,8 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             LOG_S_DEBUG("WriteIndex (" << blobs.size() << " blobs) at tablet " << TabletID());
 
             Y_VERIFY(!blobs.empty());
-            ctx.Register(CreateWriteActor(TabletID(), ctx.SelfID,
-                BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
+            auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release(),  Settings.BlobWriteGrouppingEnabled);
+            ctx.Register(CreateWriteActor(TabletID(), writeController, BlobManager->StartBlobBatch(), TInstant::Max(), Settings.MaxSmallBlobSize));
         }
     } else {
         if (putStatus == NKikimrProto::OK) {
@@ -352,7 +354,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             LOG_S_INFO("WriteIndex error at tablet " << TabletID());
         }
 
-        OnYellowChannels(*ev->Get());
+        OnYellowChannels(*ev->Get()->PutResult);
         Execute(new TTxWriteIndex(this, ev), ctx);
     }
 }

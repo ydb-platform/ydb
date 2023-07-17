@@ -492,9 +492,9 @@ void TestWriteOverload(const TestTableDescription& table) {
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
-        if (auto* msg = TryGetPrivateEvent<TEvColumnShard::TEvWrite>(ev)) {
-            Cerr << "CATCH TEvWrite, status " << msg->GetPutStatus() << Endl;
-            if (toCatch && msg->GetPutStatus() != NKikimrProto::UNKNOWN) {
+        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
+            Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
+            if (toCatch && msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
                 capturedWrites.push_back(ev.Release());
                 --toCatch;
                 return true;

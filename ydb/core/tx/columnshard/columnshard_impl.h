@@ -28,11 +28,7 @@ extern bool gAllowLogBatchingDefaultValue;
 IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
 IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
 IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::ISnapshotSchema::TPtr& snapshotSchema,
-                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
-                         TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline, const ui64 maxSmallBlobSize);
-IActor* CreateWriteActor(ui64 tabletId, const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
-                         TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline = TInstant::Max());
+IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, TBlobBatch&& blobBatch, const TInstant& deadline, const ui64 maxSmallBlobSize);
 IActor* CreateReadActor(ui64 tabletId,
                         const TActorId& dstActor,
                         std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
@@ -152,6 +148,7 @@ class TColumnShard
     void Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
@@ -192,7 +189,7 @@ class TColumnShard
         return Executor()->GetStats().IsAnyChannelYellowMove;
     }
 
-    void OnYellowChannels(TPutStatus& putStatus) {
+    void OnYellowChannels(const TPutStatus& putStatus) {
         putStatus.OnYellowChannels(Executor());
     }
 
@@ -220,7 +217,7 @@ public:
     };
 
 private:
-    void OverloadWriteFail(const EOverloadStatus& overloadReason, TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
+    void OverloadWriteFail(const EOverloadStatus& overloadReason, const NEvWrite::TWriteData& writeData, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId, const ui64 dataSize) const;
 
 protected:
@@ -265,6 +262,7 @@ protected:
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvColumnShard::TEvRead, Handle);
             HFunc(TEvColumnShard::TEvReadBlobRanges, Handle);
+            HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);

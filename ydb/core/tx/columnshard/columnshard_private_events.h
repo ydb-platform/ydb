@@ -4,6 +4,8 @@
 #include "defs.h"
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/ev_write/write_data.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -19,13 +21,14 @@ struct TEvPrivate {
         EvExport,
         EvForget,
         EvGetExported,
+        EvWriteBlobsResult,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
-    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex>, public TPutStatus {
+    struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NOlap::TVersionedIndex IndexInfo;
         THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
@@ -36,6 +39,7 @@ struct TEvPrivate {
         TUsage ResourceUsage;
         bool CacheData{false};
         TDuration Duration;
+        TBlobPutResult::TPtr PutResult;
 
         TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
@@ -45,11 +49,28 @@ struct TEvPrivate {
             , IndexChanges(indexChanges)
             , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)
-        {}
+        {
+            PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
+        }
 
         TEvWriteIndex& SetTiering(const THashMap<ui64, NKikimr::NOlap::TTiering>& tiering) {
             Tiering = tiering;
             return *this;
+        }
+
+        const TBlobPutResult& GetPutResult() const {
+            Y_VERIFY(PutResult);
+            return *PutResult;
+        }
+
+        NKikimrProto::EReplyStatus GetPutStatus() const {
+            Y_VERIFY(PutResult);
+            return PutResult->GetPutStatus();
+        }
+
+        void SetPutStatus(const NKikimrProto::EReplyStatus& status) {
+            Y_VERIFY(PutResult);
+            PutResult->SetPutStatus(status);
         }
     };
 
@@ -230,6 +251,64 @@ struct TEvPrivate {
         {}
 
         bool Manual;
+    };
+
+    class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    public:
+        class TPutBlobData {
+            YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
+            YDB_READONLY_DEF(TString, BlobData);
+            YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, ParsedBatch);
+            YDB_ACCESSOR_DEF(TString, LogicalMeta);
+        public:
+            TPutBlobData() = default;
+
+            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, const std::shared_ptr<arrow::RecordBatch>& batch)
+                : BlobId(blobId)
+                , BlobData(data)
+                , ParsedBatch(batch)
+            {}
+        };
+
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)
+            : PutResult(putResult)
+            , WriteMeta(writeMeta)
+            , Snapshot(snapshot)
+        {
+            Y_VERIFY(PutResult);
+        }
+
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TPutBlobData&& blobData, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)
+            : TEvWriteBlobsResult(putResult, writeMeta, snapshot)
+        {
+            BlobData = std::move(blobData);
+        }
+
+        const TPutBlobData& GetBlobData() const {
+            return BlobData;
+        }
+
+        const NColumnShard::TBlobPutResult& GetPutResult() const {
+            return *PutResult;
+        }
+
+        const NColumnShard::TBlobPutResult::TPtr GetPutResultPtr() {
+            return PutResult;
+        }
+
+        const NEvWrite::TWriteMeta& GetWriteMeta() const {
+            return WriteMeta;
+        }
+
+        const NOlap::TSnapshot& GetSnapshot() const {
+            return Snapshot;
+        }
+
+    private:
+        NColumnShard::TBlobPutResult::TPtr PutResult;
+        TPutBlobData BlobData;
+        NEvWrite::TWriteMeta WriteMeta;
+        NOlap::TSnapshot Snapshot;
     };
 };
 

@@ -42,17 +42,8 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
     return arrow::RecordBatch::Make(resultArrowSchema, batch->num_rows(), newColumns);
 }
 
-std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TString& data, const TString& dataSchemaStr, TString& strError) const {
+std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema, TString& strError) const {
     std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
-    std::shared_ptr<arrow::Schema> dataSchema;
-    if (dataSchemaStr.size()) {
-        dataSchema = NArrow::DeserializeSchema(dataSchemaStr);
-        if (!dataSchema) {
-            strError = "DeserializeSchema() failed";
-            return nullptr;
-        }
-    }
-
     auto batch = NArrow::DeserializeBatch(data, (dataSchema ? dataSchema : dstSchema));
     if (!batch) {
         strError = "DeserializeBatch() failed";

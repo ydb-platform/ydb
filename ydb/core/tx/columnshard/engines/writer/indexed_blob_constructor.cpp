@@ -6,93 +6,90 @@
 
 namespace NKikimr::NOlap {
 
-TIndexedBlobConstructor::TIndexedBlobConstructor(TAutoPtr<TEvColumnShard::TEvWrite> writeEv, NOlap::ISnapshotSchema::TPtr snapshotSchema)
-    : WriteEv(writeEv)
+TIndexedWriteController::TBlobConstructor::TBlobConstructor(NOlap::ISnapshotSchema::TPtr snapshotSchema, TIndexedWriteController& owner)
+    : Owner(owner)
     , SnapshotSchema(snapshotSchema)
 {}
 
-const TString& TIndexedBlobConstructor::GetBlob() const {
+const TString& TIndexedWriteController::TBlobConstructor::GetBlob() const {
     return DataPrepared;
 }
 
-IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext() {
+IBlobConstructor::EStatus TIndexedWriteController::TBlobConstructor::BuildNext() {
     if (!!DataPrepared) {
         return EStatus::Finished;
     }
 
-    const auto& evProto = Proto(WriteEv.Get());
-    const ui64 pathId = evProto.GetTableId();
-    const ui64 writeId = evProto.GetWriteId();
-
-    TString serializedScheme;
-    if (evProto.HasMeta()) {
-        serializedScheme = evProto.GetMeta().GetSchema();
-        if (serializedScheme.empty() || evProto.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_parsing_fails")("write_id", writeId)("path_id", pathId);
-            return EStatus::Error;
-        }
-    }
-    const auto& data = evProto.GetData();
+    const auto& writeMeta = Owner.WriteData.GetWriteMeta();
+    const ui64 tableId = writeMeta.GetTableId();
+    const ui64 writeId = writeMeta.GetWriteId();
 
     // Heavy operations inside. We cannot run them in tablet event handler.
     TString strError;
     {
-        NColumnShard::TCpuGuard guard(ResourceUsage);
-        Batch = SnapshotSchema->PrepareForInsert(data, serializedScheme, strError);
+        NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
+        Batch = SnapshotSchema->PrepareForInsert(Owner.WriteData.GetData().GetData(), Owner.WriteData.GetData().GetArrowSchema(), strError);
     }
+
     if (!Batch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("path_id", pathId)("error", strError);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId)("error", strError);
         return EStatus::Error;
     }
 
     {
-        NColumnShard::TCpuGuard guard(ResourceUsage);
+        NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
         DataPrepared = NArrow::SerializeBatchNoCompression(Batch);
     }
 
     if (DataPrepared.size() > NColumnShard::TLimits::GetMaxBlobSize()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_data_too_big")("write_id", writeId)("path_id", pathId);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_data_too_big")("write_id", writeId)("table_id", tableId);
         return EStatus::Error;
     }
-
-    ui64 dirtyTime = TAppData::TimeProvider->Now().Seconds();
-    Y_VERIFY(dirtyTime);
-    NKikimrTxColumnShard::TLogicalMetadata outMeta;
-    outMeta.SetNumRows(Batch->num_rows());
-    outMeta.SetRawBytes(NArrow::GetBatchDataSize(Batch));
-    outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
-
-    if (!outMeta.SerializeToString(&MetaString)) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_metadata")("write_id", writeId)("path_id", pathId);
-        return EStatus::Error;;
-    }
-
-    ++Iteration;
     return EStatus::Ok;
 }
 
-bool TIndexedBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
-    Y_VERIFY(Iteration == 1);
-    WriteEv->BlobId = blobId;
-    Y_VERIFY(WriteEv->BlobId.BlobSize() == DataPrepared.size());
+bool TIndexedWriteController::TBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
+    Y_VERIFY(blobId.BlobSize() == DataPrepared.size());
+    Owner.AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData(blobId, DataPrepared, Batch));
     return true;
 }
 
-TAutoPtr<IEventBase> TIndexedBlobConstructor::BuildResult(NKikimrProto::EReplyStatus status,
-                                                        NColumnShard::TBlobBatch&& blobBatch,
-                                                        THashSet<ui32>&& yellowMoveChannels,
-                                                        THashSet<ui32>&& yellowStopChannels)
+TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData, NOlap::ISnapshotSchema::TPtr snapshotSchema)
+    : WriteData(writeData)
+    , BlobConstructor(std::make_shared<TBlobConstructor>(snapshotSchema, *this))
+    , DstActor(dstActor)
 {
-    WriteEv->WrittenBatch = Batch;
+    ResourceUsage.SourceMemorySize = WriteData.GetSize();
+}
 
-    auto& record = Proto(WriteEv.Get());
-    record.SetData(DataPrepared); // modify for TxWrite
-    record.MutableMeta()->SetLogicalMeta(MetaString);
+void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
+    if (putResult->GetPutStatus() == NKikimrProto::OK) {
+        Y_VERIFY(BlobData.size() == 1);
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData[0]), WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
+        ctx.Send(DstActor, result.release());
+    } else {
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
+        ctx.Send(DstActor, result.release());
+    }
+}
 
-    WriteEv->ResourceUsage.Add(ResourceUsage);
-    WriteEv->SetPutStatus(status, std::move(yellowMoveChannels), std::move(yellowStopChannels));
-    WriteEv->BlobBatch = std::move(blobBatch);
-    return WriteEv.Release();
+void TIndexedWriteController::AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data) {
+    Y_VERIFY(BlobData.empty());
+
+    ui64 dirtyTime = AppData()->TimeProvider->Now().Seconds();
+    Y_VERIFY(dirtyTime);
+    NKikimrTxColumnShard::TLogicalMetadata outMeta;
+    outMeta.SetNumRows(data.GetParsedBatch()->num_rows());
+    outMeta.SetRawBytes(NArrow::GetBatchDataSize(data.GetParsedBatch()));
+    outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
+
+    TString metaString;
+    if (!outMeta.SerializeToString(&metaString)) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_metadata");
+        Y_VERIFY(false);
+    }
+    BlobData.push_back(std::move(data));
+    BlobData.back().SetLogicalMeta(metaString);
 }
 
 }

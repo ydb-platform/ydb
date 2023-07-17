@@ -130,7 +130,7 @@ private:
 
         LOG_S_DEBUG("Portions eviction started at tablet " << TabletId);
         {
-            TCpuGuard guard(TxEvent->ResourceUsage);
+            auto guard = TxEvent->PutResult->StartCpuGuard();
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
             NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);

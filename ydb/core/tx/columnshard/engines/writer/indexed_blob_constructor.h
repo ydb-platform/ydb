@@ -1,37 +1,52 @@
 #pragma once
 
 #include "blob_constructor.h"
+#include "write_controller.h"
 
+#include <ydb/core/tx/ev_write/write_data.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+
 
 namespace NKikimr::NOlap {
 
-class TIndexedBlobConstructor : public IBlobConstructor {
-    TAutoPtr<TEvColumnShard::TEvWrite> WriteEv;
-    NOlap::ISnapshotSchema::TPtr SnapshotSchema;
-    NColumnShard::TUsage ResourceUsage;
+class TIndexedWriteController : public NColumnShard::IWriteController {
+private:
+    class TBlobConstructor : public IBlobConstructor {
+        TIndexedWriteController& Owner;
+        NOlap::ISnapshotSchema::TPtr SnapshotSchema;
 
-    TString DataPrepared;
-    TString MetaString;
-    std::shared_ptr<arrow::RecordBatch> Batch;
-    ui64 Iteration = 0;
+        TString DataPrepared;
+        std::shared_ptr<arrow::RecordBatch> Batch;
+
+    public:
+        TBlobConstructor(NOlap::ISnapshotSchema::TPtr snapshotSchema, TIndexedWriteController& owner);
+
+        const TString& GetBlob() const override;
+        EStatus BuildNext() override;
+        bool RegisterBlobId(const TUnifiedBlobId& blobId) override;
+        const NOlap::TSnapshot& GetSnapshot() const {
+            return SnapshotSchema->GetSnapshot();
+        }
+    };
+
+    NEvWrite::TWriteData WriteData;
+    std::shared_ptr<TBlobConstructor> BlobConstructor;
+    std::vector<NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData> BlobData;
+    TActorId DstActor;
 
 public:
-    TIndexedBlobConstructor(TAutoPtr<TEvColumnShard::TEvWrite> writeEv, NOlap::ISnapshotSchema::TPtr snapshotSchema);
+    TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData, NOlap::ISnapshotSchema::TPtr snapshotSchema);
 
-    const TString& GetBlob() const override;
-    EStatus BuildNext() override;
-    bool RegisterBlobId(const TUnifiedBlobId& blobId) override;
+    void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
 
-    NColumnShard::TUsage& GetResourceUsage() override {
-        return ResourceUsage;
+    NOlap::IBlobConstructor::TPtr GetBlobConstructor() override {
+        return BlobConstructor;
     }
 
-    TAutoPtr<NActors::IEventBase> BuildResult(
-        NKikimrProto::EReplyStatus status,
-        NColumnShard::TBlobBatch&& blobBatch,
-        THashSet<ui32>&& yellowMoveChannels, THashSet<ui32>&& yellowStopChannels) override;
+public:
+    void AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data);
 };
 
 }

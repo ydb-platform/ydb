@@ -133,7 +133,7 @@ private:
         const TIndexationCounters Counters;
     protected:
         virtual bool DoExecute() override {
-            TCpuGuard guard(TxEvent->ResourceUsage);
+            auto guard = TxEvent->PutResult->StartCpuGuard();
 
             NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
             TxEvent->Blobs = std::move(indexationLogic.Apply(TxEvent->IndexChanges).DetachResult());

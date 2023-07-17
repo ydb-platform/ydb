@@ -50,7 +50,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return TString{NYql::S3ProviderName};
     }
 
-    virtual TMap<TString, TString> GetParamters(const TString& content) const override {
+    virtual TMap<TString, TString> GetParameters(const TString& content) const override {
         NKikimrExternalSources::TObjectStorage objectStorage;
         objectStorage.ParseFromStringOrThrow(content);
 

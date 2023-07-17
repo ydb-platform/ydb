@@ -565,8 +565,8 @@ public:
         auto userSchema = ctx.NewAtom(pos, "userschema"sv);
         items.emplace_back(ctx.NewList(pos, {userSchema, type, order}));
 
-        for (const auto& [key, value]: source->GetParamters(content)) {
-            auto keyAtom = ctx.NewAtom(pos, key);
+        for (const auto& [key, value]: source->GetParameters(content)) {
+            auto keyAtom = ctx.NewAtom(pos, NormalizeName(key));
             auto valueAtom = ctx.NewAtom(pos, value);
             items.emplace_back(ctx.NewList(pos, {keyAtom, valueAtom}));
         }

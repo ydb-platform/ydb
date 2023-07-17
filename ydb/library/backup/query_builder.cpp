@@ -174,6 +174,32 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
     }
 }
 
+void TQueryBuilder::BuildType(TTypeParser& typeParser, TTypeBuilder& typeBuilder, const TString& name) {
+    switch (typeParser.GetKind()) {
+    case TTypeParser::ETypeKind::Primitive:
+        typeBuilder.Primitive(typeParser.GetPrimitive());
+        break;
+    case TTypeParser::ETypeKind::Decimal:
+        typeBuilder.Decimal(typeParser.GetDecimal());
+        break;
+    case TTypeParser::ETypeKind::Optional:
+        typeParser.OpenOptional();
+        typeBuilder.BeginOptional();
+        BuildType(typeParser, typeBuilder, name);
+        typeBuilder.EndOptional();
+        typeParser.CloseOptional();
+        break;
+    default:
+        throw yexception() << "Unsupported type kind \"" << typeParser.GetKind() << "\" for column: " << name;
+    }
+}
+
+TType TQueryBuilder::GetType(TTypeParser& typeParser, const TString& name) {
+    TTypeBuilder typeBuilder;
+    BuildType(typeParser, typeBuilder, name);
+    return typeBuilder.Build();
+}
+
 void TQueryBuilder::CheckNull(const TString& name, TStringBuf buf) {
     if (buf == "null") {
         throw yexception() << "Wrong value \"null\" for non-optional column: " << name;
@@ -189,7 +215,7 @@ void TQueryBuilder::AddMemberFromString(TTypeParser& type, const TString& name, 
         case TTypeParser::ETypeKind::Optional:
             type.OpenOptional();
             if (buf == "null") {
-                Value.EmptyOptional();
+                Value.EmptyOptional(GetType(type, name));
             } else {
                 Value.BeginOptional();
                 AddMemberFromString(type, name, buf);
@@ -202,7 +228,7 @@ void TQueryBuilder::AddMemberFromString(TTypeParser& type, const TString& name, 
             Value.Decimal(TDecimalValue(TString(buf), type.GetDecimal().Precision, type.GetDecimal().Scale));
             break;
         default:
-            throw yexception() << "Unsupported type for column: " << name;
+            throw yexception() << "Unsupported type kind \"" << type.GetKind() << "\" for column: " << name;
     }
 }
 
@@ -211,6 +237,7 @@ void TQueryBuilder::Begin() {
 }
 
 void TQueryBuilder::AddLine(TStringBuf line) {
+    Cerr << line << Endl;
     Value.AddListItem();
     Value.BeginStruct();
     for (const auto& col : Columns) {

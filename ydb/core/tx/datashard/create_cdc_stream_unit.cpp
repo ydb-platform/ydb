@@ -58,8 +58,10 @@ public:
                 pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId()));
         }
 
-        if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
-            DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
+        if (streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+            if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
+                DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
+            }
         }
 
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(

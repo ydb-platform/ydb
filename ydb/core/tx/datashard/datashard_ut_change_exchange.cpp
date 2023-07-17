@@ -2754,6 +2754,64 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3),
+                WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))
+            )
+        ));
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        SimulateSleep(server, TDuration::Seconds(5));
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(delayed.Release(), 0, true);
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
+    }
+
 } // Cdc
 
 } // NKikimr

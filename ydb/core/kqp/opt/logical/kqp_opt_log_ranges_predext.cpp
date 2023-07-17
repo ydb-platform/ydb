@@ -391,7 +391,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     }
 
     if (!input) {
-        TMaybeNode<TExprBase> prefix = prefixPointsExpr;
+        TMaybeNode<TExprBase> prefix;
+        if (kqpCtx.Config->PredicateExtract20) {
+            prefix = prefixPointsExpr;
+        }
 
         if (indexName) {
             input = Build<TKqlReadTableIndexRanges>(ctx, read.Pos())

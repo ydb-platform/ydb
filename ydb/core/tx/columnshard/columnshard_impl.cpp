@@ -975,11 +975,15 @@ void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPriv
     const auto& tierName = event->TierName;
     if (auto s3 = GetS3ActorForTier(tierName)) {
         TStringBuilder strBlobs;
+        ui64 sumBytes = 0;
         for (auto& [blobId, _] : event->Blobs) {
             strBlobs << "'" << blobId << "' ";
+            sumBytes += blobId.BlobSize();
         }
-
         event->DstActor = s3;
+        IncCounter(COUNTER_EXPORTING_BLOBS, event->Blobs.size());
+        IncCounter(COUNTER_EXPORTING_BYTES, sumBytes);
+
         LOG_S_NOTICE("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
         ctx.Register(CreateExportActor(TabletID(), SelfId(), event.release()));
     } else {
@@ -992,6 +996,14 @@ void TColumnShard::ForgetTierBlobs(const TActorContext& ctx, const TString& tier
     if (auto s3 = GetS3ActorForTier(tierName)) {
         auto forget = std::make_unique<TEvPrivate::TEvForget>();
         forget->Evicted = std::move(blobs);
+
+        ui64 sumBytes = 0;
+        for (auto& blob : forget->Evicted) {
+            sumBytes += blob.Blob.BlobSize();
+        }
+        IncCounter(COUNTER_FORGETTING_BLOBS, forget->Evicted.size());
+        IncCounter(COUNTER_FORGETTING_BYTES, sumBytes);
+
         ctx.Send(s3, forget.release());
     }
 }
@@ -1056,6 +1068,14 @@ bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 
         get->DstCookie = cookie;
         get->Evicted = std::move(evicted);
         get->BlobRanges = std::move(ranges);
+
+        ui64 sumBytes = 0;
+        for (auto& blobRange : get->BlobRanges) {
+            sumBytes += blobRange.Size;
+        }
+        IncCounter(COUNTER_READING_EXPORTED_BLOBS);
+        IncCounter(COUNTER_READING_EXPORTED_BYTES, sumBytes);
+
         ctx.Send(s3, get.release());
         return true;
     }

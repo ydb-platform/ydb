@@ -127,6 +127,12 @@ enum ECumulativeCounters {
     COUNTER_WRITE_OVERLOAD_SHARD = 72                       [(CounterOpts) = {Name: "WriteOverloadShard"}];
     COUNTER_INDEXING_TIME = 73                              [(CounterOpts) = {Name: "IndexingTime"}];
     COUNTER_COMPACTION_TIME = 74                            [(CounterOpts) = {Name: "CompactionTime"}];
+    COUNTER_EXPORTING_BLOBS = 75                            [(CounterOpts) = {Name: "ExportingBlobs"}];
+    COUNTER_EXPORTING_BYTES = 76                            [(CounterOpts) = {Name: "ExportingBytes"}];
+    COUNTER_FORGETTING_BLOBS = 77                           [(CounterOpts) = {Name: "ForgettingBlobs"}];
+    COUNTER_FORGETTING_BYTES = 78                           [(CounterOpts) = {Name: "ForgettingBytes"}];
+    COUNTER_READING_EXPORTED_BLOBS = 79                     [(CounterOpts) = {Name: "ReadingExportedBlobs"}];
+    COUNTER_READING_EXPORTED_BYTES = 80                     [(CounterOpts) = {Name: "ReadingExportedBytes"}];
 }
 
 enum EPercentileCounters {

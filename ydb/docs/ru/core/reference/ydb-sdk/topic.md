@@ -5,23 +5,73 @@
 
 Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
 
+## Инициализация соединения с топиками
+
+{% list tabs %}
+
+- C++
+
+  Для работы с топиками создаются экземпляры драйвера YDB и клиента.
+
+  Драйвер YDB отвечает за взаимодействие приложения и YDB на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+
+  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) работает поверх драйвера YDB и отвечает за управляющие операции с топиками, а также создание сессий чтения и записи.
+
+  Фрагмент кода приложения для инициализации драйвера YDB:
+  ```cpp
+  // Create driver instance.
+  auto driverConfig = TDriverConfig()
+      .SetEndpoint(opts.Endpoint)
+      .SetDatabase(opts.Database)
+      .SetAuthToken(GetEnv("YDB_TOKEN"));
+
+  TDriver driver(driverConfig);
+  ```
+  В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+
+  Фрагмент кода приложения для создания клиента:
+  ```cpp
+  TTopicClient topicClient(driver);
+  ```
+
+
+{% endlist %}
+
 ## Управление топиками {#manage}
 
 ### Создание топика {#create-topic}
 
 {% list tabs %}
 
-Единственный обязательный параметр для создания топика - это его путь, остальные параметры - опциональны.
+- C++
+
+  Единственный обязательный параметр для создания топика - это его путь. Остальные настройки опциональны и представлены структурой `TCreateTopicSettings`.
+
+  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
+
+  Пример создания топика c тремя партициями и поддержкой кодека ZSTD:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TCreateTopicSettings()
+      .PartitioningSettings(3, 3)
+      .AppendSupportedCodecs(NYdb::NTopic::ECodec::ZSTD);
+
+  auto status = topicClient
+      .CreateTopic("my-topic", settings)  // returns TFuture<TStatus>
+      .GetValueSync();
+  ```
 
 - Go
 
+  Единственный обязательный параметр для создания топика - это его путь, остальные параметры опциональны.
+
   Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
-  Пример создания топика со списком поддерживаемых кодеков и минимальным количество партиций
+  Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
 
   ```go
   err := db.Topic().Create(ctx, "topic-path",
-      // optional
+    // optional
     topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
 
     // optional
@@ -30,6 +80,8 @@
   ```
 
 - Python
+
+  Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
 
   ```python
   driver.topic_client.create_topic(topic_path,
@@ -42,11 +94,31 @@
 
 ### Изменение топика {#alter-topic}
 
-При изменении топика в параметрах нужно указать путь топика и те параметры, которые будут изменяться.
-
 {% list tabs %}
 
+- C++
+
+  При изменении топика в параметрах метода `AlterTopic` нужно указать путь топика и параметры, которые будут изменяться. Изменяемые параметры представлены структурой `TAlterTopicSettings`.
+
+  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
+
+  Пример добавления [важного читателя](../../concepts/topic#important-consumer) к топику и установки [времени хранения сообщений](../../concepts/topic#retention-time) для топика в два дня:
+
+  ```cpp
+  auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
+      .BeginAddConsumer("my-consumer")
+          .Important(true)
+      .EndAddConsumer()
+      .SetRetentionPeriod(TDuration::Days(2));
+
+  auto status = topicClient
+      .AlterTopic("my-topic", alterSettings)  // returns TFuture<TStatus>
+      .GetValueSync();
+  ```
+
 - Go
+
+  При изменении топика в параметрах нужно указать путь топика и те параметры, которые будут изменяться.
 
   Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#AlterOption).
 
@@ -70,6 +142,26 @@
 ### Получение информации о топике {#describe-topic}
 
 {% list tabs %}
+
+- C++
+
+  Для получения информации о топике используется метод `DescribeTopic`.
+
+  Описание топика представлено структурой `TTopicDescription`.
+
+  Полный список полей описания смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L163).
+
+  Получить доступ к этому описанию можно так:
+
+  ```cpp
+  auto result = topicClient.DescribeTopic("my-topic").GetValueSync();
+  if (result.IsSuccess()) {
+      const auto& description = result.GetTopicDescription();
+      std::cout << "Topic description: " << GetProto(description) << std::endl;
+  }
+  ```
+
+  Существует отдельный метод для получения информации о читателе - `DescribeConsumer`.
 
 - Go
 
@@ -97,6 +189,12 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  auto status = topicClient.DropTopic("my-topic").GetValueSync();
+  ```
+
 - Go
 
   ```go
@@ -115,9 +213,27 @@
 
 ### Подключение к топику для записи сообщений {#start-writer}
 
-На данный момент поддерживается подключение только с совпадающими producer_id и message_group_id, в будущем это ограничение будет снято.
+На данный момент поддерживается подключение только с совпадающими идентификаторами [источника и группы сообщений](../../concepts/topic#producer-id) (`producer_id` и `message_group_id`), в будущем это ограничение будет снято.
 
 {% list tabs %}
+
+- C++
+
+  Подключение к топику на запись представлено объектом сессии записи с интерфейсом `IWriteSession` или `ISimpleBlockingWriteSession` (вариант для простой записи по одному сообщению без подтверждения, блокирующейся при превышении числа inflight записей или размера буфера SDK). Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
+
+  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+
+  Пример создания сессии записи с интерфейсом `IWriteSession`.
+
+  ```cpp
+  TString producerAndGroupID = "group-id";
+  auto settings = TWriteSessionSettings()
+      .Path("my-topic")
+      .ProducerId(producerAndGroupID)
+      .MessageGroupId(producerAndGroupID);
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
 - Go
 
@@ -142,6 +258,40 @@
 ### Асинхронная запись сообщений {#async-write}
 
 {% list tabs %}
+
+- C++
+
+  Асинхронная запись возможна через интерфейс `IWriteSession`.
+
+  Работа пользователя с объектом `IWriteSession` в общем устроена как обработка цикла событий с тремя типами событий: `TReadyToAcceptEvent`, `TAcksEvent` и `TSessionClosedEvent`.
+
+  Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
+
+  Если обработчик для некоторого события не установлен, его необходимо получить и обработать в методах `GetEvent` / `GetEvents`. Для неблокирующего ожидания очередного события есть метод `WaitEvent` с интерфейсом `TFuture<void>()`.
+
+  Для записи каждого сообщения пользователь должен "потратить" move-only объект `TContinuationToken`, который выдаёт SDK с событием `TReadyToAcceptEvent`. При записи сообщения можно установить пользовательские seqNo и временную метку создания, но по умолчанию их проставляет SDK автоматически.
+
+  По умолчанию `Write` выполняется асинхронно - данные из сообщений вычитываются и сохраняются во внутренний буфер, отправка происходит в фоне в соответствии с настройками `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. Сессия сама переподключается к YDB при обрывах связи и повторяет отправку сообщений пока это возможно, в соответствии с настройкой `RetryPolicy`. При получении ошибки, которую невозможно повторить, сессия чтения отправляет пользователю `TSessionClosedEvent` с диагностической информацией.
+
+  Так может выглядеть запись нескольких сообщений в цикле событий без использования обработчиков:
+  ```cpp
+  // Event loop
+  while (true) {
+      // Get event
+      // May block for a while if write session is busy
+      TMaybe<TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+
+      if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+          session->Write(std::move(event.ContinuationToken), "This is yet another message.");
+
+      } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+          std::cout << ackEvent->DebugString() << std::endl;
+
+      } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+          break;
+      }
+  }
+  ```
 
 - Go
 
@@ -200,6 +350,35 @@
 
 {% list tabs %}
 
+- C++
+
+  Получение подтверждений от сервера возможно через интерфейс `IWriteSession`.
+
+  Ответы о записи сообщений на сервере приходят клиенту SDK в виде событий `TAcksEvent`. В одном событии могут содержаться ответы о нескольких отправленных ранее сообщениях. Варианты ответа: запись подтверждена (`EES_WRITTEN`), запись отброшена как дубликат ранее записанного сообщения (`EES_ALREADY_WRITTEN`) или запись отброшена по причине сбоя (`EES_DISCARDED`).
+
+  Пример установки обработчика TAcksEvent для сессии записи:
+  ```cpp
+  auto settings = TWriteSessionSettings()
+    // other settings are set here
+    .EventHandlers(
+      TWriteSessionSettings::TEventHandlers()
+        .AcksHandler(
+          [&](TWriteSessionEvent::TAcksEvent& event) {
+            for (const auto& ack : event.Acks) {
+              if (ack.State == TWriteAck::EEventState::EES_WRITTEN) {
+                ackedSeqNo.insert(ack.SeqNo);
+                std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
+              }
+            }
+          }
+        )
+    );
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
+
+  В такой сессии записи события `TAcksEvent` не будут приходить пользователю в `GetEvent` / `GetEvents`, вместо этого SDK при получении подтверждений от сервера будет вызывать переданный обработчик. Аналогично можно настраивать обработчики на остальные типы событий.
+
 - Go
 
   При подключении можно указать опцию синхронной записи сообщений - topicoptions.WithSyncWrite(true). Тогда Write будет возвращаться только после того как получит подтверждение с сервера о сохранении всех, сообщений переданных в вызове. При этом SDK так же как и обычно будет при необходимости переподключаться и повторять отправку сообщений. В этом режиме контекст управляет только временем ожидания ответа из SDK, т.е. даже после отмены контекста SDK продолжит попытки отправить сообщения.
@@ -252,13 +431,31 @@
 
 ### Выбор кодека для сжатия сообщений {#codec}
 
-По умолчанию SDK выбирает кодек автоматически (с учетом настроек топика). В автоматическом режиме SDK сначала отправляет по одной группе сообщений каждым из разрешенных кодеков, затем иногда будет пробовать сжать сообщения всеми доступными кодеками и выбирать кодек, дающий наименьший размер сообщения. Если для топика список разрешенных кодеков пуст, то автовыбор производится между Raw и Gzip-кодеками.
-
-При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
+Подробнее о [сжатии данных в топиках](../../concepts/topic#message-codec).
 
 {% list tabs %}
 
+- C++
+
+  Сжатие, которое используется при отправке сообщений методом `Write`, задаётся при [создании сессии записи](#start-writer) настройками `Codec` и `CompressionLevel`. По умолчанию выбирается кодек GZIP.
+  Пример создания сессии записи без сжатия сообщений:
+
+  ```cpp
+  auto settings = TWriteSessionSettings()
+    // other settings are set here
+    .Codec(ECodec::RAW);
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
+
+  Если необходимо в рамках сессии записи отправить сообщение, сжатое другим кодеком, можно использовать метод `WriteEncoded` с указанием кодека и размера расжатого сообщения. Для успешной записи этим способом используемый кодек должен быть разрешён в настройках топика.
+
+
 - Go
+
+  По умолчанию SDK выбирает кодек автоматически (с учетом настроек топика). В автоматическом режиме SDK сначала отправляет по одной группе сообщений каждым из разрешенных кодеков, затем иногда будет пробовать сжать сообщения всеми доступными кодеками и выбирать кодек, дающий наименьший размер сообщения. Если для топика список разрешенных кодеков пуст, то автовыбор производится между Raw и Gzip-кодеками.
+
+  При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
 
   ```go
   producerAndGroupID := "group-id"
@@ -269,6 +466,10 @@
   ```
 
 - Python
+
+  По умолчанию SDK выбирает кодек автоматически (с учетом настроек топика). В автоматическом режиме SDK сначала отправляет по одной группе сообщений каждым из разрешенных кодеков, затем иногда будет пробовать сжать сообщения всеми доступными кодеками и выбирать кодек, дающий наименьший размер сообщения. Если для топика список разрешенных кодеков пуст, то автовыбор производится между Raw и Gzip-кодеками.
+
+  При необходимости можно задать фиксированный кодек в опциях подключения. Тогда будет использоваться именно он и замеры проводиться не будут.
 
   ```python
   writer = driver.topic_client.writer(topic_path,
@@ -282,11 +483,27 @@
 
 ### Подключение к топику для чтения сообщений {#start-reader}
 
-Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
-
 {% list tabs %}
 
+- C++
+
+  Подключение для чтения из одного или нескольких топиков представлено объектом сессии чтения с интерфейсом `IReadSession`. Настройки сессии чтения представлены структурой `TReadSessionSettings`.
+
+  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1344).
+
+  Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .ConsumerName("my-consumer")
+      .AppendTopics("my-topic");
+
+  auto session = topicClient.CreateReadSession(settings);
+  ```
+
 - Go
+
+  Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
 
   ```go
   reader, err := db.Topic().StartReader("my-consumer", topicoptions.ReadTopic("my-topic"))
@@ -297,6 +514,8 @@
 
 - Python
 
+  Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
+
   ```python
   reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
   ```
@@ -306,6 +525,20 @@
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`, а также задаст время, с которого начинать читать сообщения:
 
 {% list tabs %}
+
+- C++
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .ConsumerName("my-consumer")
+      .AppendTopics("my-topic")
+      .AppendTopics(
+          TTopicReadSettings("my-specific-topic")
+              .ReadFromTimestamp(someTimestamp)
+      );
+
+  auto session = topicClient.CreateReadSession(settings);
+  ```
 
 - Go
 
@@ -339,13 +572,32 @@
 
 Информацию о том, какие сообщения уже обработаны, можно [сохранять на клиентской стороне](#client-commit), передавая на сервер стартовую позицию чтения при создании подключения. При этом позиция чтения сообщений на сервере не изменяется.
 
-SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+{% list tabs %}
+
+- C++
+
+  Работа пользователя с объектом `IReadSession` в общем устроена как обработка цикла событий со следующими типами событий: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` и `TSessionClosedEvent`.
+
+  Для каждого из типов событий можно установить обработчик этого события, а также можно установить общий обработчик. Обработчики устанавливаются в настройках сессии записи перед её созданием.
+
+  Если обработчик для некоторого события не установлен, его необходимо получить и обработать в методах `GetEvent` / `GetEvents`. Для неблокирующего ожидания очередного события есть метод `WaitEvent` с сигнатурой `TFuture<void>()`.
+
+- Go
+
+  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+
+{% endlist %}
+
 
 ### Чтение без подтверждения обработки сообщений {#no-commit}
 
-Чтобы читать сообщения по одному, используйте следующий код:
+#### Чтение сообщений по одному
 
 {% list tabs %}
+
+- C++
+
+  Чтение сообщений по одному в C++ SDK не предусмотрено. Событие `TDataReceivedEvent` содержит пакет сообщений.
 
 - Go
 
@@ -371,9 +623,30 @@ SDK получает данные с сервера партиями и буфе
 
 {% endlist %}
 
-Чтобы прочитать пакет сообщений, используйте следующий код:
+#### Чтение сообщений пакетом
 
 {% list tabs %}
+
+- C++
+
+  При установке сессии чтения с настройкой `SimpleDataHandlers` достаточно передать обработчик для сообщений с данными. SDK будет вызывать этот обработчик на каждый принятый от сервера пакет сообщений.  Подтверждения чтения по умолчанию отправляться не будут.
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .EventHandlers_.SimpleDataHandlers(
+          [](TReadSessionEvent::TDataReceivedEvent& event) {
+              std::cout << "Get data event " << DebugString(event);
+          }
+      );
+
+  auto session = topicClient.CreateReadSession(settings);
+
+  // Wait SessionClosed event.
+  ReadSession->GetEvent(/* block = */true);
+  ```
+
+  В этом примере после создания сессии основной поток дожидается завершения сессии со стороны сервера в методе `GetEvent`, другие типы событий приходить не будут.
+
 
 - Go
 
@@ -405,9 +678,13 @@ SDK получает данные с сервера партиями и буфе
 
 Например с сервера пришли сообщения 1, 2, 3. Программа обрабатывает их параллельно и отправляет подтверждения в таком порядке: 1, 3, 2. В этом случае сначала будет закоммичено сообщение 1, а сообщения 2 и 3 будут закоммичены только после того как сервер получит подтверждение об обработке сообщения 2.
 
-Чтобы подтверждать обработку сообщений по одному, используйте следующий код:
+#### Чтение сообщений по одному с подтверждением
 
 {% list tabs %}
+
+- C++
+
+  Чтение сообщений по одному в C++ SDK не предусмотрено. Событие `TDataReceivedEvent` содержит пакет сообщений.
 
 - Go
 
@@ -435,9 +712,28 @@ SDK получает данные с сервера партиями и буфе
 
 {% endlist %}
 
-Для подтверждения обработки пакета сообщений используйте следующий код:
+#### Чтение сообщений пакетом с подтверждением
 
 {% list tabs %}
+
+- C++
+
+  Аналогично [примеру выше](#no-commit), при установке сессии чтения с настройкой `SimpleDataHandlers` достаточно передать обработчик для сообщений с данными. SDK будет вызывать этот обработчик на каждый принятый от сервера пакет сообщений. Передача параметра `commitDataAfterProcessing = true` означает, что SDK будет отправлять на сервер подтверждения чтения всех сообщений после выполнения обработчика.
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .EventHandlers_.SimpleDataHandlers(
+          [](TReadSessionEvent::TDataReceivedEvent& event) {
+              std::cout << "Get data event " << DebugString(event);
+          }
+          , /* commitDataAfterProcessing = */true
+      );
+
+  auto session = topicClient.CreateReadSession(settings);
+
+  // Wait SessionClosed event.
+  ReadSession->GetEvent(/* block = */true);
+  ```
 
 - Go
 
@@ -465,11 +761,17 @@ SDK получает данные с сервера партиями и буфе
 
 {% endlist %}
 
-#### Чтение с хранением позиции на клиентской стороне {#client-commit}
+### Чтение с хранением позиции на клиентской стороне {#client-commit}
 
 При начале чтения клиентский код должен сообщить серверу стартовую позицию чтения:
 
 {% list tabs %}
+
+- C++
+
+  Чтение с заданной позиции в текущей версии SDK отсутствует.
+
+  Поддерживается настройка `ReadFromTimestamp` для чтения событий с отметками времени записи не меньше данной.
 
 - Go
 
@@ -531,6 +833,21 @@ SDK получает данные с сервера партиями и буфе
 
 {% list tabs %}
 
+- C++
+
+  Мягкое прерывание приходит в виде события `TStopPartitionSessionEvent` с методом `Confirm`. Клиент может завершить обработку сообщений и отправить подтверждение на сервер.
+
+  Фрагмент цикла событий может выглядеть так:
+
+  ```cpp
+  auto event = ReadSession->GetEvent(/*block=*/true);
+  if (auto* stopPartitionSessionEvent = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+      stopPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
 - Go
 
   Клиентский код сразу получает все имеющиеся в буфере (на стороне SDK) сообщения, даже если их не достаточно для формирования пакета при групповой обработке.
@@ -564,6 +881,23 @@ SDK получает данные с сервера партиями и буфе
 #### Жесткое прерывание чтения {#hard-stop}
 
 {% list tabs %}
+
+- C++
+
+  Жёсткое прерывание приходит в виде события `TPartitionSessionClosedEvent` либо в ответ на подтверждение мягкого прерывания, либо при потере соединения с партицией. Узнать причину можно, вызвав метод `GetReason`.
+
+  Фрагмент цикла событий может выглядеть так:
+
+  ```cpp
+  auto event = ReadSession->GetEvent(/*block=*/true);
+  if (auto* partitionSessionClosedEvent = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+      if (partitionSessionClosedEvent->GetReason() == TPartitionSessionClosedEvent::EReason::ConnectionLost) {
+          std::cout << "Connection with partition was lost" << std::endl;
+      }
+  } else {
+    // other event types
+  }
+  ```
 
 - Go
 

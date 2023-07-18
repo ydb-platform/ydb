@@ -1173,9 +1173,8 @@ struct TWriteSessionEvent {
     };
 
     struct TAcksEvent {
-        //! Acks could be batched from several WriteBatch/Write requests.
-        //! Acks for messages from one WriteBatch request could be emitted as several TAcksEvents -
-        //! they are provided to client as soon as possible.
+        //! Acks could be batched from several Write requests.
+        //! They are provided to client as soon as possible.
         TVector<TWriteAck> Acks;
 
         TString DebugString() const;

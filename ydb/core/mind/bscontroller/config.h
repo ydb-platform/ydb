@@ -113,6 +113,9 @@ namespace NKikimr {
 
             TConfigFitAction Fit;
 
+            THashSet<TGroupId> GroupContentChanged;
+            THashSet<TGroupId> GroupFailureModelChanged;
+
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp)
                 : Self(controller)
@@ -234,6 +237,12 @@ namespace NKikimr {
                 };
                 PDisks.ForEachInRange(TPDiskId::MinForNode(nodeId), TPDiskId::MaxForNode(nodeId), callback);
                 return res;
+            }
+
+            void DeleteExistingGroup(TGroupId groupId) {
+                Groups.DeleteExistingEntry(groupId);
+                GroupContentChanged.erase(groupId);
+                GroupFailureModelChanged.erase(groupId);
             }
 
         private:

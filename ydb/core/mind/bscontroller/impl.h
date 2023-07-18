@@ -548,8 +548,6 @@ public:
         TGroupLatencyStats LatencyStats;
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
-        bool ContentChanged = false;
-        bool FailureModelChanged = false;
 
         TActorId VirtualGroupSetupMachineId;
 

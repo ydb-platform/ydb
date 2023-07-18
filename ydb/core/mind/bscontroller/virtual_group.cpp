@@ -224,12 +224,12 @@ namespace NKikimr::NBsController {
             const TGroupId GroupId;
             const std::weak_ptr<TToken> Token;
             std::optional<TConfigState> State;
-            const std::function<bool(TGroupInfo&)> Callback;
+            const std::function<bool(TGroupInfo&, TConfigState&)> Callback;
 
         public:
             TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_GROUP; }
 
-            TTxUpdateGroup(TVirtualGroupSetupMachine *machine, std::function<bool(TGroupInfo&)>&& callback)
+            TTxUpdateGroup(TVirtualGroupSetupMachine *machine, std::function<bool(TGroupInfo&, TConfigState&)>&& callback)
                 : TTransactionBase(machine->Self)
                 , Machine(machine)
                 , MachineId(Machine->SelfId())
@@ -248,8 +248,8 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
                 TGroupInfo *group = State->Groups.FindForUpdate(GroupId);
                 Y_VERIFY(group);
-                if (!Callback(*group)) {
-                    State->Groups.DeleteExistingEntry(group->ID);
+                if (!Callback(*group, *State)) {
+                    State->DeleteExistingGroup(group->ID);
                 }
                 group->CalculateGroupStatus();
                 TString error;
@@ -331,7 +331,7 @@ namespace NKikimr::NBsController {
 
         template<typename T>
         void UpdateBlobDepotConfig(T&& callback) {
-            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [this, callback](TGroupInfo& group) {
+            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [this, callback](TGroupInfo& group, TConfigState&) {
                 auto& config = GetConfig(&group);
                 callback(config);
                 TString data;
@@ -444,7 +444,7 @@ namespace NKikimr::NBsController {
                 NKikimrSubDomains::TDomainKey domainKey;
                 domainKey.CopyFrom(domain.GetDomainKey());
 
-                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group) {
+                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
                     auto& config = GetConfig(&group);
                     config.MutableHiveParams()->MutableObjectDomain()->CopyFrom(domainKey);
                     TString data;
@@ -602,7 +602,7 @@ namespace NKikimr::NBsController {
         }
 
         void CreateFailed(const TString& error) {
-            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group) {
+            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
                 group.VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED;
                 group.NeedAlter = false;
                 group.ErrorReason = error;
@@ -638,7 +638,7 @@ namespace NKikimr::NBsController {
         void DeleteBlobDepot() {
             auto *group = GetGroup();
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG15, "DeleteBlobDepot", (GroupId, group->ID));
-            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [](TGroupInfo& group) {
+            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [](TGroupInfo& group, TConfigState&) {
                 if (group.VDisksInGroup) {
                     group.VirtualGroupName = {};
                     group.VirtualGroupState = {};
@@ -657,7 +657,7 @@ namespace NKikimr::NBsController {
         void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr /*ev*/) {
             NTabletPipe::CloseAndForgetClient(SelfId(), BlobDepotPipeId);
 
-            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [&](TGroupInfo& group) {
+            Self->Execute(std::make_unique<TTxUpdateGroup>(this, [&](TGroupInfo& group, TConfigState& state) {
                 group.VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::WORKING;
                 auto& config = GetConfig(&group);
                 Y_VERIFY(config.HasTabletId());
@@ -665,7 +665,7 @@ namespace NKikimr::NBsController {
                 group.NeedAlter = false;
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING) {
                     group.DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS;
-                    group.ContentChanged = true;
+                    state.GroupContentChanged.insert(GroupId);
                 }
                 return true;
             }));
@@ -822,8 +822,8 @@ namespace NKikimr::NBsController {
                     }
                     group->VDisksInGroup.clear();
                     group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::DONE;
-                    group->ContentChanged = true;
                     group->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(group->Topology->GType, 0, 0, 0);
+                    state.GroupContentChanged.insert(groupId);
                 }
 
                 STLOG(PRI_INFO, BS_CONTROLLER, BSCVG10, "decommission update processed", (Status, Status),

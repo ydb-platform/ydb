@@ -159,9 +159,7 @@ namespace NKikimr::NBsController {
             TStoragePoolInfo& cur = spIt->second;
             if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
                 for (auto it = r.first; it != r.second; ++it) {
-                    TGroupInfo *group = Groups.FindForUpdate(it->second);
-                    Y_VERIFY(group);
-                    group->ContentChanged = true;
+                    GroupContentChanged.insert(it->second);
                 }
             }
             cur = std::move(storagePool); // update existing storage pool
@@ -219,7 +217,7 @@ namespace NKikimr::NBsController {
                 for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
                     DestroyVSlot(vslot->VSlotId);
                 }
-                Groups.DeleteExistingEntry(groupId);
+                DeleteExistingGroup(groupId);
             } else {
                 throw TExError() << "GroupId# " << groupId << " not found";
             }
@@ -663,7 +661,7 @@ namespace NKikimr::NBsController {
         vslot->Mood = TMood::Wipe;
         vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         vslot->IsReady = false;
-        group->FailureModelChanged = true;
+        GroupFailureModelChanged.insert(group->ID);
         group->CalculateGroupStatus();
     }
 

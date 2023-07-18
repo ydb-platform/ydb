@@ -228,7 +228,7 @@ order by ten;
 -- window and aggregate with GROUP BY expression (9.2 bug)
 statement stream query
 select first_value(max(x)) over w, y
-  from (select unique1 as x, ten+four as y from tenk1)
+  from (select unique1 as x, ten + four as y from tenk1 order by x)
   group by y
   window w AS ()
   order by y desc;
@@ -240,7 +240,7 @@ SELECT four, ten,
 	last_value(ten) over w
 FROM (select distinct ten, four from tenk1)
 WINDOW w AS (partition by four order by ten)
-ORDER BY four;
+ORDER BY four, ten;
 
 statement error
 SELECT four, ten,
@@ -269,7 +269,7 @@ SELECT four, ten/4 as two,
 	last_value(ten/4) over w
 FROM (select distinct ten, four from tenk1)
 WINDOW w AS (partition by four order by ten/4 rows between unbounded preceding and current row)
-ORDER BY four;
+ORDER BY four, two;
 
 statement error
 SELECT sum(unique1) over w,

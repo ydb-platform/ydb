@@ -626,16 +626,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         }
     }
 
-    const ui64 maxSize = Config.GetPartitionConfig().GetMaxSizeInPartition();
-    const ui64 maxCount = Config.GetPartitionConfig().GetMaxCountInPartition();
-    if (EndOffset - StartOffset >= maxCount || Size() >= maxSize) {
-        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(ev->Get()->Msgs.size());
-        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(sz);
-
-        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL,
-                   Sprintf("try later, partition is full - already have %" PRIu64" from %" PRIu64 " count, %" PRIu64 " from %" PRIu64 " size", EndOffset - StartOffset, maxCount, Size(), maxSize));
-        return;
-    }
     ui64 size = 0;
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();

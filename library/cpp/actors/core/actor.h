@@ -661,6 +661,10 @@ namespace NActors {
             : IActorCallback(static_cast<TReceiveFunc>(func), activityEnumType) {
         }
 
+        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev), const TString& actorName)
+            : IActorCallback(static_cast<TReceiveFunc>(func), TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName)) {
+        }
+
     public:
         typedef TDerived TThis;
     };

@@ -813,6 +813,9 @@ message DescribeTopicResult {
     // Zero value means default limit: 1 MB per second.
     int64 partition_write_speed_bytes_per_second = 8;
 
+    int64 partition_total_read_speed_bytes_per_second = 14;
+    int64 partition_consumer_read_speed_bytes_per_second = 15;
+
     // Burst size for write in partition, in bytes.
     // Zero value means default limit: 1 MB.
     int64 partition_write_burst_bytes = 9;

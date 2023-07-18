@@ -157,6 +157,8 @@ public:
         }
 
         for (ui32 i = 0, e = labeledCounters->GetCounters().Size(); i < e; ++i) {
+            if(!strlen(labeledCounters->GetCounterName(i))) 
+                continue;
             const ui64& value = labeledCounters->GetCounters()[i].Get();
             const ui64& id = labeledCounters->GetIds()[i].Get();
             iterTabletType->second->SetValue(tabletId, i, value, id);

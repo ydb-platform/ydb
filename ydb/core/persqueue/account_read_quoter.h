@@ -11,8 +11,8 @@ namespace NPQ {
 
 class TPercentileCounter;
 
-namespace NReadSpeedLimiterEvents {
-    struct TEvRequest : public TEventLocal<TEvRequest, TEvPQ::EvReadLimiterRequest> {
+namespace NAccountReadQuoterEvents {
+    struct TEvRequest : public TEventLocal<TEvRequest, TEvPQ::EvAccountReadQuotaRequest> {
         TEvRequest(TEvPQ::TEvRead::TPtr readRequest)
             : ReadRequest(std::move(readRequest))
         {}
@@ -20,7 +20,7 @@ namespace NReadSpeedLimiterEvents {
         TEvPQ::TEvRead::TPtr ReadRequest;
     };
 
-    struct TEvResponse : public TEventLocal<TEvResponse, TEvPQ::EvReadLimiterResponse> {
+    struct TEvResponse : public TEventLocal<TEvResponse, TEvPQ::EvAccountReadQuotaResponse> {
         TEvResponse(TEvPQ::TEvRead::TPtr readRequest, TDuration waitTime)
             : ReadRequest(std::move(readRequest))
             , WaitTime(waitTime)
@@ -30,7 +30,7 @@ namespace NReadSpeedLimiterEvents {
         TDuration WaitTime;
     };
 
-    struct TEvConsumed : public TEventLocal<TEvConsumed, TEvPQ::EvReadLimiterConsumed> {
+    struct TEvConsumed : public TEventLocal<TEvConsumed, TEvPQ::EvAccountReadQuotaConsumed> {
         TEvConsumed(ui64 readBytes, ui64 readRequestCookie)
             : ReadBytes(readBytes)
             , ReadRequestCookie(readRequestCookie)
@@ -40,7 +40,7 @@ namespace NReadSpeedLimiterEvents {
         ui64 ReadRequestCookie;
     };
 
-    struct TEvCounters : public TEventLocal<TEvCounters, TEvPQ::EvReadLimiterCounters> {
+    struct TEvCounters : public TEventLocal<TEvCounters, TEvPQ::EvAccountReadQuotaCounters> {
         TEvCounters(const NKikimr::TTabletCountersBase& counters, const TString& user)
             : User(user)
         {
@@ -52,7 +52,7 @@ namespace NReadSpeedLimiterEvents {
     };
 }
 
-class TReadSpeedLimiter : public TActorBootstrapped<TReadSpeedLimiter> {
+class TAccountReadQuoter : public TActorBootstrapped<TAccountReadQuoter> {
 private:
     static const TString READ_QUOTA_ROOT_PATH;
 
@@ -72,8 +72,8 @@ private:
         TRACE_EVENT(NKikimrServices::PQ_READ_SPEED_LIMITER);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvUpdateCounters, HandleUpdateCounters);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvRequest, HandleReadQuotaRequest);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvConsumed, HandleReadQuotaConsumed);
+            HFuncTraced(NAccountReadQuoterEvents::TEvRequest, HandleReadQuotaRequest);
+            HFuncTraced(NAccountReadQuoterEvents::TEvConsumed, HandleReadQuotaConsumed);
             HFuncTraced(TEvQuota::TEvClearance, HandleClearance);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
@@ -84,9 +84,9 @@ private:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
 
-    TReadSpeedLimiter(
+    TAccountReadQuoter(
         TActorId tabletActor,
-        TActorId partitionActor,
+        TActorId recepient,
         ui64 tabletId,
         const NPersQueue::TTopicConverterPtr& topicConverter,
         ui32 partition,
@@ -98,8 +98,8 @@ public:
     void InitCounters(const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
-    void HandleReadQuotaRequest(NReadSpeedLimiterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx);
-    void HandleReadQuotaConsumed(NReadSpeedLimiterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx);
+    void HandleReadQuotaRequest(NAccountReadQuoterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleReadQuotaConsumed(NAccountReadQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx);
     void HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
 
     void ApproveRead(TEvPQ::TEvRead::TPtr ev, TInstant startWait, const TActorContext& ctx);
@@ -109,7 +109,7 @@ private:
 
 private:
     const TActorId TabletActor;
-    const TActorId PartitionActor;
+    const TActorId Recepient;
     const ui64 TabletId;
     const NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;

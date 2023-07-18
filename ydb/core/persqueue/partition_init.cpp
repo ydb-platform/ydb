@@ -663,6 +663,16 @@ void TPartition::Initialize(const TActorContext& ctx) {
     WriteQuota.ConstructInPlace(Config.GetPartitionConfig().GetBurstSize(),
                                 Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
                                 ctx.Now());
+    ReadQuotaTrackerActor = Register(new TReadQuoter(
+        ctx,
+        SelfId(),
+        TopicConverter,
+        Config,
+        Partition,
+        Tablet,
+        TabletID,
+        Counters
+    ));
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
@@ -681,10 +691,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
                               TopicWriteQuotaResourcePath);
 
     UsersInfoStorage.ConstructInPlace(DCId,
-                                      TabletID,
                                       TopicConverter,
                                       Partition,
-                                      Counters,
                                       Config,
                                       CloudId,
                                       DbId,
@@ -728,11 +736,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     for (ui32 i = 0; i < TotalLevels; ++i) {
         DataKeysHead.push_back(TKeyLevel(CompactLevelBorder[i]));
-    }
-
-    for (const auto& readQuota : Config.GetPartitionConfig().GetReadQuota()) {
-        auto &userInfo = UsersInfoStorage->GetOrCreate(readQuota.GetClientId(), ctx);
-        userInfo.ReadQuota.UpdateConfig(readQuota.GetBurstSize(), readQuota.GetSpeedInBytesPerSecond());
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);

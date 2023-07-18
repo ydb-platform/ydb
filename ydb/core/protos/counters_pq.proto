@@ -172,13 +172,13 @@ enum EClientLabeledCounters {
     METRIC_TOTAL_READ_SPEED_4 = 20                                   [(LabeledCounterOpts) = {Name: "ReadBytesPerDay" AggrFunc : EAF_SUM SVName: ""}];
     METRIC_MAX_READ_SPEED_4 = 21                                     [(LabeledCounterOpts) = {Name: "ReadBytesMaxPerDay" AggrFunc : EAF_MAX SVName: ""}];
 
-    METRIC_READ_QUOTA_BYTES = 22                                     [(LabeledCounterOpts) = {Name: "ReadBytesQuota" AggrFunc : EAF_MIN SVName: ""}];
+    METRIC_READ_QUOTA_PER_CONSUMER_BYTES = 22                        [(LabeledCounterOpts) = {Name: "ReadBytesQuota" AggrFunc : EAF_MIN SVName: "topic.partition.read.speed_limit_bytes_per_second"}];
 
     METRIC_READ_TIME_LAG = 23                                        [(LabeledCounterOpts) = {Name: "ReadTimeLagMs" AggrFunc : EAF_MAX SVName: "topic.partition.read.lag_milliseconds_max"}];
     METRIC_WRITE_TIME_LAG = 24                                       [(LabeledCounterOpts) = {Name: "WriteTimeLagMsByLastRead" AggrFunc : EAF_MAX SVName: "topic.partition.write.lag_milliseconds_max"}];
     METRIC_LAST_READ_TIME = 25                                       [(LabeledCounterOpts) = {Name: "TimeSinceLastReadMs" AggrFunc : EAF_MIN Type : CT_TIMELAG SVName: "topic.partition.read.idle_milliseconds_max"}];
 
-    METRIC_READ_QUOTA_USAGE = 26                                     [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX SVName: ""}];
+    METRIC_READ_QUOTA_PER_CONSUMER_USAGE = 26                        [(LabeledCounterOpts) = {Name: "PartitionMaxReadQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.read.throttled_microseconds_max"}];
 }
 
 
@@ -224,11 +224,13 @@ enum EPartitionLabeledCounters {
     METRIC_MAX_QUOTA_SPEED_3 = 29                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerHour" AggrFunc : EAF_MAX SVName: "topic.partition.write.bytes_per_hour_max"}];
     METRIC_TOTAL_QUOTA_SPEED_4 = 30                               [(LabeledCounterOpts) = {Name: "QuotaBytesPerDay" AggrFunc : EAF_SUM SVName: ""}];
     METRIC_MAX_QUOTA_SPEED_4 = 31                                 [(LabeledCounterOpts) = {Name: "QuotaBytesMaxPerDay" AggrFunc : EAF_MAX SVName: "topic.partition.write.bytes_per_day_max"}];
-    METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.write.throttled_nanoseconds_max"}];
+    METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX SVName: "topic.partition.write.throttled_microseconds_max"}];
     METRIC_MIN_SID_LIFETIME = 33                                  [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN SVName: ""}];
 
     METRIC_PARTITIONS_TOTAL = 34                                  [(LabeledCounterOpts) = {Name: "PartitionsTotal" AggrFunc : EAF_MAX SVName: "topic.partition.total_count"}];
 
-    METRIC_RESERVE_LIMIT_BYTES = 35                               [(LabeledCounterOpts) = {Name: "ReserveLimitBytes" AggrFunc : EAF_SUM SVName: "topic.reserve.limit_bytes"}];
-    METRIC_RESERVE_USED_BYTES = 36                                [(LabeledCounterOpts) = {Name: "ReserveUsedBytes" AggrFunc : EAF_SUM SVName: "topic.reserve.used_bytes"}];
+    METRIC_RESERVE_LIMIT_BYTES = 35                               [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.reserve.limit_bytes"}];
+    METRIC_RESERVE_USED_BYTES = 36                                [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.reserve.used_bytes"}];
+    METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE = 37                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.read.throttled_microseconds_max"}];
+    METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES = 38                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MIN SVName: "topic.partition.read.speed_limit_bytes_per_second"}];
 }

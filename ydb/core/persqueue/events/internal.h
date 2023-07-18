@@ -107,10 +107,10 @@ struct TEvPQ {
         EvSplitMessageGroup,
         EvUpdateCounters,
         EvMirrorerCounters,
-        EvReadLimiterRequest,
-        EvReadLimiterResponse,
-        EvReadLimiterConsumed,
-        EvReadLimiterCounters,
+        EvAccountReadQuotaRequest,
+        EvAccountReadQuotaResponse,
+        EvAccountReadQuotaConsumed,
+        EvAccountReadQuotaCounters,
         EvRetryWrite,
         EvInitCredentials,
         EvCredentialsCreated,
@@ -128,6 +128,12 @@ struct TEvPQ {
         EvPartitionConfigChanged,
         EvSubDomainStatus,
         EvStatsWakeup,
+        EvRequestQuota,
+        EvApproveQuota,
+        EvConsumed,
+        EvQuotaUpdated,
+        EvQuotaCountersUpdated,
+        EvConsumerRemoved,
         EvEnd
     };
 
@@ -793,6 +799,46 @@ struct TEvPQ {
         {}
 
         ui64 Round;
+    };
+
+    struct TEvRequestQuota : public TEventLocal<TEvRequestQuota, EvRequestQuota> {
+        TEvRequestQuota(TEvPQ::TEvRead::TPtr readRequest)
+            : 
+            ReadRequest(std::move(readRequest))
+        {}
+
+        TEvPQ::TEvRead::TPtr ReadRequest;
+    };
+
+    struct TEvApproveQuota : public TEventLocal<TEvApproveQuota, EvApproveQuota> {
+        TEvApproveQuota(TEvPQ::TEvRead::TPtr readRequest, TDuration waitTime) 
+            : 
+            ReadRequest(std::move(readRequest)),
+            WaitTime(std::move(waitTime))
+        {}
+
+        TEvPQ::TEvRead::TPtr ReadRequest;
+        TDuration WaitTime;
+    };
+
+    struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
+        TEvConsumed(ui64 readBytes, ui64 readRequestCookie, const TString& consumer)
+            : ReadBytes(readBytes),
+              ReadRequestCookie(readRequestCookie),
+              Consumer(consumer)
+        {}
+
+        ui64 ReadBytes;
+        ui64 ReadRequestCookie;
+        TString Consumer;
+    };
+
+    struct TEvConsumerRemoved : public TEventLocal<TEvConsumerRemoved, EvConsumerRemoved> {
+        TEvConsumerRemoved(const TString& consumer)
+            : Consumer(consumer)
+        {}
+
+        TString Consumer;
     };
 };
 

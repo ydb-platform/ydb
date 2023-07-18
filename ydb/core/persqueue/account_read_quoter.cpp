@@ -1,4 +1,4 @@
-#include "read_speed_limiter.h"
+#include "account_read_quoter.h"
 #include "event_helpers.h"
 
 #include <ydb/core/base/appdata.h>
@@ -18,15 +18,15 @@ namespace NPQ {
 const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
 const TDuration DO_NOT_QUOTE_AFTER_ERROR_PERIOD = TDuration::Seconds(5);
 
-const TString TReadSpeedLimiter::READ_QUOTA_ROOT_PATH = "read-quota";
+const TString TAccountReadQuoter::READ_QUOTA_ROOT_PATH = "read-quota";
 
-constexpr NKikimrServices::TActivity::EType TReadSpeedLimiter::ActorActivityType() {
-    return NKikimrServices::TActivity::PERSQUEUE_READ_SPEED_LIMITER;
+constexpr NKikimrServices::TActivity::EType TAccountReadQuoter::ActorActivityType() {
+    return NKikimrServices::TActivity::PERSQUEUE_ACCOUNT_READ_QUOTER;
 }
 
-TReadSpeedLimiter::TReadSpeedLimiter(
+TAccountReadQuoter::TAccountReadQuoter(
     TActorId tabletActor,
-    TActorId partitionActor,
+    TActorId recepient,
     ui64 tabletId,
     const NPersQueue::TTopicConverterPtr& topicConverter,
     ui32 partition,
@@ -34,7 +34,7 @@ TReadSpeedLimiter::TReadSpeedLimiter(
     const TTabletCountersBase& counters
 )
         : TabletActor(tabletActor)
-        , PartitionActor(partitionActor)
+        , Recepient(recepient)
         , TabletId(tabletId)
         , TopicConverter(topicConverter)
         , Partition(partition)
@@ -56,7 +56,7 @@ TReadSpeedLimiter::TReadSpeedLimiter(
         LimiterDescription() <<" kesus=" << KesusPath << " resource_path=" << QuotaResourcePath);
 }
 
-void TReadSpeedLimiter::InitCounters(const TActorContext& ctx) {
+void TAccountReadQuoter::InitCounters(const TActorContext& ctx) {
     if (CountersInited) {
         return;
     }
@@ -81,12 +81,12 @@ void TReadSpeedLimiter::InitCounters(const TActorContext& ctx) {
 }
 
 
-void TReadSpeedLimiter::Bootstrap(const TActorContext& ctx) {
+void TAccountReadQuoter::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateWork);
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
 }
 
-void TReadSpeedLimiter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+void TAccountReadQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER, LimiterDescription() << " killed");
     for (const auto& event : Queue) {
         auto cookie = event.Event->Get()->Cookie;
@@ -99,12 +99,12 @@ void TReadSpeedLimiter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContex
     Die(ctx);
 }
 
-void TReadSpeedLimiter::HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr&, const TActorContext& ctx) {
+void TAccountReadQuoter::HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr&, const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
-    ctx.Send(PartitionActor, new NReadSpeedLimiterEvents::TEvCounters(Counters, User));
+    ctx.Send(Recepient, new NAccountReadQuoterEvents::TEvCounters(Counters, User));
 }
 
-void TReadSpeedLimiter::HandleReadQuotaRequest(NReadSpeedLimiterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx) {
+void TAccountReadQuoter::HandleReadQuotaRequest(NAccountReadQuoterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER,
         LimiterDescription() << " quota required for cookie=" << ev->Get()->ReadRequest->Get()->Cookie
     );
@@ -117,7 +117,7 @@ void TReadSpeedLimiter::HandleReadQuotaRequest(NReadSpeedLimiterEvents::TEvReque
     }
 }
 
-void TReadSpeedLimiter::HandleReadQuotaConsumed(NReadSpeedLimiterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
+void TAccountReadQuoter::HandleReadQuotaConsumed(NAccountReadQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
     ConsumedBytesInCredit += ev->Get()->ReadBytes;
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER, LimiterDescription()
         << "consumed read quota " << ev->Get()->ReadBytes
@@ -147,7 +147,7 @@ void TReadSpeedLimiter::HandleReadQuotaConsumed(NReadSpeedLimiterEvents::TEvCons
     }
 }
 
-void TReadSpeedLimiter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx) {
+void TAccountReadQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx) {
     QuotaRequestInFlight = false;
     const ui64 cookie = ev->Cookie;
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER,
@@ -170,21 +170,21 @@ void TReadSpeedLimiter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const 
     }
 }
 
-void TReadSpeedLimiter::TReadSpeedLimiter::ApproveRead(TEvPQ::TEvRead::TPtr ev, TInstant startWait, const TActorContext& ctx) {
+void TAccountReadQuoter::TAccountReadQuoter::ApproveRead(TEvPQ::TEvRead::TPtr ev, TInstant startWait, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_SPEED_LIMITER,
         LimiterDescription() << " approve read for cookie=" << ev->Get()->Cookie
     );
     InProcessReadRequestCookies.insert(ev->Get()->Cookie);
 
     auto waitTime = ctx.Now() - startWait;
-    Send(PartitionActor, new NReadSpeedLimiterEvents::TEvResponse(ev.Release(), waitTime));
+    Send(Recepient, new NAccountReadQuoterEvents::TEvResponse(ev.Release(), waitTime));
 
     if (QuotaWaitCounter) {
         QuotaWaitCounter->IncFor(waitTime.MilliSeconds());
     }
 }
 
-TString TReadSpeedLimiter::LimiterDescription() const {
+TString TAccountReadQuoter::LimiterDescription() const {
     return TStringBuilder() << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " user=" << User << ": ";
 }
 

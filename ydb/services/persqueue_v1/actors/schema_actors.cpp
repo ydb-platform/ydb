@@ -936,6 +936,12 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             Result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
         }
 
+        if (pqConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
+            auto readSpeedPerConsumer = partConfig.GetWriteSpeedInBytesPerSecond() * 2;
+            Result.set_partition_total_read_speed_bytes_per_second(readSpeedPerConsumer * pqConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition());
+            Result.set_partition_consumer_read_speed_bytes_per_second(readSpeedPerConsumer);
+        }
+
         for (const auto &codec : config.GetCodecs().GetIds()) {
             Result.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
         }

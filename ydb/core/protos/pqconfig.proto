@@ -80,6 +80,8 @@ message TPQConfig {
 
         optional bool PartitionReadQuotaIsTwiceWriteQuota = 7 [default = false];
 
+        optional uint32 MaxParallelConsumersPerPartition = 8 [default = 20];
+
     }
     optional TQuotingConfig QuotingConfig = 18;
 

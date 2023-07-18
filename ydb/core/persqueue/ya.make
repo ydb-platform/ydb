@@ -22,7 +22,8 @@ SRCS(
     pq_l2_cache.cpp
     quota_tracker.cpp
     read_balancer.cpp
-    read_speed_limiter.cpp
+    account_read_quoter.cpp
+    read_quoter.cpp
     sourceid.cpp
     subscriber.cpp
     transaction.cpp

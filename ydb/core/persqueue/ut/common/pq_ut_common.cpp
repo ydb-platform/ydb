@@ -68,28 +68,28 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             tabletConfig->AddReadRules("user");
             tabletConfig->AddReadFromTimestampsMs(parameters.readFromTimestampsMs);
             tabletConfig->SetMeteringMode(parameters.meteringMode);
-            auto config = tabletConfig->MutablePartitionConfig();
-            if (parameters.speed > 0) {
-                config->SetWriteSpeedInBytesPerSecond(parameters.speed);
-                config->SetBurstSize(parameters.speed);
+            auto partitionConfig = tabletConfig->MutablePartitionConfig();
+            if (parameters.writeSpeed > 0) {
+                partitionConfig->SetWriteSpeedInBytesPerSecond(parameters.writeSpeed);
+                partitionConfig->SetBurstSize(parameters.writeSpeed);
             }
 
-            config->SetMaxCountInPartition(parameters.maxCountInPartition);
-            config->SetMaxSizeInPartition(parameters.maxSizeInPartition);
+            partitionConfig->SetMaxCountInPartition(parameters.maxCountInPartition);
+            partitionConfig->SetMaxSizeInPartition(parameters.maxSizeInPartition);
             if (parameters.storageLimitBytes > 0) {
-                config->SetStorageLimitBytes(parameters.storageLimitBytes);
+                partitionConfig->SetStorageLimitBytes(parameters.storageLimitBytes);
             } else {
-                config->SetLifetimeSeconds(parameters.deleteTime);
+                partitionConfig->SetLifetimeSeconds(parameters.deleteTime);
             }
-            config->SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
+            partitionConfig->SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
             if (parameters.sidMaxCount > 0)
-                config->SetSourceIdMaxCounts(parameters.sidMaxCount);
-            config->SetMaxWriteInflightSize(90'000'000);
-            config->SetLowWatermark(parameters.lowWatermark);
+                partitionConfig->SetSourceIdMaxCounts(parameters.sidMaxCount);
+            partitionConfig->SetMaxWriteInflightSize(90'000'000);
+            partitionConfig->SetLowWatermark(parameters.lowWatermark);
 
             for (auto& u : users) {
                 if (u.second)
-                    config->AddImportantClientId(u.first);
+                    partitionConfig->AddImportantClientId(u.first);
                 if (u.first != "user")
                     tabletConfig->AddReadRules(u.first);
             }
@@ -864,7 +864,7 @@ TVector<TString> CmdSourceIdRead(TTestContext& tc) {
 }
 
 
-void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui32 size, const ui32 resCount, bool timeouted, TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs) {
+void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui32 size, const ui32 resCount, bool timeouted, TTestContext& tc, TVector<i32> offsets, const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString user) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
     THolder<TEvPersQueue::TEvRequest> request;
@@ -877,7 +877,7 @@ void CmdRead(const ui32 partition, const ui64 offset, const ui32 count, const ui
             req->SetPartition(partition);
             auto read = req->MutableCmdRead();
             read->SetOffset(offset);
-            read->SetClientId("user");
+            read->SetClientId(user);
             read->SetCount(count);
             read->SetBytes(size);
             if (maxTimeLagMs > 0) {

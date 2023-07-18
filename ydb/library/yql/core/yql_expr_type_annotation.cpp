@@ -5311,13 +5311,29 @@ bool IsSystemMember(const TStringBuf& memberName) {
     return memberName.StartsWith(TStringBuf("_yql_"));
 }
 
-template<bool Deduplicte, bool OrListsOfAtoms>
+template<bool Deduplicte, ui8 OrListsOfAtomsDepth>
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx)
 {
     auto children = input->Child(index)->ChildrenList();
     bool needRestart = false;
 
-    if constexpr (OrListsOfAtoms) {
+    if constexpr (OrListsOfAtomsDepth == 2U) {
+        if (!EnsureTuple(*input->Child(index), ctx))
+            return IGraphTransformer::TStatus::Error;
+
+        for (auto i = 0U; i < children.size(); ++i) {
+            if (const auto item = input->Child(index)->Child(i); item->IsList()) {
+                if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
+                    needRestart = true;
+                    children[i] = item->HeadPtr();
+                } else if (const auto status = NormalizeTupleOfAtoms<Deduplicte, 1U>(input->ChildPtr(index), i, children[i], ctx); IGraphTransformer::TStatus::Error == status)
+                    return status;
+                else
+                    needRestart = needRestart || IGraphTransformer::TStatus::Repeat == status;
+            } else if (!EnsureAtom(*item, ctx))
+                return IGraphTransformer::TStatus::Error;
+        }
+    } else if constexpr (OrListsOfAtomsDepth == 1U) {
         if (!EnsureTuple(*input->Child(index), ctx))
             return IGraphTransformer::TStatus::Error;
 
@@ -5335,7 +5351,24 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
         return IGraphTransformer::TStatus::Error;
 
     const auto getKey = [](const TExprNode::TPtr& node) {
-        if constexpr (OrListsOfAtoms) {
+        if constexpr (OrListsOfAtomsDepth == 2U) {
+            using TItemType = TSmallVec<std::string_view>;
+            using TKeyType = TSmallVec<TItemType>;
+
+            if (node->IsAtom())
+                return TKeyType(1U, TItemType(1U, node->Content()));
+
+            TKeyType result(node->ChildrenSize());
+            std::transform(node->Children().cbegin(), node->Children().cend(), result.begin(), [](const TExprNode::TPtr& item) {
+                if (item->IsAtom())
+                    return TItemType(1U, item->Content());
+
+                TItemType part(item->ChildrenSize());
+                std::transform(item->Children().cbegin(), item->Children().cend(), part.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); });
+                return part;
+            });
+            return result;
+        } else if constexpr (OrListsOfAtomsDepth == 1U) {
             using TKeyType = TSmallVec<std::string_view>;
             if (node->IsAtom())
                 return TKeyType(1U, node->Content());
@@ -5346,6 +5379,7 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
         } else
             return node->Content();
     };
+
     const auto cmp = [&getKey](const TExprNode::TPtr& a, const TExprNode::TPtr& b) { return getKey(a) < getKey(b); };
     if (std::is_sorted(children.cbegin(), children.cend(), cmp)) {
         if constexpr (Deduplicte) {
@@ -5371,9 +5405,10 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
     return IGraphTransformer::TStatus::Ok;
 }
 
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, true>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, false>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, false>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 2U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 1U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 0U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, 0U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext &ctx, bool deduplicate)

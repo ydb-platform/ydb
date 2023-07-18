@@ -19,12 +19,40 @@ using namespace NNodes;
 
 namespace {
 
-template<class TConstraint>
-TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
-    if (const auto constraint = src.GetConstraint<TConstraint>()) {
+template<bool Distinct>
+TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
         const auto pos = node->Pos();
         TExprNode::TListType children(1U, std::move(node));
-        for (const auto& set : constraint->GetAllSets()) {
+        for (const auto& sets : constraint->GetContent()) {
+            TExprNode::TListType lists;
+            lists.reserve(sets.size());
+            for (const auto& set : sets) {
+                TExprNode::TListType columns;
+                columns.reserve(set.size());
+                for (const auto& path : set) {
+                    if (1U == path.size())
+                        columns.emplace_back(ctx.NewAtom(pos, path.front()));
+                    else {
+                        TExprNode::TListType atoms(path.size());
+                        std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(pos, name); });
+                        columns.emplace_back(ctx.NewList(pos, std::move(atoms)));
+                    }
+                }
+                lists.emplace_back(ctx.NewList(pos, std::move(columns)));
+            }
+            children.emplace_back(ctx.NewList(pos, std::move(lists)));
+        }
+        return ctx.NewCallable(pos, TString("Assume") += TUniqueConstraintNodeBase<Distinct>::Name(), std::move(children));
+    }
+    return node;
+}
+
+TExprNode::TPtr KeepChoppedConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TChoppedConstraintNode>()) {
+        const auto pos = node->Pos();
+        TExprNode::TListType children(1U, std::move(node));
+        for (const auto& set : constraint->GetContent()) {
             TExprNode::TListType columns;
             columns.reserve(set.size());
             for (const auto& path : set) {
@@ -38,7 +66,7 @@ TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExpr
             }
             children.emplace_back(ctx.NewList(pos, std::move(columns)));
         }
-        return ctx.NewCallable(pos, TString("Assume") += TConstraint::Name(), std::move(children));
+        return ctx.NewCallable(pos, TString("Assume") += TChoppedConstraintNode::Name(), std::move(children));
     }
     return node;
 }
@@ -1768,9 +1796,9 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
 
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
-    res = KeepConstraint<TChoppedConstraintNode>(std::move(res), src, ctx);
-    res = KeepConstraint<TDistinctConstraintNode>(std::move(res), src, ctx);
-    res = KeepConstraint<TUniqueConstraintNode>(std::move(res), src, ctx);
+    res = KeepChoppedConstraint(std::move(res), src, ctx);
+    res = KeepUniqueConstraint<true>(std::move(res), src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
     return res;
 }
 

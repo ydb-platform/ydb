@@ -11574,9 +11574,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListZipAll"] = &ListZipAllWrapper;
         Functions["Sort"] = &SortWrapper;
         Functions["AssumeSorted"] = &SortWrapper;
-        Functions["AssumeUnique"] = &AssumeConstraintWrapper;
-        Functions["AssumeDistinct"] = &AssumeConstraintWrapper;
-        Functions["AssumeChopped"] = &AssumeConstraintWrapper;
+        Functions["AssumeUnique"] = &AssumeConstraintWrapper<false>;
+        Functions["AssumeDistinct"] = &AssumeConstraintWrapper<false>;
+        Functions["AssumeChopped"] = &AssumeConstraintWrapper<true>;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["Top"] = &TopWrapper;

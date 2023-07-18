@@ -296,7 +296,7 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 
 bool IsSystemMember(const TStringBuf& memberName);
 
-template<bool Deduplicte = true, bool OrListsOfAtoms = false>
+template<bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,

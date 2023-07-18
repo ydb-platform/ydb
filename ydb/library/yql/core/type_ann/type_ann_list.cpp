@@ -4326,8 +4326,9 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template<bool Chopped>
     IGraphTransformer::TStatus AssumeConstraintWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, Chopped ? 2U : 1U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4337,7 +4338,7 @@ namespace {
 
         if (input->ChildrenSize() > 1U) {
             for (auto i = 1U; i < input->ChildrenSize(); ++i) {
-                if (const auto status = NormalizeTupleOfAtoms<true, true>(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                if (const auto status = NormalizeTupleOfAtoms<true, Chopped ? 1U : 2U>(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                     return status;
                 }
             }
@@ -4346,6 +4347,9 @@ namespace {
         input->SetTypeAnn(input->Head().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
+
+    template IGraphTransformer::TStatus AssumeConstraintWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    template IGraphTransformer::TStatus AssumeConstraintWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     IGraphTransformer::TStatus AssumeColumnOrderWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {

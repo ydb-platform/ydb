@@ -1706,18 +1706,18 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
         }
     };
 
-#define PARSE_SPECIFIC_FORMAT(format)                                                          \
-    SIMPLE_STRICT_UDF(TParse##format, TOptional<TResource<TMResourceName>>(TAutoMap<char*>)) { \
-        auto str = args[0].AsStringRef();                                                      \
-        TInstant instant;                                                                      \
-        if (!TInstant::TryParse##format(TStringBuf(str.Data(), str.Size()), instant)) {        \
-            return TUnboxedValuePod();                                                         \
-        }                                                                                      \
-        auto& builder = valueBuilder->GetDateBuilder();                                        \
-        TUnboxedValuePod result(0);                                                            \
-        auto& storage = Reference(result);                                                     \
-        storage.FromTimestamp(builder, instant.MicroSeconds());                                \
-        return result;                                                                         \
+#define PARSE_SPECIFIC_FORMAT(format)                                                                                              \
+    SIMPLE_STRICT_UDF(TParse##format, TOptional<TResource<TMResourceName>>(TAutoMap<char*>)) {                                     \
+        auto str = args[0].AsStringRef();                                                                                          \
+        TInstant instant;                                                                                                          \
+        if (!TInstant::TryParse##format(TStringBuf(str.Data(), str.Size()), instant) || instant.Seconds() >= NUdf::MAX_DATETIME) { \
+            return TUnboxedValuePod();                                                                                             \
+        }                                                                                                                          \
+        auto& builder = valueBuilder->GetDateBuilder();                                                                            \
+        TUnboxedValuePod result(0);                                                                                                \
+        auto& storage = Reference(result);                                                                                         \
+        storage.FromTimestamp(builder, instant.MicroSeconds());                                                                    \
+        return result;                                                                                                             \
     }
 
     PARSE_SPECIFIC_FORMAT(Rfc822);

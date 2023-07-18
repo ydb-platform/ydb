@@ -93,6 +93,7 @@ public:
         , Schema(schema)
     {
         if (granuleMeta && granuleMeta->GetAdditiveSummary().GetOther().GetRecordsCount()) {
+            Y_VERIFY(granuleMeta->GetHardSummary().GetColumnIdsSortedBySizeDescending().size());
             SortedColumnIds = granuleMeta->GetHardSummary().GetColumnIdsSortedBySizeDescending();
             const auto biggestColumn = SortedColumnIds.front();
             Y_VERIFY(biggestColumn.GetPackedBlobsSize());

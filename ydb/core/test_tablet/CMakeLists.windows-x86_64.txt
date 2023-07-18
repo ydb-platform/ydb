@@ -12,7 +12,7 @@ target_link_libraries(ydb-core-test_tablet PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-t1ha
-  cpp-digest-md5
+  library-cpp-json
   ydb-core-keyvalue
   ydb-core-protos
   ydb-core-util

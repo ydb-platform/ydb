@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)))))))
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)))) '('serialColumns '('a)))))
                 (let world (CommitAll! world))
                 (return world))
         )";

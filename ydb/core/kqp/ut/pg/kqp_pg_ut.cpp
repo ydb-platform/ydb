@@ -1341,6 +1341,93 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableSerialColumns) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE PgSerial (
+                key serial PRIMARY KEY,
+                value int2
+                ))");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO PgSerial (value) values (101::int2);
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            ui32 rows = 0;
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto& c = parser.ColumnParser("key");
+                Cerr << c.GetPg().Content_ << Endl;
+                rows++;
+            }
+
+            UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial WHERE key = 1;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            ui32 rows = 0;
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto& c = parser.ColumnParser("key");
+                Cerr << c.GetPg().Content_ << Endl;
+                rows++;
+            }
+
+            UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial WHERE value = 101;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            ui32 rows = 0;
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto& c = parser.ColumnParser("key");
+                Cerr << c.GetPg().Content_ << Endl;
+                rows++;
+            }
+
+            UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
+        }     
+    }
+
     Y_UNIT_TEST(CreateNotNullPgColumn) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
         auto client = kikimr.GetTableClient();

@@ -1088,6 +1088,7 @@ private:
         std::vector<TAstNode*> NotNullColumns;
         std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
+        std::vector<TAstNode*> SerialColumns;
     };
 
     bool CheckConstraintSupported(const Constraint* pk) {
@@ -1155,7 +1156,7 @@ private:
         return inserted;
     }
 
-    const TString& FindColumnTypeAlias(const TString& colType) {
+    const TString& FindColumnTypeAlias(const TString& colType, bool& isTypeSerial) {
         const static std::unordered_map<TString, TString> aliasMap {
             {"smallserial", "int2"},
             {"serial2", "int2"},
@@ -1164,10 +1165,12 @@ private:
             {"bigserial", "int8"},
             {"serial8", "int8"},
         };
-        const auto aliasIt = aliasMap.find(ToLowerUTF8(colType));
+        const auto aliasIt = aliasMap.find(to_lower(colType));
         if (aliasIt == aliasMap.end()) {
+            isTypeSerial = false;
             return colType;
         }
+        isTypeSerial = true;
         return aliasIt->second;
     }
 
@@ -1212,7 +1215,12 @@ private:
         // for now we pass just the last part of the type name
         auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
                                            ListLength(node->typeName->names) - 1));
-        const auto colType = FindColumnTypeAlias(colTypeVal);
+        bool isTypeSerial = false;
+        const auto colType = FindColumnTypeAlias(colTypeVal, isTypeSerial);
+
+        if (isTypeSerial) {
+            ctx.SerialColumns.push_back(QA(node->colname));
+        }
 
         ctx.Columns.push_back(
                 QL(QA(node->colname), L(A("PgType"), QA(colType)))
@@ -1254,6 +1262,9 @@ private:
         }
         if (!ctx.NotNullColumns.empty()) {
             options.push_back(QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
+        }
+        if (!ctx.SerialColumns.empty()) {
+            options.push_back(QL(QA("serialColumns"), QVL(ctx.SerialColumns.data(), ctx.SerialColumns.size())));
         }
         if (ctx.isTemporary) {
             options.push_back(QL(QA("temporary")));

@@ -398,17 +398,20 @@ private:
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
                 if (meta.NotNull) {
-                    if (!rowType->FindItem(name)) {
+                    if (!rowType->FindItem(name) && !meta.IsAutoIncrement()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                             << "Missing not null column in input: " << name
                             << ". All not null columns should be initialized"));
                         return TStatus::Error;
                     }
-                    if (rowType->FindItemType(name)->GetKind() == ETypeAnnotationKind::Pg) {
+
+                    const auto* itemType = rowType->FindItemType(name);
+                    if (itemType && itemType->GetKind() == ETypeAnnotationKind::Pg) {
                         //no type-level notnull check for pg types.
                         continue;
                     }
-                    if (rowType->FindItemType(name)->HasOptionalOrNull()) {
+    
+                    if (itemType && itemType->HasOptionalOrNull()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                             << "Can't set NULL or optional value to not null column: " << name
                             << ". All not null columns should be initialized"));

@@ -24,6 +24,15 @@ namespace NKqp {
 
 namespace {
 
+NScheme::TTypeInfo BuildTypeInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto) {
+    NScheme::TTypeId typeId = static_cast<NScheme::TTypeId>(proto.GetTypeId());
+    if (typeId != NKikimr::NScheme::NTypeIds::Pg) {
+        return NScheme::TTypeInfo(typeId);
+    } else {
+        return NScheme::TTypeInfo(typeId, NPg::TypeDescFromPgTypeId(proto.GetTypeInfo().GetPgTypeId()));
+    }
+}
+
 using namespace NKikimr::NSequenceProxy;
 
 const NActors::TActorId SequenceProxyId = NSequenceProxy::MakeSequenceProxyServiceID();
@@ -37,7 +46,7 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
 
         explicit TColumnSequenceInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto)
             : DefaultFromSequence(proto.GetDefaultFromSequence())
-            , TypeInfo(static_cast<NScheme::TTypeId>(proto.GetTypeId()))
+            , TypeInfo(BuildTypeInfo(proto))
         {
         }
 

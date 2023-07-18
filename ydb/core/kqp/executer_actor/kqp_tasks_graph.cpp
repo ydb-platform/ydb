@@ -273,11 +273,17 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
     for(const auto& column: sequencer.GetColumns()) {
         auto columnIt = table.Columns.find(column);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << column);
+        const auto& columnInfo = columnIt->second;
 
         auto* columnProto = settings->AddColumns();
         columnProto->SetName(column);
-        columnProto->SetId(columnIt->second.Id);
-        columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
+        columnProto->SetId(columnInfo.Id);
+        columnProto->SetTypeId(columnInfo.Type.GetTypeId());
+
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnInfo.Type, columnInfo.TypeMod);
+        if (columnType.TypeInfo) {
+            *columnProto->MutableTypeInfo() = *columnType.TypeInfo;
+        }
 
         auto aic = autoIncrementColumns.find(column);
         if (aic != autoIncrementColumns.end()) {

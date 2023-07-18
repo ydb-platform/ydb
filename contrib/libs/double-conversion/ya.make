@@ -14,11 +14,11 @@ ADDINCL(
     GLOBAL contrib/libs/double-conversion
 )
 
-NO_SANITIZE_HEADERS()
-
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()
+
+NO_SANITIZE_HEADERS()
 
 SRCS(
     double-conversion/bignum-dtoa.cc

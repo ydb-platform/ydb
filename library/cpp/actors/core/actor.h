@@ -4,7 +4,7 @@
 #include "event.h"
 #include "executor_thread.h"
 #include "monotonic.h"
-#include "indexes.h"
+#include <library/cpp/actors/actor_type/indexes.h>
 
 #include <library/cpp/actors/util/local_process_key.h>
 

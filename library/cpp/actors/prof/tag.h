@@ -1,6 +1,8 @@
 #pragma once
 
-#include <util/generic/fwd.h>
+#include <util/generic/string.h>
+#include <util/generic/noncopyable.h>
+#include <util/generic/vector.h>
 
 /*
   Common registry for tagging memory profiler.
@@ -71,3 +73,12 @@ namespace NProfiling {
         bool Released = false;
     };
 }
+
+class TMemoryProfileGuard: TNonCopyable {
+private:
+    const TString Id;
+public:
+    TMemoryProfileGuard(const TString& id);
+    ~TMemoryProfileGuard();
+
+};

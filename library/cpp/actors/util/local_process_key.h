@@ -7,7 +7,6 @@
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
-#include <library/cpp/actors/prof/tag.h>
 
 class TLocalProcessKeyStateIndexLimiter {
 public:

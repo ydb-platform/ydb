@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include "cms_state.h"
-#include "pdiskid.h"
 
 namespace NKikimr::NCms {
 

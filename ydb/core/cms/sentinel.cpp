@@ -1,4 +1,5 @@
 #include "cms_impl.h"
+#include "cms_state.h"
 #include "sentinel.h"
 #include "sentinel_impl.h"
 
@@ -14,8 +15,6 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/hash_set.h>
-#include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -302,27 +301,8 @@ IActor* CreateBSControllerPipe(TCmsStatePtr cmsState) {
 
 /// Actors
 
-template <typename TDerived>
-class TSentinelChildBase: public TActorBootstrapped<TDerived> {
-public:
-    using TBase = TSentinelChildBase<TDerived>;
-
-    explicit TSentinelChildBase(const TActorId& parent, TCmsStatePtr cmsState)
-        : Parent(parent)
-        , CmsState(cmsState)
-        , Config(CmsState->Config.SentinelConfig)
-    {
-    }
-
-protected:
-    const TActorId Parent;
-    TCmsStatePtr CmsState;
-    const TCmsSentinelConfig& Config;
-
-}; // TSentinelChildBase
-
 template <typename TEvUpdated, typename TDerived>
-class TUpdaterBase: public TSentinelChildBase<TDerived> {
+class TUpdaterBase: public TActorBootstrapped<TDerived> {
 public:
     using TBase = TUpdaterBase<TEvUpdated, TDerived>;
 
@@ -334,8 +314,10 @@ protected:
 
 public:
     explicit TUpdaterBase(const TActorId& parent, TCmsStatePtr cmsState, TSentinelState::TPtr sentinelState)
-        : TSentinelChildBase<TDerived>(parent, cmsState)
+        : Parent(parent)
+        , CmsState(cmsState)
         , SentinelState(sentinelState)
+        , Config(CmsState->Config.SentinelConfig)
     {
         for (auto& [_, info] : SentinelState->PDisks) {
             info->ClearTouched();
@@ -343,7 +325,10 @@ public:
     }
 
 protected:
+    const TActorId Parent;
+    TCmsStatePtr CmsState;
     TSentinelState::TPtr SentinelState;
+    const TCmsSentinelConfig& Config;
 
 }; // TUpdaterBase
 
@@ -370,14 +355,11 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     }
 
     void OnRetry(TEvents::TEvWakeup::TPtr& ev) {
-        const auto* msg = ev->Get();
-        switch (static_cast<RetryCookie>(msg->Tag)) {
+        switch (static_cast<RetryCookie>(ev->Get()->Tag)) {
             case RetryCookie::BSC:
-                RequestBSConfig();
-                break;
+                return RequestBSConfig();
             case RetryCookie::CMS:
-                RequestCMSClusterState();
-                break;
+                return RequestCMSClusterState();
             default:
                 Y_FAIL("Unexpected case");
         }

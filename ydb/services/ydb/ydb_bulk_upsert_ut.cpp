@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
             auto res = client.BulkUpsert("/Root/Traces", rows.Build()).GetValueSync();
             Cerr << res.GetIssues().ToString() << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Unknown table '/Root/Traces'");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "unknown table");
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
 

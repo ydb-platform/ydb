@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             auto res = SendBatch(client, "log1", 100, 1, ts).GetValueSync();
             Cerr << __FILE__ << ":" << __LINE__ << " Issues: " << res.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Unknown database for table 'log1'");
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "unknown database");
 
             TString result = RunQuery(connection, "SELECT count(*) FROM `/Root/OlapStore/log1`;");
             UNIT_ASSERT_VALUES_EQUAL(result, "[[0u]]");

@@ -279,6 +279,10 @@ private:
         }
     }
 
+    TStringBuilder LogPrefix() {
+        return TStringBuilder() << "Bulk upsert to table '" << GetTable() << "'";
+    }
+
     static bool SameDstType(NScheme::TTypeInfo type1, NScheme::TTypeInfo type2, bool allowConvert) {
         bool res = (type1 == type2);
         if (!res && allowConvert) {
@@ -490,7 +494,8 @@ private:
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = ::NKikimr::SplitPath(table);
         if (entry.Path.empty()) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Invalid table path specified", ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder()
+                << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.SyncVersion = true;
@@ -507,8 +512,8 @@ private:
 
     void HandleTimeout(const TActorContext& ctx) {
         ShardRepliesLeft.clear();
-        return ReplyWithError(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "Bulk upsert to table " << GetTable()
-            << " longTx " << LongTxId.ToString()
+        return ReplyWithError(Ydb::StatusIds::TIMEOUT,
+            LogPrefix() << "longTx " << LongTxId.ToString()
             << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec", ctx);
     }
 
@@ -528,16 +533,16 @@ private:
                 break;
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-                return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Table '%s' unavaliable", GetTable().c_str()), ctx);
+                return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, LogPrefix() << "table unavaliable", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Unknown table '%s'", GetTable().c_str()), ctx);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown table", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Unknown database for table '%s'", GetTable().c_str()), ctx);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown database", ctx);
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-                return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, Sprintf("Unknown error on table '%s'", GetTable().c_str()), ctx);
+                return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, LogPrefix() << "unknown error", ctx);
         }
 
         TableKind = entry.Kind;
@@ -545,13 +550,13 @@ private:
 
         if (entry.TableId.IsSystemView()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                Sprintf("Table '%s' is a system view. Bulk upsert is not supported.", GetTable().c_str()), ctx);
+                LogPrefix() << "is not supported. Table is a system view", ctx);
         }
 
         // TODO: fast fail for all tables?
         if (isColumnTable && DiskQuotaExceeded) {
             return ReplyWithError(Ydb::StatusIds::UNAVAILABLE,
-                "Cannot perform writes: database is out of disk space", ctx);
+                LogPrefix() << "cannot perform writes: database is out of disk space", ctx);
         }
 
         ResolveNamesResult.reset(ev->Get()->Request.Release());
@@ -559,20 +564,20 @@ private:
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         TString errorMessage;
         if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << errorMessage, ctx);
         }
 
         switch (GetSourceType()) {
             case EUploadSource::ProtoValues:
             {
                 if (!ExtractRows(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                 }
 
                 if (isColumnTable) {
                     // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                 } else {
                     FindMinMaxKeys();
@@ -585,7 +590,7 @@ private:
                 if (isColumnTable) {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
                         Batch = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
@@ -595,17 +600,17 @@ private:
                         Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
                         if (!Batch) {
                             errorMessage = "Cannot upsert arrow batch: one of data types has no conversion";
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                         }
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     // Implicit types conversion inside ExtractRows(), in TArrowToYdbConverter
                     if (!ExtractRows(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
                     }
                     FindMinMaxKeys();
                 }
@@ -629,19 +634,17 @@ private:
             // Batch is already converted
             WriteToColumnTable(ctx);
         } else {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                Sprintf("Table '%s': Bulk upsert is not supported for this table kind.", GetTable().c_str()), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "is not supported", ctx);
         }
     }
 
     void WriteToColumnTable(const NActors::TActorContext& ctx) {
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
-            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
-                    << " starting LongTx");
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "starting LongTx");
 
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
@@ -671,13 +674,13 @@ private:
 
         LongTxId = msg->GetLongTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
-                    << " started LongTx " << LongTxId.ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "started LongTx '" << LongTxId.ToString() << "'");
 
         auto outputColumns = GetOutputColumns(ctx);
         if (!outputColumns.empty()) {
             if (!Batch) {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "No batch in bulk upsert data", ctx);
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                    LogPrefix() << "no data or conversion error", ctx);
             }
 
             auto batch = NArrow::ExtractColumns(Batch, outputColumns);
@@ -685,10 +688,10 @@ private:
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
                         return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                            "No column '" + columnName + "' in bulk upsert data", ctx);
+                            LogPrefix() << "no expected column '" << columnName << "' in data", ctx);
                     }
                 }
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Cannot prepare bulk upsert data", ctx);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "cannot prepare data", ctx);
             }
 
             Y_VERIFY(batch);
@@ -696,7 +699,9 @@ private:
 #if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
             auto validationInfo = batch->ValidateFull();
             if (!validationInfo.ok()) {
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Bad batch in bulk upsert data: " + validationInfo.message() + "; order:" + JoinSeq(", ", outputColumns), ctx);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix()
+                    << "bad batch in data: " + validationInfo.message()
+                    << "; order:" + JoinSeq(", ", outputColumns), ctx);
             }
 #endif
 
@@ -710,19 +715,19 @@ private:
         Y_VERIFY(ResolveNamesResult);
 
         if (ResolveNamesResult->ErrorCount > 0) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Failed to get table schema", ctx);
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "failed to get table schema", ctx);
             return {};
         }
 
         auto& entry = ResolveNamesResult->ResultSet[0];
 
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table", ctx);
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "specified path is not a column table", ctx);
             return {};
         }
 
         if (!entry.ColumnTableInfo || !entry.ColumnTableInfo->Description.HasSchema()) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Olap table expected", ctx);
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "column table has no schema", ctx);
             return {};
         }
 
@@ -757,8 +762,8 @@ private:
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
-                    << " rolling back LongTx " << LongTxId.ToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST,
+            LogPrefix() << "rolling back LongTx '" << LongTxId.ToString() << "'");
 
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId));
@@ -893,12 +898,12 @@ private:
         ResolvePartitionsResult = msg->Request;
 
         if (ResolvePartitionsResult->ErrorCount > 0) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Unknown table '%s'", GetTable().c_str()), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown table", ctx);
         }
 
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
-            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
@@ -911,7 +916,7 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Range shards: "
             << getShardsString(GetKeyRange()->GetPartitions()));
 
         MakeShardRequests(ctx);
@@ -967,13 +972,13 @@ private:
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
+            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
 
             ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(shardRequests[idx].release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
-                LOG_CRIT_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Upload rows: shard " << shardId << "has already been added!");
+                LOG_CRIT_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: shard " << shardId << "has already been added!");
             }
         }
 
@@ -1019,7 +1024,7 @@ private:
         // Notify the cache that we are done with the pipe
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID()));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Upload rows: got "
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
                     << " from shard " << shardResponse.GetTabletID());
 
@@ -1064,7 +1069,7 @@ private:
 
     void ReplyIfDone(const NActors::TActorContext& ctx) {
         if (!ShardRepliesLeft.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
+            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
             return;
         }
 
@@ -1078,6 +1083,8 @@ private:
     }
 
     void ReplyWithError(::Ydb::StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::RPC_REQUEST, message);
+
         SetError(status, message);
 
         Y_VERIFY_DEBUG(ShardRepliesLeft.empty());
@@ -1087,8 +1094,7 @@ private:
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         SendResult(ctx, status);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Bulk upsert to table " << GetTable()
-                    << " completed with status " << status);
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);
 
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit

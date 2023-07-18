@@ -122,7 +122,7 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev,  const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Got TEvDeliveryProblem, TabletId: " << ev->Get()->TabletId
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Got TEvDeliveryProblem, TabletId: " << ev->Get()->TabletId
                 << ", NotDelivered: " << ev->Get()->NotDelivered);
         return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, "Invalid table path specified", ctx);
     }
@@ -310,7 +310,7 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Table ["
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Table ["
                     << TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path()
                     << "] shards: " << getShardsString(KeyRange->GetPartitions()));
 

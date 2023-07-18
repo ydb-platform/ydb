@@ -655,7 +655,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     if (activity.HasCleanup()) {
         if (auto event = SetupCleanup()) {
             ctx.Send(SelfId(), event.release());
-        } else {
+        } else if (periodic) {
             // Small cleanup (no index changes)
             CleanForgottenBlobs(ctx);
         }
@@ -946,10 +946,12 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
     }
 }
 
-void TColumnShard::CleanForgottenBlobs(const TActorContext& ctx) {
+void TColumnShard::CleanForgottenBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& allowList) {
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> tierBlobsToForget;
-    BlobManager->GetCleanupBlobs(tierBlobsToForget);
-    ForgetBlobs(ctx, tierBlobsToForget);
+    BlobManager->GetCleanupBlobs(tierBlobsToForget, allowList);
+    if (tierBlobsToForget.size()) {
+        ForgetBlobs(ctx, tierBlobsToForget);
+    }
 }
 
 void TColumnShard::Reexport(const TActorContext& ctx) {

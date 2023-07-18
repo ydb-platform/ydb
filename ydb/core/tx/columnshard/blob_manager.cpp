@@ -690,9 +690,13 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
     return {};
 }
 
-void TBlobManager::GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const {
+void TBlobManager::GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs,
+                                   const THashSet<TUnifiedBlobId>& allowList) const {
     TStringBuilder strBlobs;
     for (auto& [evict, meta] : DroppedEvictedBlobs) {
+        if (!allowList.empty() && !allowList.contains(evict.Blob)) {
+            continue;
+        }
         if (evict.State != EEvictState::EVICTING) {
             strBlobs << "'" << evict.Blob << "' ";
             auto& tierName = meta.GetTierName();
@@ -734,10 +738,10 @@ bool TBlobManager::BlobInUse(const NOlap::TUnifiedBlobId& blobId) const {
     return BlobsUseCount.contains(blobId);
 }
 
-void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
+bool TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
     if (inUse) {
         BlobsUseCount[blobId]++;
-        return;
+        return true;
     }
 
     auto useIt = BlobsUseCount.find(blobId);
@@ -746,7 +750,7 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
 
     if (useIt->second > 0) {
         // Blob is still in use
-        return;
+        return false;
     }
 
     LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Blob " << blobId << " is no longer in use");
@@ -773,6 +777,7 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
             }
         }
     }
+    return true;
 }
 
 bool TBlobManager::ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped /*= false*/) {

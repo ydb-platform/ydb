@@ -2392,6 +2392,16 @@ TExprNode::TPtr DropReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
+bool IsExpression(const TExprNode& root, const TExprNode& arg) {
+    if (&root == &arg)
+        return false;
+
+    if (root.IsCallable({"Member", "Nth"}))
+        return IsExpression(root.Head(), arg);
+
+    return true;
+}
+
 template <bool IsTop, bool IsSort>
 TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) {
     const ui32 ascIndex = node->ChildrenSize() - 2U;
@@ -2592,10 +2602,10 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
             std::set<ui32> indexes;
             if (node->Tail().Tail().IsList())
                 for (auto i = 0U; i < node->Tail().Tail().ChildrenSize(); ++i)
-                    if (const auto key = node->Tail().Tail().Child(i); !key->IsCallable("Member") || &key->Head() != &node->Tail().Head().Head())
+                    if (IsExpression(*node->Tail().Tail().Child(i), node->Tail().Head().Head()))
                         indexes.emplace(i);
 
-            if (!indexes.empty() || !(node->Tail().Tail().IsList() || node->Tail().Tail().IsCallable("Member") && &node->Tail().Tail().Head() == &node->Tail().Head().Head())) {
+            if (!indexes.empty() || (!node->Tail().Tail().IsList() && IsExpression(node->Tail().Tail(), node->Tail().Head().Head()))) {
                 YQL_CLOG(DEBUG, Core) << "Make system columns for " << node->Content() << " keys.";
 
                 auto argIn = ctx.NewArgument(node->Tail().Pos(), "row");

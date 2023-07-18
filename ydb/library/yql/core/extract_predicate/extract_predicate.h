@@ -6,7 +6,7 @@
 namespace NYql {
 
 struct TPredicateExtractorSettings {
-    size_t MaxRanges = 10000;
+    TMaybe<size_t> MaxRanges = 10000; // should be less than Max<size_t>() due to integer overflow
     bool MergeAdjacentPointRanges = true;
     bool HaveNextValueCallable = false;
     bool BuildLiteralRange = false;

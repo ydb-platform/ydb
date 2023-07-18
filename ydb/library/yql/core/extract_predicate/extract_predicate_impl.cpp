@@ -15,6 +15,21 @@ namespace {
 using namespace NNodes;
 using NUdf::TCastResultOptions;
 
+TExprNode::TPtr BuildMultiplyLimit(TMaybe<size_t> limit, TExprContext& ctx, TPositionHandle pos) {
+    if (limit) {
+        return ctx.Builder(pos)
+            .Callable("Uint64")
+                .Atom(0, ToString(*limit), TNodeFlags::Default)
+            .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(pos)
+            .Callable("Void")
+            .Seal()
+            .Build();
+    }
+}
+
 const TTypeAnnotationNode* GetBaseDataType(const TTypeAnnotationNode *type) {
     type = RemoveAllOptionals(type);
     return (type && type->GetKind() == ETypeAnnotationKind::Data) ? type : nullptr;
@@ -903,15 +918,12 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
         if (!hasNot) {
             // IN = collection of point intervals
             body = ctx.Builder(pos)
-                .Callable("Take")
-                    .Callable(0, "FlatMap")
+                    .Callable("FlatMap")
                         .Add(0, collection)
                         .Lambda(1)
                             .Param("item")
                             .Callable("RangeMultiply")
-                                .Callable(0, "Uint64")
-                                    .Atom(0, ToString(settings.MaxRanges), TNodeFlags::Default)
-                                .Seal()
+                                .Add(0, BuildMultiplyLimit(settings.MaxRanges, ctx, pos))
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                                     if (haveTuples) {
                                         const auto& types = compositeKeyType->Cast<TTupleExprType>()->GetItems();
@@ -943,29 +955,44 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
                             .Seal()
                         .Seal()
                     .Seal()
-                    .Callable(1, "Uint64")
-                        // +1 is essential here - RangeMultiply will detect overflow by this extra item
-                        .Atom(0, ToString(settings.MaxRanges + 1), TNodeFlags::Default)
-                    .Seal()
-                .Seal()
                 .Build();
+            if (settings.MaxRanges) {
+                YQL_ENSURE(*settings.MaxRanges < Max<size_t>());
+                body = ctx.Builder(pos)
+                    .Callable("Take")
+                        .Add(0, body)
+                        .Callable(1, "Uint64")
+                            // +1 is essential here - RangeMultiply will detect overflow by this extra item
+                            .Atom(0, ToString(*settings.MaxRanges + 1), TNodeFlags::Default)
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
             body = ctx.NewCallable(pos, "Collect", { body });
-            body = ctx.Builder(pos)
-                .Callable("IfStrict")
-                    .Callable(0, ">")
-                        .Callable(0, "Length")
+            if (settings.MaxRanges) {
+                body = ctx.Builder(pos)
+                    .Callable("IfStrict")
+                        .Callable(0, ">")
+                            .Callable(0, "Length")
+                                .Add(0, body)
+                            .Seal()
+                            .Callable(1, "Uint64")
+                                .Atom(0, ToString(*settings.MaxRanges), TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Add(1, BuildFullRange(pos, rowType, keys, ctx))
+                        .Callable(2, "RangeUnion")
                             .Add(0, body)
                         .Seal()
-                        .Callable(1, "Uint64")
-                            .Atom(0, ToString(settings.MaxRanges), TNodeFlags::Default)
-                        .Seal()
                     .Seal()
-                    .Add(1, BuildFullRange(pos, rowType, keys, ctx))
-                    .Callable(2, "RangeUnion")
+                    .Build();
+            } else {
+                body = ctx.Builder(pos)
+                    .Callable("RangeUnion")
                         .Add(0, body)
                     .Seal()
-                .Seal()
-                .Build();
+                    .Build();
+            }
         } else {
             YQL_ENSURE(false, "not supported yet, should be rejected earlier");
         }
@@ -1335,10 +1362,10 @@ bool IsRestTrue(const TExprNode& node) {
     return false;
 }
 
-TExprNode::TPtr BuildRangeMultiply(TPositionHandle pos, size_t maxRanges, const TExprNodeList& toMultiply, TExprContext& ctx) {
+TExprNode::TPtr BuildRangeMultiply(TPositionHandle pos, TMaybe<size_t> maxRanges, const TExprNodeList& toMultiply, TExprContext& ctx) {
     TExprNodeList args;
     args.reserve(toMultiply.size() + 1);
-    args.push_back(ctx.NewCallable(pos, "Uint64", { ctx.NewAtom(pos, ToString(maxRanges), TNodeFlags::Default) }));
+    args.push_back(BuildMultiplyLimit(maxRanges, ctx, pos));
     args.insert(args.end(), toMultiply.begin(), toMultiply.end());
     return ctx.NewCallable(pos, "RangeMultiply", std::move(args));
 }
@@ -1997,7 +2024,7 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
 
     if (result.ComputeNode) {
         result.ExpectedMaxRanges = CalcMaxRanges(rebuiltRange, indexKeysOrder);
-        if (result.ExpectedMaxRanges && *result.ExpectedMaxRanges < Settings.MaxRanges) {
+        if (result.ExpectedMaxRanges && (!Settings.MaxRanges || *result.ExpectedMaxRanges < *Settings.MaxRanges)) {
             TCoLambda lambda(result.PrunedLambda);
             auto newPred = MakePredicateFromPrunedRange(prunedRange, lambda.Args().Arg(0).Ptr(), ctx);
 

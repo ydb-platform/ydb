@@ -5266,9 +5266,14 @@ TRuntimeNode TProgramBuilder::RangeIntersect(const TArrayRef<const TRuntimeNode>
 TRuntimeNode TProgramBuilder::RangeMultiply(const TArrayRef<const TRuntimeNode>& args) {
     MKQL_ENSURE(args.size() >= 2, "Expecting at least two arguments");
 
-    MKQL_ENSURE(args.front().GetStaticType()->IsData() &&
-        static_cast<TDataType*>(args.front().GetStaticType())->GetSchemeType() == NUdf::TDataType<ui64>::Id,
-            "Expected ui64 as first argument");
+    bool unlimited = false;
+    if (args.front().GetStaticType()->IsVoid()) {
+        unlimited = true;
+    } else {
+        MKQL_ENSURE(args.front().GetStaticType()->IsData() &&
+            static_cast<TDataType*>(args.front().GetStaticType())->GetSchemeType() == NUdf::TDataType<ui64>::Id,
+                "Expected ui64 as first argument");
+    }
 
     std::vector<TType*> outputComponents;
     for (size_t i = 1; i < args.size(); ++i) {
@@ -5299,8 +5304,14 @@ TRuntimeNode TProgramBuilder::RangeMultiply(const TArrayRef<const TRuntimeNode>&
     auto outputRange = TTupleType::Create(outputRangeComps.size(), &outputRangeComps.front(), Env);
 
     TCallableBuilder callableBuilder(Env, __func__, TListType::Create(outputRange, Env));
-    for (auto& arg : args) {
-        callableBuilder.Add(arg);
+    if (unlimited) {
+        callableBuilder.Add(NewDataLiteral<ui64>(std::numeric_limits<ui64>::max()));
+    } else {
+        callableBuilder.Add(args[0]);
+    }
+
+    for (size_t i = 1; i < args.size(); ++i) {
+        callableBuilder.Add(args[i]);
     }
 
     return TRuntimeNode(callableBuilder.Build(), false);

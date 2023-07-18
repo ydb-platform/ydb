@@ -43,6 +43,7 @@ message TAuthConfig {
     optional uint32 AccessServiceGrpcKeepAliveTimeMs = 70 [default = 10000]; // CLOUD-27573
     optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573
     optional TStaffApiTvmSettings StaffApiTvmSettings = 72;
+    optional TTokenAccessorConfig TokenAccessorConfig = 73;
 }
 
 message TUserRegistryConfig {
@@ -68,4 +69,11 @@ message TStaffApiTvmSettings {
         string SecretEnvironmentVariable = 6;
         string PlainTextSecret = 7;
     }
+}
+
+message TTokenAccessorConfig {
+    optional bool Enabled = 1;
+    optional string Endpoint = 2; // endpoint of token accessor daemon. If you need to use the grpcs protocol then add a prefix grpcs://
+    optional string SslCaCert = 3;
+    optional uint64 ConnectionPoolSize = 4 [default = 10];
 }

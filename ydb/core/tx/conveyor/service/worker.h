@@ -103,6 +103,12 @@ public:
     void Bootstrap() {
         Become(&TWorker::StateMain);
     }
+
+    TWorker(const TString& conveyorName)
+        : TBase("CONVEYOR::" + conveyorName + "::WORKER")
+    {
+
+    }
 };
 
 }

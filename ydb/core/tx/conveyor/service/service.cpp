@@ -16,7 +16,7 @@ void TDistributor::Bootstrap() {
     const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
     ALS_NOTICE(NKikimrServices::TX_CONVEYOR) << "action=conveyor_registered;actor_id=" << SelfId() << ";workers_count=" << workersCount << ";limit=" << Config.GetQueueSizeLimit();
     for (ui32 i = 0; i < workersCount; ++i) {
-        Workers.emplace_back(Register(new TWorker()));
+        Workers.emplace_back(Register(new TWorker(ConveyorName)));
     }
     Counters.AvailableWorkersCount->Set(Workers.size());
     Counters.WorkersCountLimit->Set(Workers.size());

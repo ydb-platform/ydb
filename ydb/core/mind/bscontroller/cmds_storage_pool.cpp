@@ -155,7 +155,17 @@ namespace NKikimr::NBsController {
         }
 
         auto &storagePools = StoragePools.Unshare();
-        storagePools[id] = std::move(storagePool);
+        if (const auto [spIt, inserted] = storagePools.try_emplace(id, std::move(storagePool)); !inserted) {
+            TStoragePoolInfo& cur = spIt->second;
+            if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
+                for (auto it = r.first; it != r.second; ++it) {
+                    TGroupInfo *group = Groups.FindForUpdate(it->second);
+                    Y_VERIFY(group);
+                    group->ContentChanged = true;
+                }
+            }
+            cur = std::move(storagePool); // update existing storage pool
+        }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
     }
 
@@ -653,7 +663,7 @@ namespace NKikimr::NBsController {
         vslot->Mood = TMood::Wipe;
         vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         vslot->IsReady = false;
-        group->MoodChanged = true;
+        group->FailureModelChanged = true;
         group->CalculateGroupStatus();
     }
 

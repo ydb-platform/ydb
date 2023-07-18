@@ -301,8 +301,7 @@ namespace NKikimr::NBsController {
                     if (!overlay->second || !base) {
                         continue;
                     }
-                    auto& group = overlay->second;
-                    if ((base->second->Generation != group->Generation || group->MoodChanged) && group->VDisksInGroup) {
+                    if (auto& group = overlay->second; group->FailureModelChanged && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
                         auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
@@ -737,7 +736,7 @@ namespace NKikimr::NBsController {
             for (const auto& slot : VDisksInGroup) {
                 slot.Mutable().Group = this;
             }
-            MoodChanged = false;
+            FailureModelChanged = false;
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id,

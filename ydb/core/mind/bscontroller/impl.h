@@ -549,7 +549,7 @@ public:
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
         bool ContentChanged = false;
-        bool MoodChanged = false;
+        bool FailureModelChanged = false;
 
         TActorId VirtualGroupSetupMachineId;
 

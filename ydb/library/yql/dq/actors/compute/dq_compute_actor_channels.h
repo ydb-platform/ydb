@@ -119,7 +119,7 @@ public:
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     bool CanSendChannelData(const ui64 channelId) const;
     bool HasFreeMemoryInChannel(const ui64 channelId) const;
-    void SendChannelData(TChannelDataOOB&& channelData);
+    void SendChannelData(TChannelDataOOB&& channelData, const bool needAck);
     void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);

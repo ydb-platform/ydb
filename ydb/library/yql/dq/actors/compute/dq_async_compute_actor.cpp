@@ -623,7 +623,7 @@ private:
                 if (lastChunk && asyncData.Checkpoint.Defined()) {
                     channelData.Proto.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
                 }
-                Channels->SendChannelData(std::move(channelData));
+                Channels->SendChannelData(std::move(channelData), i + 1 == asyncData.Data.size());
             }
             if (asyncData.Data.empty() && asyncData.Changed) {
                 TChannelDataOOB channelData;
@@ -635,7 +635,7 @@ private:
                 if (asyncData.Checkpoint.Defined()) {
                     channelData.Proto.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
                 }
-                Channels->SendChannelData(std::move(channelData));
+                Channels->SendChannelData(std::move(channelData), true);
             }
         }
 

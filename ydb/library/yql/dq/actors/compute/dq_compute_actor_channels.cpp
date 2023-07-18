@@ -566,7 +566,7 @@ bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) {
     return outputChannel.Finished && !SupportCheckpoints;
 }
 
-void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData) {
+void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, const bool needAck) {
     TOutputChannelState& outputChannel = OutCh(channelData.Proto.GetChannelId());
 
     YQL_ENSURE(!outputChannel.Finished || SupportCheckpoints);
@@ -617,6 +617,7 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData) {
     outputChannel.Finished = finished;
 
     ui32 flags = CalcMessageFlags(*outputChannel.Peer);
+    dataEv->Record.SetNoAck(!needAck);
     Send(*outputChannel.Peer, dataEv.Release(), flags, /* cookie */ outputChannel.ChannelId);
 
     outputChannel.PeerState.AddInFlight(chunkBytes, chunkRows);

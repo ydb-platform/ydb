@@ -276,7 +276,7 @@ void TType::Freeze(const TTypeEnvironment& env) {
     }
 }
 
-bool TType::IsSameType(const TType& typeToCompare) const {
+bool TTypeBase::IsSameType(const TTypeBase& typeToCompare) const {
     if (Kind != typeToCompare.Kind) {
         return false;
     }
@@ -285,6 +285,21 @@ bool TType::IsSameType(const TType& typeToCompare) const {
 #define APPLY(kind, type) \
     case EKind::kind: \
         return static_cast<const type&>(*this).IsSameType(static_cast<const type&>(typeToCompare));
+
+    TYPES_LIST(APPLY)
+
+#undef APPLY
+    default:
+        Y_FAIL();
+    }
+}
+
+size_t TTypeBase::CalcHash() const {
+    switch (Kind) {
+#define APPLY(kind, type) \
+    case EKind::kind: \
+        /* combine hashes to aviod collision, for example, between Kind and SchemeType */ \
+        return CombineHashes(IntHash((size_t)Kind), static_cast<const type&>(*this).CalcHash());
 
     TYPES_LIST(APPLY)
 
@@ -333,6 +348,10 @@ bool TTypeType::IsSameType(const TTypeType& typeToCompare) const {
     return true;
 }
 
+size_t TTypeType::CalcHash() const {
+    return 0;
+}
+
 bool TTypeType::IsConvertableTo(const TTypeType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
     return IsSameType(typeToCompare);
@@ -378,6 +397,14 @@ bool TDataType::IsSameType(const TDataType& typeToCompare) const {
     return static_cast<const TDataDecimalType&>(*this).IsSameType(static_cast<const TDataDecimalType&>(typeToCompare));
 }
 
+size_t TDataType::CalcHash() const {
+    size_t hash = IntHash((size_t)GetSchemeType());
+    if (SchemeType == NUdf::TDataType<NUdf::TDecimal>::Id) {
+        hash = CombineHashes(hash, static_cast<const TDataDecimalType&>(*this).CalcHash());
+    }
+    return hash;
+}
+
 bool TDataType::IsConvertableTo(const TDataType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
     return IsSameType(typeToCompare);
@@ -413,6 +440,10 @@ TDataDecimalType* TDataDecimalType::Create(ui8 precision, ui8 scale, const TType
 
 bool TDataDecimalType::IsSameType(const TDataDecimalType& typeToCompare) const {
     return Precision == typeToCompare.Precision && Scale == typeToCompare.Scale;
+}
+
+size_t TDataDecimalType::CalcHash() const {
+    return CombineHashes(IntHash((size_t)Precision), IntHash((size_t)Scale));
 }
 
 bool TDataDecimalType::IsConvertableTo(const TDataDecimalType& typeToCompare, bool ignoreTagged) const {
@@ -490,6 +521,10 @@ TPgType* TPgType::Create(ui32 typeId, const TTypeEnvironment& env) {
 
 bool TPgType::IsSameType(const TPgType& typeToCompare) const {
     return TypeId == typeToCompare.TypeId;
+}
+
+size_t TPgType::CalcHash() const {
+    return IntHash((size_t)TypeId);
 }
 
 bool TPgType::IsConvertableTo(const TPgType& typeToCompare, bool ignoreTagged) const {
@@ -591,6 +626,15 @@ bool TStructType::IsSameType(const TStructType& typeToCompare) const {
     }
 
     return true;
+}
+
+size_t TStructType::CalcHash() const {
+    size_t hash = 0;
+    for (size_t i = 0; i < MembersCount; ++i) {
+        hash = CombineHashes(hash, Members[i].first.Hash());
+        hash = CombineHashes(hash, Members[i].second->CalcHash());
+    }
+    return hash;
 }
 
 bool TStructType::IsConvertableTo(const TStructType& typeToCompare, bool ignoreTagged) const {
@@ -814,6 +858,10 @@ bool TListType::IsSameType(const TListType& typeToCompare) const {
     return GetItemType()->IsSameType(*typeToCompare.GetItemType());
 }
 
+size_t TListType::CalcHash() const {
+    return CombineHashes(IndexDictKey->CalcHash(), Data->CalcHash());
+}
+
 bool TListType::IsConvertableTo(const TListType& typeToCompare, bool ignoreTagged) const {
     return GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
 }
@@ -989,6 +1037,10 @@ bool TStreamType::IsSameType(const TStreamType& typeToCompare) const {
     return GetItemType()->IsSameType(*typeToCompare.GetItemType());
 }
 
+size_t TStreamType::CalcHash() const {
+    return Data->CalcHash();
+}
+
 bool TStreamType::IsConvertableTo(const TStreamType& typeToCompare, bool ignoreTagged) const {
     return GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
 }
@@ -1031,6 +1083,10 @@ TFlowType* TFlowType::Create(TType* itemType, const TTypeEnvironment& env) {
 
 bool TFlowType::IsSameType(const TFlowType& typeToCompare) const {
     return GetItemType()->IsSameType(*typeToCompare.GetItemType());
+}
+
+size_t TFlowType::CalcHash() const {
+    return Data->CalcHash();
 }
 
 bool TFlowType::IsConvertableTo(const TFlowType& typeToCompare, bool ignoreTagged) const {
@@ -1077,6 +1133,10 @@ bool TOptionalType::IsSameType(const TOptionalType& typeToCompare) const {
     return GetItemType()->IsSameType(*typeToCompare.GetItemType());
 }
 
+size_t TOptionalType::CalcHash() const {
+    return Data->CalcHash();
+}
+
 bool TOptionalType::IsConvertableTo(const TOptionalType& typeToCompare, bool ignoreTagged) const {
     return GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
 }
@@ -1119,6 +1179,10 @@ TTaggedType* TTaggedType::Create(TType* baseType, const TStringBuf& tag, const T
 
 bool TTaggedType::IsSameType(const TTaggedType& typeToCompare) const {
     return Tag == typeToCompare.Tag && GetBaseType()->IsSameType(*typeToCompare.GetBaseType());
+}
+
+size_t TTaggedType::CalcHash() const {
+    return CombineHashes(BaseType->CalcHash(), Tag.Hash());
 }
 
 bool TTaggedType::IsConvertableTo(const TTaggedType& typeToCompare, bool ignoreTagged) const {
@@ -1236,6 +1300,10 @@ TDictType* TDictType::Create(TType* keyType, TType* payloadType, const TTypeEnvi
 bool TDictType::IsSameType(const TDictType& typeToCompare) const {
     return KeyType->IsSameType(*typeToCompare.KeyType)
         && PayloadType->IsSameType(*typeToCompare.PayloadType);
+}
+
+size_t TDictType::CalcHash() const {
+    return CombineHashes(KeyType->CalcHash(), PayloadType->CalcHash());
 }
 
 bool TDictType::IsConvertableTo(const TDictType& typeToCompare, bool ignoreTagged) const {
@@ -1492,6 +1560,18 @@ bool TCallableType::IsSameType(const TCallableType& typeToCompare) const {
         return false;
 
     return !Payload || Payload->Equals(*typeToCompare.Payload);
+}
+
+size_t TCallableType::CalcHash() const {
+    size_t hash = 0;
+    hash = CombineHashes(hash, IntHash<size_t>(ArgumentsCount));
+    hash = CombineHashes(hash, Name.Hash());
+    hash = CombineHashes(hash, ReturnType->CalcHash());
+    for (size_t index = 0; index < ArgumentsCount; ++index) {
+        hash = CombineHashes(hash, Arguments[index]->CalcHash());
+    }
+    hash = CombineHashes(hash, IntHash<size_t>(OptionalArgs));
+    return hash;
 }
 
 bool TCallableType::IsConvertableTo(const TCallableType& typeToCompare, bool ignoreTagged) const {
@@ -1826,6 +1906,10 @@ bool TAnyType::IsSameType(const TAnyType& typeToCompare) const {
     return true;
 }
 
+size_t TAnyType::CalcHash() const {
+    return 0;
+}
+
 bool TAnyType::IsConvertableTo(const TAnyType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
     return IsSameType(typeToCompare);
@@ -2017,6 +2101,10 @@ bool TResourceType::IsSameType(const TResourceType& typeToCompare) const {
     return Tag == typeToCompare.Tag;
 }
 
+size_t TResourceType::CalcHash() const {
+    return Tag.Hash();
+}
+
 bool TResourceType::IsConvertableTo(const TResourceType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
     return IsSameType(typeToCompare);
@@ -2049,6 +2137,10 @@ TVariantType* TVariantType::Create(TType* underlyingType, const TTypeEnvironment
 
 bool TVariantType::IsSameType(const TVariantType& typeToCompare) const {
     return GetUnderlyingType()->IsSameType(*typeToCompare.GetUnderlyingType());
+}
+
+size_t TVariantType::CalcHash() const {
+    return Data->CalcHash();
 }
 
 bool TVariantType::IsConvertableTo(const TVariantType& typeToCompare, bool ignoreTagged) const {
@@ -2176,6 +2268,10 @@ TBlockType* TBlockType::Create(TType* itemType, EShape shape, const TTypeEnviron
 
 bool TBlockType::IsSameType(const TBlockType& typeToCompare) const {
     return GetItemType()->IsSameType(*typeToCompare.GetItemType()) && Shape == typeToCompare.Shape;
+}
+
+size_t TBlockType::CalcHash() const {
+    return CombineHashes(ItemType->CalcHash(), IntHash((size_t)Shape));
 }
 
 bool TBlockType::IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged) const {

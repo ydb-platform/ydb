@@ -913,8 +913,8 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
-            NUdf::ICompare::TPtr compare,
-            NUdf::IEquate::TPtr equate,
+            const NUdf::ICompare* compare,
+            const NUdf::IEquate* equate,
             const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
@@ -947,7 +947,7 @@ private:
         }
 
         return BinarySearch(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key),
-            TValueLess(Types, IsTuple, Compare.Get()));
+            TValueLess(Types, IsTuple, Compare));
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -957,8 +957,8 @@ private:
             encodedKey = MakeString(Packer->Encode(key, false));
         }
 
-        const auto it = LowerBound(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key), TValueLess(Types, IsTuple, Compare.Get()));
-        if (it == Items.end() || !TValueEqual(Types, IsTuple, Equate.Get())(*it, NUdf::TUnboxedValuePod(Packer ? encodedKey : key)))
+        const auto it = LowerBound(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key), TValueLess(Types, IsTuple, Compare));
+        if (it == Items.end() || !TValueEqual(Types, IsTuple, Equate)(*it, NUdf::TUnboxedValuePod(Packer ? encodedKey : key)))
             return NUdf::TUnboxedValuePod();
 
         return it->MakeOptional();
@@ -998,8 +998,8 @@ private:
 
         switch (Mode) {
         case EDictSortMode::RequiresSorting:
-            StableSort(Items.begin(), Items.end(), TValueLess(Types, IsTuple, Compare.Get()));
-            Items.erase(Unique(Items.begin(), Items.end(), TValueEqual(Types, IsTuple, Equate.Get())), Items.end());
+            StableSort(Items.begin(), Items.end(), TValueLess(Types, IsTuple, Compare));
+            Items.erase(Unique(Items.begin(), Items.end(), TValueEqual(Types, IsTuple, Equate)), Items.end());
             break;
         case EDictSortMode::SortedUniqueAscending:
             break;
@@ -1019,7 +1019,7 @@ private:
     }
 
     bool IsSortedUnique() const {
-        TValueLess less(Types, IsTuple, Compare.Get());
+        TValueLess less(Types, IsTuple, Compare);
         for (size_t i = 1, e = Items.size(); i < e; ++i) {
             if (!less(Items[i - 1], Items[i]))
                 return false;
@@ -1037,8 +1037,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     const EDictSortMode Mode;
-    NUdf::ICompare::TPtr Compare;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::ICompare* Compare;
+    const NUdf::IEquate* Equate;
     mutable bool IsBuilt;
     const THolderFactory& HolderFactory;
     mutable TItems Items;
@@ -1115,8 +1115,8 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
-            NUdf::ICompare::TPtr compare,
-            NUdf::IEquate::TPtr equate,
+            const NUdf::ICompare* compare,
+            const NUdf::IEquate* equate,
             const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
@@ -1149,7 +1149,7 @@ private:
         }
 
         return BinarySearch(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValuePod()),
-            TKeyPayloadPairLess(Types, IsTuple, Compare.Get()));
+            TKeyPayloadPairLess(Types, IsTuple, Compare));
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -1159,8 +1159,8 @@ private:
             encodedKey = MakeString(Packer->Encode(key, false));
         }
 
-        const auto it = LowerBound(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValue()), TKeyPayloadPairLess(Types, IsTuple, Compare.Get()));
-        if (it == Items.end() || !TKeyPayloadPairEqual(Types, IsTuple, Equate.Get())({it->first, it->second}, TKeyPayloadPair(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), {})))
+        const auto it = LowerBound(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValue()), TKeyPayloadPairLess(Types, IsTuple, Compare));
+        if (it == Items.end() || !TKeyPayloadPairEqual(Types, IsTuple, Equate)({it->first, it->second}, TKeyPayloadPair(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), {})))
             return NUdf::TUnboxedValuePod();
 
         return it->second.MakeOptional();
@@ -1200,8 +1200,8 @@ private:
 
         switch (Mode) {
         case EDictSortMode::RequiresSorting:
-            StableSort(Items.begin(), Items.end(), TKeyPayloadPairLess(Types, IsTuple, Compare.Get()));
-            Items.erase(Unique(Items.begin(), Items.end(), TKeyPayloadPairEqual(Types, IsTuple, Equate.Get())), Items.end());
+            StableSort(Items.begin(), Items.end(), TKeyPayloadPairLess(Types, IsTuple, Compare));
+            Items.erase(Unique(Items.begin(), Items.end(), TKeyPayloadPairEqual(Types, IsTuple, Equate)), Items.end());
             break;
         case EDictSortMode::SortedUniqueAscending:
             break;
@@ -1221,7 +1221,7 @@ private:
     }
 
     bool IsSortedUnique() const {
-        TKeyPayloadPairLess less(Types, IsTuple, Compare.Get());
+        TKeyPayloadPairLess less(Types, IsTuple, Compare);
         for (size_t i = 1, e = Items.size(); i < e; ++i) {
             if (!less(Items[i - 1], Items[i]))
                 return false;
@@ -1239,8 +1239,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     const EDictSortMode Mode;
-    NUdf::ICompare::TPtr Compare;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::ICompare* Compare;
+    const NUdf::IEquate* Equate;
     mutable bool IsBuilt;
     const THolderFactory& HolderFactory;
     mutable TItems Items;
@@ -1303,11 +1303,11 @@ public:
 
     THashedSetHolder(TMemoryUsageInfo* memInfo, THashedSetFiller filler,
         const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
-        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, const THolderFactory& holderFactory)
+        const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
-        , Set(0, TValueHasher(Types, isTuple, hash.Get()), TValueEqual(Types, isTuple, equate.Get()))
+        , Set(0, TValueHasher(Types, isTuple, hash), TValueEqual(Types, isTuple, equate))
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -2091,11 +2091,11 @@ public:
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
         const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
-        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, const THolderFactory& holderFactory)
+        const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
-        , Map(0, TValueHasher(Types, isTuple, hash.Get()), TValueEqual(Types, isTuple, equate.Get()))
+        , Map(0, TValueHasher(Types, isTuple, hash), TValueEqual(Types, isTuple, equate))
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -2761,7 +2761,7 @@ public:
             };
 
             return ctx.HolderFactory.CreateDirectSortedDictHolder(filler, Types, IsTuple, EDictSortMode::RequiresSorting,
-                true, EncodedType, Compare, Equate);
+                true, EncodedType, Compare.Get(), Equate.Get());
         } else {
             THashedDictFiller filler =
                     [&items, &packer](TValuesDictHashMap& map) {
@@ -2776,7 +2776,7 @@ public:
                     };
 
             return ctx.HolderFactory.CreateDirectHashedDictHolder(
-                    filler, Types, IsTuple, true, EncodedType, Hash, Equate);
+                    filler, Types, IsTuple, true, EncodedType, Hash.Get(), Equate.Get());
         }
     }
 
@@ -3160,9 +3160,9 @@ public:
             bool isTuple,
             ui32 dictFlags,
             TType* encodeType,
-            NUdf::IHash::TPtr hash,
-            NUdf::IEquate::TPtr equate,
-            NUdf::ICompare::TPtr compare)
+            const NUdf::IHash* hash,
+            const NUdf::IEquate* equate,
+            const NUdf::ICompare* compare)
         : HolderFactory_(holderFactory)
         , Types_(types)
         , IsTuple_(isTuple)
@@ -3270,14 +3270,14 @@ private:
             }
         }
 
-        StableSort(localValues.begin(), localValues.end(), TKeyPayloadPairLess(Types_, IsTuple_, Compare_.Get()));
+        StableSort(localValues.begin(), localValues.end(), TKeyPayloadPairLess(Types_, IsTuple_, Compare_));
 
         TKeyPayloadPairVector groups;
         groups.reserve(localValues.size());
         if (!localValues.empty()) {
             TDefaultListRepresentation currentList(std::move(localValues.begin()->second));
             auto lastKey = std::move(localValues.begin()->first);
-            TValueEqual eqPredicate(Types_, IsTuple_, Equate_.Get());
+            TValueEqual eqPredicate(Types_, IsTuple_, Equate_);
             for (auto it = localValues.begin() + 1; it != localValues.end(); ++it) {
                 if (eqPredicate(lastKey, it->first)) {
                     currentList = currentList.Append(std::move(it->second));
@@ -3313,9 +3313,9 @@ private:
     const bool IsTuple_;
     const ui32 DictFlags_;
     TType* const EncodeType_;
-    NUdf::IHash::TPtr Hash_;
-    NUdf::IEquate::TPtr Equate_;
-    NUdf::ICompare::TPtr Compare_;
+    const NUdf::IHash* Hash_;
+    const NUdf::IEquate* Equate_;
+    const NUdf::ICompare* Compare_;
     TKeyPayloadPairVector Items_;
 };
 
@@ -3390,6 +3390,18 @@ NUdf::TUnboxedValuePod THolderFactory::NewVectorHolder() const {
 
 NUdf::TUnboxedValuePod THolderFactory::NewTemporaryVectorHolder() const {
     return NUdf::TUnboxedValuePod(new TTemporaryVectorHolder(&MemInfo));
+}
+
+const NUdf::IHash* THolderFactory::GetHash(const TType& type, bool useIHash) const {
+    return useIHash ? HashRegistry.FindOrEmplace(type) : nullptr;
+}
+
+const NUdf::IEquate* THolderFactory::GetEquate(const TType& type, bool useIHash) const {
+    return useIHash ? EquateRegistry.FindOrEmplace(type) : nullptr;
+}
+
+const NUdf::ICompare* THolderFactory::GetCompare(const TType& type, bool useIHash) const {
+    return useIHash ? CompareRegistry.FindOrEmplace(type) : nullptr;
 }
 
 NUdf::TUnboxedValuePod THolderFactory::VectorAsVectorHolder(TUnboxedValueVector&& list) const {
@@ -3701,8 +3713,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedSetHolder(
         EDictSortMode mode,
         bool eagerFill,
         TType* encodedType,
-        NUdf::ICompare::TPtr compare,
-        NUdf::IEquate::TPtr equate) const
+        const NUdf::ICompare* compare,
+        const NUdf::IEquate* equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedSetHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, mode, eagerFill, encodedType, compare, equate, *this));
@@ -3715,8 +3727,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedDictHolder(
         EDictSortMode mode,
         bool eagerFill,
         TType* encodedType,
-        NUdf::ICompare::TPtr compare,
-        NUdf::IEquate::TPtr equate) const
+        const NUdf::ICompare* compare,
+        const NUdf::IEquate* equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedDictHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, mode, eagerFill, encodedType, compare, equate, *this));
@@ -3728,8 +3740,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedDictHolder(
         bool isTuple,
         bool eagerFill,
         TType* encodedType,
-        NUdf::IHash::TPtr hash,
-        NUdf::IEquate::TPtr equate) const
+        const NUdf::IHash* hash,
+        const NUdf::IEquate* equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<THashedDictHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
@@ -3741,8 +3753,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSetHolder(
     bool isTuple,
     bool eagerFill,
     TType* encodedType,
-    NUdf::IHash::TPtr hash,
-    NUdf::IEquate::TPtr equate) const {
+    const NUdf::IHash* hash,
+    const NUdf::IEquate* equate) const {
     return NUdf::TUnboxedValuePod(AllocateOn<THashedSetHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
 }
@@ -3838,8 +3850,8 @@ NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
     bool useIHash;
     GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
     return new TDictValueBuilder(*this, types, isTuple, flags, encoded ? keyType : nullptr,
-        useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr,
-        useIHash ? MakeCompareImpl(keyType) : nullptr);
+        GetHash(*keyType, useIHash), GetEquate(*keyType, useIHash),
+        GetCompare(*keyType, useIHash));
 }
 
 #define DEFINE_HASHED_SINGLE_FIXED_MAP_OPT(xType) \

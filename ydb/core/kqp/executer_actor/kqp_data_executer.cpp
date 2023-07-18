@@ -625,7 +625,7 @@ private:
     bool ShardPrepared(TShardState& state, const NKikimrTxColumnShard::TEvProposeTransactionResult& result) {
         return ShardPreparedImpl(state, result);
     }
- 
+
     bool ShardPrepared(TShardState& state, const NKikimrPQ::TEvProposeTransactionResult& result) {
         return ShardPreparedImpl(state, result);
     }
@@ -2134,7 +2134,7 @@ private:
             ExecuteDataComputeTask(taskId, shareMailbox);
         }
 
-        if (ComputeTasks.size() == 0 && RemoteComputeTasks.size() == 1) {
+        if (ComputeTasks.size() == 0 && RemoteComputeTasks.size() == 1 && !UnknownAffectedShardCount) {
             // query affects a single key or shard, so it might be more effective
             // to execute this task locally so we can avoid useless overhead for remote task launching.
             for(auto& [shardId, tasks]: RemoteComputeTasks) {

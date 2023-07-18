@@ -134,10 +134,8 @@ public:
 
     private:
         void Reinit() {
-            with_lock (Mutex) {
-                for (auto& v : Registered) {
-                    v.ResetRandom();
-                }
+            for (auto& v : Registered) {
+                v.ResetRandom();
             }
         }
 

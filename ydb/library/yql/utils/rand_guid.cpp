@@ -14,19 +14,19 @@ TRandGuid::TRandGuid() {
 }
 
 void TRandGuid::ResetSeed() {
-    Rnd.Reset(new TMersenne<ui64>(GetCycleCount() + MicroSeconds() + GetPID()));
+    new (&Rnd_) TMersenne<ui64>(GetCycleCount() + MicroSeconds() + GetPID());
 }
 
 TString TRandGuid::GenGuid() {
     TGUID ret = {};
-    WriteUnaligned<ui64>(ret.dw, Rnd->GenRand());
-    ret.dw[2] = (ui32)Rnd->GenRand();
+    WriteUnaligned<ui64>(ret.dw, GetRnd().GenRand());
+    ret.dw[2] = (ui32)GetRnd().GenRand();
     ret.dw[3] = AtomicIncrement(Counter);
 
     return GetGuidAsString(ret);
 }
 
 ui64 TRandGuid::GenNumber() {
-    return Rnd->GenRand();
+    return GetRnd().GenRand();
 }
 }

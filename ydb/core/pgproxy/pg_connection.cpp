@@ -435,7 +435,13 @@ protected:
         for (const auto& item : dataIn) {
             if (item.Value) {
                 const auto& value(item.Value.value());
-                dataOut << uint32_t(value.size()) << value;
+                if (std::holds_alternative<TString>(value)) {
+                    const auto& valueText(std::get<TString>(value));
+                    dataOut << uint32_t(valueText.size()) << valueText;
+                } else {
+                    const auto& valueBinary(std::get<std::vector<uint8_t>>(value));
+                    dataOut << uint32_t(valueBinary.size()) << valueBinary;
+                }
             } else {
                 dataOut << uint32_t(-1);
             }
@@ -452,7 +458,7 @@ protected:
                 << uint32_t(field.DataType)
                 << uint16_t(field.DataTypeSize)
                 << uint32_t(field.DataTypeModifier)
-                << uint16_t(0)          // format text
+                << uint16_t(field.Format)
                 ;
         }
     }

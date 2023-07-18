@@ -39,11 +39,11 @@ struct TEvPGEvents {
         uint32_t DataType;
         int16_t DataTypeSize;
         int32_t DataTypeModifier;
-        //uint16_t Format;
+        int16_t Format = 0; // 0 = text, 1 = binary
     };
 
     struct TRowValueField {
-        std::optional<TString> Value;
+        std::optional<std::variant<TString, std::vector<uint8_t>>> Value;
     };
 
     using TDataRow = std::vector<TRowValueField>;

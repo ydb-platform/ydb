@@ -19,6 +19,8 @@ target_link_libraries(pgwire PUBLIC
   api-grpc
   cpp-client-ydb_driver
   cpp-client-draft
+  yql-parser-pg_wrapper
+  udf-service-exception_policy
 )
 target_sources(pgwire PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/apps/pgwire/main.cpp

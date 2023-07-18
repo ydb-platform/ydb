@@ -14,6 +14,7 @@ target_link_libraries(ydb-core-pgproxy PUBLIC
   yutil
   cpp-actors-core
   cpp-actors-protos
+  cpp-string_utils-base64
   ydb-core-base
   ydb-core-protos
   ydb-core-raw_socket

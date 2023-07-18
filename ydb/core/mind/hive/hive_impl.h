@@ -192,6 +192,7 @@ protected:
     friend class TTxMonEvent_ResumeTablet;
     friend class TTxMonEvent_InitMigration;
     friend class TTxMonEvent_QueryMigration;
+    friend class TTxMonEvent_RebalanceFromScratch;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;

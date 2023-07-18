@@ -112,4 +112,5 @@ enum ETxTypes {
     TXTYPE_REQUEST_TABLET_OWNERS = 59                     [(TxTypeOpts) = {Name: "TxRequestTabletOwners"}];
     TXTYPE_REASSIGN_GROUPS_ON_DECOMMIT = 60               [(TxTypeOpts) = {Name: "TxReassignGroupsOnDecommit"}];
     TXTYPE_UPDATE_TABLETS_OBJECT = 61                     [(TxTypeOpts) = {Name: "TxUpdateTabletsObject"}];
+    TXTYPE_MON_REBALANCE_FROM_SCRATCH = 62                [(TxTypeOpts) = {Name: "TxMonRebalanceFromScratch"}];
 }

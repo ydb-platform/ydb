@@ -1352,7 +1352,7 @@ public:
             << aliveNodes << "/" << nodes << "</td></tr>";*/
         out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << (tablets == 0 ? 0 : runningTablets * 100 / tablets) << "% "
             << runningTablets << "/" << tablets << "</td></tr>";
-        out << "<tr><td title='Rebalance all tablets' style='cursor:pointer' onclick='rebalanceTablets(this)'>Balancer: </td><td id='balancerProgress'>"
+        out << "<tr><td><button type='button' class='btn btn-link' data-toggle='modal' data-target='#rebalance'>Balancer: </button></td><td id='balancerProgress'>"
             << (Self->BalancerProgress >= 0 ? Sprintf("%d%%", Self->BalancerProgress) : TString()) << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Wait Queue:" << "</td><td id='waitQueue'>" << Self->BootQueue.WaitQueue.size() << "</td></tr>";
@@ -1540,6 +1540,48 @@ public:
                </div>
                )___";
 
+        out << R"___(
+               <div class='modal fade' id='rebalance' role='dialog'>
+                   <div class='modal-dialog' style='width:60%'>
+                       <div class='modal-content'>
+                           <div class='modal-header'>
+                               <button type='button' class='close' data-dismiss='modal'>&times;</button>
+                               <h4 class='modal-title'>Rebalance tablets</h4>
+                           </div>
+                           <div class='modal-body'>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <h2> Run Balancer</h2>
+                                       <label for='balancer_max_movements'>Max movements</label>
+                                       <div in='balancer_max_movements' class='input-group'>
+                                           <input id='balancer_max_movements' type='number' value='1000' class='form-control'>
+                                       </div>
+                                       <button type='submit' class='btn btn-primary' onclick='rebalanceTablets()' data-dismiss='modal'>Run</button>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <hr>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <h2> Rebalance ALL tablets FROM SCRATCH</h2>
+                                       <label for='tenant_name'> Please enter the tenant name to confirm you know what you are doing</label>
+                                       <div in='tenant_name' class='input-group' style='width:100%'>
+                                           <input id='tenant_name' type='text' class='form-control'>
+                                       </div>
+                                       <button id='button_rebalance' type='submit' class='btn btn-danger' onclick='rebalanceTabletsFromScratch();' data-dismiss='modal'>Run</button>
+                                   </div>
+                              </div>
+                           </div>
+                           <div class='modal-footer'>
+                               <button type='button' class='btn btn-default' data-dismiss='modal'>Cancel</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+               )___";
         out << "<script>";
         out << "var hiveId = '" << Self->HiveId << "';";
         out << "var tablets = [";
@@ -1707,9 +1749,15 @@ public:
                 $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); }});
             }
 
-            function rebalanceTablets(element) {
+            function rebalanceTablets() {
                 $('#balancerProgress').html('o.O');
-                $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance'});
+                var max_movements = $('#balancer_max_movements').val();
+                $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
+            }
+
+            function rebalanceTabletsFromScratch(element) {
+                var tenant_name = $('#tenant_name').val();
+                $.ajax({url:'app?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name});
             }
 
             function toggleAlert() {
@@ -2241,6 +2289,45 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         Self->StartHiveBalancer(MaxMovements);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+    }
+};
+
+class TTxMonEvent_RebalanceFromScratch : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    TString TenantName;
+
+    TTxMonEvent_RebalanceFromScratch(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+        TenantName = ev->Get()->Cgi().Get("tenantName");
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }
+
+    bool ValidateTenantName() {
+        auto domainId = Self->GetMySubDomainKey();
+        auto* domainInfo = Self->FindDomain(domainId);
+        if (!domainInfo || !domainInfo->Path) {
+            // In the non-normal case of not knowing our domain, allow anything
+            return true;
+        }
+        return TenantName == domainInfo->Path;
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext&) override {
+        if (!ValidateTenantName()) {
+            return true;
+        }
+        for (const auto& tablet : Self->Tablets) {
+            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+        }
         return true;
     }
 
@@ -3633,6 +3720,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Rebalance") {
         return Execute(new TTxMonEvent_Rebalance(ev->Sender, ev, this), ctx);
+    }
+    if (page == "RebalanceFromScratch") {
+        return Execute(new TTxMonEvent_RebalanceFromScratch(ev->Sender, ev, this), ctx);
     }
     if (page == "LandingData") {
         return Execute(new TTxMonEvent_LandingData(ev->Sender, ev, this), ctx);

@@ -34,7 +34,7 @@ SRCS(
 
 IF (BUILD_TYPE != "DEBUG")
     SRCS(
-        big_cluster.cpp
+#        big_cluster.cpp
         get.cpp
         discover.cpp
         multiget.cpp

@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
 
         const NYql::TAstNode* writeNode = nullptr;
         VisitAstNodes(*res.Root, [&writeNode] (const NYql::TAstNode& node) {
-            const bool isWriteNode = node.IsList() && node.GetChildrenCount() > 0 
+            const bool isWriteNode = node.IsList() && node.GetChildrenCount() > 0
                 && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "Write!";
             if (isWriteNode) {
                 writeNode = &node;
@@ -89,6 +89,26 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         UNIT_ASSERT(writeNode->GetChildrenCount() > 5);
         const auto optionsQListNode = writeNode->GetChild(5);
         UNIT_ASSERT(optionsQListNode->ToString().Contains("'default_values"));
+    }
+
+    Y_UNIT_TEST(InsertStmt_Returning) {
+        auto res = PgSqlToYql("INSERT INTO plato.Input VALUES (1, 1) RETURNING *");
+        UNIT_ASSERT(res.Root);
+        const NYql::TAstNode* writeNode = nullptr;
+        VisitAstNodes(*res.Root, [&writeNode] (const NYql::TAstNode& node) {
+            const bool isWriteNode = node.IsList() && node.GetChildrenCount() > 0
+                && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "Write!";
+            if (isWriteNode) {
+                writeNode = &node;
+            }
+        });
+        UNIT_ASSERT(writeNode);
+        UNIT_ASSERT(writeNode->GetChildrenCount() > 5);
+        const auto optionsQListNode = writeNode->GetChild(5);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            optionsQListNode->ToString(),
+            R"('('('mode 'append) '('returning '((PgResultItem '"" (Void) (lambda '() (PgStar)))))))"
+        );
     }
 
     Y_UNIT_TEST(DeleteStmt) {
@@ -106,6 +126,26 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
+
+    Y_UNIT_TEST(DeleteStmt_Returning) {
+        auto res = PgSqlToYql("DELETE FROM plato.Input RETURNING name, price AS new_price");
+        UNIT_ASSERT(res.Root);
+        const NYql::TAstNode* writeNode = nullptr;
+        VisitAstNodes(*res.Root, [&writeNode] (const NYql::TAstNode& node) {
+            const bool isWriteNode = node.IsList() && node.GetChildrenCount() > 0
+                && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "Write!";
+            if (isWriteNode) {
+                writeNode = &node;
+            }
+        });
+        UNIT_ASSERT(writeNode);
+        UNIT_ASSERT(writeNode->GetChildrenCount() > 5);
+        const auto optionsQListNode = writeNode->GetChild(5);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            optionsQListNode->GetChild(1)->GetChild(2)->ToString(),
+            R"('('returning '((PgResultItem '"name" (Void) (lambda '() (PgColumnRef '"name"))) (PgResultItem '"new_price" (Void) (lambda '() (PgColumnRef '"price"))))))"
+        );
     }
 
     Y_UNIT_TEST(CreateTableStmt_Basic) {
@@ -221,22 +261,22 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         auto issue = *(res.Issues.begin());
         UNIT_ASSERT(issue.GetMessage().find("PK column does not belong to table") != TString::npos);
     }
-    
+
     Y_UNIT_TEST(CreateTableStmt_AliasSerialToIntType) {
         auto res = PgSqlToYql("CREATE TABLE t (a SerIAL)");
         UNIT_ASSERT(res.Root);
-        
+
         TString program = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4))))))) 
-                (let world (CommitAll! world)) 
+                (let world (Write! world (DataSink '"kikimr" '"") (Key '('tablescheme (String '"t"))) (Void) '('('mode 'create) '('columns '('('a (PgType 'int4)))))))
+                (let world (CommitAll! world))
                 (return world))
         )";
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
-    
+
     Y_UNIT_TEST(CreateTableStmt_Temp) {
         auto res = PgSqlToYql("create temp table t ()");
         UNIT_ASSERT(res.Root);
@@ -260,24 +300,24 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         TString program = fmt::format(R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
-                (let output (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"server_version_num" (Void) (lambda '() (PgConst '"{}" (PgType 'text)))))))))) '('set_ops '('push))))) 
+                (let output (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"server_version_num" (Void) (lambda '() (PgConst '"{}" (PgType 'text)))))))))) '('set_ops '('push)))))
                 (let result_sink (DataSink 'result))
-                (let world (Write! world result_sink (Key) output '('('type) '('autoref)))) 
-                (let world (Commit! world result_sink)) 
-                (let world (CommitAll! world)) 
+                (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+                (let world (Commit! world result_sink))
+                (let world (CommitAll! world))
                 (return world)
             )
         )", NYql::GetPostgresServerVersionNum());
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
-    
+
     TMap<TString, TString> GetParamNameToPgType(const NYql::TAstNode& root) {
         TMap<TString, TString> actualParamToType;
 
         VisitAstNodes(root, [&actualParamToType] (const NYql::TAstNode& node) {
-            bool isDeclareNode = 
-                node.IsListOfSize(3) && node.GetChild(0)->IsAtom() 
+            bool isDeclareNode =
+                node.IsListOfSize(3) && node.GetChild(0)->IsAtom()
                 && node.GetChild(0)->GetContent() == "declare";
             if (isDeclareNode) {
                 const auto varNameNode = node.GetChild(1);
@@ -290,20 +330,20 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                 actualParamToType[TString(varName)] = varTypeNode->GetChild(1)->ToString();
             }
         });
-        
+
         return actualParamToType;
     }
-    
+
     Y_UNIT_TEST(ParamRef_IntAndPoint) {
         TTranslationSettings settings;
-        
+
         settings.PgParameterTypeOids = {NYql::NPg::LookupType("int4").TypeId, NYql::NPg::LookupType("point").TypeId};
         auto res = SqlToYqlWithMode(
             R"(select $1 as "x", $2 as "y")",
-            NSQLTranslation::ESqlMode::QUERY, 
-            10, 
-            {}, 
-            EDebugOutput::None, 
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
             false,
             settings);
         TMap<TString, TString> expectedParamToType {
@@ -321,10 +361,10 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         settings.PgParameterTypeOids = {NYql::NPg::LookupType("int4").TypeId, NYql::NPg::LookupType("unknown").TypeId, NYql::NPg::LookupType("int4").TypeId};
         auto res = SqlToYqlWithMode(
             R"(select $1 as "x", $2 as "y", $3 as "z")",
-            NSQLTranslation::ESqlMode::QUERY, 
-            10, 
-            {}, 
-            EDebugOutput::None, 
+            NSQLTranslation::ESqlMode::QUERY,
+            10,
+            {},
+            EDebugOutput::None,
             false,
             settings);
         TMap<TString, TString> expectedParamToType {
@@ -351,7 +391,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         auto actualParamToTypes = GetParamNameToPgType(*res.Root);
         UNIT_ASSERT_VALUES_EQUAL(expectedParamToType, actualParamToTypes);
     }
-    
+
     Y_UNIT_TEST(DropTableStmt) {
         auto res = PgSqlToYql("drop table plato.Input");
         TString program = R"(

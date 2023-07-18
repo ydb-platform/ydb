@@ -350,7 +350,7 @@ protected:
 
         // Send checkpoints to output channels.
         ProcessOutputsImpl(ERunStatus::Finished);
-        return true;  // returns true, when channels were handled syncronously
+        return true;  // returns true, when channels were handled synchronously
     }
 
     void ProcessOutputsImpl(ERunStatus status) {
@@ -379,8 +379,7 @@ protected:
 
             if (!outputChannel.Finished || Checkpoints) {
                 if (Channels->CanSendChannelData(channelId)) {
-                    auto peerState = Channels->GetOutputChannelInFlightState(channelId);
-                    DrainOutputChannel(outputChannel, peerState);
+                    DrainOutputChannel(outputChannel);
                 } else {
                     ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
                 }
@@ -1265,9 +1264,9 @@ protected:
 
 protected:
 
-    void UpdateBlocked(TOutputChannelInfo& outputChannel, i64 toSend) {
+    void UpdateBlocked(TOutputChannelInfo& outputChannel, const bool blocked) {
         if (Y_UNLIKELY(outputChannel.Stats)) {
-            if (toSend <= 0) {
+            if (blocked) {
                 outputChannel.Stats->BlockedByCapacity++;
                 if (!outputChannel.Stats->StartBlockedTime) {
                     outputChannel.Stats->StartBlockedTime = TInstant::Now();
@@ -1287,43 +1286,30 @@ private:
         return MemoryQuota->GetProfileStats();
     }
 
-    virtual void DrainOutputChannel(TOutputChannelInfo& outputChannel, const TDqComputeActorChannels::TPeerState& peerState) {
+    virtual void DrainOutputChannel(TOutputChannelInfo& outputChannel) {
         YQL_ENSURE(!outputChannel.Finished || Checkpoints);
 
         const bool wasFinished = outputChannel.Finished;
         auto channelId = outputChannel.Channel->GetChannelId();
 
-        const ui32 allowedOvercommit = AllowedChannelsOvercommit();
-
-        const i64 toSend = peerState.PeerFreeSpace + allowedOvercommit - peerState.InFlightBytes;
-
         CA_LOG_T("About to drain channelId: " << channelId
             << ", hasPeer: " << outputChannel.HasPeer
-            << ", peerFreeSpace: " << peerState.PeerFreeSpace
-            << ", inFlightBytes: " << peerState.InFlightBytes
-            << ", inFlightRows: " << peerState.InFlightRows
-            << ", inFlightCount: " << peerState.InFlightCount
-            << ", allowedOvercommit: " << allowedOvercommit
-            << ", toSend: " << toSend
             << ", finished: " << outputChannel.Channel->IsFinished());
 
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
 
-        UpdateBlocked(outputChannel, toSend);
+        UpdateBlocked(outputChannel, !Channels->HasFreeMemoryInChannel(channelId));
 
-        i64 remains = toSend;
-        while (remains > 0 && (!outputChannel.Finished || Checkpoints)) {
-            ui32 sent = this->SendChannelDataChunk(outputChannel);
-            if (sent == 0) {
-                break;
-            }
-            remains -= sent;
+        ui32 sentChunks = 0;
+        while ((!outputChannel.Finished || Checkpoints) &&
+            Channels->HasFreeMemoryInChannel(outputChannel.ChannelId) && SendChannelDataChunk(outputChannel)) {
+            ++sentChunks;
         }
 
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
-        ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || remains != toSend;
+        ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
     }
 
     ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel) {

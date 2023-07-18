@@ -22,14 +22,25 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(WriteRead) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         TTopicClient client(setup->GetDriver());
-
-        auto writeSettings = TWriteSessionSettings()
-            .Path(setup->GetTestTopic())
-            .MessageGroupId("group_id");
-        auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-        TString message = "message";
-        UNIT_ASSERT(writeSession->Write(message));
-        writeSession->Close();
+        
+        {
+            auto writeSettings = TWriteSessionSettings()
+                        .Path(setup->GetTestTopic())
+                        .ProducerId(setup->GetTestMessageGroupId())
+                        .MessageGroupId(setup->GetTestMessageGroupId());
+            auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+            UNIT_ASSERT(writeSession->Write("message_using_MessageGroupId"));
+            writeSession->Close();
+        }
+        {
+            auto writeSettings = TWriteSessionSettings()
+                        .Path(setup->GetTestTopic())
+                        .ProducerId(setup->GetTestMessageGroupId())
+                        .PartitionId(0);
+            auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+            UNIT_ASSERT(writeSession->Write("message_using_PartitionId"));
+            writeSession->Close();
+        }
 
         auto readSettings = TReadSessionSettings()
             .ConsumerName("shared/user")
@@ -49,8 +60,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         dataReceived.Commit();
 
         auto& messages = dataReceived.GetMessages();
-        UNIT_ASSERT(messages.size() == 1);
-        UNIT_ASSERT(messages[0].GetData() == message);
+        UNIT_ASSERT(messages.size() == 2);
+        UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
+        UNIT_ASSERT(messages[1].GetData() == "message_using_PartitionId");
     }
 
     Y_UNIT_TEST(MaxByteSizeEqualZero) {

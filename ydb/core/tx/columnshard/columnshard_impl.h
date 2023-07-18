@@ -349,7 +349,7 @@ private:
             for (auto&& i : ActiveCompactionInfo) {
                 if (TMonotonic::Now() - i.second.GetStartTime() > NOlap::TCompactionLimits::CompactionTimeout) {
                     AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction");
-                    Y_VERIFY(false);
+                    Y_VERIFY_DEBUG(false);
                 }
             }
         }

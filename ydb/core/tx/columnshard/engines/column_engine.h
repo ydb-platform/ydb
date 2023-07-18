@@ -35,7 +35,7 @@ struct TCompactionLimits {
 
     static constexpr const ui64 WARNING_INSERTED_PORTIONS_SIZE = 0.5 * WARNING_OVERLOAD_GRANULE_SIZE;
     static constexpr const ui64 WARNING_INSERTED_PORTIONS_COUNT = 100;
-    static constexpr const TDuration CompactionTimeout = TDuration::Seconds(120);
+    static constexpr const TDuration CompactionTimeout = TDuration::Minutes(3);
 
     ui32 GoodBlobSize{MIN_GOOD_BLOB_SIZE};
     ui32 GranuleBlobSplitSize{MAX_BLOB_SIZE};

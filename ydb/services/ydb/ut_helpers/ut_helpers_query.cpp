@@ -34,17 +34,16 @@ TString CreateQuerySession(const TGRpcClientConfig& clientConfig) {
     return sessionId;
 }
 
-using TProcessor = typename NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
-void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id,
-    int code, bool& allDoneOk)
+NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, const TGRpcClientConfig& clientConfig,
+    const TString& id, int code, bool& allDoneOk)
 {
     const Ydb::StatusIds::StatusCode expected = static_cast<Ydb::StatusIds::StatusCode>(code);
-    NGrpc::TGRpcClientLow clientLow;
     auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
 
     Ydb::Query::AttachSessionRequest request;
     request.set_session_id(id);
 
+    using TProcessor = typename NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
     auto promise = NThreading::NewPromise<TProcessor>();
     auto cb = [&allDoneOk, promise, expected](TGrpcStatus grpcStatus, TProcessor processor) mutable {
         UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
@@ -53,7 +52,7 @@ void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id,
             UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
             allDoneOk &= (resp->status() == expected);
             if (!allDoneOk) {
-                Cerr << "Got attach response: " << resp->DebugString() << Endl;
+                Cerr << "Expected status: " << expected << ", got response: " << resp->DebugString() << Endl;
             }
             promise.SetValue(processor);
         });
@@ -64,8 +63,12 @@ void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id,
         cb,
         &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession);
 
-    auto provider = promise.GetFuture().GetValueSync();
-    provider->Cancel();
+    return promise.GetFuture().GetValueSync();
+}
+
+void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id, int code, bool& allDoneOk) {
+    NGrpc::TGRpcClientLow clientLow;
+    CheckAttach(clientLow, clientConfig, id, code, allDoneOk)->Cancel();
 }
 
 }

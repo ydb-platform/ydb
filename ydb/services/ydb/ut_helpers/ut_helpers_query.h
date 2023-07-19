@@ -6,7 +6,10 @@
 namespace NTestHelpers {
 
 TString CreateQuerySession(const NGrpc::TGRpcClientConfig& clientConfig);
-void CheckAttach(const NGrpc::TGRpcClientConfig& clientConfig, const TString& id,
-    int expected, bool& allDoneOk);
+
+NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, const NGrpc::TGRpcClientConfig& clientConfig,
+    const TString& id, int code, bool& allDoneOk);
+
+void CheckAttach(const NGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 
 }

@@ -96,11 +96,17 @@ void Init(
         );
     }
 
+    NFq::TSigner::TPtr signer;
+    if (protoConfig.GetTokenAccessor().GetHmacSecretFile()) {
+        signer = ::NFq::CreateSignerFromFile(protoConfig.GetTokenAccessor().GetHmacSecretFile());
+    }
+
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
         auto controlPlaneProxy = NFq::CreateControlPlaneProxyActor(
             protoConfig.GetControlPlaneProxy(),
             protoConfig.GetCompute(),
             protoConfig.GetCommon(),
+            signer,
             yqSharedResources,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"),
@@ -294,7 +300,7 @@ void Init(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
-                protoConfig.GetTokenAccessor(),
+                signer,
                 yqSharedResources,
                 credentialsFactory,
                 pqCmConnections,
@@ -332,7 +338,7 @@ void Init(
             TAppData::TimeProvider,
             TAppData::RandomProvider,
             serviceCounters.Counters,
-            protoConfig.GetTokenAccessor());
+            signer);
 
         actorRegistrator(MakeYqPrivateProxyId(), proxyPrivate);
     }

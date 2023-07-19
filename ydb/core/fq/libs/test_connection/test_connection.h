@@ -46,7 +46,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
+        const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,

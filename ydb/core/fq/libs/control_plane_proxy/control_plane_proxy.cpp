@@ -433,6 +433,7 @@ class TCreateConnectionInYDBActor :
     TString Scope;
     TTableClientPtr TableClient;
     TString ObjectStorageEndpoint;
+    NFq::TSigner::TPtr Signer;
 
 public:
     TCreateConnectionInYDBActor(
@@ -445,6 +446,7 @@ public:
         TEventRequest event,
         ui32 cookie,
         const TString& scope,
+        const NFq::TSigner::TPtr& signer,
         TDuration requestTimeout)
         : Sender(sender)
         , Counters(counters)
@@ -455,7 +457,8 @@ public:
         , Scope(scope)
         , TableClient(CreateNewTableClient(
               computeConfig, yqSharedResources, credentialsProviderFactory))
-        , ObjectStorageEndpoint(objectStorageEndpoint) { }
+        , ObjectStorageEndpoint(objectStorageEndpoint)
+        , Signer(signer) { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_CREATE_CONNECTION_IN_YDB";
 
@@ -524,20 +527,69 @@ public:
         session
             .ExecuteSchemeQuery(fmt::format(
                 R"(
+                    {upsert_object};
                     CREATE EXTERNAL DATA SOURCE {external_source} WITH (
                         SOURCE_TYPE="ObjectStorage",
-                        LOCATION="{location}",
-                        AUTH_METHOD="NONE"
+                        LOCATION="{location}"
+                        {auth_params}
                     );
                 )",
                 "external_source"_a = EncloseAndEscapeString(request.content().name(), '`'),
-                "location"_a = ObjectStorageEndpoint + "/" + bucketName + "/"))
+                "location"_a = ObjectStorageEndpoint + "/" + bucketName + "/",
+                "upsert_object"_a = CreateSecretObjectQuery(request.content().setting().object_storage().auth(), request.content().name()),
+                "auth_params"_a = CreateAuthParamsQuery(request.content().setting().object_storage().auth(), request.content().name())))
             .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(),
                         self = SelfId()](const TAsyncStatus& future) {
                 actorSystem->Send(
                     self,
                     new TEvPrivate::TEvCreateConnectionExecutionResponse(std::move(future)));
             });
+    }
+
+    TString CreateSecretObjectQuery(const FederatedQuery::IamAuth& auth, const TString& name) const {
+        using namespace fmt::literals;
+        switch (auth.identity_case()) {
+        case FederatedQuery::IamAuth::kServiceAccount: {
+            if (!Signer) {
+                return {};
+            }
+            return fmt::format(R"(
+                UPSERT OBJECT {external_source} (TYPE SECRET) WITH value={signature};
+            )",
+            "external_source"_a = EncloseAndEscapeString(name, '`'),
+            "signature"_a =  EncloseAndEscapeString(SignAccountId(auth.service_account().id()), '`'));
+        }
+        case FederatedQuery::IamAuth::kNone:
+        case FederatedQuery::IamAuth::kCurrentIam:
+        // Do not replace with default. Adding a new auth item should cause a compilation error
+        case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
+            return {};
+        }
+    }
+
+    TString CreateAuthParamsQuery(const FederatedQuery::IamAuth& auth, const TString& name) const {
+        using namespace fmt::literals;
+        switch (auth.identity_case()) {
+        case FederatedQuery::IamAuth::kNone:
+            return R"(, AUTH_METHOD="NONE")";
+        case FederatedQuery::IamAuth::kServiceAccount:
+            return fmt::format(R"(,
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID={service_account_id},
+                SERVICE_ACCOUNT_SECRET_NAME={secret_name}
+            )",
+            "service_account_id"_a = EncloseAndEscapeString(auth.service_account().id(), '"'),
+            "external_source"_a = EncloseAndEscapeString(name, '"'),
+            "secret_name"_a = EncloseAndEscapeString(Signer ? name : TString{}, '"'));
+        case FederatedQuery::IamAuth::kCurrentIam:
+        // Do not replace with default. Adding a new auth item should cause a compilation error
+        case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
+            return {};
+        }
+    }
+
+    TString SignAccountId(const TString& id) const {
+        return Signer ? Signer->SignAccountId(id) : TString{};
     }
 
     void Handle(TEvPrivate::TEvCreateConnectionExecutionResponse::TPtr& event) {
@@ -1608,12 +1660,14 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
     const bool QuotaManagerEnabled;
     NConfig::TComputeConfig ComputeConfig;
     TActorId AccessService;
+    NFq::TSigner::TPtr Signer;
 
 public:
     TControlPlaneProxyActor(
         const NConfig::TControlPlaneProxyConfig& config,
         const NConfig::TComputeConfig& computeConfig,
         const NConfig::TCommonConfig& commonConfig,
+        const ::NFq::TSigner::TPtr& signer,
         const TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -1622,7 +1676,9 @@ public:
         , Config(config, computeConfig, commonConfig)
         , YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
-        , QuotaManagerEnabled(quotaManagerEnabled) { }
+        , QuotaManagerEnabled(quotaManagerEnabled)
+        , Signer(signer)
+        {}
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY";
 
@@ -2479,6 +2535,7 @@ private:
                 ev,
                 cookie,
                 scope,
+                Signer,
                 Config.RequestTimeout));
             return;
         }
@@ -3249,6 +3306,7 @@ IActor* CreateControlPlaneProxyActor(
     const NConfig::TControlPlaneProxyConfig& config,
     const NConfig::TComputeConfig& computeConfig,
     const NConfig::TCommonConfig& commonConfig,
+    const ::NFq::TSigner::TPtr& signer,
     const TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
@@ -3257,6 +3315,7 @@ IActor* CreateControlPlaneProxyActor(
         config,
         computeConfig,
         commonConfig,
+        signer,
         yqSharedResources,
         credentialsProviderFactory,
         counters,

@@ -384,6 +384,7 @@ private:
             Config,
             ComputeConfig,
             CommonConfig,
+            nullptr,
             NFq::TYqSharedResources::TPtr{},
             NKikimr::TYdbCredentialsProviderFactory(nullptr),
             MakeIntrusive<::NMonitoring::TDynamicCounters>(),

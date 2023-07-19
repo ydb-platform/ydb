@@ -101,6 +101,10 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::NOT_FOUND);
         }
 
+        if (record.GetResponse().GetSessionStatus() != Ydb::Table::KeepAliveResult::SESSION_STATUS_READY) {
+            return ReplyFinishStream(Ydb::StatusIds::SESSION_BUSY);
+        }
+
         SubscribeClientLost();
 
         SendAttachResult(record.GetStatus());

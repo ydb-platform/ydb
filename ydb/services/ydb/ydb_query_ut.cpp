@@ -44,4 +44,28 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         UNIT_ASSERT(allDoneOk);
     }
+
+    Y_UNIT_TEST(TestAttachTwice) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        NGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+        CheckAttach(clientConfig, sessionId, Ydb::StatusIds::SESSION_BUSY, allDoneOk);
+
+        p->Cancel();
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
 }

@@ -658,6 +658,12 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
+    if (Config.GetPartitionConfig().HasMirrorFrom()) {
+        ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
+    } else {
+        ManageWriteTimestampEstimate = IsLocalDC;
+    }
+
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
     WriteQuota.ConstructInPlace(Config.GetPartitionConfig().GetBurstSize(),
@@ -700,12 +706,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       IsServerless,
                                       FolderId);
     TotalChannelWritesByHead.resize(NumChannels);
-
-    if (Config.GetPartitionConfig().HasMirrorFrom()) {
-        ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
-    } else {
-        ManageWriteTimestampEstimate = IsLocalDC;
-    }
 
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),

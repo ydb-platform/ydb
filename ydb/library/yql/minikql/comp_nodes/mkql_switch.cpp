@@ -526,6 +526,9 @@ public:
 
             block = next;
 
+            const auto posPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetPosition() }, "pos_ptr", block);
+            new StoreInst(ConstantInt::get(indexType, 0), posPtr, block);
+
             const auto plus = BinaryOperator::CreateAdd(index, ConstantInt::get(index->getType(), 1), "plus", block);
             new StoreInst(plus, indexPtr, block);
             const auto flush = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, plus, ConstantInt::get(plus->getType(), Handlers.size()), "flush", block);

@@ -163,10 +163,12 @@ public:
 
         if (IsDebugLogEnabled()) {
             auto sb = TStringBuilder() << "ActorState: " << CurrentStateFuncName()
-                << ", waiting for " << PendingComputeActors.size() << " compute actor(s) and "
+                << ", waiting for " << (Planner ? Planner->GetPendingComputeActors().size() : 0) << " compute actor(s) and "
                 << notFinished << " datashard(s): ";
-            for (const auto& shardId : PendingComputeActors) {
-                sb << "CA " << shardId.first << ", ";
+            if (Planner) {
+                for (const auto& shardId : Planner->GetPendingComputeActors()) {
+                    sb << "CA " << shardId.first << ", ";
+                }
             }
             for (const auto& [shardId, shardState] : ShardStates) {
                 if (shardState.State != TShardState::EState::Finished) {
@@ -1343,6 +1345,7 @@ private:
                 return TasksGraph.GetTask(it->second);
             }
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.Type = TTaskMeta::TTaskType::DataShard;
             task.Meta.ExecuterId = SelfId();
             task.Meta.ShardId = shardId;
             shardTasks.emplace(shardId, task.Id);
@@ -1527,6 +1530,7 @@ private:
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.ExecuterId = SelfId();
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }
@@ -1620,44 +1624,6 @@ private:
         Send(MakePipePeNodeCacheID(GetUseFollowers()), new TEvPipeCache::TEvForward(ev.release(), shardId, true), 0, 0, std::move(traceId));
 
         auto result = ShardStates.emplace(shardId, std::move(shardState));
-        YQL_ENSURE(result.second);
-    }
-
-    void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox) {
-        auto& task = TasksGraph.GetTask(taskId);
-        NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task);
-
-        TComputeRuntimeSettings settings;
-        if (Deadline) {
-            settings.Timeout = *Deadline - TAppData::TimeProvider->Now();
-        }
-        //settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
-        settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
-        settings.FailOnUndelivery = true;
-        settings.StatsMode = GetDqStatsMode(Request.StatsMode);
-        settings.UseSpilling = false;
-
-        TComputeMemoryLimits limits;
-        limits.ChannelBufferSize = 50_MB;
-        limits.MkqlLightProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(500_MB, Request.MkqlMemoryLimit) : 500_MB;
-        limits.MkqlHeavyProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(2_GB, Request.MkqlMemoryLimit) : 2_GB;
-
-        auto& taskOpts = taskDesc->GetProgram().GetSettings();
-        auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
-            ? limits.MkqlHeavyProgramMemoryLimit
-            : limits.MkqlLightProgramMemoryLimit;
-
-        limits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(limit, limit);
-
-        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, taskDesc, AsyncIoFactory,
-            AppData()->FunctionRegistry, settings, limits, NWilson::TTraceId(), TasksGraph.GetMeta().GetArenaIntrusivePtr());
-
-        auto computeActorId = shareMailbox ? RegisterWithSameMailbox(computeActor) : Register(computeActor);
-        task.ComputeActorId = computeActorId;
-
-        LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
-
-        auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat());
         YQL_ENSURE(result.second);
     }
 
@@ -2128,42 +2094,26 @@ private:
         NWilson::TSpan sendTasksSpan(TWilsonKqp::DataExecuterSendTasksAndTxs, ExecuterStateSpan.GetTraceId(), "SendTasksAndTxs", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size(), DatashardTxs.size());
 
-        // first, start compute tasks
-        bool shareMailbox = (ComputeTasks.size() <= 1);
-        for (ui64 taskId : ComputeTasks) {
-            ExecuteDataComputeTask(taskId, shareMailbox);
+        for (auto& [shardId, tasks] : RemoteComputeTasks) {
+            auto it = ShardIdToNodeId.find(shardId);
+            YQL_ENSURE(it != ShardIdToNodeId.end());
+            for (ui64 taskId : tasks) {
+                auto& task = TasksGraph.GetTask(taskId);
+                task.Meta.NodeId = it->second;
+            }
         }
 
-        if (ComputeTasks.size() == 0 && RemoteComputeTasks.size() == 1 && !UnknownAffectedShardCount) {
-            // query affects a single key or shard, so it might be more effective
-            // to execute this task locally so we can avoid useless overhead for remote task launching.
-            for(auto& [shardId, tasks]: RemoteComputeTasks) {
-                for(ui64 taskId: tasks) {
-                    ExecuteDataComputeTask(taskId, true);
-                }
-            }
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, {}, GetSnapshot(),
+            Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
+            ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, !UnknownAffectedShardCount);
 
-        } else {
-            THashMap<ui64, TVector<ui64>> tasksPerNode;
-            for (auto& [shardId, tasks] : RemoteComputeTasks) {
-                auto it = ShardIdToNodeId.find(shardId);
-                YQL_ENSURE(it != ShardIdToNodeId.end());
-                for (ui64 taskId : tasks) {
-                    PendingComputeTasks.insert(taskId);
-                    tasksPerNode[it->second].emplace_back(taskId);
-                }
-            }
-
-            Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, std::move(tasksPerNode), GetSnapshot(),
-                Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-                ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */);
-            auto err = Planner->PlanExecution();
-            if (err) {
-                TlsActivationContext->Send(err.release());
-                return;
-            }
-            Planner->Submit();
+        auto err = Planner->PlanExecution();
+        if (err) {
+            TlsActivationContext->Send(err.release());
+            return;
         }
+
+        Planner->Submit();
 
         // then start data tasks with known actor ids of compute tasks
         for (auto& [shardId, shardTx] : DatashardTxs) {
@@ -2229,9 +2179,10 @@ private:
             << ", topicTxs: " << Request.TopicOperations.GetSize()
             << ", volatile: " << VolatileTx
             << ", immediate: " << ImmediateTx
-            << ", pending compute tasks" << PendingComputeTasks.size()
+            << ", pending compute tasks" << (Planner ? Planner->GetPendingComputeTasks().size() : 0)
             << ", useFollowers: " << GetUseFollowers());
 
+        // error
         LOG_T("Updating channels after the creation of compute actors");
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {

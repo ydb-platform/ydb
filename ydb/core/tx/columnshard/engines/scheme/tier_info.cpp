@@ -1,4 +1,4 @@
-#include "portion_info.h"
+#include "tier_info.h"
 
 namespace NKikimr::NOlap {
 

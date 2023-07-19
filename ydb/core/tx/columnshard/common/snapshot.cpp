@@ -1,5 +1,5 @@
-#include "portion_info.h"
+#include "snapshot.h"
 
 namespace NKikimr::NOlap {
 
-}
+};

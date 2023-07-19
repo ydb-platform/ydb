@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/switch_type.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NOlap {
 

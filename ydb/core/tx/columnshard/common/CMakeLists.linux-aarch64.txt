@@ -12,7 +12,11 @@ target_link_libraries(tx-columnshard-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  ydb-core-protos
+  libs-apache-arrow
 )
 target_sources(tx-columnshard-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/reverse_accessor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/scalars.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/snapshot.cpp
 )

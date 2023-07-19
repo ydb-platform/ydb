@@ -217,7 +217,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             // TODO: move to run actor priority selection
             *queryInternal.mutable_compute_connection() = computeDatabase.connection();
             TSet<TString> disabledConnections;
-            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME)) {
+            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources())) {
                 if (!Config->AvailableConnections.contains(connection.content().setting().connection_case())) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
@@ -230,7 +230,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             }
 
             TSet<TString> connectionIds;
-            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME);
+            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources());
             for (const auto& [_, connection]: connections) {
                 if (disabledConnections.contains(connection.meta().id())) {
                     continue;
@@ -239,7 +239,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
                 connectionIds.insert(connection.meta().id());
             }
 
-            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME);
+            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources());
             for (const auto& [_, binding]: bindings) {
                 if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
                     continue;
@@ -881,7 +881,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;
-            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME)) {
+            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources())) {
                 if (!Config->AvailableConnections.contains(connection.content().setting().connection_case())) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
@@ -894,7 +894,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             }
 
             TSet<TString> connectionIds;
-            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME);
+            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources());
             for (const auto& [_, connection]: connections) {
                 if (disabledConnections.contains(connection.meta().id())) {
                     continue;
@@ -903,7 +903,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                 connectionIds.insert(connection.meta().id());
             }
 
-            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME);
+            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources());
             for (const auto& [_, binding]: bindings) {
                 if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
                     continue;

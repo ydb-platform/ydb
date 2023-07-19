@@ -176,18 +176,21 @@ struct TRequestCounters {
 };
 
 template<typename T>
-THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName)
+THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources)
 {
     THashMap<TString, T> entities;
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         T entity;
         Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        const auto visibility = entity.content().acl().visibility();
+        if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
+            continue;
+        }
         const TString name = entity.content().name();
         if (auto it = entities.find(name); it != entities.end()) {
-            const auto visibility = entity.content().acl().visibility();
             if (visibility == FederatedQuery::Acl::PRIVATE) {
-                entities[name] = std::move(entity);
+                it->second = std::move(entity);
             }
         } else {
             entities[name] = std::move(entity);
@@ -198,12 +201,18 @@ THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultS
 }
 
 template<typename T>
-TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName)
+TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName, bool ignorePrivateSources)
 {
     TVector<T> entities;
     TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
-        Y_VERIFY(entities.emplace_back().ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        T entity;
+        Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        const auto visibility = entity.content().acl().visibility();
+        if (ignorePrivateSources && visibility == FederatedQuery::Acl::PRIVATE) {
+            continue;
+        }
+        entities.emplace_back(std::move(entity));
     }
     return entities;
 }

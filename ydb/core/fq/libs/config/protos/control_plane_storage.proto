@@ -70,4 +70,5 @@ message TControlPlaneStorageConfig {
     bool UseDbMapping = 30;
     string DbReloadPeriod = 31;
     bool DumpRawStatistics = 32;
+    bool IgnorePrivateSources = 33;
 }

@@ -486,7 +486,7 @@ public:
         ctx.Send(keyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResults->RequestUid,
             IntermediateResults->CreatedAtGeneration, IntermediateResults->CreatedAtStep,
-            IntermediateResults->Stat, status));
+            IntermediateResults->Stat, status, std::move(IntermediateResults->RefCountsIncr)));
         Die(ctx);
     }
 

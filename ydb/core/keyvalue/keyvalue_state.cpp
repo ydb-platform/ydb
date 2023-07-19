@@ -834,6 +834,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_REJECTED);
             intermediate->Response.SetErrorReason(str.Str());
+            DropRefCountsOnErrorInTx(std::move(intermediate->RefCountsIncr), db, ctx);
             return;
         }
     }
@@ -865,6 +866,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_INTERNALERROR);
             intermediate->Response.SetErrorReason(str.Str());
+            DropRefCountsOnErrorInTx(std::move(intermediate->RefCountsIncr), db, ctx);
             return;
         }
     }
@@ -881,6 +883,32 @@ void TKeyValueState::RequestComplete(THolder<TIntermediate> &intermediate, const
     Reply(intermediate, ctx, info);
     // Make sure there is no way for a successfull delete transaction to end without getting here
     PrepareCollectIfNeeded(ctx);
+}
+
+void TKeyValueState::DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db,
+        const TActorContext& ctx) {
+    for (const auto& [logoBlobId, initial] : refCountsIncr) {
+        Dereference(logoBlobId, db, ctx, initial);
+    }
+}
+
+void TKeyValueState::DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>& refCountsIncr, bool writesMade,
+        const TActorContext& /*ctx*/) {
+    auto pred = [&](const auto& item) {
+        const auto& [logoBlobId, initial] = item;
+        const auto it = RefCounts.find(logoBlobId);
+        Y_VERIFY(it != RefCounts.end() && it->second); // item must exist and have a refcount
+        if (it->second != 1) { // just drop the reference, item kept alive
+            --it->second;
+        } else if (initial && !writesMade) { // this was just generated BlobId and no writes were possibly made
+            RefCounts.erase(it);
+        } else { // this item has to be removed inside tx by rotation to Trash -- it may have been written somehow
+            return false;
+        }
+        return true;
+    };
+
+    refCountsIncr.erase(std::remove_if(refCountsIncr.begin(), refCountsIncr.end(), pred), refCountsIncr.end());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1597,9 +1625,7 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
     success = success && CheckCmds(intermediate, ctx, keys, info);
     success = success && CheckCmdGetStatus(intermediate, ctx, keys, info);
     if (!success) {
-        for (const auto& [logoBlobId, initial] : std::exchange(intermediate->RefCountsIncr, {})) {
-            Dereference(logoBlobId, db, ctx, initial);
-        }
+        DropRefCountsOnErrorInTx(std::exchange(intermediate->RefCountsIncr, {}), db, ctx);
     } else {
         // Read + validate
         CmdRead(intermediate, db, ctx);
@@ -2778,11 +2804,8 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
     TPrepareResult result = PrepareCommands(request, intermediate, info, ctx);
 
     if (result.WithError) {
-        for (const auto& [logoBlobId, initial] : std::exchange(intermediate->RefCountsIncr, {})) {
-            if (const auto it = RefCounts.find(logoBlobId); it != RefCounts.end() && !--it->second) {
-                RefCounts.erase(it);
-            }
-        }
+        DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
+        Y_VERIFY(intermediate->RefCountsIncr.empty());
 
         LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " PrepareExecuteTransactionRequest return flase, Marker# KV73"
@@ -3162,11 +3185,8 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     intermediate->ConcatCount = request.CmdConcatSize();
 
     if (error) {
-        for (const auto& [logoBlobId, initial] : std::exchange(intermediate->RefCountsIncr, {})) {
-            if (const auto it = RefCounts.find(logoBlobId); it != RefCounts.end() && !--it->second) {
-                RefCounts.erase(it);
-            }
-        }
+        DropRefCountsOnError(intermediate->RefCountsIncr, false, ctx);
+        Y_VERIFY(intermediate->RefCountsIncr.empty());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " PrepareIntermediate return flase, Marker# KV41");

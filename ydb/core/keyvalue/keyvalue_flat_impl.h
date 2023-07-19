@@ -163,6 +163,31 @@ protected:
         }
     };
 
+    struct TTxDropRefCountsOnError : NTabletFlatExecutor::ITransaction {
+        std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
+        TKeyValueFlat *Self;
+
+        TTxDropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, TKeyValueFlat *self)
+            : RefCountsIncr(std::move(refCountsIncr))
+            , Self(self)
+        {}
+
+        TTxType GetTxType() const override { return TXTYPE_DROP_REF_COUNTS_ON_ERROR; }
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Execute");
+            if (!Self->State.GetIsDamaged()) {
+                TSimpleDbFlat db(txc.DB);
+                Self->State.DropRefCountsOnErrorInTx(std::move(RefCountsIncr), db, ctx);
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Complete");
+        }
+    };
+
     struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {
         const THolder<NMon::TEvRemoteHttpInfo> Event;
         const TActorId RespondTo;
@@ -381,6 +406,10 @@ protected:
 
         CheckYellowChannels(ev->Get()->Stat);
         State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
+        State.DropRefCountsOnError(event.RefCountsIncr, true, ctx);
+        if (!event.RefCountsIncr.empty()) {
+            Execute(new TTxDropRefCountsOnError(std::move(event.RefCountsIncr), this), ctx);
+        }
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {

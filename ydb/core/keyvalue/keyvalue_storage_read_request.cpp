@@ -300,6 +300,10 @@ public:
                 // FIXME: count distinct blobs?" keyvalue_storage_request.cpp:279
                 IntermediateResult->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), batch.GroupId)] += 1;
             } else {
+                Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
+                    << " TabletId# " << TabletInfo->TabletID
+                    << " Id# " << response.Id
+                    << " Key# " << read.Key);
                 STLOG_WITH_ERROR_DESCRIPTION(ErrorDescription, NLog::PRI_ERROR, NKikimrServices::KEYVALUE, KV317,
                         "Unexpected EvGetResult.",
                         (KeyValue, TabletInfo->TabletID),
@@ -336,7 +340,7 @@ public:
         Send(IntermediateResult->KeyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResult->RequestUid,
             IntermediateResult->CreatedAtGeneration, IntermediateResult->CreatedAtStep,
-            IntermediateResult->Stat, status));
+            IntermediateResult->Stat, status, std::move(IntermediateResult->RefCountsIncr)));
     }
 
     std::unique_ptr<TEvKeyValue::TEvReadResponse> CreateReadResponse(NKikimrKeyValue::Statuses::ReplyStatus status,

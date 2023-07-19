@@ -1503,7 +1503,6 @@ void TPartition::EndTransaction(const TEvPQ::TEvTxCommit& event,
             Y_VERIFY(userInfo.Offset == (i64)operation.GetBegin());
 
             userInfo.Offset = operation.GetEnd();
-            userInfo.Session = "";
         }
 
         ChangePlanStepAndTxId(t.Tx->Step, t.Tx->TxId);
@@ -1748,7 +1747,6 @@ void TPartition::ProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx,
         }
 
         userInfo.Offset = operation.GetEnd();
-        userInfo.Session = "";
     }
 
     ScheduleReplyPropose(tx,

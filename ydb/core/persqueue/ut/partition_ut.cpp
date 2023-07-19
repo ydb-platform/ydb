@@ -966,7 +966,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
                                   "topic-path",
                                   true,
                                   1);
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="", .Offset=2}}}});
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=2}}}});
 
     SendProposeTransactionRequest(partition,
                                   2, 0,          // begin > end
@@ -1002,7 +1002,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProposeTransactionResponse({.TxId=1, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
-    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="", .Offset=4}}}});
+    WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session=session, .Offset=4}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitProposeTransactionResponse({.TxId=2, .Status=NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST});
@@ -1034,7 +1034,7 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 
     SendCommitTx(step, txId);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session="", .Offset=2}}}});
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitCommitTxDone({.TxId=txId, .Partition=partition});
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
     WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=partition, .Predicate=false});
     SendRollbackTx(step, txId_3);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session="", .Offset=1}}}});
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session=session, .Offset=1}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     WaitCommitTxDone({.TxId=txId_1, .Partition=partition});
@@ -1102,7 +1102,7 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
     SendCommitTx(step, txId);
 
     WaitCmdWrite({.Count=5, .UserInfos={
-                 {1, {.Session="", .Offset=1}},
+                 {1, {.Session="session-2", .Offset=1}},
                  {3, {.Session="session-1", .Offset=6}}
                  }});
 }
@@ -1150,7 +1150,7 @@ Y_UNIT_TEST_F(AfterRestart_1, TPartitionFixture)
     WaitCalcPredicateResult({.Step=step, .TxId=22222, .Partition=partition, .Predicate=true});
     SendCommitTx(step, 22222);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=22222, .UserInfos={{1, {.Session="", .Offset=4}}}});
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=22222, .UserInfos={{1, {.Session=session, .Offset=4}}}});
 }
 
 Y_UNIT_TEST_F(AfterRestart_2, TPartitionFixture)
@@ -1244,8 +1244,6 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     const ui32 partition = 3;
     const ui64 begin = 0;
     const ui64 end = 10;
-    const TString client = "client";
-    const TString session = "session";
 
     const ui64 step = 12345;
     const ui64 txId_1 = 67890;
@@ -1283,7 +1281,7 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     WaitCmdWrite({.Count=8,
                  .PlanStep=step, .TxId=txId_2,
                  .UserInfos={
-                 {1, {.Consumer="client-1", .Session="", .Offset=2}},
+                 {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
                  {3, {.Consumer="client-3", .Session="", .Offset=0, .ReadRuleGeneration=7}}
                  },
                  .DeleteRanges={

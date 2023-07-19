@@ -31,6 +31,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/http/http.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -104,6 +105,14 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     return NOperationId::ProtoToString(opId);
 }
 
+bool isGrpcProtocol(const TString& endpoint) {
+    TStringBuf scheme;
+    TStringBuf host;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, host, uri);
+    return scheme == "grpcs";
+}
+
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
         enum EEv {
@@ -158,11 +167,13 @@ public:
 
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
         : LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
+        , TokenAccessorConfig(tokenAccessorConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
         , HttpGateway(NYql::IHTTPGateway::Make()) // TODO: pass config and counters
@@ -172,9 +183,19 @@ public:
     {}
 
     void Bootstrap() {
+        if (TokenAccessorConfig.GetEnabled()) {
+            TString caContent;
+            if (const auto& path = TokenAccessorConfig.GetSslCaCert()) {
+                caContent = TUnbufferedFileInput(path).ReadAll();
+            }
+
+            const TString endpoint = TokenAccessorConfig.GetEndpoint();
+            CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(endpoint, isGrpcProtocol(endpoint), caContent, TokenAccessorConfig.GetConnectionPoolSize());
+        }
+
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, HttpGateway);
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, HttpGateway, CredentialsFactory);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
@@ -1473,7 +1494,9 @@ private:
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    NKikimrProto::TTokenAccessorConfig TokenAccessorConfig;
     TKqpSettings::TConstPtr KqpSettings;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
     NYql::IHTTPGateway::TPtr HttpGateway;
 
@@ -1522,11 +1545,12 @@ private:
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings),
+    return new TKqpProxyService(logConfig, tableServiceConfig, tokenAccessorConfig, std::move(settings),
         std::move(queryReplayFactory),std::move(kqpProxySharedResources));
 }
 

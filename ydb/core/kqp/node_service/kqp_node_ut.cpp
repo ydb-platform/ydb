@@ -180,7 +180,7 @@ public:
         WaitForBootstrap();
 
         auto httpGateway = NYql::IHTTPGateway::Make();
-        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, httpGateway);
+        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, httpGateway, nullptr);
         auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get(), asyncIoFactory);
         KqpNodeActorId = Runtime->Register(kqpNode);
         Runtime->EnableScheduleForActor(KqpNodeActorId, true);

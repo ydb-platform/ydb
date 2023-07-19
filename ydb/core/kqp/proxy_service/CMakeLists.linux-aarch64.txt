@@ -17,6 +17,7 @@ target_link_libraries(core-kqp-proxy_service PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  cpp-actors-http
   cpp-protobuf-json
   ydb-core-actorlib_impl
   ydb-core-base

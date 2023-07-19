@@ -100,7 +100,7 @@ ci:
           title: Release docs to stable
           task: common/docs/release
           needs: release-to-testing
-          manual: true
+          manual: false
           stage: stable
           input:
             projects: ${tasks.deploy.output_params.projects}

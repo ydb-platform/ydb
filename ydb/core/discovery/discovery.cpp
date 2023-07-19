@@ -462,7 +462,7 @@ public:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
                 return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::DATABASE_NOT_EXIST,
-                    "Requested database not exists"));
+                    "Requested database does not exist"));
             default:
                 DLOG_D("Unexpected status"
                     << ": entry# " << entry.ToString());
@@ -534,7 +534,7 @@ public:
         auto* domainInfo = AppData()->DomainsInfo->GetDomainByName(domainName);
         if (!domainInfo) {
             return Reply(new TEvDiscovery::TEvError(TEvDiscovery::TEvError::DATABASE_NOT_EXIST,
-                "Database " + domainName + " not exists"));
+                "Database " + domainName + " does not exist"));
         }
 
         TString database;

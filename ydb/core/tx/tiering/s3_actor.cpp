@@ -247,7 +247,9 @@ public:
 
         const TString key = *msg.Key;
 
-        LOG_S_DEBUG("[S3] PutObjectResponse '" << key << "' at tablet " << TabletId);
+        LOG_S_NOTICE("[S3] PutObjectResponse '" << key << "' "
+            << (resultOutcome.IsSuccess() ? "OK" : resultOutcome.GetError().GetMessage()) << " at tablet " << TabletId);
+
         KeyFinished(key, hasError, errStr);
     }
 
@@ -307,8 +309,6 @@ public:
 
         TString key = *msg.Key;
 
-        LOG_S_DEBUG("[S3] DeleteObjectResponse '" << key << "' at tablet " << TabletId);
-
         if (!ForgettingKeys.count(key)) {
             LOG_S_INFO("[S3] DeleteObjectResponse for unknown key '" << key << "' at tablet " << TabletId);
             return;
@@ -321,6 +321,9 @@ public:
             LOG_S_INFO("[S3] DeleteObjectResponse for unknown forget with key '" << key << "' at tablet " << TabletId);
             return;
         }
+
+        LOG_S_NOTICE("[S3] DeleteObjectResponse '" << key << "' "
+            << (resultOutcome.IsSuccess() ? "OK" : resultOutcome.GetError().GetMessage()) << " at tablet " << TabletId);
 
         auto& forget = Forgets[forgetNo];
         forget.KeysToDelete.erase(key);

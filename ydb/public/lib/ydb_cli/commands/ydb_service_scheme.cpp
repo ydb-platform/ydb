@@ -579,6 +579,7 @@ namespace {
         if (!settings) {
             return;
         }
+
         Cout << Endl << "Ttl settings ";
         switch (settings->GetMode()) {
         case NTable::TTtlSettings::EMode::DateTypeColumn:
@@ -603,6 +604,10 @@ namespace {
             Cout << "(unknown):" << Endl
                 << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
                 << colors.OldColor() << Endl;
+        }
+
+        if (settings->GetRunInterval()) {
+            Cout << "Run interval: " << settings->GetRunInterval() << Endl;
         }
     }
 

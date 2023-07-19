@@ -987,7 +987,7 @@ class ToolchainOptions(object):
             self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
             self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
 
-        # TODO(somov): Посмотреть, можно ли спрятать это поле.
+        # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
         self.arch_opt = self.params.get('arch_opt', [])

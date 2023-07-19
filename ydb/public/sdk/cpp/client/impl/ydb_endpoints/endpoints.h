@@ -81,7 +81,7 @@ public:
     // Allows to get stats
     void SetStatCollector(const NSdkStats::TStatCollector::TEndpointElectorStatCollector& endpointStatCollector);
 
-    // Returns prefered (if presents) or best endpoint
+    // Returns preferred (if presents) or best endpoint
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint) const;
 
     // Move endpoint to the end

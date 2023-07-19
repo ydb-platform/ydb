@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT(endpoints.find("One_B") != endpoints.end());
 
         elector.SetNewState(TVector<TEndpointRecord>{{"One", 1}});
-        // no prefered endpoint, expect avaliable
+        // no preferred endpoint, expect avaliable
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("Three", 0)).Endpoint, "One");
         UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Endpoint, "One");
     }

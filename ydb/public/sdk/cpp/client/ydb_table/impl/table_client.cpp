@@ -357,7 +357,7 @@ i64 TTableClient::TImpl::GetCurrentPoolSize() const {
 }
 
 TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessionSettings& settings, bool standalone,
-    TString preferedLocation)
+    TString preferredLocation)
 {
     auto request = MakeOperationRequest<Ydb::Table::CreateSessionRequest>(settings);
 
@@ -395,7 +395,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         rpcSettings,
-        TEndpointKey(preferedLocation, 0));
+        TEndpointKey(preferredLocation, 0));
 
     std::weak_ptr<TDbDriverState> state = DbDriverState_;
 

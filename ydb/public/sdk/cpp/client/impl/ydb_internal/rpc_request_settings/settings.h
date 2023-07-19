@@ -10,9 +10,9 @@ struct TRpcRequestSettings {
     TStringType RequestType;
     std::vector<std::pair<TStringType, TStringType>> Header;
     enum class TEndpointPolicy {
-        UsePreferedEndpoint,
+        UsePreferredEndpoint,
         UseDiscoveryEndpoint // Use single discovery endpoint for request
-    } EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
+    } EndpointPolicy = TEndpointPolicy::UsePreferredEndpoint;
     bool UseAuth = true;
     TDuration ClientTimeout;
 
@@ -22,7 +22,7 @@ struct TRpcRequestSettings {
         rpcSettings.TraceId = settings.TraceId_;
         rpcSettings.RequestType = settings.RequestType_;
         rpcSettings.Header = settings.Header_;
-        rpcSettings.EndpointPolicy = TEndpointPolicy::UsePreferedEndpoint;
+        rpcSettings.EndpointPolicy = TEndpointPolicy::UsePreferredEndpoint;
         rpcSettings.UseAuth = true;
         rpcSettings.ClientTimeout = settings.ClientTimeout_;
         return rpcSettings;

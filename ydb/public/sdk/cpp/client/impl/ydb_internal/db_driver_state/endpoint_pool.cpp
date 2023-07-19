@@ -44,12 +44,12 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             // Is used to convert float to integer load factor
             // same integer values will be selected randomly.
             const float multiplicator = 10.0;
-            const auto& preferedLocation = GetPreferedLocation(result.Result.self_location());
+            const auto& preferredLocation = GetPreferredLocation(result.Result.self_location());
             for (const auto& endpoint : result.Result.endpoints()) {
                 i32 loadFactor = (i32)(multiplicator * Min(LoadMax, Max(LoadMin, endpoint.load_factor())));
                 ui64 nodeId = endpoint.node_id();
                 if (BalancingSettings_.Policy != EBalancingPolicy::UseAllNodes) {
-                    if (endpoint.location() != preferedLocation) {
+                    if (endpoint.location() != preferredLocation) {
                         // Location missmatch, shift this endpoint
                         loadFactor += GetLocalityShift();
                     }
@@ -170,7 +170,7 @@ constexpr i32 TEndpointPool::GetLocalityShift() {
     return LoadMax * Multiplicator;
 }
 
-TStringType TEndpointPool::GetPreferedLocation(const TStringType& selfLocation) {
+TStringType TEndpointPool::GetPreferredLocation(const TStringType& selfLocation) {
     switch (BalancingSettings_.Policy) {
         case EBalancingPolicy::UseAllNodes:
             return {};

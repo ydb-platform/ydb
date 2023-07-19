@@ -45,7 +45,7 @@ public:
     static constexpr i32 GetLocalityShift();
 
 private:
-    TStringType GetPreferedLocation(const TStringType& selfLocation);
+    TStringType GetPreferredLocation(const TStringType& selfLocation);
 
 private:
     TListEndpointsResultProvider Provider_;

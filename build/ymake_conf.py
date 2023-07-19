@@ -88,8 +88,11 @@ class Platform(object):
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
 
+        self.is_wasm64 = self.arch == 'wasm64'
+        self.is_wasm = self.is_wasm64
+
         self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -120,6 +123,7 @@ class Platform(object):
 
         self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
+        self.is_emscripten = self.os == 'emscripten'
 
         self.is_none = self.os == 'none'
 
@@ -170,6 +174,7 @@ class Platform(object):
             (self.is_riscv32, 'ARCH_RISCV32'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
+            (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),
             (self.is_64_bit, 'ARCH_TYPE_64'),
         ))
@@ -1224,6 +1229,8 @@ class GnuToolchain(Toolchain):
                     (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
                     (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
                     (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+
+                    (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
                 ])
 
             if target.is_android:
@@ -1612,7 +1619,7 @@ class Linker(object):
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)

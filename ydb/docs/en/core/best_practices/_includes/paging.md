@@ -28,27 +28,13 @@ DECLARE $limit AS Uint64;
 DECLARE $lastCity AS Utf8;
 DECLARE $lastNumber AS Uint32;
 
-$part1 = (
-    SELECT * FROM schools
-    WHERE city = $lastCity AND number > $lastNumber
-    ORDER BY city, number LIMIT $limit
-);
-
-$part2 = (
-    SELECT * FROM schools
-    WHERE city > $lastCity
-    ORDER BY city, number LIMIT $limit
-);
-
-$union = (
-    SELECT * FROM $part1
-    UNION ALL
-    SELECT * FROM $part2
-);
-
-SELECT * FROM $union
-ORDER BY city, number LIMIT $limit;
+SELECT * FROM schools
+WHERE (city, number) > ($lastCity, $lastNumber)
+ORDER BY city, number
+LIMIT $limit;
 ```
+
+In the query example shown above, the `WHERE` clause uses a tuple comparison to select the next set of rows. Tuples are compared element by element from left to right, so the order of the fields in the tuple must match the order of the fields in the primary key to avoid table full scan.
 
 {% note warning "NULL value in key column" %}
 
@@ -65,4 +51,3 @@ In {{ ydb-short-name }}, all columns, including key ones, may have a NULL value.
 * [Java](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/ydb-cookbook/src/main/java/com/yandex/ydb/examples/pagination)
 * [Python](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/pagination)
 * [Go](https://github.com/ydb-platform/ydb-go-examples/tree/master/pagination)
-

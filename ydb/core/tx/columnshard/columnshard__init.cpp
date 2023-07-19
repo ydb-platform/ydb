@@ -36,9 +36,7 @@ void TTxInit::SetDefaults() {
     Self->LastPlannedTxId = 0;
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
-    Self->BasicTxInfo.clear();
-    Self->DeadlineQueue.clear();
-    Self->PlanQueue.clear();
+    Self->ProgressTxController.Clear();
     Self->AltersInFlight.clear();
     Self->CommitsInFlight.clear();
     Self->TablesManager.Clear();
@@ -84,56 +82,8 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     if (!ready)
         return false;
 
-    { // Load transactions
-        auto rowset = db.Table<Schema::TxInfo>().GreaterOrEqual(0).Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            ui64 txId = rowset.GetValue<Schema::TxInfo::TxId>();
-            auto& txInfo = Self->BasicTxInfo[txId];
-            txInfo.TxId = txId;
-            txInfo.MaxStep = rowset.GetValue<Schema::TxInfo::MaxStep>();
-            txInfo.PlanStep = rowset.GetValueOrDefault<Schema::TxInfo::PlanStep>(0);
-            txInfo.Source = rowset.GetValue<Schema::TxInfo::Source>();
-            txInfo.Cookie = rowset.GetValue<Schema::TxInfo::Cookie>();
-            txInfo.TxKind = rowset.GetValue<Schema::TxInfo::TxKind>();
-
-            if (txInfo.PlanStep != 0) {
-                Self->PlanQueue.emplace(txInfo.PlanStep, txInfo.TxId);
-            } else if (txInfo.MaxStep != Max<ui64>()) {
-                Self->DeadlineQueue.emplace(txInfo.MaxStep, txInfo.TxId);
-            }
-
-            switch (txInfo.TxKind) {
-                case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
-                    TColumnShard::TAlterMeta meta;
-                    Y_VERIFY(meta.Body.ParseFromString(rowset.GetValue<Schema::TxInfo::TxBody>()));
-
-                    Self->AltersInFlight.emplace(txId, std::move(meta));
-                    break;
-                }
-                case NKikimrTxColumnShard::TX_KIND_COMMIT: {
-                    NKikimrTxColumnShard::TCommitTxBody body;
-                    Y_VERIFY(body.ParseFromString(rowset.GetValue<Schema::TxInfo::TxBody>()));
-
-                    TColumnShard::TCommitMeta meta;
-                    meta.MetaShard = body.GetTxInitiator();
-                    for (auto& id : body.GetWriteIds()) {
-                        meta.AddWriteId(TWriteId{id});
-                    }
-
-                    Self->CommitsInFlight.emplace(txId, std::move(meta));
-                    break;
-                }
-                default: {
-                    Y_FAIL("Unsupported TxKind stored in the TxInfo table");
-                }
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
+    if (!Self->ProgressTxController.Load(txc)) {
+        return false;
     }
 
     Self->TablesManager.InitFromDB(db, Self->TabletID());
@@ -334,6 +284,34 @@ void TTxInitSchema::Complete(const TActorContext& ctx) {
 
 ITransaction* TColumnShard::CreateTxInitSchema() {
     return new TTxInitSchema(this);
+}
+
+bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody) {
+    switch (txKind) {
+        case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
+            TColumnShard::TAlterMeta meta;
+            Y_VERIFY(meta.Body.ParseFromString(txBody));
+            AltersInFlight.emplace(txId, std::move(meta));
+            break;
+        }
+        case NKikimrTxColumnShard::TX_KIND_COMMIT: {
+            NKikimrTxColumnShard::TCommitTxBody body;
+            Y_VERIFY(body.ParseFromString(txBody));
+
+            TColumnShard::TCommitMeta meta;
+            meta.MetaShard = body.GetTxInitiator();
+            for (auto& id : body.GetWriteIds()) {
+                meta.AddWriteId(TWriteId{id});
+            }
+
+            CommitsInFlight.emplace(txId, std::move(meta));
+            break;
+        }
+        default: {
+            Y_FAIL("Unsupported TxKind stored in the TxInfo table");
+        }
+    }
+    return true;
 }
 
 }

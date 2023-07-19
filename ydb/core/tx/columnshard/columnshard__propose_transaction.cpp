@@ -113,12 +113,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             // Always persist the latest metadata, this may include an updated seqno
-            auto& txInfo = Self->BasicTxInfo[txId];
-            txInfo.TxId = txId;
-            txInfo.TxKind = txKind;
-            txInfo.Source = Ev->Get()->GetSource();
-            txInfo.Cookie = Ev->Cookie;
-            Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
+            Self->ProgressTxController.RegisterTx(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
 
             if (!Self->AltersInFlight.contains(txId)) {
                 Self->AltersInFlight.emplace(txId, std::move(meta));
@@ -136,17 +131,17 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             if (Self->CommitsInFlight.contains(txId)) {
                 LOG_S_DEBUG(TxPrefix() << "CommitTx (retry) TxId " << txId << TxSuffix());
 
-                Y_VERIFY(Self->BasicTxInfo.contains(txId));
-                const auto& txInfo = Self->BasicTxInfo[txId];
+                auto txInfoPtr = Self->ProgressTxController.GetTxInfo(txId);
+                Y_VERIFY(txInfoPtr);
 
-                if (txInfo.Source != Ev->Get()->GetSource() || txInfo.Cookie != Ev->Cookie) {
+                if (txInfoPtr->Source != Ev->Get()->GetSource() || txInfoPtr->Cookie != Ev->Cookie) {
                     statusMessage = TStringBuilder()
                         << "Another commit TxId# " << txId << " has already been proposed";
                     break;
                 }
 
-                maxStep = txInfo.MaxStep;
-                minStep = maxStep - Self->MaxCommitTxDelay.MilliSeconds(); // TODO: improve this code
+                maxStep = txInfoPtr->MaxStep;
+                minStep = txInfoPtr->MinStep;
                 status = NKikimrTxColumnShard::EResultStatus::PREPARED;
                 break;
             }
@@ -190,9 +185,6 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
             }
 
-            minStep = Self->GetAllowedStep();
-            maxStep = minStep + Self->MaxCommitTxDelay.MilliSeconds();
-
             TColumnShard::TCommitMeta meta;
             meta.MetaShard = body.GetTxInitiator();
             for (ui64 wId : body.GetWriteIds()) {
@@ -203,17 +195,11 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
             }
 
-            auto& txInfo = Self->BasicTxInfo[txId];
-            txInfo.TxId = txId;
-            txInfo.TxKind = txKind;
-            txInfo.MaxStep = maxStep;
-            txInfo.Source = Ev->Get()->GetSource();
-            txInfo.Cookie = Ev->Cookie;
-            Schema::SaveTxInfo(db, txInfo.TxId, txInfo.TxKind, txBody, txInfo.MaxStep, txInfo.Source, txInfo.Cookie);
+            const auto& txInfo =  Self->ProgressTxController.RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
+            minStep = txInfo.MinStep;
+            maxStep = txInfo.MaxStep;
 
             Self->CommitsInFlight.emplace(txId, std::move(meta));
-
-            Self->DeadlineQueue.emplace(txInfo.MaxStep, txId);
 
             LOG_S_DEBUG(TxPrefix() << "CommitTx txId " << txId << TxSuffix());
 

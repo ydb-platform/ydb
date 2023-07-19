@@ -19,15 +19,7 @@ public:
 
         const auto* msg = Ev->Get();
         const ui64 txId = msg->Record.GetTxId();
-
-        if (Self->BasicTxInfo.contains(txId)) {
-            auto& txInfo = Self->BasicTxInfo[txId];
-            if (txInfo.PlanStep == 0) {
-                // Not planned yet, safe to remove
-                Self->RemoveTx(txc.DB, txId);
-            }
-        }
-
+        Self->ProgressTxController.CancelTx(txId, txc);
         return true;
     }
 

@@ -35,6 +35,7 @@ SRCS(
     read_actor.cpp
     write_actor.cpp
     tables_manager.cpp
+    tx_controller.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)

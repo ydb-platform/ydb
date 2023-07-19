@@ -7,6 +7,7 @@
 #include "columnshard_private_events.h"
 #include "blob_manager.h"
 #include "tables_manager.h"
+#include "tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
 
@@ -14,7 +15,6 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -126,6 +126,8 @@ class TColumnShard
     friend class TTxRunGC;
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
+
+    friend class TTxController;
 
     class TTxProgressTx;
     class TTxProposeCancel;
@@ -277,44 +279,7 @@ protected:
     }
 
 private:
-    struct TBasicTxInfo {
-        ui64 TxId;
-        ui64 MaxStep = Max<ui64>();
-        ui64 PlanStep = 0;
-        TActorId Source;
-        ui64 Cookie = 0;
-        NKikimrTxColumnShard::ETransactionKind TxKind;
-    };
-
-    struct TDeadlineQueueItem {
-        ui64 MaxStep;
-        ui64 TxId;
-
-        TDeadlineQueueItem() = default;
-        TDeadlineQueueItem(ui64 maxStep, ui64 txId)
-            : MaxStep(maxStep)
-            , TxId(txId)
-        { }
-
-        inline bool operator<(const TDeadlineQueueItem& rhs) const {
-            return MaxStep < rhs.MaxStep || (MaxStep == rhs.MaxStep && TxId < rhs.TxId);
-        }
-    };
-
-    struct TPlanQueueItem {
-        ui64 Step;
-        ui64 TxId;
-
-        TPlanQueueItem() = default;
-        TPlanQueueItem(ui64 step, ui64 txId)
-            : Step(step)
-            , TxId(txId)
-        { }
-
-        inline bool operator<(const TPlanQueueItem& rhs) const {
-            return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId);
-        }
-    };
+    TTxController ProgressTxController;
 
     struct TAlterMeta {
         NKikimrTxColumnShard::TSchemaTxBody Body;
@@ -508,7 +473,6 @@ private:
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
     TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
-    TDuration MaxCommitTxDelay = TDuration::Seconds(30); // TODO: Make configurable?
     TDuration ActivationPeriod = TDuration::Seconds(60);
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TDuration StatsReportInterval = TDuration::Seconds(10);
@@ -535,11 +499,6 @@ private:
     const TCSCounters CSCounters;
     TWritesMonitor WritesMonitor;
 
-
-    THashMap<ui64, TBasicTxInfo> BasicTxInfo;
-    TSet<TDeadlineQueueItem> DeadlineQueue;
-    std::set<TPlanQueueItem> PlanQueue;
-    std::set<TPlanQueueItem> RunningQueue;
     bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     THashMap<ui64, TAlterMeta> AltersInFlight;
@@ -566,15 +525,14 @@ private:
     TRowVersion GetMaxReadVersion() const;
     ui64 GetMinReadStep() const;
     ui64 GetOutdatedStep() const;
-    ui64 GetAllowedStep() const;
-    bool HaveOutdatedTxs() const;
 
     TWriteId HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId, const ui32 partId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
     void LoadLongTxWrite(TWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId);
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
-    bool RemoveTx(NTable::TDatabase& database, ui64 txId);
+    bool AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, NTabletFlatExecutor::TTransactionContext& txc);
+    bool LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody);
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
 
     void EnqueueProgressTx(const TActorContext& ctx);

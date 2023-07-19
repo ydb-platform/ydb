@@ -247,9 +247,7 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory =
-        BasicTxInfo.size() * sizeof(TBasicTxInfo) +
-        DeadlineQueue.size() * sizeof(TDeadlineQueueItem) +
-        (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem) +
+        ProgressTxController.GetMemoryUsage() +
         ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
         AltersInFlight.size() * sizeof(TAlterMeta) +
         CommitsInFlight.size() * sizeof(TCommitMeta) +

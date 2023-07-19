@@ -128,6 +128,7 @@ bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& sche
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
+    , ProgressTxController(*this)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , ReadCounters("Read")
@@ -229,10 +230,10 @@ void TColumnShard::RescheduleWaitingReads() {
 }
 
 TRowVersion TColumnShard::GetMaxReadVersion() const {
-    if (!PlanQueue.empty()) {
+    auto plannedTx = ProgressTxController.GetPlannedTx();
+    if (plannedTx) {
         // We may only read just before the first transaction in the queue
-        auto it = PlanQueue.begin();
-        return TRowVersion(it->Step, it->TxId).Prev();
+        return TRowVersion(plannedTx->Step, plannedTx->TxId).Prev();
     }
     ui64 step = LastPlannedStep;
     if (MediatorTimeCastEntry) {
@@ -250,25 +251,11 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
-ui64 TColumnShard::GetAllowedStep() const {
-    return Max(GetOutdatedStep() + 1, TAppData::TimeProvider->Now().MilliSeconds());
-}
-
 ui64 TColumnShard::GetMinReadStep() const {
     ui64 delayMillisec = MaxReadStaleness.MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
     return minReadStep;
-}
-
-bool TColumnShard::HaveOutdatedTxs() const {
-    if (!DeadlineQueue) {
-        return false;
-    }
-    ui64 step = GetOutdatedStep();
-    auto it = DeadlineQueue.begin();
-    // Return true if the first transaction has no chance to be planned
-    return it->MaxStep <= step;
 }
 
 TWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) {
@@ -336,20 +323,14 @@ bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64
     return false;
 }
 
-bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {
-    auto it = BasicTxInfo.find(txId);
-    if (it == BasicTxInfo.end()) {
-        return false;
-    }
-
-    NIceDb::TNiceDb db(database);
-
-    switch (it->second.TxKind) {
+bool TColumnShard::AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, NTabletFlatExecutor::TTransactionContext& txc) {
+    switch (txKind) {
         case NKikimrTxColumnShard::TX_KIND_SCHEMA: {
             AltersInFlight.erase(txId);
             break;
         }
         case NKikimrTxColumnShard::TX_KIND_COMMIT: {
+            NIceDb::TNiceDb db(txc.DB);
             if (auto* meta = CommitsInFlight.FindPtr(txId)) {
                 if (meta->MetaShard == 0) {
                     for (TWriteId writeId : meta->WriteIds) {
@@ -360,7 +341,7 @@ bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {
                     }
                 }
                 TBlobGroupSelector dsGroupSelector(Info());
-                NOlap::TDbWrapper dbTable(database, &dsGroupSelector);
+                NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
                 InsertTable->Abort(dbTable, meta->MetaShard, meta->WriteIds);
 
                 CommitsInFlight.erase(txId);
@@ -371,17 +352,6 @@ bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {
             Y_FAIL("Unsupported TxKind");
         }
     }
-
-    if (it->second.PlanStep != 0) {
-        PlanQueue.erase(TPlanQueueItem(it->second.PlanStep, txId));
-        RescheduleWaitingReads();
-    } else if (it->second.MaxStep != Max<ui64>()) {
-        DeadlineQueue.erase(TDeadlineQueueItem(it->second.MaxStep, txId));
-    }
-
-    BasicTxInfo.erase(it);
-
-    Schema::EraseTxInfo(db, txId);
     return true;
 }
 

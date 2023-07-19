@@ -98,6 +98,8 @@ IF (PY2)
         yndexer.py
     )
 ELSEIF(PY3)
+    STYLE_PYTHON()
+
     TEST_SRCS(
         build_info_gen.py
     )

@@ -283,10 +283,9 @@ public:
         const auto& resultOutcome = msg.Result;
 
         if (!resultOutcome.IsSuccess()) {
-            KeyFinished(context->GetKey(), true, LogError("CheckObjectExistsResponse", resultOutcome.GetError(), context->GetKey()));
-        } else if (!msg.IsExists()) {
             SendPutObject(context->GetKey(), std::move(context->DetachData()));
         } else {
+            // TODO: check CRC
             KeyFinished(context->GetKey(), false, "");
         }
     }
@@ -486,10 +485,10 @@ private:
     }
 
     void SendPutObjectIfNotExists(const TString& key, TString&& data) {
-        auto request = Aws::S3::Model::ListObjectsRequest()
-            .WithPrefix(key);
+        auto request = Aws::S3::Model::HeadObjectRequest()
+            .WithKey(key);
 
-        LOG_S_DEBUG("[S3] PutObjectIfNotExists->ListObjectsRequest key '" << key << "' at tablet " << TabletId);
+        LOG_S_DEBUG("[S3] PutObjectIfNotExists->HeadObjectRequest key '" << key << "' at tablet " << TabletId);
         std::shared_ptr<TEvCheckObjectExistsRequestContext> context = std::make_shared<TEvCheckObjectExistsRequestContext>(key, std::move(data));
         Send(ExternalStorageActorId, new TEvExternalStorage::TEvCheckObjectExistsRequest(request, context));
     }

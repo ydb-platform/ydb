@@ -2181,19 +2181,22 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     }
 
     ui32 topLevelSelects = 0;
+    bool hasTailOps = false;
     for (auto& block : blocks) {
-        if (block->IsSelect()) {
+        if (block->HasSelectResult()) {
             ++topLevelSelects;
+        } else if (topLevelSelects) {
+            hasTailOps = true;
         }
     }
 
-    if ((Mode == NSQLTranslation::ESqlMode::SUBQUERY || Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) && topLevelSelects != 1) {
-        Error() << "Strictly one select/process/reduce statement must be used in the "
+    if ((Mode == NSQLTranslation::ESqlMode::SUBQUERY || Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW) && (topLevelSelects != 1 || hasTailOps)) {
+        Error() << "Strictly one select/process/reduce statement is expected at the end of "
             << (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
         return nullptr;
     }
 
-    if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) {
+     if (!Ctx.PragmaAutoCommit && Ctx.Settings.EndOfQueryCommit && IsQueryMode(Mode)) {
         AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
     }
 

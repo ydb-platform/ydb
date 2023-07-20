@@ -3970,14 +3970,17 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, stmt.GetRule_define_action_or_subquery_body8());
 
     ui32 topLevelSelects = 0;
+    bool hasTailOps = false;
     for (auto& block : innerBlocks) {
-        if (block->IsSelect()) {
+        if (block->HasSelectResult()) {
             ++topLevelSelects;
+        } else if (topLevelSelects) {
+            hasTailOps = true;
         }
     }
 
-    if (isSubquery && topLevelSelects != 1) {
-        Error() << "Strictly one select/process/reduce statement must be used in the subquery, got: " << topLevelSelects;
+    if (isSubquery && (topLevelSelects != 1 || hasTailOps)) {
+        Error() << "Strictly one select/process/reduce statement is expected at the end of subquery";
         return false;
     }
 

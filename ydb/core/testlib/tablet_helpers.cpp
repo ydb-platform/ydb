@@ -333,8 +333,8 @@ namespace NKikimr {
             if (ENABLE_REBOOT_DISPATCH_LOG)
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") on event " << eventType << " !\n";
 
-            // Synchronously kill both system and user parts of the tablet
-            runtime.Send(new IEventHandle(TabletSys.at(TabletId), TActorId(), new TEvents::TEvPoisonPill()));
+            // We synchronously kill user part of the tablet to stop user-level logic at current event
+            // However we don't kill the system part because tests historically expect pending commits to finish
             runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
             // Wait for the tablet to boot or to become deleted
             TDispatchOptions rebootOptions;

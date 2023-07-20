@@ -57,8 +57,9 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(TEvBlockStore::TEvUpdateVolumeConfig, Handle);
+        default:
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 
@@ -105,8 +106,9 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(TEvFileStore::TEvUpdateConfig, Handle);
+        default:
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 

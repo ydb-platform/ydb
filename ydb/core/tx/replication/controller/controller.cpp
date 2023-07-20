@@ -55,6 +55,8 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
+    default:
+        HandleDefaultEvents(ev, SelfId());
     }
 }
 

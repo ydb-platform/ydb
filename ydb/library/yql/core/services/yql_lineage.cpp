@@ -294,6 +294,10 @@ private:
                     auto& s = (*dst.StructItems)[fieldName];
                     MergeLineageFromUsedFields(x->Tail(), arg, src, s, newTransforms);
                 }
+            } else if (root->IsCallable("Member") && &root->Head() == &arg) {
+                auto fieldName = root->Tail().Content();
+                const auto& in = *(*src.Fields).FindPtr(fieldName);
+                dst.StructItems = in.StructItems;
             }
         }
 

@@ -105,12 +105,14 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     return NOperationId::ProtoToString(opId);
 }
 
-bool isGrpcProtocol(const TString& endpoint) {
+void ParseGrpcEndpoint(const TString& endpoint, TString& address, bool& useSsl) {
     TStringBuf scheme;
     TStringBuf host;
     TStringBuf uri;
     NHttp::CrackURL(endpoint, scheme, host, uri);
-    return scheme == "grpcs";
+
+    address = ToString(host);
+    useSsl = scheme == "grpcs";
 }
 
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
@@ -189,8 +191,11 @@ public:
                 caContent = TUnbufferedFileInput(path).ReadAll();
             }
 
-            const TString endpoint = TokenAccessorConfig.GetEndpoint();
-            CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(endpoint, isGrpcProtocol(endpoint), caContent, TokenAccessorConfig.GetConnectionPoolSize());
+            TString endpointAddress;
+            bool useSsl = false;
+            ParseGrpcEndpoint(TokenAccessorConfig.GetEndpoint(), endpointAddress, useSsl);
+            
+            CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(endpointAddress, useSsl, caContent, TokenAccessorConfig.GetConnectionPoolSize());
         }
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));

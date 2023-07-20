@@ -1,0 +1,50 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(library-cpp-actors-interconnect-ut_huge_cluster)
+target_link_libraries(library-cpp-actors-interconnect-ut_huge_cluster PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  cpp-actors-core
+  cpp-actors-interconnect
+  interconnect-ut-lib
+  interconnect-ut-protos
+  cpp-testing-unittest
+  cpp-actors-testlib
+)
+target_link_options(library-cpp-actors-interconnect-ut_huge_cluster PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(library-cpp-actors-interconnect-ut_huge_cluster PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/interconnect/ut_huge_cluster/huge_cluster.cpp
+)
+add_test(
+  NAME
+  library-cpp-actors-interconnect-ut_huge_cluster
+  COMMAND
+  library-cpp-actors-interconnect-ut_huge_cluster
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(library-cpp-actors-interconnect-ut_huge_cluster)

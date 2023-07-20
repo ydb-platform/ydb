@@ -135,8 +135,7 @@ private:
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
                       const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<IEventHandle> &ev,
-                 const TActorContext &ctx) override;
+    void DefaultSignalTabletActive(const TActorContext &ctx) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                              const TActorContext &ctx) override;
     void Cleanup(const TActorContext &ctx);
@@ -220,7 +219,6 @@ private:
     void ProcessDelayedListNodesRequests();
 
     void ScheduleEpochUpdate(const TActorContext &ctx);
-    void ProcessEnqueuedEvents(const TActorContext &ctx);
     void FillNodeInfo(const TNodeInfo &node,
                       NKikimrNodeBroker::TNodeInfo &info) const;
 
@@ -310,7 +308,6 @@ private:
     ui64 ConfigSubscriptionId;
 
     // Events collected during initialization phase.
-    TVector<TAutoPtr<IEventHandle>> EnqueuedEvents;
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
     // Transactions queue.
     TTxProcessor::TPtr TxProcessor;

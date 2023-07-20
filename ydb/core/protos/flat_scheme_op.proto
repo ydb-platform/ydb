@@ -101,6 +101,10 @@ message TStorageConfig {
     optional uint32 ExternalThreshold = 6;
 }
 
+message TKeyValueStorageConfig {
+    repeated TStorageSettings Channel = 3;
+}
+
 message TFamilyDescription {
     optional uint32 Id = 1;
     optional uint32 Room = 2; // Used by datashard, must not be used by users
@@ -1089,6 +1093,8 @@ message TCreateSolomonVolume {
 
     optional uint64 PartitionCount = 3;                // it is a mutually exclusive parametr
     repeated TAdoptedPartition AdoptedPartitions = 4; // with this one
+
+    optional TKeyValueStorageConfig StorageConfig = 5;
 }
 
 message TAlterSolomonVolume {
@@ -1099,6 +1105,8 @@ message TAlterSolomonVolume {
     optional uint64 PartitionCount = 3;
 
     optional bool UpdateChannelsBinding = 4 [default = false];
+
+    optional TKeyValueStorageConfig StorageConfig = 5;
 }
 
 message TBlockStoreAssignOp {

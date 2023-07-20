@@ -656,14 +656,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         }
 
         if (checks && !exists) {
-            checks
-                .IsValidLeafName()
-                .DepthLimit()
-                .PathsLimit();
-        }
-
-        if (checks && !exists && path.Parent().IsResolved()) {
-            checks.DirChildrenLimit();
+            checks.IsValidLeafName();
         }
 
         if (!checks) {
@@ -764,14 +757,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         }
 
         if (checks) {
-            checks
-                .IsValidLeafName()
-                .DepthLimit()
-                .PathsLimit(result.Transactions.size() + 1);
-        }
-
-        if (checks && path.Parent().IsResolved()) {
-            checks.DirChildrenLimit();
+            checks.IsValidLeafName();
         }
 
         if (!checks) {

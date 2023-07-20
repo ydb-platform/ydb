@@ -34,6 +34,8 @@ public:
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig);
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
 
+    void Unsubscribe();
+
     void ProcessTasksForScanExecuter();
     void ProcessTasksForDataExecuter();
 

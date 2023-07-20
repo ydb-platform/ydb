@@ -8,7 +8,7 @@
 
 namespace NKikimr::NDataShard {
 
-void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
+void TBaseChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
     THashMap<ui64, TSender> senders;
 
     for (const auto& partitionId : partitionIds) {
@@ -32,6 +32,24 @@ void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds) {
     }
 
     Senders = std::move(senders);
+}
+
+void TBaseChangeSender::RecreateSenders(const TVector<ui64>& partitionIds) {
+    for (const auto& partitionId : partitionIds) {
+        Y_VERIFY(!Senders.contains(partitionId));
+        auto& sender = Senders[partitionId];
+        sender.ActorId = ActorOps->Register(CreateSender(partitionId));
+    }
+}
+
+void TBaseChangeSender::CreateSenders(const TVector<ui64>& partitionIds, bool partitioningChanged) {
+    if (partitioningChanged) {
+        CreateMissingSenders(partitionIds);
+    } else {
+        RecreateSenders(GonePartitions);
+    }
+
+    GonePartitions.clear();
 
     if (!Enqueued || !RequestRecords()) {
         SendRecords();
@@ -199,6 +217,7 @@ void TBaseChangeSender::OnGone(ui64 partitionId) {
     }
 
     Senders.erase(it);
+    GonePartitions.push_back(partitionId);
 
     if (Resolver->IsResolving()) {
         return;

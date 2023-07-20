@@ -516,7 +516,10 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Blob " << blobId);
         TLogoBlobID logoBlobId = blobId.GetLogoBlobId();
         BlobsToDelete.insert(logoBlobId);
-        NBlobCache::ForgetBlob(blobId);
+
+        if (!EvictedBlobs.contains(TEvictedBlob{.Blob = blobId})) {
+            NBlobCache::ForgetBlob(blobId);
+        }
     } else {
         LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delay Delete Blob " << blobId);
         BlobsToDeleteDelayed.insert(blobId.GetLogoBlobId());
@@ -602,8 +605,13 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
 }
 
 bool TBlobManager::EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) {
-    db.EraseEvictBlob(evict);
-    return DroppedEvictedBlobs.erase(evict);
+    Y_VERIFY_DEBUG(!EvictedBlobs.contains(evict)); // erase before drop
+
+    if (DroppedEvictedBlobs.erase(evict)) {
+        db.EraseEvictBlob(evict);
+        return true;
+    }
+    return false;
 }
 
 bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db, THashSet<TUnifiedBlobId>& droppedEvicting) {
@@ -656,16 +664,26 @@ TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetada
     return {};
 }
 
-void TBlobManager::GetCleanupBlobs(THashSet<TEvictedBlob>& cleanup) const {
-    TString strBlobs;
-    for (auto& [evict, _] : DroppedEvictedBlobs) {
+void TBlobManager::GetCleanupBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const {
+    TStringBuilder strBlobs;
+    for (auto& [evict, meta] : DroppedEvictedBlobs) {
         if (evict.State != EEvictState::EVICTING) {
-            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
-            cleanup.insert(evict);
+            strBlobs << "'" << evict.Blob.ToStringNew() << "' ";
+            auto& tierName = meta.GetTierName();
+            tierBlobs[tierName].emplace(evict);
         }
     }
     if (!strBlobs.empty()) {
-        LOG_S_NOTICE("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);
+        LOG_S_DEBUG("Cleanup evicted blobs " << strBlobs << "at tablet " << TabletInfo->TabletID);
+    }
+}
+
+void TBlobManager::GetReexportBlobs(THashMap<TString, THashSet<TEvictedBlob>>& tierBlobs) const {
+    for (auto& [evict, meta] : EvictedBlobs) {
+        if (evict.State == EEvictState::EVICTING) {
+            auto& tierName = meta.GetTierName();
+            tierBlobs[tierName].emplace(evict);
+        }
     }
 }
 
@@ -704,6 +722,7 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
         return;
     }
 
+    LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Blob " << blobId << " is no longer in use");
     BlobsUseCount.erase(useIt);
 
     // Check if the blob is marked for delayed deletion
@@ -718,7 +737,10 @@ void TBlobManager::SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) {
         if (BlobsToDeleteDelayed.erase(logoBlobId)) {
             LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Delayed Blob " << blobId);
             BlobsToDelete.insert(logoBlobId);
-            NBlobCache::ForgetBlob(blobId);
+
+            if (!EvictedBlobs.contains(TEvictedBlob{.Blob = blobId})) {
+                NBlobCache::ForgetBlob(blobId);
+            }
         }
     }
 }

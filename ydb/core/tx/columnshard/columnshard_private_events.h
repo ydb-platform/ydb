@@ -129,36 +129,42 @@ struct TEvPrivate {
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         ui64 ExportNo = 0;
         TString TierName;
-        ui64 PathId = 0;
         TActorId DstActor;
         TBlobDataMap Blobs; // src: blobId -> data map; dst: exported blobIds set
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TMap<TString, TString> ErrorStrings;
 
-        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TBlobDataMap&& tierBlobs)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId,
+                           const THashSet<TUnifiedBlobId>& blobIds)
             : ExportNo(exportNo)
             , TierName(tierName)
-            , PathId(pathId)
-            , Blobs(std::move(tierBlobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
-            Y_VERIFY(PathId);
-            Y_VERIFY(!Blobs.empty());
+            Y_VERIFY(pathId);
+            Y_VERIFY(!blobIds.empty());
+
+            for (auto& blobId : blobIds) {
+                Blobs.emplace(blobId, TString());
+                SrcToDstBlobs[blobId] = blobId.MakeS3BlobId(pathId);
+            }
         }
 
-        TEvExport(ui64 exportNo, const TString& tierName, ui64 pathId, TActorId dstActor, TBlobDataMap&& blobs)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, const THashSet<NOlap::TEvictedBlob>& evictSet)
             : ExportNo(exportNo)
             , TierName(tierName)
-            , PathId(pathId)
-            , DstActor(dstActor)
-            , Blobs(std::move(blobs))
         {
             Y_VERIFY(ExportNo);
             Y_VERIFY(!TierName.empty());
-            Y_VERIFY(PathId);
-            Y_VERIFY(DstActor);
-            Y_VERIFY(!Blobs.empty());
+            Y_VERIFY(!evictSet.empty());
+
+            for (auto& evict : evictSet) {
+                Y_VERIFY(evict.IsEvicting());
+                Y_VERIFY(evict.ExternBlob.IsS3Blob());
+
+                Blobs.emplace(evict.Blob, TString());
+                SrcToDstBlobs[evict.Blob] = evict.ExternBlob;
+            }
         }
 
         void AddResult(const TUnifiedBlobId& blobId, const TString& key, const bool hasError, const TString& errStr) {

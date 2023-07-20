@@ -282,6 +282,25 @@ struct TColumnEngineStats {
     void Clear() {
         *this = {};
     }
+
+    TPortionsStats& StatsByType(TPortionMeta::EProduced produced) {
+        switch (produced) {
+            case NOlap::TPortionMeta::INSERTED:
+                return Inserted;
+            case NOlap::TPortionMeta::COMPACTED:
+                return Compacted;
+            case NOlap::TPortionMeta::SPLIT_COMPACTED:
+                return SplitCompacted;
+            case NOlap::TPortionMeta::INACTIVE:
+                return Inactive;
+            case NOlap::TPortionMeta::EVICTED:
+                return Evicted;
+            case NOlap::TPortionMeta::UNSPECIFIED:
+            default:
+                break;
+        }
+        Y_VERIFY(false);
+    }
 };
 
 class IColumnEngine {

@@ -319,6 +319,7 @@ struct TSchemeCacheRequest {
         EStatus Status = EStatus::Unknown;
         EKind Kind = EKind::KindUnknown;
         TIntrusivePtr<TDomainInfo> DomainInfo;
+        ui64 GeneralVersion = 0;
 
         explicit TEntry(THolder<TKeyDesc> keyDesc)
             : KeyDescription(std::move(keyDesc))

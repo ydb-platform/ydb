@@ -46,9 +46,10 @@ namespace NActors {
             if (addr.GetFamily() == AF_INET6) {
                 SetSockOpt(*Listener, IPPROTO_IPV6, IPV6_V6ONLY, 0);
             }
+            const ui32 backlog = ProxyCommonCtx->Settings.SocketBacklogSize;
             if (const auto e = -Listener->Bind(addr)) {
                 return e;
-            } else if (const auto e = -Listener->Listen(SOMAXCONN)) {
+            } else if (const auto e = -Listener->Listen(backlog ? backlog : SOMAXCONN)) {
                 return e;
             } else {
                 return 0;

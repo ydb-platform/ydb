@@ -437,6 +437,7 @@ message TInterconnectConfig {
     optional bool SuppressConnectivityCheck = 39 [default = false];
     optional uint32 PreallocatedBufferSize = 40;
     optional uint32 NumPreallocatedBuffers = 41;
+    optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -453,6 +454,8 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27;
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
+
+    optional uint32 OutgoingHandshakeInflightLimit = 43;
 }
 
 message TChannelProfileConfig {
@@ -1211,6 +1214,18 @@ message TTableServiceConfig {
         optional uint32 MaxRetryNumber = 3 [default = 10];
     }
 
+    message TIteratorReadsRetrySettings {
+        optional uint32 StartDelayMs = 1;
+        optional uint32 MaxDelayMs = 8;
+
+        optional uint32 MaxShardRetries = 2;
+        optional uint32 MaxShardResolves = 3;
+        optional double UnsertaintyRatio = 4;
+        optional double Multiplier = 5;
+        optional uint32 IteratorResponseTimeoutMs = 6;
+        optional uint32 MaxTotalRetries = 7;
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1249,6 +1264,7 @@ message TTableServiceConfig {
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     optional bool EnableKqpImmediateEffects = 38 [default = false];
+    optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
 };
 
 // Config describes immediate controls and allows
@@ -1363,7 +1379,7 @@ message TImmediateControlsConfig {
             Description: "Enables experimental persistent locked writes",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 MaxLockedWritesPerKey = 15 [(ControlOptions) = {
             Description: "Maximum number of uncommitted locked writes per key",
             MinValue: 0,
@@ -1420,10 +1436,39 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
     }
 
+    message TTCMallocControls {
+        optional uint64 ProfileSamplingRate = 1 [(ControlOptions) = {
+            Description: "Sets the sampling rate for heap profiles. TCMalloc samples approximately every rate bytes allocated.",
+            MinValue: 65536,
+            MaxValue: 4294967296,
+            DefaultValue: 2097152 }];
+        optional uint64 GuardedSamplingRate = 2 [(ControlOptions) = {
+            Description: "Sets the guarded sampling rate for sampled allocations. TCMalloc samples approximately every rate bytes allocated, subject to implementation limitations in GWP-ASan.",
+            MinValue: 65536,
+            MaxValue: 4294967296,
+            DefaultValue: 4294967296 }];
+        optional uint64 MemoryLimit = 3 [(ControlOptions) = {
+            Description: "Make a best effort attempt to prevent more than limit bytes of memory from being allocated by the system.",
+            MinValue: 0,
+            MaxValue: 9223372036854775807,
+            DefaultValue: 0 }];
+        optional uint64 PageCacheTargetSize = 4 [(ControlOptions) = {
+            Description: "Page Cache Target Size.",
+            MinValue: 0,
+            MaxValue: 137438953472,
+            DefaultValue: 536870912 }];
+        optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
+            Description: "Page Cache Release Rate.",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 8388608 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
     optional TSchemeShardControls SchemeShardControls = 4;
+    optional TTCMallocControls TCMallocControls = 5;
 };
 
 message TMeteringConfig {

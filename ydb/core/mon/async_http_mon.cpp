@@ -394,6 +394,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
 
@@ -458,6 +459,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
 
@@ -660,6 +662,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvMon::TEvMonitoringRequest, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
         }
     }
 
@@ -729,7 +732,7 @@ void TAsyncHttpMon::Stop() {
     IndexMonPage->ClearPages(); // it's required to avoid loop-reference
     if (ActorSystem) {
         TGuard<TMutex> g(Mutex);
-        for (const TActorId& actorId : ActorServices) {
+        for (const auto& [path, actorId] : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }
         ActorSystem->Send(NodeProxyServiceActorId, new TEvents::TEvPoisonPill);
@@ -752,12 +755,15 @@ NMonitoring::TIndexMonPage* TAsyncHttpMon::RegisterIndexPage(const TString& path
 void TAsyncHttpMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
     if (ActorSystem) {
         TActorMonPage* actorMonPage = static_cast<TActorMonPage*>(pageInfo.Page.Get());
-        auto actorId = ActorSystem->Register(
+        auto& actorId = ActorServices[pageInfo.Path];
+        if (actorId) {
+            ActorSystem->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));
+        }
+        actorId = ActorSystem->Register(
             new THttpMonServiceLegacyActor(actorMonPage),
             TMailboxType::ReadAsFilled,
             ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(pageInfo.Path, actorId));
-        ActorServices.push_back(actorId);
     }
 }
 
@@ -774,7 +780,9 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer());
     if (fields.Index) {
         fields.Index->Register(page);
-        fields.Index->SortPages();
+        if (fields.SortPages) {
+            fields.Index->SortPages();
+        }
     } else {
         Register(page.Get());
     }

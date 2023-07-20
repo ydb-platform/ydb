@@ -366,7 +366,7 @@ public:
             }
 
             if (checks) {
-                if (!parent.Base()->IsTableIndex()) {
+                if (!parent.Base()->IsTableIndex() && !isBackup) {
                     checks.DepthLimit();
                 }
 

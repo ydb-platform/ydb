@@ -26,13 +26,15 @@ private:
     TList<TTrafficInterrupter> interrupters;
     NActors::TChannelsConfig ChannelsConfig;
     TPortManager PortManager;
+    TIntrusivePtr<NLog::TSettings> LoggerSettings;
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
-                   TTrafficInterrupterSettings* tiSettings = nullptr)
+                   TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr)
         : NumNodes(numNodes)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
+        , LoggerSettings(loggerSettings)
     {
         THashMap<ui32, ui16> nodeToPortMap;
         THashMap<ui32, THashMap<ui32, ui16>> specificNodePortMap;
@@ -59,7 +61,8 @@ public:
 
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
-            Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig));
+            Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
+                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings));
         }
     }
 

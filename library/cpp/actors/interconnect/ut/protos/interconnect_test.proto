@@ -23,3 +23,6 @@ message TEvTestSmall {
 message TEvTestResponse {
     optional uint64 ConfirmedSequenceNumber = 1;
 }
+
+message TEvTestStartPolling {
+}

@@ -1069,7 +1069,7 @@ protected:
             }
 
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, ResponseEv->TxResults[0].MkqlItemType,
-                ResponseEv->TxResults[0].ColumnOrder, Target, Stats.get(), this->SelfId());
+                ResponseEv->TxResults[0].ColumnOrder, Target, Stats, this->SelfId());
         } else {
             YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
 
@@ -1079,7 +1079,7 @@ protected:
                 return channelIt->second;
             }
 
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats.get(), this->SelfId(),
+            proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
         }
 
@@ -1101,6 +1101,11 @@ protected:
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
         }
+
+        if (Planner) {
+            Planner->Unsubscribe();
+        }
+
         if (KqpTableResolverId) {
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
             this->Send(this->SelfId(), new TEvents::TEvPoison);
@@ -1149,7 +1154,7 @@ protected:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
-    std::unique_ptr<TQueryExecutionStats> Stats;
+    std::shared_ptr<TQueryExecutionStats> Stats;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;
     TActorId DeadlineActor;

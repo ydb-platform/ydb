@@ -367,6 +367,7 @@ private:
         bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
 
         bool defaultSyntaxVersion = Config.GetSqlVersion();
+        bool enableKqpImmediateEffects = Config.GetEnableKqpImmediateEffects();
 
         Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -380,8 +381,9 @@ private:
             Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
             Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
             Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract || 
-            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract)
+            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
+            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
+            Config.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects)
         {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,

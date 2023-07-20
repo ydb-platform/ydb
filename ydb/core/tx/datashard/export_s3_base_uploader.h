@@ -269,14 +269,21 @@ protected:
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
-        if (!result.IsSuccess()) {
-            const auto& error = result.GetError();
-            if (error.GetErrorType() != Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
-                Error = error.GetMessage().c_str();
-            }
+        if (result.IsSuccess()) {
+            return PassAway();
         }
 
-        PassAway();
+        const auto& error = result.GetError();
+        if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
+            return PassAway();
+        }
+
+        if (CanRetry(error)) {
+            Retry();
+        } else {
+            Error = error.GetMessage().c_str();
+            PassAway();
+        }
     }
 
     void Handle(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
@@ -286,13 +293,19 @@ protected:
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
-        if (!result.IsSuccess()) {
-            Y_VERIFY(Error);
-            Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
-                << result.GetError().GetMessage();
+        if (result.IsSuccess()) {
+            return PassAway();
         }
 
-        PassAway();
+        const auto& error = result.GetError();
+        if (CanRetry(error)) {
+            Retry();
+        } else {
+            Y_VERIFY(Error);
+            Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
+                << error.GetMessage();
+            PassAway();
+        }
     }
 
     template <typename TResult>
@@ -321,12 +334,19 @@ protected:
         return false;
     }
 
-    void RetryOrFinish(const Aws::S3::S3Error& error) {
-        if (Attempt++ < Retries && ShouldRetry(error)) {
-            Delay = Min(Delay * Attempt, TDuration::Minutes(10));
-            const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
+    bool CanRetry(const Aws::S3::S3Error& error) const {
+        return Attempt < Retries && ShouldRetry(error);
+    }
 
-            this->Schedule(Delay + random, new TEvents::TEvWakeup());
+    void Retry() {
+        Delay = Min(Delay * ++Attempt, TDuration::Minutes(10));
+        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
+        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+    }
+
+    void RetryOrFinish(const Aws::S3::S3Error& error) {
+        if (CanRetry(error)) {
+            Retry();
         } else {
             Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
         }

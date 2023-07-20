@@ -226,7 +226,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
-    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr;
+    TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
@@ -246,9 +246,9 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev)
+    explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
-        , NotifyResult(ev)
+        , CompletedTxId(completedTxId)
     {
     }
 
@@ -263,7 +263,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
-        } else if (NotifyResult) {
+        } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
             Resume(txc, ctx);
@@ -424,6 +424,10 @@ private:
 
         auto path = Self->PathsById.at(item.SourcePathId);
         if (path->PathState != NKikimrSchemeOp::EPathStateCopying) {
+            return InvalidTxId;
+        }
+
+        if (!ItemPathId(Self, exportInfo, 0)) {
             return InvalidTxId;
         }
 
@@ -782,7 +786,7 @@ private:
                                 SubscribeTx(path->LastTxId);
 
                                 Y_VERIFY_DEBUG(itemIdx == Max<ui32>());
-                                Self->TxIdToExport[path->LastTxId] = {exportInfo->Id, itemIdx};
+                                Self->TxIdToDependentExport[path->LastTxId].insert(exportInfo->Id);
                             }
                         }
 
@@ -854,29 +858,46 @@ private:
     }
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
-        Y_VERIFY(NotifyResult);
-        const auto& record = NotifyResult->Get()->Record;
-
+        Y_VERIFY(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
-            << ": txId# " << record.GetTxId());
+            << ": txId# " << CompletedTxId);
 
-        const auto txId = TTxId(record.GetTxId());
-        if (!Self->TxIdToExport.contains(txId)) {
+        const auto txId = CompletedTxId;
+        if (!Self->TxIdToExport.contains(txId) && !Self->TxIdToDependentExport.contains(txId)) {
             LOG_E("TExport::TTxProgress: OnNotifyResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
 
-        ui64 id;
-        ui32 itemIdx;
-        std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
+        if (Self->TxIdToExport.contains(txId)) {
+            ui64 id;
+            ui32 itemIdx;
+            std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
+
+            OnNotifyResult(txId, id, itemIdx, txc);
+            Self->TxIdToExport.erase(txId);
+        }
+        
+        if (Self->TxIdToDependentExport.contains(txId)) {
+            for (const auto id : Self->TxIdToDependentExport.at(txId)) {
+                OnNotifyResult(txId, id, Max<ui32>(), txc);
+            }
+
+            Self->TxIdToDependentExport.erase(txId);
+        }
+    }
+
+    void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc) {
+        LOG_D("TExport::TTxProgress: OnNotifyResult"
+            << ": txId# " << txId
+            << ", id# " << id
+            << ", itemIdx# " << itemIdx);
+
         if (!Self->Exports.contains(id)) {
             LOG_E("TExport::TTxProgress: OnNotifyResult received unknown id"
                 << ": id# " << id);
             return;
         }
-
-        Self->TxIdToExport.erase(txId);
 
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         NIceDb::TNiceDb db(txc.DB);
@@ -977,8 +998,8 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySche
     return new TExport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-    return new TExport::TTxProgress(this, ev);
+ITransaction* TSchemeShard::CreateTxProgressExport(TTxId completedTxId) {
+    return new TExport::TTxProgress(this, completedTxId);
 }
 
 } // NSchemeShard

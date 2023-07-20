@@ -438,6 +438,7 @@ public:
     bool ResolveTabletChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveRtmrChannels(const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    bool ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveChannelsByPoolKinds(
         const TVector<TStringBuf>& channelPoolKinds,
@@ -1019,6 +1020,7 @@ public:
     THashMap<ui64, TExportInfo::TPtr> Exports;
     THashMap<TString, TExportInfo::TPtr> ExportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
+    THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
 
     void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo);
 
@@ -1049,7 +1051,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(ui64 id);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressExport(TTxId completedTxId);
 
     void Handle(TEvExport::TEvCreateExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExport::TEvGetExportRequest::TPtr& ev, const TActorContext& ctx);
@@ -1098,7 +1100,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev);
-    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TTxId completedTxId);
 
     void Handle(TEvImport::TEvCreateImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvGetImportRequest::TPtr& ev, const TActorContext& ctx);
@@ -1174,7 +1176,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgress(TIndexBuildId id);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& modifyResult);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TTxId completedTxId);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);

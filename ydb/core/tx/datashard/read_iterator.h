@@ -182,6 +182,10 @@ public:
 
     TQuota Quota;
 
+    // Number of rows processed so far
+    ui64 TotalRows = 0;
+    ui64 TotalRowsLimit = Max<ui64>();
+
     // items are running total,
     // first item corresponds to SeqNo = LastAckSeqNo + 1,
     // i.e. [LastAckSeqNo + 1; SeqNo]

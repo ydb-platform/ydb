@@ -730,10 +730,6 @@ private:
             channelPair.second->Receive(ev, TActivationContext::AsActorContext());
         }
 
-        for (auto& [shardId, nodeId] : ShardIdToNodeId) {
-            Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe());
-        }
-
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->ScanTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
 

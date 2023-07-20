@@ -158,10 +158,14 @@ public:
             if (checks) {
                 checks
                     .IsValidLeafName()
+                    .IsValidACL(acl);
+            }
+
+            if (checks && !context.SS->SystemBackupSIDs.contains(owner)) {
+                checks
                     .DepthLimit()
                     .PathsLimit()
-                    .DirChildrenLimit()
-                    .IsValidACL(acl);
+                    .DirChildrenLimit();
             }
 
             if (!checks) {

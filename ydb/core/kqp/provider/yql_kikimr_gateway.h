@@ -151,8 +151,16 @@ struct TColumnFamily {
 };
 
 struct TTtlSettings {
+    enum class EUnit: ui32 {
+        Seconds = 1,
+        Milliseconds = 2,
+        Microseconds = 3,
+        Nanoseconds = 4,
+    };
+
     TString ColumnName;
     TDuration ExpireAfter;
+    TMaybe<EUnit> ColumnUnit;
 
     static bool TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error);
 };
@@ -438,6 +446,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
             }
         }
         return {nullptr, TIndexDescription::EIndexState::Invalid};
+    }
+
+    bool IsOlap() const {
+        return Kind == EKikimrTableKind::Olap;
     }
 };
 

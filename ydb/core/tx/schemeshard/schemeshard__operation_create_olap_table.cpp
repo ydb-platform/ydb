@@ -23,19 +23,27 @@ bool PrepareSchema(NKikimrSchemeOp::TColumnTableSchema& proto, TOlapSchema& sche
     return schema.Parse(proto, errStr, allowNullableKeys);
 }
 
+NKikimrSchemeOp::TColumnTableSharding DefaultSharding() {
+    NKikimrSchemeOp::TColumnTableSharding sharding;
+    auto* hashSharding = sharding.MutableHashSharding();
+    hashSharding->SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+    return sharding;
+}
+
 bool SetSharding(const TOlapSchema& schema, NKikimrSchemeOp::TColumnTableDescription& op,
                  TColumnTableInfo::TPtr tableInfo,
                  TEvSchemeShard::EStatus& status, TString& errStr)
 {
-    ui32 shardsCount = Max(ui32(1), op.GetColumnShardCount());
+    ui32 shardsCount = op.GetColumnShardCount();
+    if (!shardsCount) {
+        status = NKikimrScheme::StatusSchemeError;
+        errStr = Sprintf("Shards count is zero");
+        return false;
+    }
     if (op.HasSharding()) {
         tableInfo->Sharding = std::move(*op.MutableSharding());
-    } else if (shardsCount < 2) {
-        tableInfo->Sharding.MutableRandomSharding();
     } else {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Sharding is not set");
-        return false;
+        tableInfo->Sharding = DefaultSharding();
     }
 
     op.ClearSharding();
@@ -51,8 +59,11 @@ bool SetSharding(const TOlapSchema& schema, NKikimrSchemeOp::TColumnTableDescrip
         case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
             auto& sharding = *tableInfo->Sharding.MutableHashSharding();
             if (sharding.ColumnsSize() == 0) {
+                sharding.MutableColumns()->CopyFrom(tableInfo->Description.GetSchema().GetKeyColumnNames());
+            }
+            if (shardsCount > 1 && sharding.ColumnsSize() == 0) {
                 status = NKikimrScheme::StatusSchemeError;
-                errStr = Sprintf("Hash sharding requires a non-empty list of columns");
+                errStr = Sprintf("Hash sharding requires a non-empty list of columns or primary key specified");
                 return false;
             }
             bool keysOnly = true;
@@ -591,7 +602,11 @@ public:
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        auto& createDescription = Transaction.GetCreateColumnTable();
+        auto createDescription = Transaction.GetCreateColumnTable();
+        if (!createDescription.HasColumnShardCount()) {
+            static constexpr ui32 DEFAULT_SHARDS_COUNT = 64;
+            createDescription.SetColumnShardCount(DEFAULT_SHARDS_COUNT);
+        }
         const TString& name = createDescription.GetName();
         const ui32 shardsCount = Max(ui32(1), createDescription.GetColumnShardCount());
         auto opTxId = OperationId.GetTxId();

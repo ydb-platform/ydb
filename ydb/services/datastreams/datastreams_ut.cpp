@@ -1374,7 +1374,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     UNIT_ASSERT_VALUES_EQUAL(item.GetData(), item.GetPartitionKey());
                     auto hashKey = item.GetExplicitHash().empty() ? HexBytesToDecimal(MD5::Calc(item.GetPartitionKey())) : BytesToDecimal(item.GetExplicitHash());
                     UNIT_ASSERT_VALUES_EQUAL(NKikimr::NDataStreams::V1::ShardFromDecimal(hashKey, 5), item.GetPartitionStream()->GetPartitionId());
-                    UNIT_ASSERT(!item.GetIp().empty());
+                    UNIT_ASSERT(item.GetIp().empty());
                     if (item.GetData() == dataStr) {
                         UNIT_ASSERT_VALUES_EQUAL(item.GetExplicitHash(), dataStr);
                     }

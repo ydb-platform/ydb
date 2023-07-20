@@ -392,6 +392,13 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             Runtime = Server->GetRuntime();
             KqpProxy = MakeKqpProxyID(Runtime->GetNodeId(0));
 
+            {
+                auto settings = MakeIntrusive<TIteratorReadBackoffSettings>();
+                settings->StartRetryDelay = TDuration::MilliSeconds(250);
+                settings->MaxShardAttempts = 4;
+                SetReadIteratorBackoffSettings(settings);
+            }
+
             Sender = Runtime->AllocateEdgeActor();
 
             CollectKeysTo(&CollectedKeys, Runtime, Sender);

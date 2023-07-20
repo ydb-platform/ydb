@@ -23,18 +23,11 @@ public:
     TTxType GetTxType() const override { return TXTYPE_WRITE_INDEX; }
 
 private:
-    struct TPathIdBlobs {
-        THashMap<TUnifiedBlobId, TString> Blobs;
-        ui64 PathId;
-        TPathIdBlobs(const ui64 pathId)
-            : PathId(pathId) {
-
-        }
-    };
+    using TPathIdBlobs = THashMap<ui64, THashSet<TUnifiedBlobId>>;
 
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
-    THashSet<NOlap::TEvictedBlob> BlobsToForget;
+    THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
     ui64 ExportNo = 0;
     TBackgroundActivity TriggerActivity = TBackgroundActivity::All();
 };
@@ -197,7 +190,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
                     auto evict = Self->BlobManager->GetDropped(blobId, meta);
                     Y_VERIFY(evict.State != EEvictState::UNKNOWN);
 
-                    BlobsToForget.emplace(std::move(evict));
+                    BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
 
                     if (NOlap::IsDeleted(evict.State)) {
                         LOG_S_DEBUG("Skip delete blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
@@ -228,21 +221,22 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     }
 
     if (blobsToExport.size()) {
-        size_t numBlobs = blobsToExport.size();
         for (auto& [blobId, evFeatures] : blobsToExport) {
-            auto it = ExportTierBlobs.find(evFeatures.TargetTierName);
-            if (it == ExportTierBlobs.end()) {
-                it = ExportTierBlobs.emplace(evFeatures.TargetTierName, TPathIdBlobs(evFeatures.PathId)).first;
-            }
-            it->second.Blobs.emplace(blobId, TString());
+            ExportTierBlobs[evFeatures.TargetTierName][evFeatures.PathId].emplace(blobId);
         }
         blobsToExport.clear();
 
-        ExportNo = Self->LastExportNo + 1;
-        Self->LastExportNo += ExportTierBlobs.size();
+        ui32 numExports = 0;
+        for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
+            numExports += pathBlobs.size();
+        }
 
-        LOG_S_DEBUG("TTxWriteIndex init export " << ExportNo << " of " << numBlobs << " blobs in "
-            << ExportTierBlobs.size() << " tiers at tablet " << Self->TabletID());
+        ExportNo = Self->LastExportNo;
+        Self->LastExportNo += numExports;
+
+        // Do not start new TTL till we finish current tx. TODO: check if this protection needed
+        Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
+        Self->ActiveEvictions += numExports;
 
         NIceDb::TNiceDb db(txc.DB);
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
@@ -284,10 +278,6 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->ActiveTtl = false;
         //TriggerActivity = changes->NeedRepeat ? TBackgroundActivity::Ttl() : TBackgroundActivity::None();
 
-        // Do not start new TTL till we evict current PortionsToEvict. We could evict them twice otherwise
-        Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
-        Self->ActiveEvictions = ExportTierBlobs.size();
-
         Self->IncCounter(ok ? COUNTER_TTL_SUCCESS : COUNTER_TTL_FAIL);
         Self->IncCounter(COUNTER_EVICTION_BLOBS_WRITTEN, blobsWritten);
         Self->IncCounter(COUNTER_EVICTION_BYTES_WRITTEN, bytesWritten);
@@ -308,12 +298,16 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
-        Y_VERIFY(ExportNo);
-        Y_VERIFY(pathBlobs.PathId);
-
-        ctx.Send(Self->SelfId(),
-                 new TEvPrivate::TEvExport(ExportNo, tierName, pathBlobs.PathId, std::move(pathBlobs.Blobs)));
-        ++ExportNo;
+        for (auto& [pathId, blobs] : pathBlobs) {
+            ++ExportNo;
+            Y_VERIFY(pathId);
+            auto event = std::make_unique<TEvPrivate::TEvExport>(ExportNo, tierName, pathId, std::move(blobs));
+            Self->ExportBlobs(ctx, std::move(event));
+        }
+        Self->ActiveEvictions -= pathBlobs.size();
+    }
+    if (ExportTierBlobs.size()) {
+        Y_VERIFY(!Self->ActiveEvictions, "Unexpected active evictions count at tablet %lu", Self->TabletID());
     }
 
     Self->ForgetBlobs(ctx, BlobsToForget);

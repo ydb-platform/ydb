@@ -66,6 +66,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
             TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                 Name: "ColumnTable"
+                ColumnShardCount: 1
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -111,6 +112,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
             TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                 Name: "ColumnTable"
+                ColumnShardCount: 1
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -163,11 +165,13 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             t.TestEnv->ReliablePropose(runtime,
                 CreateColumnTableRequest(t.TxId += 2, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable1"
+                    ColumnShardCount: 1
                 )"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->ReliablePropose(runtime,
                 CreateColumnTableRequest(t.TxId - 1, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable2"
+                    ColumnShardCount: 1
                 )"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
@@ -221,11 +225,13 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable1"
+                    ColumnShardCount: 1
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable2"
+                    ColumnShardCount: 1
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -319,6 +325,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable"
+                    ColumnShardCount: 1
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
@@ -354,6 +361,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
                 TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
                     Name: "ColumnTable"
+                    ColumnShardCount: 1
                     SchemaPresetName: "default"
                     TtlSettings {
                         Enabled {

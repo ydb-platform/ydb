@@ -330,7 +330,7 @@ class TDataShard
             EvMediatorRestoreBackup,
             EvRemoveLockChangeRecords,
             EvCdcStreamScanRegistered,
-            EvCdcStreamScanProgress,
+            EvCdcStreamScanProgress, // WARNING: tests use ES_PRIVATE + 24
             EvCdcStreamScanContinue,
             EvRestartOperation, // used to restart after an aborted scan (e.g. backup)
             EvChangeExchangeExecuteHandshakes,

@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/core/base/wilson.h>
@@ -76,7 +77,12 @@ public:
         IKqpNodeComputeActorFactory* caFactory)
         : Config(config.GetResourceManager())
         , Counters(counters)
-        , CaFactory(caFactory) {}
+        , CaFactory(caFactory)
+    {
+        if (config.HasIteratorReadsRetrySettings()) {
+            SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
+        }
+    }
 
     void Bootstrap() {
         LOG_I("Starting KQP Node service");
@@ -444,8 +450,29 @@ private:
             LOG_I("Updated table service config: " << Config.DebugString());
         }
 
+        if (event.GetConfig().GetTableServiceConfig().HasIteratorReadsRetrySettings()) {
+            SetIteratorReadsRetrySettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadsRetrySettings());
+        }
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+    }
+
+    void SetIteratorReadsRetrySettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadsRetrySettings& settings) {
+        auto ptr = MakeIntrusive<NKikimr::NKqp::TIteratorReadBackoffSettings>();
+        ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartDelayMs());
+        ptr->MaxShardAttempts = settings.GetMaxShardRetries();
+        ptr->MaxShardResolves = settings.GetMaxShardResolves();
+        ptr->UnsertaintyRatio = settings.GetUnsertaintyRatio();
+        ptr->Multiplier = settings.GetMultiplier();
+        if (settings.GetMaxTotalRetries()) {
+            ptr->MaxTotalRetries = settings.GetMaxTotalRetries();
+        }
+        if (settings.GetIteratorResponseTimeoutMs()) {
+            ptr->ReadResponseTimeout = TDuration::MilliSeconds(settings.GetIteratorResponseTimeoutMs());
+        }
+        ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
+        SetReadIteratorBackoffSettings(ptr);
     }
 
     void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {

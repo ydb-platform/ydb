@@ -48,6 +48,7 @@ namespace NActors {
         ui32 MaxSerializedEventSize = NActors::EventMaxByteSize;
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
+        ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
 
         ui32 GetSendBufferSize() const {
             ui32 res = 512 * 1024; // 512 kb is the default value for send buffer
@@ -94,6 +95,7 @@ namespace NActors {
         std::shared_ptr<TEventFilter> EventFilter;
         TString Cookie; // unique random identifier of a node instance (generated randomly at every start)
         std::unordered_map<ui16, TString> ChannelName;
+        std::optional<ui32> OutgoingHandshakeInflightLimit;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

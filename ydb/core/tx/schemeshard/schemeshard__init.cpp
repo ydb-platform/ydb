@@ -2958,6 +2958,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 } else {
                     stream->DoneShards.insert(shardIdx);
                 }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
             }
         }
 

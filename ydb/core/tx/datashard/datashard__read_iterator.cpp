@@ -435,6 +435,11 @@ public:
         // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
         // then it will also become less than size() when finished
         while (FirstUnprocessedQuery < State.Request->Ranges.size()) {
+            if (ReachedTotalRowsLimit()) {
+                FirstUnprocessedQuery = -1;
+                return true;
+            }
+
             if (ShouldStop())
                 return true;
 
@@ -464,6 +469,11 @@ public:
         // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
         // then it will also become less than size() when finished
         while (FirstUnprocessedQuery < State.Request->Keys.size()) {
+            if (ReachedTotalRowsLimit()) {
+                FirstUnprocessedQuery = -1;
+                return true;
+            }
+
             if (ShouldStop())
                 return true;
 
@@ -631,6 +641,7 @@ public:
     }
 
     void UpdateState(TReadIteratorState& state) {
+        state.TotalRows += RowsRead;
         state.FirstUnprocessedQuery = FirstUnprocessedQuery;
         state.LastProcessedKey = LastProcessedKey;
         state.ConsumeSeqNo(RowsRead, BytesInResult);
@@ -665,6 +676,27 @@ private:
         return RowsRead >= State.MaxRowsInResult;
     }
 
+    bool ReachedTotalRowsLimit() const {
+        if (State.TotalRowsLimit == Max<ui64>()) {
+            return false;
+        }
+
+        return State.TotalRows + RowsRead >= State.TotalRowsLimit;
+    }
+
+    ui64 GetTotalRowsLeft() const {
+        if (State.TotalRowsLimit == Max<ui64>()) {
+            return Max<ui64>();
+        }
+
+        if (State.TotalRows + RowsRead >= State.TotalRowsLimit) {
+            return 0;
+        }
+
+
+        return State.TotalRowsLimit - State.TotalRows - RowsRead;
+    }
+
     bool ShouldStop() {
         if (!CanResume()) {
             return false;
@@ -689,6 +721,8 @@ private:
             rowsLeft = State.Quota.Rows - RowsRead;
             bytesLeft = State.Quota.Bytes - BlockBuilder.Bytes();
         }
+
+        rowsLeft = Min(rowsLeft, GetTotalRowsLeft());
 
         auto direction = reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward;
         return db.Precharge(TableInfo.LocalTid,
@@ -720,6 +754,10 @@ private:
             RowsSinceLastCheck += 1 + ResetRowStats(iter->Stats);
 
             Self->GetKeyAccessSampler()->AddSample(TableId, rowKey.Cells());
+
+            if (ReachedTotalRowsLimit()) {
+                break;
+            }
 
             if (ShouldStop()) {
                 return EReadStatus::StoppedByLimit;
@@ -1206,6 +1244,9 @@ public:
 
         if (record.HasMaxRowsInResult())
             state.MaxRowsInResult = record.GetMaxRowsInResult();
+
+        if (record.HasTotalRowsLimit())
+            state.TotalRowsLimit = record.GetTotalRowsLimit();
 
         if (record.HasSnapshot()) {
             state.ReadVersion.Step = record.GetSnapshot().GetStep();

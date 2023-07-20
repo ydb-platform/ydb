@@ -481,7 +481,7 @@ struct TSchemeShard::TIndexBuilder::TTxReply: public TSchemeShard::TIndexBuilder
 private:
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult;
-    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr Notification;
+    TTxId CompletedTxId = InvalidTxId;
     TEvDataShard::TEvBuildIndexProgressResponse::TPtr ShardProgress;
     struct {
         TIndexBuildId BuildIndexId;
@@ -502,9 +502,9 @@ public:
     {
     }
 
-    explicit TTxReply(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& notification)
+    explicit TTxReply(TSelf* self, TTxId completedTxId)
         : TSchemeShard::TIndexBuilder::TTxBase(self)
-        , Notification(notification)
+        , CompletedTxId(completedTxId)
     {
     }
 
@@ -530,7 +530,7 @@ public:
             return OnAllocation(txc, ctx);
         } else if (ModifyResult) {
             return OnModifyResult(txc, ctx);
-        } else if (Notification) {
+        } else if (CompletedTxId) {
             return OnNotification(txc, ctx);
         } else if (ShardProgress) {
             return OnProgress(txc, ctx);
@@ -773,12 +773,10 @@ public:
     }
 
     bool OnNotification(TTransactionContext& txc, const TActorContext&) {
-        const auto& record = Notification->Get()->Record;
-
-        const auto txId = TTxId(record.GetTxId());
+        const auto txId = CompletedTxId;
         if (!Self->TxIdToIndexBuilds.contains(txId)) {
             LOG_I("TTxReply : TEvNotifyTxCompletionResult superfluous message"
-                  << ", txId: " << record.GetTxId()
+                  << ", txId: " << txId
                   << ", buildInfoId not found");
             return true;
         }
@@ -788,10 +786,10 @@ public:
 
         TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(buildId);
         LOG_I("TTxReply : TEvNotifyTxCompletionResult"
-              << ", txId# " << record.GetTxId()
+              << ", txId# " << txId
               << ", buildInfoId: " << buildInfo->Id);
         LOG_D("TTxReply : TEvNotifyTxCompletionResult"
-              << ", txId# " << record.GetTxId()
+              << ", txId# " << txId
               << ", buildInfo: " << *buildInfo);
 
         switch (buildInfo->State) {
@@ -1280,8 +1278,8 @@ ITransaction* TSchemeShard::CreateTxReply(TEvSchemeShard::TEvModifySchemeTransac
     return new TIndexBuilder::TTxReply(this, modifyResult);
 }
 
-ITransaction* TSchemeShard::CreateTxReply(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& notification) {
-    return new TIndexBuilder::TTxReply(this, notification);
+ITransaction* TSchemeShard::CreateTxReply(TTxId completedTxId) {
+    return new TIndexBuilder::TTxReply(this, completedTxId);
 }
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress) {

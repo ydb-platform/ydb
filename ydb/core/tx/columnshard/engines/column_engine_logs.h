@@ -218,8 +218,7 @@ public:
     enum class EStatsUpdateType {
         DEFAULT = 0,
         ERASE,
-        LOAD,
-        EVICT
+        ADD,
     };
 
     TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits = {});
@@ -339,12 +338,14 @@ private:
 
     void EraseGranule(ui64 pathId, ui64 granule, const TMark& mark);
     bool SetGranule(const TGranuleRecord& rec, bool apply);
-    bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
+    bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, const TPortionInfo* exInfo = nullptr);
     bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
     void AddColumnRecord(const TColumnRecord& row);
-    void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT);
+    void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT,
+                            const TPortionInfo* exPortionInfo = nullptr);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
-                            EStatsUpdateType updateType) const;
+                            EStatsUpdateType updateType,
+                            const TPortionInfo* exPortionInfo = nullptr) const;
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
     TMap<TSnapshot, TVector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;

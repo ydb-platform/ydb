@@ -35,9 +35,9 @@ public:
         return Event->Blobs;
     }
 
-    TUnifiedBlobId AddExported(const TUnifiedBlobId& srcBlob, const ui64 pathId) {
-        Event->SrcToDstBlobs[srcBlob] = srcBlob.MakeS3BlobId(pathId);
-        return Event->SrcToDstBlobs[srcBlob];
+    TString GetS3Key(const TUnifiedBlobId& srcBlob) const {
+        Y_VERIFY(Event->SrcToDstBlobs.contains(srcBlob));
+        return Event->SrcToDstBlobs.find(srcBlob)->second.GetS3Key();
     }
 
     bool ExtractionFinished() const {
@@ -52,6 +52,18 @@ public:
         auto node = KeysToWrite.extract(key);
         return node.mapped();
     }
+
+    void RemoveBlobs(const THashSet<TUnifiedBlobId>& blobIds) {
+        for (auto& blobId : blobIds) {
+            Event->Blobs.erase(blobId);
+            Event->SrcToDstBlobs.erase(blobId);
+        }
+    }
+
+    bool IsNotFinished(const TString& key) const {
+        return KeysToWrite.contains(key);
+    }
+
 private:
     std::unordered_map<TString, TUnifiedBlobId> KeysToWrite;
 };
@@ -125,46 +137,74 @@ public:
         Exports[exportNo] = TS3Export(ev->Release());
         auto& ex = Exports[exportNo];
 
+        THashSet<TUnifiedBlobId> retryes;
         for (auto& [blobId, blobData] : ex.Blobs()) {
-            TString key = ex.AddExported(blobId, msg.PathId).GetS3Key();
-            Y_VERIFY(!ExportingKeys.count(key)); // TODO: allow reexport?
+            const TString key = ex.GetS3Key(blobId);
+            Y_VERIFY(!key.empty());
 
-            ex.RegisterKey(key, blobId);
-            ExportingKeys[key] = exportNo;
+            if (ExportingKeys.contains(key)) {
+                retryes.insert(blobId);
+                auto strBlobId = blobId.ToStringNew();
 
-            SendPutObjectIfNotExists(key, std::move(blobData));
+                const auto& prevExport = Exports[ExportingKeys[key]];
+                if (prevExport.IsNotFinished(key)) {
+                    LOG_S_INFO("[S3] Retry export blob '" << strBlobId << "' at tablet " << TabletId);
+                } else {
+                    LOG_S_INFO("[S3] Avoid export retry for blob '" << strBlobId << "' at tablet " << TabletId);
+                    blobData = {};
+                }
+            } else {
+                ex.RegisterKey(key, blobId);
+                ExportingKeys[key] = exportNo;
+            }
+
+            if (!blobData.empty()) {
+                SendPutObjectIfNotExists(key, std::move(blobData));
+            }
+        }
+
+        ex.RemoveBlobs(retryes);
+        if (ex.ExtractionFinished()) {
+            Exports.erase(exportNo);
+            LOG_S_DEBUG("[S3] Empty export " << exportNo << " at tablet " << TabletId);
         }
     }
 
     void Handle(TEvPrivate::TEvForget::TPtr& ev) {
-        // It's possible to get several forgets for the same blob (remove + cleanup)
-        for (auto& evict : ev->Get()->Evicted) {
-            if (evict.ExternBlob.IsS3Blob()) {
-                const TString& key = evict.ExternBlob.GetS3Key();
-                if (ForgettingKeys.count(key)) {
-                    LOG_S_NOTICE("[S3] Ignore forget '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
-                    return; // TODO: return an error?
-                }
-            }
-        }
-
         ui64 forgetNo = ++ForgetNo;
-
         Forgets[forgetNo] = TS3Forget(ev->Release());
         auto& forget = Forgets[forgetNo];
 
-        for (auto& evict : forget.Event->Evicted) {
+        auto& eventEvicted = forget.Event->Evicted;
+        Y_VERIFY(!eventEvicted.empty());
+
+        std::vector<NOlap::TEvictedBlob> newEvicted;
+        newEvicted.reserve(eventEvicted.size());
+
+        for (auto&& evict : forget.Event->Evicted) {
             if (!evict.ExternBlob.IsS3Blob()) {
                 LOG_S_ERROR("[S3] Forget not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
                 continue;
             }
 
-            const TString& key = evict.ExternBlob.GetS3Key();
-            Y_VERIFY(!ForgettingKeys.count(key));
+            const TString key = evict.ExternBlob.GetS3Key();
 
-            forget.KeysToDelete.emplace(key);
-            ForgettingKeys[key] = forgetNo;
+            if (ForgettingKeys.contains(key)) {
+                auto strBlobId = evict.Blob.ToStringNew();
+                LOG_S_INFO("[S3] Retry forget blob '" << strBlobId << "' at tablet " << TabletId);
+            } else {
+                newEvicted.emplace_back(std::move(evict));
+                forget.KeysToDelete.emplace(key);
+                ForgettingKeys[key] = forgetNo;
+            }
+
             SendDeleteObject(key);
+        }
+
+        eventEvicted.swap(newEvicted);
+        if (eventEvicted.empty()) {
+            Forgets.erase(forgetNo);
+            LOG_S_DEBUG("[S3] Empty forget " << forgetNo << " at tablet " << TabletId);
         }
     }
 
@@ -270,7 +310,7 @@ public:
         LOG_S_DEBUG("[S3] DeleteObjectResponse '" << key << "' at tablet " << TabletId);
 
         if (!ForgettingKeys.count(key)) {
-            LOG_S_DEBUG("[S3] DeleteObjectResponse for unknown key '" << key << "' at tablet " << TabletId);
+            LOG_S_INFO("[S3] DeleteObjectResponse for unknown key '" << key << "' at tablet " << TabletId);
             return;
         }
 
@@ -278,7 +318,7 @@ public:
         ForgettingKeys.erase(key);
 
         if (!Forgets.count(forgetNo)) {
-            LOG_S_DEBUG("[S3] DeleteObjectResponse for unknown forget with key '" << key << "' at tablet " << TabletId);
+            LOG_S_INFO("[S3] DeleteObjectResponse for unknown forget with key '" << key << "' at tablet " << TabletId);
             return;
         }
 
@@ -355,28 +395,30 @@ public:
     }
 
     void KeyFinished(const TString& key, const bool hasError, const TString& errStr) {
-        ui64 exportNo = 0;
-        {
-            auto itExportKey = ExportingKeys.find(key);
-            if (itExportKey == ExportingKeys.end()) {
-                LOG_S_DEBUG("[S3] KeyFinished for unknown key '" << key << "' at tablet " << TabletId);
-                return;
-            }
-            exportNo = itExportKey->second;
-            ExportingKeys.erase(itExportKey);
+        auto itExportKey = ExportingKeys.find(key);
+        if (itExportKey == ExportingKeys.end()) {
+            LOG_S_INFO("[S3] KeyFinished for unknown key '" << key << "' at tablet " << TabletId);
+            return;
         }
+        ui64 exportNo = itExportKey->second;
+
         auto it = Exports.find(exportNo);
         if (it == Exports.end()) {
-            LOG_S_DEBUG("[S3] KeyFinished for unknown export with key '" << key << "' at tablet " << TabletId);
+            LOG_S_INFO("[S3] KeyFinished for unknown export with key '" << key << "' at tablet " << TabletId);
             return;
         }
 
+        LOG_S_DEBUG("[S3] KeyFinished for key '" << key << "' at tablet " << TabletId);
         auto& ex = it->second;
         TUnifiedBlobId blobId = ex.FinishKey(key);
 
         ex.Event->AddResult(blobId, key, hasError, errStr);
 
         if (ex.ExtractionFinished()) {
+            for (auto& [blobId, _] : ex.Blobs()) {
+                ExportingKeys.erase(ex.GetS3Key(blobId));
+            }
+
             Y_VERIFY(ex.Event->Finished());
             Send(ShardActor, ex.Event.release());
             Exports.erase(exportNo);

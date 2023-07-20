@@ -865,12 +865,16 @@ public:
             if (const auto& ttl = Params.TableSettings.TtlSettings) {
                 if (ttl.IsSet()) {
                     const auto& ttlSettings = ttl.GetValueSet();
-                    auto columnName = BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name);
-                    auto nameValueTuple = Y(
-                        Q(Y(Q("columnName"), columnName)),
-                        Q(Y(Q("expireAfter"), ttlSettings.Expr))
-                    );
-                    settings = L(settings, Q(Y(Q("setTtlSettings"), Q(nameValueTuple))));
+                    auto opts = Y();
+
+                    opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
+                    opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
+
+                    if (ttlSettings.ColumnUnit) {
+                        opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
+                    }
+
+                    settings = L(settings, Q(Y(Q("setTtlSettings"), Q(opts))));
                 } else {
                     YQL_ENSURE(false, "Can't reset TTL settings");
                 }
@@ -1049,12 +1053,16 @@ public:
             if (const auto& ttl = Params.TableSettings.TtlSettings) {
                 if (ttl.IsSet()) {
                     const auto& ttlSettings = ttl.GetValueSet();
-                    auto columnName = BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name);
-                    auto nameValueTuple = Y(
-                        Q(Y(Q("columnName"), columnName)),
-                        Q(Y(Q("expireAfter"), ttlSettings.Expr))
-                    );
-                    settings = L(settings, Q(Y(Q("setTtlSettings"), Q(nameValueTuple))));
+                    auto opts = Y();
+
+                    opts = L(opts, Q(Y(Q("columnName"), BuildQuotedAtom(ttlSettings.ColumnName.Pos, ttlSettings.ColumnName.Name))));
+                    opts = L(opts, Q(Y(Q("expireAfter"), ttlSettings.Expr)));
+
+                    if (ttlSettings.ColumnUnit) {
+                        opts = L(opts, Q(Y(Q("columnUnit"), Q(ToString(*ttlSettings.ColumnUnit)))));
+                    }
+
+                    settings = L(settings, Q(Y(Q("setTtlSettings"), Q(opts))));
                 } else {
                     settings = L(settings, Q(Y(Q("resetTtlSettings"), Q(Y()))));
                 }

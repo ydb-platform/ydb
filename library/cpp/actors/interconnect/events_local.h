@@ -52,6 +52,9 @@ namespace NActors {
         EvProcessPingRequest,
         EvGetSecureSocket,
         EvSecureSocket,
+        HandshakeBrokerTake,
+        HandshakeBrokerFree,
+        HandshakeBrokerPermit,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
@@ -96,6 +99,18 @@ namespace NActors {
             : Reason(std::move(reason))
         {
         }
+    };
+
+    struct TEvHandshakeBrokerTake: TEventLocal<TEvHandshakeBrokerTake, ui32(ENetwork::HandshakeBrokerTake)> {
+        DEFINE_SIMPLE_LOCAL_EVENT(TEvHandshakeBrokerTake, "Network: TEvHandshakeBrokerTake")
+    };
+
+    struct TEvHandshakeBrokerFree: TEventLocal<TEvHandshakeBrokerFree, ui32(ENetwork::HandshakeBrokerFree)> {
+        DEFINE_SIMPLE_LOCAL_EVENT(TEvHandshakeBrokerFree, "Network: TEvHandshakeBrokerFree")
+    };
+
+    struct TEvHandshakeBrokerPermit: TEventLocal<TEvHandshakeBrokerPermit, ui32(ENetwork::HandshakeBrokerPermit)> {
+        DEFINE_SIMPLE_LOCAL_EVENT(TEvHandshakeBrokerPermit, "Network: TEvHandshakeBrokerPermit")
     };
 
     struct TEvHandshakeAsk: public TEventLocal<TEvHandshakeAsk, ui32(ENetwork::HandshakeAsk)> {

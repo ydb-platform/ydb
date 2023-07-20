@@ -211,6 +211,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema = R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
         )";
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
@@ -223,6 +224,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Missing column from schema preset
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableMissingDataColumn"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
@@ -233,6 +235,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Extra column not in schema preset
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableExtraColumn"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -245,6 +248,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Different column order
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableDifferentColumnOrder"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "timestamp" Type: "Timestamp" }
@@ -256,6 +260,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Extra key column
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableExtraKeyColumn"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -268,6 +273,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Unknown key column
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableUnknownKeyColumn"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -279,6 +285,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Different data column type
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableDataColumnType"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "String" }
@@ -290,6 +297,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Repeating preset schema should succeed
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "ColumnTableExplicitSchema"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -302,6 +310,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Creating table with directories should succeed
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "DirA/DirB/NestedTable"
+            ColumnShardCount: 1
         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -312,6 +321,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         // Additional storage tier in schema
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "TableWithTiers"
+            ColumnShardCount: 1
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -333,6 +343,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
             SchemaPresetName: "default"
         )");
         env.TestWaitNotification(runtime, txId);
@@ -362,6 +373,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema = R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
         )";
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
@@ -452,6 +464,67 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
     }
 
+    Y_UNIT_TEST(CreateDropStandaloneTableDefaultSharding) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir", false, NLs::PathExist);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestLsPathId(runtime, 3, NLs::PathStringEqual("/MyRoot/MyDir/ColumnTable"));
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 3, NLs::PathStringEqual(""));
+
+        TString otherSchema = R"(
+            Name: "ColumnTable"
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "some" Type: "Uint64" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "some"
+                KeyColumnNames: "data"
+            }
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", otherSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/MyDir/ColumnTable");
+
+            auto& description = record.GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(description.GetColumnShardCount(), 64);
+
+            auto& sharding = description.GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 64);
+            UNIT_ASSERT(sharding.HasHashSharding());
+            auto& hashSharding = sharding.GetHashSharding();
+            UNIT_ASSERT_VALUES_EQUAL(hashSharding.ColumnsSize(), 2);
+            UNIT_ASSERT_EQUAL(hashSharding.GetFunction(),
+                              NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+            UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[0], "some");
+            UNIT_ASSERT_VALUES_EQUAL(hashSharding.GetColumns()[1], "data");
+        };
+
+        TestLsPathId(runtime, 4, checkFn);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
+    }
+
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -462,6 +535,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema1 = R"(
             Name: "Table1"
+            ColumnShardCount: 1
             TtlSettings {
                 Enabled { ColumnName: "timestamp" ExpireAfterSeconds: 300 }
             }
@@ -478,6 +552,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema2 = R"(
             Name: "Table2"
+            ColumnShardCount: 1
             TtlSettings {
                 Disabled {}
             }
@@ -494,6 +569,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema3 = R"(
             Name: "Table3"
+            ColumnShardCount: 1
             TtlSettings {
                 UseTiering : "Tiering1"
             }
@@ -510,6 +586,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema4 = R"(
             Name: "Table4"
+            ColumnShardCount: 1
             TtlSettings {
                 UseTiering : "Tiering1"
             }
@@ -531,6 +608,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchemaX = R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
             TtlSettings {
                 Enabled {
                     ExpireAfterSeconds: 300
@@ -543,6 +621,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema = R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
             TtlSettings {
                 Enabled {
                     ColumnName: "timestamp"
@@ -595,6 +674,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema = R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
             TtlSettings {
                 Enabled {
                     ColumnName: "timestamp"
@@ -678,6 +758,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TString tableSchema = R"(
             Name: "ColumnTable"
+            ColumnShardCount: 1
         )";
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);

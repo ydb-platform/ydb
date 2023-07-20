@@ -31,6 +31,7 @@ target_link_libraries(core-kqp-runtime PUBLIC
   library-yql-utils
   dq-actors-protos
   yql-dq-runtime
+  cpp-threading-hot_swap
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-runtime PRIVATE

@@ -75,7 +75,7 @@ struct THttpRequestContext {
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;
-    TString DatabaseName;
+    TString DatabasePath;
     TString DatabaseId; // not in context
     TString FolderId;   // not in context
     TString CloudId;    // not in context

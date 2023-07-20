@@ -1,4 +1,5 @@
 #include "columnshard_ut_common.h"
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/services/metadata/service.h>
@@ -168,18 +169,23 @@ bool TestCreateTable(const TString& txBody, ui64 planStep = 1000, ui64 txId = 10
     return ProposeSchemaTx(runtime, sender, txBody, {++planStep, ++txId});
 }
 
-TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead,
-                      std::optional<ui32> batchNo = 0,
-                      std::optional<bool> finished = true)
+enum class EExpectedResult {
+    OK_FINISHED,
+    OK,
+    ERROR
+};
+
+TString GetReadResult(NKikimrTxColumnShard::TEvReadResult& resRead, EExpectedResult expected = EExpectedResult::OK_FINISHED)
 {
     UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
     UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), TTestTxConfig::TxTablet1);
-    UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    if (batchNo) {
-        UNIT_ASSERT_VALUES_EQUAL(resRead.GetBatch(), *batchNo);
+    if (expected == EExpectedResult::ERROR) {
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
+    } else {
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
-    if (finished) {
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), *finished);
+    if (expected == EExpectedResult::OK_FINISHED) {
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
     }
     return resRead.GetData();
 }
@@ -368,46 +374,68 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
 class TCountersContainer {
 private:
-    ui32 SuccessCounterStart = 0;
+    struct TCounters {
+        ui32 Attempt = 0;
+        ui32 Request = 0;
+        ui32 Response = 0;
+        ui32 Success = 0;
+
+        void Clear() {
+            Attempt = 0;
+            Request = 0;
+            Response = 0;
+            Success = 0;
+        }
+
+        TString ToString() const {
+            return TStringBuilder() << Attempt << "/" << Request << "/" << Response << "/" << Success;
+        }
+    };
+
+    ui32 WaitNo = 0;
+
 public:
-    ui32 UnknownsCounter = 0;
-    ui32 SuccessCounter = 0;
-    ui32 ErrorsCounter = 0;
-    ui32 ResponsesCounter = 0;
+    TCounters ExportCounters;
+    TCounters ForgetCounters;
     ui32 CaptureReadEvents = 0;
     std::vector<TAutoPtr<IEventHandle>> CapturedReads;
+    ui32 CaptureEvictResponse = 0;
+    ui32 CaptureForgetResponse = 0;
+    std::vector<TAutoPtr<IEventHandle>> CapturedResponses;
+    bool BlockForgets = false;
 
-    TString SerializeToString() const {
-        TStringBuilder sb;
-        sb << "EXPORTS INFO: " << SuccessCounter << "/" << ErrorsCounter << "/" << UnknownsCounter << "/" << ResponsesCounter;
-        return sb;
-    }
-
-    void WaitEvents(TTestBasicRuntime& runtime, const ui32 attemption, const ui32 expectedDeltaSuccess, const TDuration timeout) {
+    void WaitEvents(TTestBasicRuntime& runtime, const TDuration& timeout, ui32 waitExports, ui32 waitForgets,
+                    const TString& promo = "START_WAITING") {
         const TInstant startInstant = TAppData::TimeProvider->Now();
         const TInstant deadline = startInstant + timeout;
-        Cerr << "START_WAITING(" << attemption << "): " << SerializeToString() << Endl;
+        Cerr << promo << "(" << WaitNo << "): "
+            << "E" << ExportCounters.ToString() << " F" << ForgetCounters.ToString() << Endl;
         while (TAppData::TimeProvider->Now() < deadline) {
-            Cerr << "IN_WAITING(" << attemption << "):" << SerializeToString() << Endl;
+            Cerr << "IN_WAITING(" << WaitNo << "): "
+                << "E" << ExportCounters.ToString() << " F" << ForgetCounters.ToString() << Endl;
             runtime.SimulateSleep(TDuration::Seconds(1));
-            UNIT_ASSERT(ErrorsCounter == 0);
-            if (expectedDeltaSuccess) {
-                if (SuccessCounter >= SuccessCounterStart + expectedDeltaSuccess) {
-                    break;
-                }
-            } else {
-                if (SuccessCounter > SuccessCounterStart) {
-                    break;
-                }
+
+            if (!waitExports && ExportCounters.Success
+                || !waitForgets && ForgetCounters.Success
+                || !waitForgets && ExportCounters.Success >= waitExports
+                || !waitExports && ForgetCounters.Success >= waitForgets
+                || waitExports && waitForgets
+                    && ExportCounters.Success >= waitExports && ForgetCounters.Success >= waitForgets) {
+                break;
             }
         }
-        if (expectedDeltaSuccess) {
-            UNIT_ASSERT(SuccessCounter >= SuccessCounterStart + expectedDeltaSuccess);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(SuccessCounter, SuccessCounterStart);
-        }
-        Cerr << "FINISH_WAITING(" << attemption << "): " << SerializeToString() << Endl;
-        SuccessCounterStart = SuccessCounter;
+        Cerr << "FINISH_WAITING(" << WaitNo << "): "
+            << "E" << ExportCounters.ToString() << " F" << ForgetCounters.ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(ExportCounters.Success, waitExports);
+        UNIT_ASSERT_VALUES_EQUAL(ForgetCounters.Success, waitForgets);
+        ExportCounters.Clear();
+        ForgetCounters.Clear();
+        ++WaitNo;
+    }
+
+    void WaitMoreEvents(TTestBasicRuntime& runtime, const TDuration& timeout, ui32 waitExports, ui32 waitForgets) {
+        --WaitNo;
+        WaitEvents(runtime, timeout, waitExports, waitForgets, "CONTINUE_WAITING");
     }
 
     void WaitReadsCaptured(TTestBasicRuntime& runtime) const {
@@ -429,6 +457,18 @@ public:
         }
         CapturedReads.clear();
     }
+
+    void ResendCapturedResponses(TTestBasicRuntime& runtime) {
+        for (auto& cev : CapturedResponses) {
+            Cerr << "RESEND S3_RESPONSE" << Endl;
+            runtime.Send(cev.Release());
+        }
+        CapturedResponses.clear();
+    }
+
+    void BlockForgetsTillReboot() {
+        BlockForgets = true;
+    }
 };
 
 class TEventsCounter {
@@ -446,13 +486,52 @@ public:
 
     bool operator()(TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         TStringBuilder ss;
-        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
-            ss << "EXPORT(" << ++Counters->SuccessCounter << "): " << NKikimrProto::EReplyStatus_Name(msg->Status);
+        if (ev->GetTypeRewrite() == TEvTablet::EvBoot) {
+            Counters->BlockForgets = false;
+            return false;
+        } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvExport>(ev)) {
+            if (msg->Status == NKikimrProto::OK) {
+                ss << "EXPORT(done " << ++Counters->ExportCounters.Success << "): ";
+            } else {
+                ss << "EXPORT(attempt " << ++Counters->ExportCounters.Attempt << "): "
+                    << NKikimrProto::EReplyStatus_Name(msg->Status);
+            }
+        } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvForget>(ev)) {
+            if (Counters->BlockForgets) {
+                ss << "FORGET(ignore " << NKikimrProto::EReplyStatus_Name(msg->Status) << "): ";
+                ss << " " << ev->Sender << "->" << ev->Recipient;
+                Cerr << ss << Endl;
+                return true;
+            }
+
+            if (msg->Status == NKikimrProto::OK) {
+                ss << "FORGET(done " << ++Counters->ForgetCounters.Success << "): ";
+            } else {
+                ss << "FORGET(attempt " << ++Counters->ForgetCounters.Attempt << "): "
+                    << NKikimrProto::EReplyStatus_Name(msg->Status);
+            }
+        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectRequest>(ev)) {
+            ss << "S3_REQ(put " << ++Counters->ExportCounters.Request << "):";
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
-            ss << "S3_RESPONSE(put " << ++Counters->ResponsesCounter << "):";
+            if (Counters->CaptureEvictResponse) {
+                Cerr << "CAPTURE S3_RESPONSE(put)" << Endl;
+                --Counters->CaptureEvictResponse;
+                Counters->CapturedResponses.push_back(ev.Release());
+                return true;
+            }
+
+            ss << "S3_RESPONSE(put " << ++Counters->ExportCounters.Response << "):";
+        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(ev)) {
+            ss << "S3_REQ(delete " << ++Counters->ForgetCounters.Request << "):";
         } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
-            ss << "(" << ++Counters->SuccessCounter << "): DELETE SUCCESS";
-            ss << "S3_RESPONSE(delete " << ++Counters->ResponsesCounter << "):";
+            if (Counters->CaptureForgetResponse) {
+                Cerr << "CAPTURE S3_RESPONSE(delete)" << Endl;
+                --Counters->CaptureForgetResponse;
+                Counters->CapturedResponses.push_back(ev.Release());
+                return true;
+            }
+
+            ss << "S3_RESPONSE(delete " << ++Counters->ForgetCounters.Response << "):";
         } else if (auto* msg = TryGetPrivateEvent<NBlobCache::TEvBlobCache::TEvReadBlobRange>(ev)) {
             if (Counters->CaptureReadEvents) {
                 Cerr << "CAPTURE " << msg->BlobRange.ToString() << " "
@@ -463,23 +542,28 @@ public:
             } else {
                 return false;
             }
+        } else if (auto* msg = TryGetPrivateEvent<TEvColumnShard::TEvReadResult>(ev)) {
+            ss << "Got TEvReadResult " << NKikimrTxColumnShard::EResultStatus_Name(Proto(msg).GetStatus()) << Endl;
         } else {
             return false;
         }
         ss << " " << ev->Sender << "->" << ev->Recipient;
         Cerr << ss << Endl;
         return false;
-    };
+    }
 };
 
 std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TString>& blobs,
                                              const std::vector<TTestSchema::TTableSpecials>& specs,
-                                             const ui32 initialEviction)
+                                             const THashSet<ui32>& exportSteps,
+                                             const THashSet<ui32>& forgetSteps,
+                                             std::optional<ui32> eventLoss = {})
 {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_INFO);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_INFO);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
@@ -509,6 +593,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     ui64 tableId = 1;
     ui64 planStep = 1000000000; // greater then delays
     ui64 txId = 100;
+    const TDuration exportTimeout = TDuration::Seconds(40);
 
     UNIT_ASSERT(specs.size() > 0);
     {
@@ -532,18 +617,37 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
 
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
     TAutoPtr<IEventHandle> handle;
 
     std::vector<std::pair<ui32, ui64>> specRowsBytes;
     specRowsBytes.reserve(specs.size());
+    ui32 deplayedExports = 0;
+    ui32 deplayedForgets = 0;
 
     TCountersContainer counter;
     runtime.SetEventFilter(TEventsCounter(counter, runtime));
     for (ui32 i = 0; i < specs.size(); ++i) {
+        ui32 numExports = exportSteps.contains(i) ? 1 : 0;
+        ui32 numForgets = forgetSteps.contains(i) ? 1 : 0;
         bool hasColdEviction = false;
-        for (auto&& i : specs[i].Tiers) {
-            if (!!i.S3) {
+        bool misconfig = false;
+        auto expectedReadResult = EExpectedResult::OK;
+        for (auto&& spec : specs[i].Tiers) {
+            if (!!spec.S3) {
                 hasColdEviction = true;
+                if (spec.S3->GetEndpoint() != "fake") {
+                    misconfig = true;
+                    // misconfig in export => OK, misconfig after export => ERROR
+                    if (i > 1) {
+                        expectedReadResult = EExpectedResult::ERROR;
+                    }
+                    deplayedExports += numExports;
+                    deplayedForgets += numForgets;
+                    numExports = 0;
+                    numForgets = 0;
+                }
                 break;
             }
         }
@@ -557,12 +661,37 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 PlanSchemaTx(runtime, sender, { planStep, txId });
             }
         }
-        if (specs[i].HasTiers()) {
+        if (specs[i].HasTiers() || reboots) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
 
+        if (!misconfig && (deplayedExports || deplayedForgets)) {
+            UNIT_ASSERT(hasColdEviction);
+            // continue waiting: finish previous step
+            counter.WaitMoreEvents(runtime, exportTimeout, deplayedExports, deplayedForgets);
+            deplayedExports = 0;
+            deplayedForgets = 0;
+        }
+
+        if (eventLoss) {
+            if (*eventLoss == i) {
+                if (numExports) {
+                    counter.CaptureEvictResponse = 1;
+                    deplayedExports += numExports;
+                    numExports = 0;
+                } else if (numForgets) {
+                    counter.CaptureForgetResponse = reboots ? 2 : 1;
+                    deplayedForgets += numForgets;
+                    numForgets = 0;
+                }
+            } else {
+                // Check there would be no troubles with delayed responses
+                counter.ResendCapturedResponses(runtime);
+            }
+        }
+
         // Read crossed with eviction (start)
-        {
+        if (!misconfig) {
             auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
             Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
 
@@ -575,24 +704,26 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         TriggerTTL(runtime, sender, { ++planStep, ++txId }, {}, 0, specs[i].TtlColumn);
 
-        Cerr << (hasColdEviction ? "Cold" : "Hot")
-            << " tiering, spec " << i << ", num tiers: " << specs[i].Tiers.size() << "\n";
+        Cerr << "-- " << (hasColdEviction ? "COLD" : "HOT")
+            << " TIERING(" << i << ") num tiers: " << specs[i].Tiers.size()
+            << ", exports: " << numExports << ", forgets: " << numForgets
+            << ", delayed exports: " << deplayedExports << ", delayed forgets: " << deplayedForgets << Endl;
 
-        if (hasColdEviction) {
-            if (i > initialEviction) {
-                counter.WaitEvents(runtime, i, 1, TDuration::Seconds(40));
-            } else {
-                counter.WaitEvents(runtime, i, 0, TDuration::Seconds(20));
-            }
+        if (numExports) {
+            UNIT_ASSERT(hasColdEviction);
+            counter.WaitEvents(runtime, exportTimeout, numExports, 0);
         } else {
-            counter.WaitEvents(runtime, i, 0, TDuration::Seconds(4));
+            TDuration timeout = hasColdEviction ? TDuration::Seconds(10) : TDuration::Seconds(4);
+            counter.WaitEvents(runtime, timeout, 0, 0);
         }
-        if (reboots) {
-            ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+
+        if (numForgets && reboots) {
+            // Do not finish forget before reboot. Check forget would happen after it.
+            counter.BlockForgetsTillReboot();
         }
 
         // Read crossed with eviction (finish)
-        {
+        if (!misconfig) {
             counter.ResendCapturedReads(runtime);
             ui32 numBatches = 0;
             THashSet<ui32> batchNumbers;
@@ -601,12 +732,23 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 UNIT_ASSERT(event);
 
                 auto& resRead = Proto(event);
-                TString data = GetReadResult(resRead, {}, {});
+                TString data = GetReadResult(resRead, EExpectedResult::OK);
+
                 batchNumbers.insert(resRead.GetBatch());
                 if (resRead.GetFinished()) {
                     numBatches = resRead.GetBatch() + 1;
                 }
             }
+        }
+
+        if (numForgets) {
+            UNIT_ASSERT(hasColdEviction);
+            if (reboots) {
+                Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
+                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+                ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
+            }
+            counter.WaitMoreEvents(runtime, exportTimeout, 0, numForgets);
         }
 
         // Read data after eviction
@@ -616,12 +758,17 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
 
         specRowsBytes.emplace_back(0, 0);
-        while (true) {
+        ui32 numBatches = 0;
+        ui32 numExpected = (expectedReadResult == EExpectedResult::ERROR) ? 1 : 100;
+        for (; numBatches < numExpected; ++numBatches) {
             auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
             UNIT_ASSERT(event);
 
             auto& resRead = Proto(event);
-            TString data = GetReadResult(resRead, {}, {});
+            TString data = GetReadResult(resRead, expectedReadResult);
+            if (expectedReadResult == EExpectedResult::ERROR) {
+                break;
+            }
             if (!data.size()) {
                 break;
             }
@@ -642,6 +789,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
 
         if (reboots) {
+            Cerr << "REBOOT(" << i << ")" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     }
@@ -747,13 +895,32 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     size_t initialEviction = alters.size();
 
     TEvictionChanges changes;
+    THashSet<ui32> exports;
+    THashSet<ui32> forgets;
     if (testTtl) {
         changes.AddTtlAlters(spec, {allowBoth, allowOne, allowNone}, alters);
     } else {
         changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
+
+        for (ui32 i = initialEviction + 1; i < alters.size() - 1; ++i) {
+            for (auto& tier : alters[i].Tiers) {
+                if (tier.S3) {
+                    exports.emplace(i);
+                    break;
+                }
+            }
+        }
+        for (ui32 i = initialEviction + 2; i < alters.size(); ++i) {
+            for (auto& tier : alters[i].Tiers) {
+                if (tier.S3) {
+                    forgets.emplace(i);
+                    break;
+                }
+            }
+        }
     }
 
-    auto rowsBytes = TestTiers(reboots, blobs, alters, initialEviction);
+    auto rowsBytes = TestTiers(reboots, blobs, alters, exports, forgets);
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;
     }
@@ -766,12 +933,50 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     return rowsBytes;
 }
 
-void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None) {
+std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec, bool reboots,
+                                                    std::optional<ui32> misconfig, std::optional<ui32> loss) {
+    const std::vector<ui64> ts = { 1600000000, 1620000000 };
+
+    ui32 overlapSize = 0;
+    std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
+
+    TInstant now = TAppData::TimeProvider->Now();
+    TDuration allowBoth = TDuration::Seconds(now.Seconds() - ts[0] + 600);
+    TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
+    TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
+
+    std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials() };
+
+    TEvictionChanges changes;
+    changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
+    UNIT_ASSERT_VALUES_EQUAL(alters.size(), 4);
+
+    if (misconfig) {
+        // Add error in config => eviction + not finished export
+        UNIT_ASSERT_VALUES_EQUAL(alters[*misconfig].Tiers.size(), 1);
+        UNIT_ASSERT(alters[*misconfig].Tiers[0].S3);
+        alters[*misconfig].Tiers[0].S3->SetEndpoint("nowhere"); // clear special "fake" endpoint
+    }
+
+    auto rowsBytes = TestTiers(reboots, blobs, alters, {1}, {2, 3}, loss);
+    for (auto&& i : rowsBytes) {
+        Cerr << i.first << "/" << i.second << Endl;
+    }
+
+    UNIT_ASSERT_EQUAL(rowsBytes.size(), alters.size());
+    if (!misconfig) {
+        changes.Assert(spec, rowsBytes, 1);
+    }
+    return rowsBytes;
+}
+
+void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None,
+                    bool revCompaction = false) {
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
-    spec.Tiers.back().SetCodec("zstd");
+    spec.Tiers[(revCompaction ? 0 : 1)].SetCodec("zstd");
 
     auto rowsBytes = TestTiersAndTtl(spec, reboot, initial, changeTtl);
     if (changeTtl) {
@@ -792,12 +997,16 @@ void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial
         UNIT_ASSERT_VALUES_EQUAL(rowsBytes[3].first, PORTION_ROWS);
         UNIT_ASSERT_VALUES_EQUAL(rowsBytes[4].first, 0);
 
-        UNIT_ASSERT(rowsBytes[1].second > rowsBytes[2].second); // compression works
+        // compression works
+        if (revCompaction) {
+            UNIT_ASSERT(rowsBytes[1].second < rowsBytes[2].second);
+        } else {
+            UNIT_ASSERT(rowsBytes[1].second > rowsBytes[2].second);
+        }
     }
 }
 
 void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
-    const TString bucket = "tiering-test-01";
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
 
@@ -808,30 +1017,24 @@ void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
-    spec.Tiers.back().S3 = NKikimrSchemeOp::TS3Settings();
-    auto& s3Config = *spec.Tiers.back().S3;
-    {
-
-        s3Config.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-        s3Config.SetVerifySSL(false);
-        s3Config.SetBucket(bucket);
-//#define S3_TEST_USAGE
-#ifdef S3_TEST_USAGE
-        s3Config.SetEndpoint("storage.cloud-preprod.yandex.net");
-        s3Config.SetAccessKey("...");
-        s3Config.SetSecretKey("...");
-        s3Config.SetProxyHost("localhost");
-        s3Config.SetProxyPort(8080);
-        s3Config.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
-#else
-        s3Config.SetEndpoint("fake");
-#endif
-        s3Config.SetRequestTimeoutMs(10000);
-        s3Config.SetHttpRequestTimeoutMs(10000);
-        s3Config.SetConnectionTimeoutMs(10000);
-    }
+    spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
     TestTiersAndTtl(spec, reboot, initial);
+}
+
+void TestExport(bool reboot, std::optional<ui32> misconfig = {}, std::optional<ui32> loss = {}) {
+    TPortManager portManager;
+    const ui16 port = portManager.GetPort();
+
+    TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+    UNIT_ASSERT(s3Mock.Start());
+
+    TTestSchema::TTableSpecials spec;
+    spec.SetTtlColumn("timestamp");
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
+    spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
+
+    TestOneTierExport(spec, reboot, misconfig, loss);
 }
 
 void TestDrop(bool reboots) {
@@ -952,6 +1155,79 @@ void TestDropWriteRace() {
 
     // Plan commit
     PlanCommit(runtime, sender, ++planStep, commitTxId);
+}
+
+void TestCompaction(std::optional<ui32> numWrites = {}) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime,
+                        CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+                        &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    // Create table
+
+    ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 planStep = 100;
+    ui64 txId = 100;
+
+    bool ok = ProposeSchemaTx(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk),
+                              {++planStep, ++txId});
+    UNIT_ASSERT(ok);
+    PlanSchemaTx(runtime, sender, {planStep, txId});
+
+    // Set tiering
+
+    ui64 ts = 1620000000;
+    TInstant now = TAppData::TimeProvider->Now();
+    TDuration allow = TDuration::Seconds(now.Seconds() - ts + 3600);
+    TDuration disallow = TDuration::Seconds(now.Seconds() - ts - 3600);
+
+    TTestSchema::TTableSpecials spec;
+    spec.SetTtlColumn("timestamp");
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("hot").SetTtlColumn("timestamp"));
+    spec.Tiers.back().EvictAfter = disallow;
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
+    spec.Tiers.back().EvictAfter = allow;
+    spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
+
+    ok = ProposeSchemaTx(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
+                            {++planStep, ++txId});
+    UNIT_ASSERT(ok);
+    PlanSchemaTx(runtime, sender, {planStep, txId});
+
+    ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(spec));
+
+    // Writes
+
+    std::vector<TString> blobs = MakeData({ts, ts}, PORTION_ROWS, 0, spec.TtlColumn);
+    const TString& triggerData = blobs[0];
+    //UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
+    //UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
+
+    if (!numWrites) {
+        numWrites = 4 * NOlap::TCompactionLimits().GranuleExpectedSize / triggerData.size();
+    }
+
+    ++planStep;
+    ++txId;
+    for (ui32 i = 0; i < *numWrites; ++i, ++writeId, ++planStep, ++txId) {
+        UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+
+        ProposeCommit(runtime, sender, metaShard, txId, {writeId});
+        PlanCommit(runtime, sender, planStep, txId);
+
+        if (i % 2 == 0) {
+            TriggerTTL(runtime, sender, {++planStep, ++txId}, {}, 0, spec.TtlColumn);
+        }
+    }
 }
 
 }
@@ -1117,6 +1393,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestTwoHotTiers(true, false);
     }
 
+    Y_UNIT_TEST(HotTiersRevCompression) {
+        TestTwoHotTiers(false, false, EInitialEviction::None, true);
+    }
+
+    Y_UNIT_TEST(RebootHotTiersRevCompression) {
+        TestTwoHotTiers(true, false, EInitialEviction::None, true);
+    }
+
     Y_UNIT_TEST(HotTiersTtl) {
         NColumnShard::gAllowLogBatchingDefaultValue = false;
         TestTwoHotTiers(false, true);
@@ -1162,7 +1446,55 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestHotAndColdTiers(true, EInitialEviction::Ttl);
     }
 
-    // TODO: EnableTtlAfterColdTiers
+    Y_UNIT_TEST(OneColdTier) {
+        TestExport(false);
+    }
+
+    Y_UNIT_TEST(RebootOneColdTier) {
+        TestExport(true);
+    }
+
+    Y_UNIT_TEST(ExportAfterFail) {
+        TestExport(false, 1);
+    }
+
+    Y_UNIT_TEST(RebootExportAfterFail) {
+        TestExport(true, 1);
+    }
+
+    Y_UNIT_TEST(ForgetAfterFail) {
+        TestExport(false, 2);
+    }
+
+    Y_UNIT_TEST(RebootForgetAfterFail) {
+        TestExport(true, 2);
+    }
+
+    Y_UNIT_TEST(ExportWithLostAnswer) {
+        TestExport(false, {}, 1);
+    }
+
+    Y_UNIT_TEST(RebootExportWithLostAnswer) {
+        TestExport(true, {}, 1);
+    }
+
+    Y_UNIT_TEST(ForgetWithLostAnswer) {
+        TestExport(false, {}, 2);
+    }
+
+    Y_UNIT_TEST(RebootForgettWithLostAnswer) {
+        TestExport(true, {}, 2);
+    }
+
+    // TODO: LastTierBorderIsTtl = false
+
+    // TODO: DisableTierAfterExport
+    // TODO: ReenableTierAfterExport
+    // TODO: AlterTierBorderAfterExport
+
+    Y_UNIT_TEST(ColdCompactionSmoke) {
+        TestCompaction();
+    }
 
     Y_UNIT_TEST(Drop) {
         TestDrop(false);

@@ -14,15 +14,13 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
+#include <library/cpp/threading/hot_swap/hot_swap.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/actorsystem.h>
 
 #include <util/generic/intrlist.h>
 
 namespace {
-
-static constexpr ui64 MAX_SHARD_RETRIES = 5;
-static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
 bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::EComponent component) {
     auto* settings = actorSystem->LoggerSettings();
@@ -64,7 +62,33 @@ THolder<NKikimr::TEvDataShard::TEvReadAck> DefaultAckSettings() {
 NActors::TActorId MainPipeCacheId = NKikimr::MakePipePeNodeCacheID(false);
 NActors::TActorId FollowersPipeCacheId =  NKikimr::MakePipePeNodeCacheID(true);
 
-TDuration StartRetryDelay = TDuration::MilliSeconds(250);
+struct TBackoffStorage {
+    THotSwap<NKikimr::NKqp::TIteratorReadBackoffSettings> SettingsPtr;
+
+    TBackoffStorage() {
+        SettingsPtr.AtomicStore(new NKikimr::NKqp::TIteratorReadBackoffSettings());
+    }
+};
+
+TDuration CalcDelay(size_t attempt, bool allowInstantRetry) {
+    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->CalcShardDelay(attempt, allowInstantRetry);
+}
+
+size_t MaxShardResolves() {
+    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardResolves;
+}
+
+size_t MaxShardRetries() {
+    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxShardAttempts;
+}
+
+TMaybe<size_t> MaxTotalRetries() {
+    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->MaxTotalRetries;
+}
+
+TMaybe<TDuration> ShardTimeout() {
+    return Singleton<::TBackoffStorage>()->SettingsPtr.AtomicLoad()->ReadResponseTimeout;
+}
 
 }
 
@@ -441,6 +465,7 @@ public:
                     state.AddRange(TSerializedTableRange(range));
                 }
             } else {
+                YQL_ENSURE(Settings.GetRanges().KeyPointsSize() > 0);
                 for (const auto& point : Settings.GetRanges().GetKeyPoints()) {
                     state.AddPoint(TSerializedCellVec(point));
                 }
@@ -485,7 +510,7 @@ public:
     }
 
     void ResolveShard(TShardState* state) {
-        if (state->ResolveAttempt >= MAX_SHARD_RESOLVES) {
+        if (state->ResolveAttempt >= ::MaxShardResolves()) {
             RuntimeError(TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' resolve limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
             return;
@@ -723,12 +748,23 @@ public:
         }
 
         auto state = Reads[id].Shard;
-        if (state->RetryAttempt == 0 && allowInstantRetry) { // instant retry
-            return DoRetryRead(id);
+
+        TotalRetries += 1;
+        auto limit = ::MaxTotalRetries();
+        if (limit && TotalRetries > *limit) {
+            return RuntimeError(TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' retry limit exceeded",
+                NDqProto::StatusIds::UNAVAILABLE);
         }
-        auto delay = ::StartRetryDelay;
-        for (size_t i = 0; i < state->RetryAttempt; ++i) {
-            delay *= 2;
+
+        state->RetryAttempt += 1;
+        if (state->RetryAttempt > ::MaxShardRetries()) {
+            ResetRead(id);
+            return ResolveShard(state);
+        }
+
+        auto delay = ::CalcDelay(state->RetryAttempt, allowInstantRetry);
+        if (delay == TDuration::Zero()) {
+            return DoRetryRead(id);
         }
 
         CA_LOG_D("schedule retry #" << id << " after " << delay);
@@ -741,12 +777,6 @@ public:
         }
 
         auto state = Reads[id].Shard;
-
-        state->RetryAttempt += 1;
-        if (state->RetryAttempt >= MAX_SHARD_RETRIES) {
-            ResetRead(id);
-            return ResolveShard(state);
-        }
         CA_LOG_D("Retrying read #" << id);
 
         ResetRead(id);
@@ -811,6 +841,7 @@ public:
         record.SetReverse(Settings.GetReverse());
         if (limit) {
             record.SetMaxRows(*limit);
+            record.SetTotalRowsLimit(*limit);
         }
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 
@@ -836,6 +867,10 @@ public:
         ReadIdByTabletId[state->TabletId].push_back(id);
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
             IEventHandle::FlagTrackDelivery);
+
+        if (auto delay = ShardTimeout()) {
+            TlsActivationContext->Schedule(*delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
+        }
     }
 
     void NotifyCA() {
@@ -1169,6 +1204,10 @@ public:
                         CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
                         Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, true),
                             IEventHandle::FlagTrackDelivery);
+
+                        if (auto delay = ShardTimeout()) {
+                            TlsActivationContext->Schedule(*delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
+                        }
                     } else {
                         Reads[id].Finished = true;
                     }
@@ -1204,10 +1243,6 @@ public:
             << " finished = " << finished
             << " has limit " << (Settings.GetItemsLimit() != 0)
             << " limit reached " << LimitReached());
-
-        if (!Results.empty()) {
-            NotifyCA();
-        }
 
         return bytes;
     }
@@ -1339,6 +1374,8 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     bool UseFollowers;
     NActors::TActorId PipeCacheId;
+
+    size_t TotalRetries = 0;
 };
 
 
@@ -1361,6 +1398,10 @@ void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck& ack) {
 
 void InterceptReadActorPipeCache(NActors::TActorId id) {
     ::MainPipeCacheId = id;
+}
+
+void SetReadIteratorBackoffSettings(TIntrusivePtr<TIteratorReadBackoffSettings> ptr) {
+    Singleton<::TBackoffStorage>()->SettingsPtr.AtomicStore(ptr);
 }
 
 } // namespace NKqp

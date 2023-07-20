@@ -10,7 +10,7 @@
 #include "events_local.h"
 
 namespace NActors {
-    static constexpr TDuration DEFAULT_HANDSHAKE_TIMEOUT = TDuration::Seconds(1);
+    static constexpr TDuration DEFAULT_HANDSHAKE_TIMEOUT = TDuration::Seconds(5);
     static constexpr ui64 INTERCONNECT_PROTOCOL_VERSION = 2;
 
     using TSocketPtr = TIntrusivePtr<NInterconnect::TStreamSocket>;

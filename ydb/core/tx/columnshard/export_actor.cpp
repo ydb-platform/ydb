@@ -32,10 +32,8 @@ public:
                 << " at tablet " << TabletId << " (export)");
 
             BlobsToRead.erase(blobId);
-            Event->Status = event.Status;
-            if (Event->Status == NKikimrProto::UNKNOWN) {
-                Event->Status = NKikimrProto::ERROR;
-            }
+            Event->AddResult(blobId, blobId.ToStringNew(), true,
+                TStringBuilder() << "cannot read, status " << NKikimrProto::EReplyStatus_Name(event.Status));
             return;
         }
 
@@ -102,9 +100,15 @@ private:
     }
 
     void SendResultAndDie(const TActorContext& ctx) {
-        auto s3Actor = Event->DstActor;
-        Event->DstActor = Parent;
-        ctx.Send(s3Actor, Event.release());
+        if (Event->Status == NKikimrProto::UNKNOWN) {
+            auto s3Actor = Event->DstActor;
+            Event->DstActor = Parent;
+            ctx.Send(s3Actor, Event.release());
+        } else {
+            Y_VERIFY(Event->Status == NKikimrProto::ERROR);
+            Event->DstActor = Parent;
+            ctx.Send(Parent, Event.release());
+        }
         Die(ctx);
     }
 };

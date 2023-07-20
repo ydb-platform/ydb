@@ -224,7 +224,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
-    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr;
+    TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
         : TXxport::TTxBase(self)
@@ -257,9 +257,9 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev)
+    explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
-        , NotifyResult(ev)
+        , CompletedTxId(completedTxId)
     {
     }
 
@@ -278,7 +278,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnModifyResult(txc, ctx);
         } else if (CreateIndexResult) {
             OnCreateIndexResult(txc, ctx);
-        } else if (NotifyResult) {
+        } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
             Resume(txc, ctx);
@@ -908,13 +908,11 @@ private:
     }
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext&) {
-        Y_VERIFY(NotifyResult);
-        const auto& record = NotifyResult->Get()->Record;
-
+        Y_VERIFY(CompletedTxId);
         LOG_D("TImport::TTxProgress: OnNotifyResult"
-            << ": txId# " << record.GetTxId());
+            << ": txId# " << CompletedTxId);
 
-        const auto txId = TTxId(record.GetTxId());
+        const auto txId = CompletedTxId;
         if (!Self->TxIdToImport.contains(txId)) {
             LOG_E("TImport::TTxProgress: OnNotifyResult received unknown txId"
                 << ": txId# " << txId);
@@ -1018,8 +1016,8 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TEvIndexBuilder::TEvCreateRes
     return new TImport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-    return new TImport::TTxProgress(this, ev);
+ITransaction* TSchemeShard::CreateTxProgressImport(TTxId completedTxId) {
+    return new TImport::TTxProgress(this, completedTxId);
 }
 
 } // NSchemeShard

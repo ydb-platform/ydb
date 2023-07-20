@@ -163,6 +163,7 @@ class TDataShard::TTxCdcStreamScanProgress
     TDataShard::TEvPrivate::TEvCdcStreamScanProgress::TPtr Request;
     THolder<TDataShard::TEvPrivate::TEvCdcStreamScanContinue> Response;
     TVector<IDataShardChangeCollector::TChange> ChangeRecords;
+    bool Reschedule = false;
 
     static TVector<TRawTypeValue> MakeKey(TArrayRef<const TCell> cells, TUserTable::TCPtr table) {
         TVector<TRawTypeValue> key(Reserve(cells.size()));
@@ -219,17 +220,30 @@ public:
         LOG_D("Progress"
             << ": streamPathId# " << streamPathId);
 
-        if (Self->CheckChangesQueueOverflow()) {
+        if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
+            LOG_W("Cannot progress on unknown table"
+                << ": tablePathId# " << tablePathId);
             return true;
         }
 
-        Y_VERIFY(Self->GetUserTables().contains(tablePathId.LocalPathId));
         auto table = Self->GetUserTables().at(tablePathId.LocalPathId);
 
         auto it = table->CdcStreams.find(streamPathId);
-        Y_VERIFY(it != table->CdcStreams.end());
+        if (it == table->CdcStreams.end()) {
+            LOG_W("Cannot progress on unknown cdc stream"
+                << ": streamPathId# " << streamPathId);
+            return true;
+        }
+
+        ChangeRecords.clear();
+        if (Self->CheckChangesQueueOverflow()) {
+            Reschedule = true;
+            return true;
+        }
 
         NIceDb::TNiceDb db(txc.DB);
+        bool pageFault = false;
+
         for (const auto& [k, v] : ev.Rows) {
             const auto key = MakeKey(k.GetCells(), table);
             const auto& keyTags = table->KeyColumnIds;
@@ -238,10 +252,10 @@ public:
             TSelectStats stats;
             auto ready = txc.DB.Select(table->LocalTid, key, {}, row, stats, 0, readVersion);
             if (ready == EReady::Page) {
-                return false;
+                pageFault = true;
             }
 
-            if (ready == EReady::Gone || stats.InvisibleRowSkips) {
+            if (pageFault || ready == EReady::Gone || stats.InvisibleRowSkips) {
                 continue;
             }
 
@@ -293,6 +307,10 @@ public:
             Self->PersistChangeRecord(db, record);
         }
 
+        if (pageFault) {
+            return false;
+        }
+
         if (ev.Rows) {
             const auto& [key, _] = ev.Rows.back();
 
@@ -315,12 +333,12 @@ public:
 
             Self->EnqueueChangeRecords(std::move(ChangeRecords));
             ctx.Send(Request->Sender, Response.Release());
-        } else {
-            LOG_I("Re-run progress tx"
+        } else if (Reschedule) {
+            LOG_I("Re-schedule progress tx"
                 << ": streamPathId# " << Request->Get()->StreamPathId);
 
             // re-schedule tx
-            ctx.Schedule(TDuration::Seconds(1), Request->Release().Release());
+            ctx.TActivationContext::Schedule(TDuration::Seconds(1), Request->Forward(ctx.SelfID));
         }
     }
 

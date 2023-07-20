@@ -76,6 +76,8 @@ protected:
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TCoordinatorControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TSchemeShardControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TSchemeShardControls::descriptor(), ctx);
+            else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTCMallocControls")
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTCMallocControls::descriptor(), ctx);
         }
 
         ctx.Send(RequestEvent->Sender,

@@ -8,7 +8,7 @@ namespace NActors {
 using namespace NMonitoring;
 
 IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
-    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth) {
+    const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth, bool sortPages) {
     return RegisterActorPage({
         .Title = title,
         .RelPath = relPath,
@@ -17,6 +17,7 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
         .PreTag = preTag,
         .ActorId = actorId,
         .UseAuth = useAuth,
+        .SortPages = sortPages,
     });
 }
 

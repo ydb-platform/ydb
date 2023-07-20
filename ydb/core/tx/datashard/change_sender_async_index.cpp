@@ -188,12 +188,33 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         }
     }
 
+    bool CanRetry() const {
+        return Attempt < MaxAttempts;
+    }
+
+    void Retry() {
+        ++Attempt;
+        Delay = Min(2 * Delay, MaxDelay);
+
+        LOG_N("Retry"
+            << ": attempt# " << Attempt
+            << ", delay# " << Delay);
+
+        const auto random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
+        Schedule(Delay + random, new TEvents::TEvWakeup());
+    }
+
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         if (ShardId != ev->Get()->TabletId) {
             return;
         }
 
-        Leave();
+        if (CanRetry()) {
+            Unlink();
+            Retry();
+        } else {
+            Leave();
+        }
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -222,11 +243,14 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
         PassAway();
     }
 
-    void PassAway() override {
+    void Unlink() {
         if (LeaderPipeCache) {
             Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(ShardId));
         }
+    }
 
+    void PassAway() override {
+        Unlink();
         TActorBootstrapped::PassAway();
     }
 
@@ -254,6 +278,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
+            sFunc(TEvents::TEvWakeup, Handshake);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -268,6 +293,12 @@ private:
 
     TActorId LeaderPipeCache;
     ui64 LastRecordOrder;
+
+    // Retry on delivery problem
+    static constexpr ui32 MaxAttempts = 3;
+    static constexpr auto MaxDelay = TDuration::MilliSeconds(50);
+    ui32 Attempt = 0;
+    TDuration Delay = TDuration::MilliSeconds(10);
 
 }; // TAsyncIndexChangeSenderShard
 
@@ -624,8 +655,11 @@ class TAsyncIndexChangeSenderMain
             return Retry();
         }
 
+        const bool versionChanged = !IndexTableVersion || IndexTableVersion != entry.GeneralVersion;
+        IndexTableVersion = entry.GeneralVersion;
+
         KeyDesc = std::move(entry.KeyDescription);
-        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()));
+        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()), versionChanged);
 
         Become(&TThis::StateMain);
     }
@@ -723,6 +757,7 @@ public:
         : TActorBootstrapped()
         , TBaseChangeSender(this, this, dataShard, indexPathId)
         , UserTableId(userTableId)
+        , IndexTableVersion(0)
     {
     }
 
@@ -751,6 +786,7 @@ private:
     TMap<TTag, TTag> TagMap; // from main to index
 
     TPathId IndexTablePathId;
+    ui64 IndexTableVersion;
     THolder<TKeyDesc> KeyDesc;
 
 }; // TAsyncIndexChangeSenderMain

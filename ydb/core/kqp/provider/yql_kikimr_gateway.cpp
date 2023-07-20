@@ -160,6 +160,21 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
             }
 
             settings.ExpireAfter = TDuration::FromValue(value);
+        } else if (name == "columnUnit") {
+            YQL_ENSURE(field.Value().Maybe<TCoAtom>());
+            auto value = field.Value().Cast<TCoAtom>().StringValue();
+            if (value == "seconds") {
+                settings.ColumnUnit = EUnit::Seconds;
+            } else if (value == "milliseconds") {
+                settings.ColumnUnit = EUnit::Milliseconds;
+            } else if (value == "microseconds") {
+                settings.ColumnUnit = EUnit::Microseconds;
+            } else if (value == "nanoseconds") {
+                settings.ColumnUnit = EUnit::Nanoseconds;
+            } else {
+                error = TStringBuilder() << "Invalid unit: " << value;
+                return false;
+            }
         } else {
             error = TStringBuilder() << "Unknown field: " << name;
             return false;
@@ -292,8 +307,16 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
 }
 
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) {
-    proto.mutable_date_type_column()->set_column_name(settings.ColumnName);
-    proto.mutable_date_type_column()->set_expire_after_seconds(settings.ExpireAfter.Seconds());
+    if (!settings.ColumnUnit) {
+        auto& opts = *proto.mutable_date_type_column();
+        opts.set_column_name(settings.ColumnName);
+        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
+    } else {
+        auto& opts = *proto.mutable_value_since_unix_epoch();
+        opts.set_column_name(settings.ColumnName);
+        opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
+        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
+    }
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

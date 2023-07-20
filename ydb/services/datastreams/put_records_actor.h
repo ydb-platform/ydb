@@ -28,7 +28,9 @@ namespace NKikimr::NDataStreams::V1 {
     TString GetSerializedData(const TPutRecordsItem& item) {
         NKikimrPQClient::TDataChunk proto;
 
-        proto.SetIp(item.Ip);
+        //TODO: get ip from client, not grpc;
+        // proto.SetIp(item.Ip);
+
         proto.SetCodec(0); // NPersQueue::CODEC_RAW
         proto.SetData(item.Data);
 
@@ -516,10 +518,11 @@ namespace NKikimr::NDataStreams::V1 {
             if (putRecordsResult.records(0).error_code() == "ProvisionedThroughputExceededException"
                 || putRecordsResult.records(0).error_code() == "ThrottlingException")
             {
-                return ReplyWithResult(Ydb::StatusIds::OVERLOADED, ctx);
+                return ReplyWithError(Ydb::StatusIds::OVERLOADED, Ydb::PersQueue::ErrorCode::OVERLOAD, putRecordsResult.records(0).error_message(), ctx);
             }
             //TODO: other codes - access denied and so on
-            return ReplyWithResult(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+            return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, putRecordsResult.records(0).error_message(), ctx);
+
         }
     }
 

@@ -29,7 +29,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.qq"
+                                                "TopSortBy": "argument.qr.qq"
                                             },
                                             {
                                                 "Name": "InnerJoin (MapJoin)"
@@ -192,7 +192,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "qq (Asc)"
+                                    "qr.qq (Asc)"
                                 ]
                             }
                         ]

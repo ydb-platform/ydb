@@ -38,6 +38,7 @@ public:
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoFlatMap::Match, HNDL(LatePushExtractedPredicateToReadTable));
+        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverRename));
         AddHandler(0, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
@@ -137,6 +138,12 @@ protected:
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqExpandWindowFunctions(node, ctx, true);
         DumpAppliedRule("ExpandWindowFunctions", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteTopSortOverRename(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteTopSortOverRename(node, ctx);
+        DumpAppliedRule("RewriteTopSortOverRename", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -24,12 +24,11 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-TableFullScan",
+                                        "Node Type": "Limit-TableFullScan",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "Name": "Limit"
                                             },
                                             {
                                                 "Name": "TableFullScan",
@@ -37,6 +36,7 @@
                                                     "a",
                                                     "b"
                                                 ],
+                                                "ReadLimit": "1001",
                                                 "ReadRanges": [
                                                     "a (-\u221e, +\u221e)",
                                                     "b (-\u221e, +\u221e)",
@@ -54,8 +54,8 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "col1 (Asc)",
-                                    "col2 (Asc)"
+                                    "a (Asc)",
+                                    "b (Asc)"
                                 ]
                             }
                         ]
@@ -77,6 +77,7 @@
                         "a",
                         "b"
                     ],
+                    "limit": "1001",
                     "scan_by": [
                         "a (-\u221e, +\u221e)",
                         "b (-\u221e, +\u221e)",

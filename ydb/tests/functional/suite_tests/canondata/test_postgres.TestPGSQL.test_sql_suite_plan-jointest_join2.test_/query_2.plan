@@ -30,7 +30,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.name"
+                                                "TopSortBy": "argument.s2.name"
                                             },
                                             {
                                                 "Name": "InnerJoin (MapJoin)"
@@ -59,7 +59,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "name (Asc)"
+                                    "s2.name (Asc)"
                                 ]
                             }
                         ]

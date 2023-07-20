@@ -102,10 +102,10 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "x (Asc)",
-                                    "q1 (Asc)",
-                                    "q2 (Asc)",
-                                    "y (Asc)"
+                                    "ss1.x (Asc)",
+                                    "ss2.q1 (Asc)",
+                                    "ss2.q2 (Asc)",
+                                    "ss2.y (Asc)"
                                 ]
                             }
                         ]

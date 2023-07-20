@@ -47,6 +47,8 @@ NYql::NNodes::TExprBase KqpRewriteLookupTable(const NYql::NNodes::TExprBase& nod
 NYql::NNodes::TExprBase KqpRewriteTopSortOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 
+NYql::NNodes::TExprBase KqpRewriteTopSortOverRename(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
+
 NYql::NNodes::TExprBase KqpRewriteTakeOverIndexRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext&,
     const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap);
 

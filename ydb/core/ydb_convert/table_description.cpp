@@ -97,6 +97,12 @@ static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
     default:
         break;
     }
+
+    if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
+        if (inTTL.HasSysSettings() && inTTL.GetSysSettings().HasRunInterval()) {
+            out.mutable_ttl_settings()->set_run_interval_seconds(TDuration::FromValue(inTTL.GetSysSettings().GetRunInterval()).Seconds());
+        }
+    }
 }
 
 template <typename TYdbProto>

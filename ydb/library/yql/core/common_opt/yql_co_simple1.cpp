@@ -891,13 +891,13 @@ TExprNode::TPtr OptimizeEquality(const TExprNode::TPtr& node, TExprContext& ctx)
     }
 
     if (IsBoolType(*node) || IsOptBoolType(*node)) {
-        if (node->Head().IsCallable("Bool")) {
+        if (node->Head().IsCallable("Bool") && (IsBoolType(node->Tail()) || IsOptBoolType(node->Tail()))) {
             YQL_CLOG(DEBUG, Core) << "Compare '" << node->Content() << "' with " << node->Head().Content() << " '" << node->Head().Head().Content();
             const auto value = FromString<bool>(node->Head().Head().Content());
             return ctx.WrapByCallableIf(Equal != value, "Not", node->TailPtr());
         }
 
-        if (node->Tail().IsCallable("Bool")) {
+        if (node->Tail().IsCallable("Bool") && (IsBoolType(node->Head()) || IsOptBoolType(node->Head()))) {
             YQL_CLOG(DEBUG, Core) << "Compare '" << node->Content() << "' with " << node->Tail().Content() << " '" << node->Tail().Head().Content();
             const auto value = FromString<bool>(node->Tail().Head().Content());
             return ctx.WrapByCallableIf(Equal != value, "Not", node->HeadPtr());

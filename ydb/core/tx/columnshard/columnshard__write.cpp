@@ -125,10 +125,24 @@ void TTxWrite::Complete(const TActorContext& ctx) {
 
 void TColumnShard::OverloadWriteFail(const EOverloadStatus& overloadReason, const NEvWrite::TWriteData& writeData, const TActorContext& ctx) {
     IncCounter(COUNTER_WRITE_FAIL);
-    if (overloadReason == EOverloadStatus::Disk) {
-        IncCounter(COUNTER_OUT_OF_SPACE);
-    } else {
-        IncCounter(COUNTER_WRITE_OVERLOAD);
+    switch (overloadReason) {
+        case EOverloadStatus::Disk:
+            IncCounter(COUNTER_OUT_OF_SPACE);
+            break;
+        case EOverloadStatus::Granule:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadGranule(writeData.GetSize());
+            break;
+        case EOverloadStatus::InsertTable:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadInsertTable(writeData.GetSize());
+            break;
+        case EOverloadStatus::Shard:
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            CSCounters.OnOverloadShard(writeData.GetSize());
+            break;
+        case EOverloadStatus::None:
+            Y_FAIL("invalid function usage");
     }
 
     LOG_S_INFO("Write (overload) " << writeData.GetSize() << " bytes into pathId " << writeData.GetWriteMeta().GetTableId()
@@ -139,19 +153,20 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus& overloadReason, cons
     ctx.Send(writeData.GetWriteMeta().GetSource(), result.release());
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId, const ui64 dataSize) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) const {
     if (IsAnyChannelYellowStop()) {
         return EOverloadStatus::Disk;
     }
 
     if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
-        CSCounters.OnOverloadInsertTable(dataSize);
         return EOverloadStatus::InsertTable;
-    } else if (TablesManager.IsOverloaded(tableId)) {
-        CSCounters.OnOverloadGranule(dataSize);;
+    }
+
+    if (TablesManager.IsOverloaded(tableId)) {
         return EOverloadStatus::Granule;
-    } else if (WritesMonitor.ShardOverloaded()) {
-        CSCounters.OnOverloadShard(dataSize);
+    }
+
+    if (WritesMonitor.ShardOverloaded()) {
         return EOverloadStatus::Shard;
     }
     return EOverloadStatus::None;
@@ -219,7 +234,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     }
 
     NEvWrite::TWriteData writeData(writeMeta, arrowData);
-    auto overloadStatus = CheckOverloaded(tableId, writeData.GetSize());
+    auto overloadStatus = CheckOverloaded(tableId);
     if (!TablesManager.IsReadyForWrite(tableId)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex()? "": " no index")
             << " at tablet " << TabletID());

@@ -219,7 +219,7 @@ public:
 
 private:
     void OverloadWriteFail(const EOverloadStatus& overloadReason, const NEvWrite::TWriteData& writeData, const TActorContext& ctx);
-    EOverloadStatus CheckOverloaded(const ui64 tableId, const ui64 dataSize) const;
+    EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:
     STFUNC(StateInit) {

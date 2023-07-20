@@ -43,8 +43,11 @@ items:
       href: commands/readtable.md
     - name: Скан запросы
       href: commands/scan-query.md
-  - name: Загрузка и выгрузка данных
+  - name: Выгрузка и загрузка данных
+    include: { mode: link, path: export-import/toc_p.yaml }
+  - name: Выгрузка и загрузка данных
     include: { mode: link, path: export_import/toc_p.yaml }
+    hidden: true
   - name: Работа с топиками
     items:
     - name: Команды для работы с топиком

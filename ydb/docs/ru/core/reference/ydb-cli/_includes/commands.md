@@ -30,10 +30,10 @@
 [config profile set](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [discovery list](../commands/discovery-list.md) | Список эндпоинтов
 [discovery whoami](../commands/discovery-whoami.md) | Проверка аутентификации
-[export s3](../export_import/s3_export.md) | Экспорт данных в хранилище S3
-[import file csv](../export_import/import-file.md) | Импорт данных из CSV-файла
-[import file tsv](../export_import/import-file.md) | Импорт данных из TSV-файла
-[import s3](../export_import/s3_import.md) | Импорт данных из хранилища S3
+[export s3](../export-import/export-s3.md) | Экспорт данных в хранилище S3
+[import file csv](../export-import/import-file.md) | Импорт данных из CSV-файла
+[import file tsv](../export-import/import-file.md) | Импорт данных из TSV-файла
+[import s3](../export-import/import-s3.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
 [operation cancel](../operation-cancel.md) | Прерывание исполнения фоновой операции
 [operation forget](../operation-forget.md) | Удаление фоновой операции из списка

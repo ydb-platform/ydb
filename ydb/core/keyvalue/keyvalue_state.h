@@ -256,6 +256,8 @@ protected:
     TSet<TLogoBlobID> Trash;
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
+    THashSet<ui64> CmdTrimLeakedBlobsUids;
+    std::vector<THolder<TIntermediate>> CmdTrimLeakedBlobsPostponed;
     THashMap<ui64, TInstant> RequestInputTime;
     ui64 NextRequestUid = 1;
     TIntrusivePtr<TCollectOperation> CollectOperation;
@@ -327,7 +329,7 @@ public:
         const TActorContext &ctx, const TTabletStorageInfo *info);
     bool RegisterInitialCollectResult(const TActorContext &ctx);
     void RegisterInitialGCCompletionExecute(ISimpleDb &db, const TActorContext &ctx);
-    void RegisterInitialGCCompletionComplete(const TActorContext &ctx);
+    void RegisterInitialGCCompletionComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
     void SendCutHistory(const TActorContext &ctx);
     void OnInitQueueEmpty(const TActorContext &ctx);
     void OnStateWork(const TActorContext &ctx);
@@ -337,13 +339,14 @@ public:
     void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db, const TActorContext& ctx);
     void DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>& refCountsIncr /*in-out*/, bool writesMade,
         const TActorContext& ctx);
+    void ProcessPostponedTrims(const TActorContext& ctx, const TTabletStorageInfo *info);
 
     // garbage collection methods
     void PrepareCollectIfNeeded(const TActorContext &ctx);
     bool RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ctx);
     void UpdateStoredState(ISimpleDb &db, const TActorContext &ctx, const NKeyValue::THelpers::TGenerationStep &genStep);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
-    void CompleteGCComplete(const TActorContext &ctx);
+    void CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info);
     void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
         TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);

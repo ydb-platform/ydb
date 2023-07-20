@@ -228,7 +228,7 @@ protected:
     };
 
     using TExecuteMethod = void (TKeyValueState::*)(ISimpleDb &db, const TActorContext &ctx);
-    using TCompleteMethod = void (TKeyValueState::*)(const TActorContext &ctx);
+    using TCompleteMethod = void (TKeyValueState::*)(const TActorContext &ctx, const TTabletStorageInfo *info);
 
     template <typename TDerived, TExecuteMethod ExecuteMethod, TCompleteMethod CompleteMethod>
     struct TTxUniversal : NTabletFlatExecutor::ITransaction {
@@ -248,7 +248,7 @@ protected:
         void Complete(const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
                     << ' ' << TDerived::Name << " Complete");
-            (Self->State.*CompleteMethod)(ctx);
+            (Self->State.*CompleteMethod)(ctx, Self->Info());
         }
     };
 

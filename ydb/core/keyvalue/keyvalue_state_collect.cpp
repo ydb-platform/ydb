@@ -7,6 +7,11 @@ namespace NKeyValue {
 void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded KeyValue# " << TabletId << " Marker# KV61");
 
+    if (CmdTrimLeakedBlobsUids) {
+        // Do not start garbage collection while we are trimming to avoid race.
+        return;
+    }
+
     if (IsCollectEventSent || InitialCollectsSent) {
         // We already are trying to collect something, just pass this time.
         return;
@@ -95,7 +100,7 @@ void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) 
     }
 }
 
-void TKeyValueState::CompleteGCComplete(const TActorContext &ctx) {
+void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletStorageInfo *info) {
     if (RepeatGCTX) {
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC20, "Repeat CompleteGC",
             (TabletId, TabletId),
@@ -110,6 +115,7 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx) {
     STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC22, "CompleteGC Complete",
         (TabletId, TabletId),
         (TrashCount, Trash.size()));
+    ProcessPostponedTrims(ctx, info);
     PrepareCollectIfNeeded(ctx);
 }
 

@@ -668,7 +668,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     // corner case, if no CollectGarbage events were sent
     if (InitialCollectsSent == 0) {
         SendCutHistory(ctx);
-        RegisterInitialGCCompletionComplete(ctx);
+        RegisterInitialGCCompletionComplete(ctx, info);
     } else {
         IsCollectEventSent = true;
     }
@@ -693,9 +693,10 @@ void TKeyValueState::RegisterInitialGCCompletionExecute(ISimpleDb &db, const TAc
     THelpers::DbUpdateState(StoredState, db, ctx);
 }
 
-void TKeyValueState::RegisterInitialGCCompletionComplete(const TActorContext &ctx) {
+void TKeyValueState::RegisterInitialGCCompletionComplete(const TActorContext &ctx, const TTabletStorageInfo *info) {
     IsCollectEventSent = false;
     // initiate collection if trash was loaded from local base
+    ProcessPostponedTrims(ctx, info);
     PrepareCollectIfNeeded(ctx);
 }
 
@@ -1702,6 +1703,7 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
         CountRequestTakeOffOrEnqueue(requestType);
     }
 
+    CmdTrimLeakedBlobsUids.erase(requestUid);
     CancelInFlight(requestUid);
     PrepareCollectIfNeeded(ctx);
 }
@@ -2868,6 +2870,16 @@ void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THol
     }
 }
 
+void TKeyValueState::ProcessPostponedTrims(const TActorContext& ctx, const TTabletStorageInfo *info) {
+    if (!IsCollectEventSent && !InitialCollectsSent) {
+        for (auto& interm : CmdTrimLeakedBlobsPostponed) {
+            CmdTrimLeakedBlobsUids.insert(interm->RequestUid);
+            RegisterRequestActor(ctx, std::move(interm), info, ExecutorGeneration);
+        }
+        CmdTrimLeakedBlobsPostponed.clear();
+    }
+}
+
 void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info)
 {
@@ -3030,6 +3042,8 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
     bool hasReads = request.CmdReadSize() || request.CmdReadRangeSize();
 
+    bool hasTrim = request.HasCmdTrimLeakedBlobs();
+
     TRequestType::EType requestType;
     if (hasWrites) {
         if (hasReads) {
@@ -3045,25 +3059,32 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
     if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) {
         // Spawn KeyValueStorageRequest actor on the same thread
-        if (requestType == TRequestType::WriteOnly) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                << " Create storage request for WO, Marker# KV42");
-            RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-        } else if (requestType == TRequestType::ReadOnlyInline) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                << " Create storage request for RO_INLINE, Marker# KV45");
-            RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-            ++RoInlineIntermediatesInFlight;
+        if (hasTrim && (IsCollectEventSent || InitialCollectsSent)) {
+            CmdTrimLeakedBlobsPostponed.push_back(std::move(intermediate));
         } else {
-            if (IntermediatesInFlight < IntermediatesInFlightLimit) {
+            if (hasTrim) {
+                CmdTrimLeakedBlobsUids.insert(intermediate->RequestUid);
+            }
+            if (requestType == TRequestType::WriteOnly) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Create storage request for RO/RW, Marker# KV43");
+                    << " Create storage request for WO, Marker# KV42");
                 RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-                ++IntermediatesInFlight;
-            } else {
+            } else if (requestType == TRequestType::ReadOnlyInline) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Enqueue storage request for RO/RW, Marker# KV44");
-                PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate));
+                    << " Create storage request for RO_INLINE, Marker# KV45");
+                RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+                ++RoInlineIntermediatesInFlight;
+            } else {
+                if (IntermediatesInFlight < IntermediatesInFlightLimit) {
+                    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                        << " Create storage request for RO/RW, Marker# KV43");
+                    RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+                    ++IntermediatesInFlight;
+                } else {
+                    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+                        << " Enqueue storage request for RO/RW, Marker# KV44");
+                    PostponeIntermediate<TEvKeyValue::TEvRequest>(std::move(intermediate));
+                }
             }
         }
 

@@ -3,6 +3,8 @@
 #include "mkql_computation_node.h"
 #include "mkql_computation_node_holders.h"
 #include "mkql_optional_usage_mask.h"
+#include "mkql_block_transport.h"
+#include "mkql_block_reader.h"
 
 #include <ydb/library/yql/minikql/mkql_buffer.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -73,32 +75,47 @@ class TValuePackerTransport {
 public:
     using TSelf = TValuePackerTransport<Fast>;
 
-    explicit TValuePackerTransport(const TType* type);
+    explicit TValuePackerTransport(const TType* type, arrow::MemoryPool* pool = nullptr);
     // for compatibility with TValuePackerGeneric - stable packing is not supported
-    TValuePackerTransport(bool stable, const TType* type);
+    TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* ppol = nullptr);
 
     // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
     TSelf& AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 count);
     size_t PackedSizeEstimate() const {
-        return Buffer_ ? (Buffer_->Size() + Buffer_->ReservedHeaderSize()) : 0;
+        return IsBlock_ ? BlockBuffer_.size() : (Buffer_ ? (Buffer_->Size() + Buffer_->ReservedHeaderSize()) : 0);
     }
     void Clear();
-    TPagedBuffer::TPtr Finish();
+    TRope Finish();
 
     // Pack()/Unpack() will pack/unpack single value of type T
-    TPagedBuffer::TPtr Pack(const NUdf::TUnboxedValuePod& value) const;
+    TRope Pack(const NUdf::TUnboxedValuePod& value) const;
     NUdf::TUnboxedValue Unpack(TRope&& buf, const THolderFactory& holderFactory) const;
     void UnpackBatch(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
 private:
     void BuildMeta(TPagedBuffer::TPtr& buffer, bool addItemCount) const;
     void StartPack();
 
+    void InitBlocks();
+    TSelf& AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 count);
+    TRope FinishBlocks();
+    void UnpackBatchBlocks(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
+
     const TType* const Type_;
     ui64 ItemCount_ = 0;
     TPagedBuffer::TPtr Buffer_;
     mutable NDetails::TPackerState State_;
     mutable NDetails::TPackerState IncrementalState_;
+
+    arrow::MemoryPool& ArrowPool_;
+    bool IsBlock_ = false;
+
+    TVector<std::unique_ptr<IBlockSerializer>> BlockSerializers_;
+    TVector<std::unique_ptr<IBlockReader>> BlockReaders_;
+    TVector<std::shared_ptr<arrow::ArrayData>> ConvertedScalars_;
+    TRope BlockBuffer_;
+
+    TVector<std::unique_ptr<IBlockDeserializer>> BlockDeserializers_;
 };
 
 using TValuePacker = TValuePackerGeneric<false>;

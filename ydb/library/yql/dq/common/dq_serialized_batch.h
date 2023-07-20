@@ -38,7 +38,7 @@ struct TDqSerializedBatch {
         return oob;
     }
 
-    void SetPayload(const NKikimr::NMiniKQL::TPagedBuffer::TPtr& buffer);
+    void SetPayload(TRope&& payload);
 
     TRope PullPayload() {
         TRope result;

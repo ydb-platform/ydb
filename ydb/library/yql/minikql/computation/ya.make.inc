@@ -4,6 +4,7 @@ SRCS(
     mkql_block_builder.cpp
     mkql_block_impl.cpp
     mkql_block_reader.cpp
+    mkql_block_transport.cpp
     mkql_computation_node.cpp
     mkql_computation_node_codegen.cpp
     mkql_computation_node_graph.cpp
@@ -20,6 +21,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/actors/util
     library/cpp/enumbitset
     library/cpp/packedtypes
     library/cpp/random_provider

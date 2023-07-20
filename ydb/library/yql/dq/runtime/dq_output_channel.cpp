@@ -127,8 +127,8 @@ public:
         if (packerSize >= MaxChunkBytes) {
             Data.emplace_back();
             Data.back().Buffer = Packer.Finish();
-            BasicStats.Bytes += Data.back().Buffer->Size();
-            PackedDataSize += Data.back().Buffer->Size();
+            BasicStats.Bytes += Data.back().Buffer.size();
+            PackedDataSize += Data.back().Buffer.size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
             ChunkRowCount = 0;
@@ -137,13 +137,13 @@ public:
 
         while (Storage && PackedDataSize && PackedDataSize + packerSize > MaxStoredBytes) {
             auto& head = Data.front();
-            size_t bufSize = head.Buffer->Size();
+            size_t bufSize = head.Buffer.size();
             YQL_ENSURE(PackedDataSize >= bufSize);
 
             TDqSerializedBatch data;
             data.Proto.SetTransportVersion(TransportVersion);
             data.Proto.SetRows(head.RowCount);
-            data.SetPayload(head.Buffer);
+            data.SetPayload(std::move(head.Buffer));
             Storage->Put(NextStoredId++, SaveForSpilling(std::move(data)));
 
             PackedDataSize -= bufSize;
@@ -203,15 +203,14 @@ public:
             SpilledRowCount -= data.RowCount();
         } else if (!Data.empty()) {
             auto& packed = Data.front();
-            data.Proto.SetRows(packed.RowCount);
-            data.SetPayload(packed.Buffer);
             PackedRowCount -= packed.RowCount;
-            PackedDataSize -= packed.Buffer->Size();
+            PackedDataSize -= packed.Buffer.size();
+            data.Proto.SetRows(packed.RowCount);
+            data.SetPayload(std::move(packed.Buffer));
             Data.pop_front();
         } else {
             data.Proto.SetRows(ChunkRowCount);
-            auto buffer = Packer.Finish();
-            data.SetPayload(buffer);
+            data.SetPayload(Packer.Finish());
             ChunkRowCount = 0;
         }
 
@@ -265,8 +264,8 @@ public:
         if (ChunkRowCount) {
             Data.emplace_back();
             Data.back().Buffer = Packer.Finish();
-            BasicStats.Bytes += Data.back().Buffer->Size();
-            PackedDataSize += Data.back().Buffer->Size();
+            BasicStats.Bytes += Data.back().Buffer.size();
+            PackedDataSize += Data.back().Buffer.size();
             PackedRowCount += ChunkRowCount;
             Data.back().RowCount = ChunkRowCount;
             ChunkRowCount = 0;
@@ -350,7 +349,7 @@ private:
     TLogFunc LogFunc;
 
     struct TSerializedBatch {
-        TPagedBuffer::TPtr Buffer;
+        TRope Buffer;
         ui64 RowCount = 0;
     };
     std::deque<TSerializedBatch> Data;

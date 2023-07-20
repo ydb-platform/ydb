@@ -108,6 +108,18 @@ public:
         }
     }
 
+    inline TRope ReleaseRope() {
+        Y_VERIFY_DEBUG(OriginalLen_ >= Len_);
+        Rope_.EraseFront(OriginalLen_ - Len_);
+        TRope result = std::move(Rope_);
+
+        Data_ = nullptr;
+        Len_ = OriginalLen_ = 0;
+        Rope_.clear();
+
+        return result;
+    }
+
     void Next() {
         Y_VERIFY_DEBUG(Len_ == 0);
         Rope_.EraseFront(OriginalLen_);

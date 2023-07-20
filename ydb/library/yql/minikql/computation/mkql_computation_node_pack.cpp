@@ -1,3 +1,4 @@
+#include "mkql_block_impl.h"
 #include "mkql_computation_node_pack.h"
 #include "mkql_computation_node_pack_impl.h"
 #include "mkql_computation_node_holders.h"
@@ -223,6 +224,11 @@ bool HasOptionalFields(const TType* type) {
             }
         }
         return false;
+    }
+
+    case TType::EKind::Block: {
+        auto blockType = static_cast<const TBlockType*>(type);
+        return HasOptionalFields(blockType->GetItemType());
     }
 
     default:
@@ -855,6 +861,16 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
     }
 }
 
+bool HasNonTrivialNulls(const arrow::ArrayData& array, i64 expectedOffset) {
+    MKQL_ENSURE(array.offset == expectedOffset, "Unexpected offset in child arrays");
+    i64 nulls = array.GetNullCount();
+    if (nulls > 0 && nulls != array.length) {
+        return true;
+    }
+
+    return AnyOf(array.child_data, [&](const auto& child) { return HasNonTrivialNulls(*child, expectedOffset); });
+}
+
 
 } // namespace
 
@@ -939,20 +955,73 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 
 // Transport packer
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type)
+TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* pool)
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
+    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
+    InitBlocks();
 }
 
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type)
+TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::MemoryPool* pool)
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
+    , ArrowPool_(pool ? *pool : *arrow::default_memory_pool())
 {
+    InitBlocks();
+}
+
+template<bool Fast>
+void TValuePackerTransport<Fast>::InitBlocks() {
+    if (!Type_->IsMulti()) {
+        return;
+    }
+
+    const TMultiType* multiType = static_cast<const TMultiType*>(Type_);
+    ui32 width = multiType->GetElementsCount();
+    if (!width) {
+        return;
+    }
+
+    const TType* last = multiType->GetElementType(width - 1);
+    if (!last->IsBlock()) {
+        return;
+    }
+
+    const TBlockType* blockLenType = static_cast<const TBlockType*>(multiType->GetElementType(width - 1));
+    if (blockLenType->GetShape() != TBlockType::EShape::Scalar) {
+        return;
+    }
+
+    if (!blockLenType->GetItemType()->IsData()) {
+        return;
+    }
+
+    if (static_cast<const TDataType*>(blockLenType->GetItemType())->GetDataSlot() != NUdf::EDataSlot::Uint64) {
+        return;
+    }
+
+    if (AnyOf(multiType->GetElements(), [](const auto& t) { return !t->IsBlock(); })) {
+        return;
+    }
+
+    IsBlock_ = true;
+    ConvertedScalars_.resize(width - 1);
+    for (ui32 i = 0; i < width - 1; ++i) {
+        const TBlockType* itemType = static_cast<const TBlockType*>(multiType->GetElementType(i));
+        const bool isScalar = itemType->GetShape() == TBlockType::EShape::Scalar;
+        BlockSerializers_.emplace_back(MakeBlockSerializer(TTypeInfoHelper(), itemType->GetItemType()));
+        BlockDeserializers_.emplace_back(MakeBlockDeserializer(TTypeInfoHelper(), itemType->GetItemType()));
+        if (itemType->GetShape() == TBlockType::EShape::Scalar) {
+            BlockReaders_.emplace_back(NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType->GetItemType()));
+        } else {
+            BlockReaders_.emplace_back();
+        }
+    }
 }
 
 template<bool Fast>
@@ -964,13 +1033,16 @@ NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TRope&& buf, const THold
 
 template<bool Fast>
 void TValuePackerTransport<Fast>::UnpackBatch(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
+    if (IsBlock_) {
+        return UnpackBatchBlocks(std::move(buf), holderFactory, result);
+    }
     const size_t totalSize = buf.GetSize();
     TChunkedInputBuffer chunked(std::move(buf));
     DoUnpackBatch<Fast>(Type_, chunked, totalSize, holderFactory, IncrementalState_, result);
 }
 
 template<bool Fast>
-TPagedBuffer::TPtr TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
+TRope TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
     MKQL_ENSURE(ItemCount_ == 0, "Can not mix Pack() and AddItem() calls");
     TPagedBuffer::TPtr result = std::make_shared<TPagedBuffer>();
     if constexpr (Fast) {
@@ -981,7 +1053,7 @@ TPagedBuffer::TPtr TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePo
         PackImpl<Fast, false>(Type_, *result, value, State_);
         BuildMeta(result, false);
     }
-    return result;
+    return TPagedBuffer::AsRope(result);
 }
 
 template<bool Fast>
@@ -1013,6 +1085,10 @@ template<bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 width) {
     Y_VERIFY_DEBUG(Type_->IsMulti());
     Y_VERIFY_DEBUG(static_cast<const TMultiType*>(Type_)->GetElementsCount() == width);
+    if (IsBlock_) {
+        return AddWideItemBlocks(values, width);
+    }
+
     const TMultiType* itemType = static_cast<const TMultiType*>(Type_);
     if (!ItemCount_) {
         StartPack();
@@ -1026,13 +1102,133 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf
 }
 
 template<bool Fast>
+TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 width) {
+    const ui64 len = TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+
+    auto metadataBuffer = std::make_shared<TPagedBuffer>();
+    PackData<false>(len, *metadataBuffer);
+
+    TMaybe<ui64> originalOffset;
+    bool hasNonTrivialNulls = false;
+    // all offsets should be equal
+    for (size_t i = 0; i < width - 1; ++i) {
+        arrow::Datum datum = TArrowBlock::From(values[i]).GetDatum();
+        if (datum.is_array()) {
+            i64 offset = datum.array()->offset;
+            MKQL_ENSURE(offset >= 0, "Negative offset");
+            if (!originalOffset.Defined()) {
+                originalOffset = offset;
+            } else {
+                MKQL_ENSURE(*originalOffset == offset, "All columns should have equal offsets");
+            }
+            hasNonTrivialNulls = hasNonTrivialNulls || HasNonTrivialNulls(*datum.array(), offset);
+        }
+    }
+
+    const ui64 desiredOffset = (originalOffset.Defined() && hasNonTrivialNulls) ? (*originalOffset % 8) : 0;
+    PackData<false>(desiredOffset, *metadataBuffer);
+
+    // "scalars are present"
+    const ui64 metadataFlags = 1 << 0;
+    PackData<false>(metadataFlags, *metadataBuffer);
+
+    ui32 totalMetadataCount = 0;
+    for (size_t i = 0; i < width - 1; ++i) {
+        totalMetadataCount += BlockSerializers_[i]->ArrayMetadataCount();
+    }
+    PackData<false>(totalMetadataCount, *metadataBuffer);
+
+    TVector<std::shared_ptr<arrow::ArrayData>> arrays;
+    arrays.reserve(width - 1);
+    for (ui32 i = 0; i < width - 1; ++i) {
+        arrow::Datum datum = TArrowBlock::From(values[i]).GetDatum();
+        if (datum.is_scalar()) {
+            if (!ConvertedScalars_[i]) {
+                const TType* itemType = static_cast<const TMultiType*>(Type_)->GetElementType(i);
+                datum = MakeArrayFromScalar(*datum.scalar(), 1, static_cast<const TBlockType*>(itemType)->GetItemType(), ArrowPool_);
+                ConvertedScalars_[i] = datum.array();
+            }
+            arrays.emplace_back(ConvertedScalars_[i]);
+        } else {
+            MKQL_ENSURE(datum.is_array(), "Expecting array or scalar");
+            arrays.emplace_back(datum.array());
+        }
+    }
+
+    ui32 savedMetadata = 0;
+    for (size_t i = 0; i < width - 1; ++i) {
+        const bool isScalar = BlockReaders_[i] != nullptr;
+        BlockSerializers_[i]->StoreMetadata(*arrays[i], isScalar ? 0 : desiredOffset, [&](ui64 meta) {
+            PackData<false>(meta, *metadataBuffer);
+            ++savedMetadata;
+        });
+    }
+
+    MKQL_ENSURE(savedMetadata == totalMetadataCount, "Serialization metadata error");
+
+    BlockBuffer_.Insert(BlockBuffer_.End(), TPagedBuffer::AsRope(metadataBuffer));
+    for (size_t i = 0; i < width - 1; ++i) {
+        const bool isScalar = BlockReaders_[i] != nullptr;
+        BlockSerializers_[i]->StoreArray(*arrays[i], isScalar ? 0 : desiredOffset, BlockBuffer_);
+    }
+    ++ItemCount_;
+    return *this;
+}
+
+template<bool Fast>
+void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
+    while (!buf.empty()) {
+        TChunkedInputBuffer chunked(std::move(buf));
+        const ui64 len = UnpackData<false, ui64>(chunked);
+        if (len == 0) {
+            continue;
+        }
+
+        const ui64 offset = UnpackData<false, ui64>(chunked);
+        const ui64 metadataFlags = UnpackData<false, ui64>(chunked);
+        MKQL_ENSURE(metadataFlags == 1, "Unsupported metadata flags");
+
+        ui32 metaCount = UnpackData<false, ui32>(chunked);
+        for (auto& deserializer : BlockDeserializers_) {
+            deserializer->LoadMetadata([&]() -> ui64 {
+                MKQL_ENSURE(metaCount > 0, "No more metadata available");
+                --metaCount;
+                return UnpackData<false, ui64>(chunked);
+            });
+        }
+        MKQL_ENSURE(metaCount == 0, "Partial buffers read");
+        TRope ropeTail = chunked.ReleaseRope();
+        result.PushRow([&](ui32 i) {
+            if (i < BlockDeserializers_.size()) {
+                const bool isScalar = BlockReaders_[i] != nullptr;
+                auto array = BlockDeserializers_[i]->LoadArray(ropeTail, isScalar ? 1 : len, isScalar ? 0 : offset);
+                if (isScalar) {
+                    TBlockItem item = BlockReaders_[i]->GetItem(*array, 0);
+                    const TBlockType* itemType = static_cast<const TBlockType*>(static_cast<const TMultiType*>(Type_)->GetElementType(i));
+                    return holderFactory.CreateArrowBlock(ConvertScalar(itemType->GetItemType(), item, ArrowPool_));
+                }
+                return holderFactory.CreateArrowBlock(array);
+            }
+            MKQL_ENSURE(i == BlockDeserializers_.size(), "Unexpected row index");
+            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)));
+        });
+        buf = std::move(ropeTail);
+    }
+}
+
+template<bool Fast>
 void TValuePackerTransport<Fast>::Clear() {
     Buffer_.reset();
+    BlockBuffer_.clear();
     ItemCount_ = 0;
 }
 
 template<bool Fast>
-TPagedBuffer::TPtr TValuePackerTransport<Fast>::Finish() {
+TRope TValuePackerTransport<Fast>::Finish() {
+    if (IsBlock_) {
+        return FinishBlocks();
+    }
+
     if (!ItemCount_) {
         StartPack();
     }
@@ -1044,6 +1240,13 @@ TPagedBuffer::TPtr TValuePackerTransport<Fast>::Finish() {
         BuildMeta(Buffer_, true);
     }
     TPagedBuffer::TPtr result = std::move(Buffer_);
+    Clear();
+    return TPagedBuffer::AsRope(result);
+}
+
+template<bool Fast>
+TRope TValuePackerTransport<Fast>::FinishBlocks() {
+    TRope result = std::move(BlockBuffer_);
     Clear();
     return result;
 }

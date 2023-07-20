@@ -19,7 +19,7 @@ using namespace NYql;
 namespace {
 
 TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const TType* type, const NUdf::TUnboxedValuePod& value) {
-    TPagedBuffer::TPtr packResult;
+    TRope packResult;
     switch (version) {
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
             version = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0;
@@ -43,12 +43,12 @@ TDqSerializedBatch SerializeValue(NDqProto::EDataTransportVersion version, const
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(version);
     result.Proto.SetRows(1);
-    result.SetPayload(packResult);
+    result.SetPayload(std::move(packResult));
     return result;
 }
 
 template<bool Fast>
-TPagedBuffer::TPtr DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer) {
+TRope DoSerializeBuffer(const TType* type, const TUnboxedValueBatch& buffer) {
     using TPacker = TValuePackerTransport<Fast>;
 
     TPacker packer(/* stable */ false, type);
@@ -65,7 +65,7 @@ TPagedBuffer::TPtr DoSerializeBuffer(const TType* type, const TUnboxedValueBatch
 }
 
 TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, const TType* type, const TUnboxedValueBatch& buffer) {
-    TPagedBuffer::TPtr packResult;
+    TRope packResult;
     switch (version) {
         case NDqProto::DATA_TRANSPORT_VERSION_UNSPECIFIED:
             version = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0;
@@ -87,7 +87,7 @@ TDqSerializedBatch SerializeBuffer(NDqProto::EDataTransportVersion version, cons
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(version);
     result.Proto.SetRows(buffer.RowCount());
-    result.SetPayload(packResult);
+    result.SetPayload(std::move(packResult));
     return result;
 }
 

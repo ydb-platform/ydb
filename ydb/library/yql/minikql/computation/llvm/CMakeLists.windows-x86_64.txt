@@ -23,6 +23,7 @@ target_link_libraries(minikql-computation-llvm PUBLIC
   Target-X86-AsmParser
   lib-Transforms-IPO
   libs-apache-arrow
+  cpp-actors-util
   library-cpp-enumbitset
   library-cpp-packedtypes
   library-cpp-random_provider
@@ -38,6 +39,7 @@ target_sources(minikql-computation-llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_reader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_transport.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_graph.cpp

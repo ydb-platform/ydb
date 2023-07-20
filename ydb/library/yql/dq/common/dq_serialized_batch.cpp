@@ -26,12 +26,18 @@ T ReadNumber(TStringBuf& src) {
 
 }
 
-void TDqSerializedBatch::SetPayload(const NKikimr::NMiniKQL::TPagedBuffer::TPtr& buffer) {
+void TDqSerializedBatch::SetPayload(TRope&& payload) {
+    Proto.ClearRaw();
     if (IsOOBTransport((NDqProto::EDataTransportVersion)Proto.GetTransportVersion())) {
-        Payload = NKikimr::NMiniKQL::TPagedBuffer::AsRope(std::move(buffer));
+        Payload = std::move(payload);
     } else {
-        Proto.MutableRaw()->reserve(buffer->Size());
-        buffer->CopyTo(*Proto.MutableRaw());
+        Payload.clear();
+        Proto.MutableRaw()->reserve(payload.size());
+        while (!payload.IsEmpty()) {
+            auto it = payload.Begin();
+            Proto.MutableRaw()->append(it.ContiguousData(), it.ContiguousSize());
+            payload.Erase(it, it + it.ContiguousSize());
+        }
     }
  }
 

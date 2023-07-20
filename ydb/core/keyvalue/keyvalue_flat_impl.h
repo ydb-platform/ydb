@@ -265,11 +265,8 @@ protected:
     }
 #endif
 
-    KV_SIMPLE_TX(StoreCollect);
-    KV_SIMPLE_TX(EraseCollect);
     KV_SIMPLE_TX(RegisterInitialGCCompletion);
     KV_SIMPLE_TX(CompleteGC);
-    KV_SIMPLE_TX(PartialCompleteGC);
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -332,25 +329,11 @@ protected:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state
-    void Handle(TEvKeyValue::TEvEraseCollect::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvEraseCollect " << ev->Get()->ToString());
-        State.OnEvEraseCollect(ctx);
-        Execute(new TTxEraseCollect(this), ctx);
-    }
-
     void Handle(TEvKeyValue::TEvCompleteGC::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvCompleteGC " << ev->Get()->ToString());
         State.OnEvCompleteGC();
         Execute(new TTxCompleteGC(this), ctx);
-    }
-
-    void  Handle(TEvKeyValue::TEvPartialCompleteGC::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvPartitialCompleteGC " << ev->Get()->ToString());
-        State.OnEvPartialCompleteGC(ev->Get());
-        Execute(new TTxPartialCompleteGC(this), ctx);
     }
 
     void Handle(TEvKeyValue::TEvCollect::TPtr &ev, const TActorContext &ctx) {
@@ -374,12 +357,6 @@ protected:
             Become(&TThis::StateBroken);
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
-    }
-
-    void Handle(TEvKeyValue::TEvStoreCollect::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvStoreCollect " << ev->Get()->ToString());
-        Execute(new TTxStoreCollect(this), ctx);
     }
 
     void CheckYellowChannels(TRequestStat& stat) {
@@ -545,11 +522,8 @@ public:
             hFunc(TEvKeyValue::TEvGetStorageChannelStatus, Handle);
             hFunc(TEvKeyValue::TEvAcquireLock, Handle);
 
-            HFunc(TEvKeyValue::TEvEraseCollect, Handle);
             HFunc(TEvKeyValue::TEvCompleteGC, Handle);
-            HFunc(TEvKeyValue::TEvPartialCompleteGC, Handle);
             HFunc(TEvKeyValue::TEvCollect, Handle);
-            HFunc(TEvKeyValue::TEvStoreCollect, Handle);
             HFunc(TEvKeyValue::TEvRequest, Handle);
             HFunc(TEvKeyValue::TEvIntermediate, Handle);
             HFunc(TEvKeyValue::TEvNotify, Handle);

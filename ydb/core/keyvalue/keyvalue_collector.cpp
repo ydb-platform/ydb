@@ -34,9 +34,6 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     TVector<TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
     ui32 EndChannel = 0;
 
-    // For DoNotKeep
-    TVector<TLogoBlobID> CollectedDoNotKeep;
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -106,7 +103,6 @@ public:
                 maxDoNotKeepSizeInGroupChannel = Max(maxDoNotKeepSizeInGroupChannel, collector.DoNotKeep.size());
             }
         }
-        CollectedDoNotKeep.reserve(Min(maxDoNotKeepSizeInGroupChannel, MaxCollectGarbageFlagsPerMessage));
 
         SendTheRequest();
         Become(&TThis::StateWait);
@@ -158,10 +154,6 @@ public:
                     (TabletId, TabletInfo->TabletID), (Channel, GetCurretChannelId()));
                 CollectorForGroupForChannel.pop_back();
             }
-            if (CollectedDoNotKeep.size()) {
-                SendPartialCompleteGC();
-                return;
-            }
             if (CollectorForGroupForChannel.empty()) {
                 SendCompleteGCAndDie();
                 return;
@@ -194,14 +186,6 @@ public:
         } else {
             SendTheRequest();
         }
-    }
-
-    void SendPartialCompleteGC() {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC14, "Collector send PartialCompleteGC",
-            (TabletId, TabletInfo->TabletID),
-            (FirstDoNotKeep, (CollectedDoNotKeep.size() ? CollectedDoNotKeep[0].ToString() : "none")),
-            (CollectedDoNotKeepSize, CollectedDoNotKeep.size()));
-        Send(KeyValueActorId, new TEvKeyValue::TEvPartialCompleteGC(std::move(CollectedDoNotKeep)));
     }
 
     void SendCompleteGCAndDie() {
@@ -251,9 +235,6 @@ public:
 
             collector.NextCountOfSentFlags += doNotKeepSize;
             Copy(begin, end, doNotKeep->begin());
-            if (!IsRepeatedRequest) {
-                Copy(doNotKeep->cbegin(), doNotKeep->cend(), std::back_inserter(CollectedDoNotKeep));
-            }
         }
 
         ui32 keepStartIdx = 0;
@@ -298,18 +279,6 @@ public:
         IsRepeatedRequest = false;
     }
 
-    void HandleContinueGC(TEvKeyValue::TEvContinueGC::TPtr &ev) {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC13, "Collector continue GC",
-            (TabletId, TabletInfo->TabletID));
-        if (CollectorForGroupForChannel.empty()) {
-            SendCompleteGCAndDie();
-            return;
-        }
-        CollectedDoNotKeep = std::move(ev->Get()->Buffer);
-        CollectedDoNotKeep.clear();
-        SendTheRequest();
-    }
-
     void HandleWakeUp() {
         auto collectorsOfCurrentChannel = CollectorForGroupForChannel.rbegin();
         if (collectorsOfCurrentChannel == CollectorForGroupForChannel.rend()) {
@@ -352,7 +321,6 @@ public:
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
-            hFunc(TEvKeyValue::TEvContinueGC, HandleContinueGC);
             cFunc(TEvents::TEvWakeup::EventType, HandleWakeUp);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoisonPill);
             default:

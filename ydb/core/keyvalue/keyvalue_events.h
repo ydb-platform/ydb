@@ -20,13 +20,10 @@ struct TEvKeyValue {
         EvNotify,
         EvStoreCollect,
         EvCollect,
-        EvEraseCollect,
         EvPeriodicRefresh,
         EvReportWriteLatency,
         EvUpdateWeights,
         EvCompleteGC,
-        EvPartialCompleteGC,
-        EvContinueGC,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -185,16 +182,8 @@ struct TEvKeyValue {
         }
     };
 
-    struct TEvStoreCollect : public TEventLocal<TEvStoreCollect, EvStoreCollect> {
-        TEvStoreCollect() { }
-    };
-
     struct TEvCollect : public TEventLocal<TEvCollect, EvCollect> {
         TEvCollect() { }
-    };
-
-    struct TEvEraseCollect : public TEventLocal<TEvEraseCollect, EvEraseCollect> {
-        TEvEraseCollect() { }
     };
 
     struct TEvPeriodicRefresh : public TEventLocal<TEvPeriodicRefresh, EvPeriodicRefresh> {
@@ -203,23 +192,6 @@ struct TEvKeyValue {
 
     struct TEvCompleteGC : public TEventLocal<TEvCompleteGC, EvCompleteGC> {
         TEvCompleteGC() { }
-    };
-
-    struct TEvPartialCompleteGC : public TEventLocal<TEvPartialCompleteGC, EvPartialCompleteGC> {
-        TVector<TLogoBlobID> CollectedDoNotKeep;
-
-        TEvPartialCompleteGC() { }
-
-        TEvPartialCompleteGC(TVector<TLogoBlobID> &&doNotKeeps)
-            : CollectedDoNotKeep(std::move(doNotKeeps))
-        { }
-    };
-
-    struct TEvContinueGC : public TEventLocal<TEvContinueGC, EvContinueGC> {
-        TVector<TLogoBlobID> Buffer;
-        TEvContinueGC(TVector<TLogoBlobID> &&buffer)
-            : Buffer(std::move(buffer))
-        { }
     };
 };
 

@@ -13,6 +13,7 @@
 #include "keyvalue_simple_db.h"
 #include "channel_balancer.h"
 #include <util/generic/set.h>
+#include <util/generic/hash_multi_map.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -254,8 +255,9 @@ protected:
     THashMap<TLogoBlobID, ui32> RefCounts;
     TSet<TLogoBlobID> Trash;
     TMap<ui64, ui64> InFlightForStep;
+    TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashMap<ui64, TInstant> RequestInputTime;
-    ui64 NextRequestUid = 0;
+    ui64 NextRequestUid = 1;
     TIntrusivePtr<TCollectOperation> CollectOperation;
     bool IsCollectEventSent;
     bool IsSpringCleanupDone;
@@ -338,29 +340,16 @@ public:
 
     // garbage collection methods
     void PrepareCollectIfNeeded(const TActorContext &ctx);
-    void RemoveFromTrashDoNotKeep(ISimpleDb &db, const TActorContext &ctx, const TVector<TLogoBlobID> &collectedDoNotKeep);
-    void RemoveFromTrashBySoftBarrier(ISimpleDb &db, const TActorContext &ctx, const NKeyValue::THelpers::TGenerationStep &genStep);
+    bool RemoveCollectedTrash(ISimpleDb &db, const TActorContext &ctx);
     void UpdateStoredState(ISimpleDb &db, const TActorContext &ctx, const NKeyValue::THelpers::TGenerationStep &genStep);
-    void UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool updateTrash, bool updateState);
-    void UpdateAfterPartialGC(ISimpleDb &db, const TActorContext &ctx);
-    void StoreCollectExecute(ISimpleDb &db, const TActorContext &ctx);
-    void StoreCollectComplete(const TActorContext &ctx);
-    void EraseCollectExecute(ISimpleDb &db, const TActorContext &ctx);
-    void EraseCollectComplete(const TActorContext &ctx);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
     void CompleteGCComplete(const TActorContext &ctx);
-    void PartialCompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
-    void PartialCompleteGCComplete(const TActorContext &ctx);
-    void SendStoreCollect(const TActorContext &ctx, const THelpers::TGenerationStep &genStep,
-        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep);
-    void StartGC(const TActorContext &ctx, const THelpers::TGenerationStep &genStep,
-        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep);
+    void StartGC(const TActorContext &ctx, TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep,
+        TVector<TLogoBlobID>& trashGoingToCollect);
     void StartCollectingIfPossible(const TActorContext &ctx);
     ui64 OnEvCollect(const TActorContext &ctx);
     void OnEvCollectDone(ui64 perGenerationCounterStepSize, TActorId collector, const TActorContext &ctx);
-    void OnEvEraseCollect(const TActorContext &ctx);
     void OnEvCompleteGC();
-    void OnEvPartialCompleteGC(TEvKeyValue::TEvPartialCompleteGC *ev);
 
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
@@ -434,7 +423,7 @@ public:
             const TTabletStorageInfo* /*info*/);
 
     void Step();
-    TLogoBlobID AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx);
+    TLogoBlobID AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx, ui64 requestUid);
     TIntrusivePtr<TCollectOperation>& GetCollectOperation() {
         return CollectOperation;
     }
@@ -463,6 +452,7 @@ public:
 
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
         const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat);
+    void CancelInFlight(ui64 requestUid);
 
     void OnEvIntermediate(TIntermediate &intermediate, const TActorContext &ctx);
     void OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActorContext &ctx, const TTabletStorageInfo *info);

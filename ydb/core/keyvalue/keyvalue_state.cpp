@@ -438,28 +438,8 @@ void TKeyValueState::Load(const TString &key, const TString& value) {
             break;
         }
         case EIT_COLLECT: {
+            // just ignore the record
             Y_VERIFY(arbitraryPart.size() == 0);
-            Y_VERIFY(!CollectOperation.Get());
-            Y_VERIFY(value.size() >= sizeof(TCollectOperationHeader));
-            const TCollectOperationHeader *header = (const TCollectOperationHeader*)value.data();
-            Y_VERIFY(header->DataHeader.ItemType == EIT_COLLECT);
-            ui64 totalSize = sizeof(TCollectOperationHeader)
-                + sizeof(TLogoBlobID) * (header->KeepCount + header->DoNotKeepCount);
-            Y_VERIFY(value.size() == totalSize);
-            TVector<TLogoBlobID> keep;
-            TVector<TLogoBlobID> doNotKeep;
-            keep.resize(header->KeepCount);
-            doNotKeep.resize(header->DoNotKeepCount);
-            const char* data = value.data() + sizeof(TCollectOperationHeader);
-            if (keep.size()) {
-                memcpy((char *) &keep[0], data, sizeof(TLogoBlobID) * keep.size());
-            }
-            data += sizeof(TLogoBlobID) * keep.size();
-            if (doNotKeep.size()) {
-                memcpy((char *) &doNotKeep[0], data, sizeof(TLogoBlobID) * doNotKeep.size());
-            }
-            CollectOperation.Reset(new TCollectOperation(
-                header->CollectGeneration, header->CollectStep, std::move(keep), std::move(doNotKeep)));
             break;
         }
         case EIT_STATE: {
@@ -601,12 +581,6 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             }
         }
 
-        if (CollectOperation) {
-            for (const TLogoBlobID &id : CollectOperation->Keep) {
-                addBlobToKeep(id);
-            }
-        }
-
         for (const auto &channelInfo : info->Channels) {
             if (channelInfo.Channel < BLOB_CHANNEL) {
                 continue;
@@ -630,10 +604,11 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             std::tie(group, channel) = keepInfo.first;
 
             THolder<TVector<TLogoBlobID>>& keep = keepInfo.second;
+            const ui32 step = TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(keep.Get(), nullptr);
             auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(info->TabletID, executorGeneration,
                     PerGenerationCounter, channel, true /*collect*/, barrierGeneration, barrierStep, keep.Release(),
                     nullptr /*doNotKeep*/, TInstant::Max(), false /*isMultiCollectAllowed*/, false /*hard*/);
-            ++PerGenerationCounter;
+            PerGenerationCounter += step;
 
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
             const TActorId proxy = MakeBlobStorageProxyID(group);
@@ -686,39 +661,9 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             ChannelRangeSets[id.Channel()].Remove(id.Generation());
         }
     }
-    if (CollectOperation) {
-        auto &keep = CollectOperation->Keep;
-        for (auto it = keep.begin(); it != keep.end(); ++it) {
-            const TLogoBlobID &id = *it;
-            if (id.Channel() < ChannelRangeSets.size()) {
-                ChannelRangeSets[id.Channel()].Remove(id.Generation());
-            }
-        }
-        auto &doNotKeep = CollectOperation->DoNotKeep;
-        for (auto it = doNotKeep.begin(); it != doNotKeep.end(); ++it) {
-            const TLogoBlobID &id = *it;
-            if (id.Channel() < ChannelRangeSets.size()) {
-                ChannelRangeSets[id.Channel()].Remove(id.Generation());
-            }
-        }
-        // Patch collect operation generation and step
-        Y_VERIFY(CollectOperation->Header.GetCollectGeneration() < ExecutorGeneration);
-        CollectOperation->Header.SetCollectGeneration(ExecutorGeneration);
-        CollectOperation->Header.SetCollectStep(0);
-    }
 
-    if (CollectOperation) {
-        for (const TLogoBlobID &id : CollectOperation->DoNotKeep) {
-            Trash.insert(id);
-            THelpers::DbUpdateTrash(id, db, ctx);
-        }
-        THelpers::DbEraseCollect(db, ctx);
-        CollectOperation = nullptr;
-    }
-
-
+    THelpers::DbEraseCollect(db, ctx);
     THelpers::DbUpdateState(StoredState, db, ctx);
-
 
     // corner case, if no CollectGarbage events were sent
     if (InitialCollectsSent == 0) {
@@ -798,7 +743,7 @@ void TKeyValueState::Step() {
     }
 }
 
-TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx) {
+TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx, ui64 requestUid) {
     ui32 generation = ExecutorGeneration;
     TLogoBlobID id(TabletId, generation, NextLogoBlobStep, storageChannelIdx, size, NextLogoBlobCookie);
     if (NextLogoBlobCookie < TLogoBlobID::MaxCookie) {
@@ -808,6 +753,10 @@ TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx
     }
     Y_VERIFY(!CollectOperation || THelpers::GenerationStep(id) >
         THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
+    if (requestUid) {
+        ++InFlightForStep[id.Step()];
+        ++RequestUidStepToCount[std::make_tuple(requestUid, id.Step())];
+    }
     return id;
 }
 
@@ -1363,7 +1312,7 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
                 Y_VERIFY(it->second != 0);
             } else if (!Trash.count(id)) { // we found a candidate for trash
                 if (numItems < intermediate->TrimLeakedBlobs->MaxItemsToTrim) {
-                    LOG_WARN_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " trimming " << id.ToString());
+                    LOG_WARN_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " trimming " << id);
                     Trash.insert(id);
                     CountTrashRecord(id.BlobSize());
                     THelpers::DbUpdateTrash(id, db, ctx);
@@ -1753,15 +1702,21 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
         CountRequestTakeOffOrEnqueue(requestType);
     }
 
-    if (StoredState.GetChannelGeneration() == generation) {
-        auto it = InFlightForStep.find(step);
-        Y_VERIFY(it != InFlightForStep.end(), "Unexpected step# %" PRIu64, (ui64)step);
-        it->second--;
-        if (it->second == 0) {
-            InFlightForStep.erase(it);
+    CancelInFlight(requestUid);
+    PrepareCollectIfNeeded(ctx);
+}
 
-            // Initiate Garbage collection process if needed
-           StartCollectingIfPossible(ctx);
+void TKeyValueState::CancelInFlight(ui64 requestUid) {
+    for (auto it = RequestUidStepToCount.lower_bound(std::make_tuple(requestUid, 0)); it != RequestUidStepToCount.end() &&
+            std::get<0>(it->first) == requestUid; it = RequestUidStepToCount.erase(it)) {
+        const auto& [requestUid, step] = it->first;
+        const ui32 drop = it->second;
+        auto stepIt = InFlightForStep.find(step);
+        Y_VERIFY(stepIt != InFlightForStep.end() && drop <= stepIt->second);
+        if (drop < stepIt->second) {
+            stepIt->second -= drop;
+        } else {
+            InFlightForStep.erase(stepIt);
         }
     }
 }
@@ -2210,7 +2165,7 @@ void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, u
         ui64 sizeRemain = cmd.Data.size();
         while (sizeRemain) {
             ui32 blobSize = Min<ui64>(sizeRemain, 8 << 20);
-            cmd.LogoBlobIds.push_back(AllocateLogoBlobId(blobSize, storageChannelIdx));
+            cmd.LogoBlobIds.push_back(AllocateLogoBlobId(blobSize, storageChannelIdx, intermediate->RequestUid));
             sizeRemain -= blobSize;
         }
         for (const TLogoBlobID& logoBlobId : cmd.LogoBlobIds) {
@@ -2337,7 +2292,7 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
         }
 
         cmd.StorageChannel = storageChannel;
-        cmd.LogoBlobId = AllocateLogoBlobId(1, storageChannelIdx);
+        cmd.LogoBlobId = AllocateLogoBlobId(1, storageChannelIdx, 0);
         cmd.Status = NKikimrProto::UNKNOWN;
     }
     return {false, msg};
@@ -2925,7 +2880,6 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
     CountRequestIncoming(requestType);
 
     if (PrepareReadRequest(ctx, ev, intermediate, &requestType)) {
-        ++InFlightForStep[StoredState.GetChannelStep()];
         if (requestType == TRequestType::ReadOnlyInline) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage inline read request, Marker# KV49");
@@ -2962,7 +2916,6 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
     CountRequestIncoming(requestType);
 
     if (PrepareReadRangeRequest(ctx, ev, intermediate, &requestType)) {
-        ++InFlightForStep[StoredState.GetChannelStep()];
         if (requestType == TRequestType::ReadOnlyInline) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage inline read range request, Marker# KV58");
@@ -3000,7 +2953,6 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
     CountRequestIncoming(requestType);
 
     if (PrepareExecuteTransactionRequest(ctx, ev, intermediate, info)) {
-        ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create storage request for WO, Marker# KV67");
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
@@ -3009,6 +2961,7 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
     } else {
         intermediate->UpdateStat();
         CountRequestOtherError(requestType);
+        CancelInFlight(intermediate->RequestUid);
     }
 }
 
@@ -3024,7 +2977,6 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
     CountRequestIncoming(requestType);
 
     if (PrepareGetStorageChannelStatusRequest(ctx, ev, intermediate, info)) {
-        ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create GetStorageChannelStatus request, Marker# KV75");
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
@@ -3048,7 +3000,6 @@ void TKeyValueState::OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, cons
 
     CountRequestIncoming(requestType);
     if (PrepareAcquireLockRequest(ctx, ev, intermediate)) {
-        ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create AcquireLock request, Marker# KV80");
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
@@ -3094,7 +3045,6 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
 
     if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) {
         // Spawn KeyValueStorageRequest actor on the same thread
-        ++InFlightForStep[StoredState.GetChannelStep()];
         if (requestType == TRequestType::WriteOnly) {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
                 << " Create storage request for WO, Marker# KV42");
@@ -3118,11 +3068,10 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
         }
 
         CountRequestTakeOffOrEnqueue(requestType);
-
     } else {
         intermediate->UpdateStat();
-
         CountRequestOtherError(requestType);
+        CancelInFlight(intermediate->RequestUid);
     }
 }
 

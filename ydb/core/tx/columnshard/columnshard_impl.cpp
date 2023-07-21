@@ -1046,6 +1046,7 @@ bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 
             sumBytes += blobRange.Size;
         }
         IncCounter(COUNTER_READING_EXPORTED_BLOBS);
+        IncCounter(COUNTER_READING_EXPORTED_RANGES, get->BlobRanges.size());
         IncCounter(COUNTER_READING_EXPORTED_BYTES, sumBytes);
 
         ctx.Send(s3, get.release());

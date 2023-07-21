@@ -7,6 +7,9 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
+
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -117,6 +120,11 @@ public:
         }
 
         ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(msg.Settings);
+        if (auto* s3Config = dynamic_cast<NWrappers::NExternalStorage::TS3ExternalStorageConfig*>(ExternalStorageConfig.get())) {
+            static constexpr ui32 MAX_THREADS = 10;
+            Aws::Client::ClientConfiguration& awsConfig = s3Config->ConfigRef();
+            awsConfig.executor = Aws::MakeShared<Aws::Utils::Threading::PooledThreadExecutor>("cs-s3", MAX_THREADS);
+        }
         if (ExternalStorageActorId) {
             Send(ExternalStorageActorId, new TEvents::TEvPoisonPill);
             ExternalStorageActorId = {};

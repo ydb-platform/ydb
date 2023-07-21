@@ -133,6 +133,7 @@ enum ECumulativeCounters {
     COUNTER_FORGETTING_BYTES = 78                           [(CounterOpts) = {Name: "ForgettingBytes"}];
     COUNTER_READING_EXPORTED_BLOBS = 79                     [(CounterOpts) = {Name: "ReadingExportedBlobs"}];
     COUNTER_READING_EXPORTED_BYTES = 80                     [(CounterOpts) = {Name: "ReadingExportedBytes"}];
+    COUNTER_READING_EXPORTED_RANGES = 81                    [(CounterOpts) = {Name: "ReadingExportedRanges"}];
 }
 
 enum EPercentileCounters {

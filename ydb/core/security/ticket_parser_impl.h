@@ -388,6 +388,8 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
         }
 
         auto& record = it->second;
+        record.CurrentDelay = MinErrorRefreshTime;
+        record.RefreshRetryableErrorImmediately = true;
         record.PeerName = std::move(ev->Get()->PeerName);
         record.Database = std::move(ev->Get()->Database);
         record.Signature = ev->Get()->Signature;
@@ -878,11 +880,11 @@ protected:
         TInstant RefreshTime;
         TInstant ExpireTime;
         TInstant AccessTime;
-        TDuration CurrentMaxRefreshTime = TDuration::Seconds(1);
-        TDuration CurrentMinRefreshTime = TDuration::Seconds(1);
+        TDuration CurrentDelay = TDuration::Seconds(1);
         TString PeerName;
         TString Database;
         TStackVec<TString> AdditionalSIDs;
+        bool RefreshRetryableErrorImmediately = false;
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
@@ -916,32 +918,24 @@ protected:
         template <typename T>
         void SetErrorRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
             if (Error.Retryable) {
-                if (CurrentMaxRefreshTime < ticketParser->MaxErrorRefreshTime) {
-                    CurrentMaxRefreshTime += ticketParser->MinErrorRefreshTime;
+                SetRefreshTime(now, CurrentDelay);
+                if (CurrentDelay < ticketParser->MaxErrorRefreshTime - ticketParser->MinErrorRefreshTime) {
+                    static const double scaleFactor = 2.0;
+                    CurrentDelay = Min(CurrentDelay * scaleFactor, ticketParser->MaxErrorRefreshTime - ticketParser->MinErrorRefreshTime);
                 }
-                CurrentMinRefreshTime = ticketParser->MinErrorRefreshTime;
             } else {
-                CurrentMaxRefreshTime = ticketParser->RefreshTime;
-                CurrentMinRefreshTime = CurrentMaxRefreshTime / 2;
+                SetRefreshTime(now, ticketParser->RefreshTime - ticketParser->RefreshTime / 2);
             }
-            SetRefreshTime(now);
         }
 
         template <typename T>
         void SetOkRefreshTime(TTicketParserImpl<T>* ticketParser, TInstant now) {
-            CurrentMaxRefreshTime = ticketParser->RefreshTime;
-            CurrentMinRefreshTime = CurrentMaxRefreshTime / 2;
-            SetRefreshTime(now);
+            SetRefreshTime(now, ticketParser->RefreshTime - ticketParser->RefreshTime / 2);
         }
 
-        void SetRefreshTime(TInstant now) {
-            if (CurrentMinRefreshTime < CurrentMaxRefreshTime) {
-                TDuration currentDuration = CurrentMaxRefreshTime - CurrentMinRefreshTime;
-                TDuration refreshDuration = CurrentMinRefreshTime + TDuration::MilliSeconds(RandomNumber<double>() * currentDuration.MilliSeconds());
-                RefreshTime = now + refreshDuration;
-            } else {
-                RefreshTime = now + CurrentMinRefreshTime;
-            }
+        void SetRefreshTime(TInstant now, TDuration delay) {
+            const TDuration::TValue half = delay.GetValue() / 2;
+            RefreshTime = now + TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
         }
 
         TString GetSubject() const {
@@ -1079,6 +1073,7 @@ protected:
         } else {
             record.RefreshTime = record.ExpireTime;
         }
+        record.RefreshRetryableErrorImmediately = true;
         CounterTicketsSuccess->Inc();
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
         BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
@@ -1096,6 +1091,11 @@ protected:
             CounterTicketsErrorsRetryable->Inc();
             BLOG_D("Ticket " << MaskTicket(record.Ticket) << " ("
                         << record.PeerName << ") has now retryable error message '" << error.Message << "'");
+            if (record.RefreshRetryableErrorImmediately) {
+                record.RefreshRetryableErrorImmediately = false;
+                GetDerived()->CanRefreshTicket(key, record);
+                Respond(record);
+            }
         } else {
             record.UnsetToken();
             record.SetOkRefreshTime(this, now);

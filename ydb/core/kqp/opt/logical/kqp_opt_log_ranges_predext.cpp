@@ -20,6 +20,28 @@ using namespace NYql::NNodes;
 
 namespace {
 
+bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
+    TExprBase expr(node);
+    if (auto sqlin = expr.Maybe<TCoSqlIn>()) {
+        auto collection = sqlin.Cast().Collection().Ptr();
+        bool result = true;
+        VisitExpr(collection,
+            [&](const TExprNode::TPtr& node) {
+                if (node->IsCallable({"DqPhyPrecompute", "DqPrecompute"})) {
+                    return false;
+                }
+                if (node->IsCallable() && (node->Content().StartsWith("Dq") || node->Content().StartsWith("Kql") || node->Content().StartsWith("Kqp"))) {
+                    result = false;
+                    return false;
+                }
+                return true;
+            });
+        return result;
+    }
+
+    return true;
+}
+
 TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTableRangesBase readTable,
     const TKqpMatchReadResult& readMatch, const TKikimrTableDescription& tableDesc, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, TMaybeNode<TCoAtom> indexName)
@@ -151,19 +173,6 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
         .Done();
 }
 
-TMaybe<size_t> EstimateSqlInCollectionSize(const NYql::TExprNode::TPtr& collection) {
-    NYql::TExprNode::TPtr curr = collection;
-    if (curr->IsCallable("Just")) {
-        curr = curr->HeadPtr();
-    }
-
-    if (curr->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Tuple || curr->IsCallable({"AsList", "AsDict", "AsSet"})) {
-        return std::max<size_t>(curr->ChildrenSize(), 1);
-    }
-
-    return {};
-}
-
 } // namespace
 
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
@@ -233,16 +242,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             return expr.Cast();
         }
     } else {
-        settings.IsValidForRange = [&] (const TExprNode::TPtr& node) -> bool {
-            TExprBase expr(node);
-            if (auto sqlin = expr.Maybe<TCoSqlIn>()) {
-                if (!EstimateSqlInCollectionSize(sqlin.Cast().Collection().Ptr())) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
+        settings.IsValidForRange = IsValidForRange;
     }
 
     auto extractor = MakePredicateRangeExtractor(settings);
@@ -262,10 +262,11 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     TExprNode::TPtr prefixPointsExpr;
     IPredicateRangeExtractor::TBuildResult pointsExtractionResult;
 
-    if (buildResult.PointPrefixLen > 0 && buildResult.ExpectedMaxRanges) {
+    if (buildResult.PointPrefixLen > 0) {
         TPredicateExtractorSettings pointSettings = settings;
         pointSettings.MergeAdjacentPointRanges = false;
         pointSettings.HaveNextValueCallable = false;
+        pointSettings.MaxRanges = Nothing();
         TVector<TString> pointKeys;
         for (size_t i = 0; i < buildResult.PointPrefixLen; ++i) {
             pointKeys.push_back(tableDesc.Metadata->KeyColumnNames[i]);
@@ -274,7 +275,9 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         YQL_ENSURE(extractor->Prepare(flatmap.Lambda().Ptr(), *mainTableDesc.SchemeNode, possibleKeys, ctx, typesCtx));
 
         pointsExtractionResult = extractor->BuildComputeNode(pointKeys, ctx, typesCtx);
+        YQL_ENSURE(pointsExtractionResult.ComputeNode);
         prefixPointsExpr = BuildPointsList(pointsExtractionResult, pointKeys, ctx);
+        YQL_CLOG(DEBUG, ProviderKqp) << "Points extracted: " << KqpExprToPrettyString(*prefixPointsExpr, ctx);
     }
 
     TExprNode::TPtr residualLambda = buildResult.PrunedLambda;

@@ -466,7 +466,7 @@ class Options(object):
         self.toolchain_params = self.options.toolchain_params
 
         self.presets = parse_presets(self.options.presets)
-        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS', 'USE_LOCAL_SWIG', 'SWIG_TOOL', 'SWIG_LIBRARY'))
+        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS'))
 
     Instance = None
 
@@ -697,8 +697,6 @@ class Build(object):
         cuda = Cuda(self)
         cuda.print_()
         CuDNN(cuda).print_()
-
-        print_swig_config()
 
         if self.ignore_local_files or host.is_windows or is_positive('NO_SVN_DEPENDS'):
             emit_with_ignore_comment('SVN_DEPENDS')
@@ -2524,34 +2522,6 @@ class CuDNN(object):
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():
             self.cudnn_version.emit()
-
-
-def print_swig_config():
-    def get_swig_tool():
-        tool = preset('USER_SWIG_TOOL')
-        if not tool:
-            tool = which('swig')
-            if not tool:
-                raise ConfigureError('SWIG_TOOL is not specified and "swig" is not found in PATH')
-        return os.path.abspath(tool)
-
-    def get_swig_library(tool):
-        library = preset('USER_SWIG_LIBRARY')
-        if not library:
-            library, code = get_stdout_and_code((tool, '-swiglib'))
-            if code != 0:
-                raise ConfigureError('SWIG_LIBRARY is not specified and "{} -swiglib" failed'.format(tool))
-            library = library.split('\n')[0]
-        return os.path.abspath(library)
-
-    use_local_swig = to_bool(preset('USER_USE_LOCAL_SWIG'), False) or bool(preset('USER_SWIG_TOOL'))
-    if use_local_swig:
-        tool = get_swig_tool()
-        library = get_swig_library(tool)
-
-        emit('USE_LOCAL_SWIG', True)
-        emit('SWIG_TOOL', tool)
-        emit('SWIG_LIBRARY', library)
 
 
 def main():

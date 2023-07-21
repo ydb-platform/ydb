@@ -8,6 +8,7 @@
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include "viewer.h"
+#include "viewer_helper.h"
 #include "json_pipe_req.h"
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
@@ -824,57 +825,36 @@ public:
                 }
             }
 
-            bool reverse = ReverseSort;
             switch (GroupSort) {
                 case EGroupSort::PoolName:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.PoolName < b.PoolName);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.PoolName;}, ReverseSort);
                     break;
                 case EGroupSort::GroupId:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.GroupId < b.GroupId);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.GroupId;}, ReverseSort);
                     break;
                 case EGroupSort::Kind:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Kind < b.Kind);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Kind;}, ReverseSort);
                     break;
                 case EGroupSort::Erasure:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Erasure < b.Erasure);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Erasure;}, ReverseSort);
                     break;
                 case EGroupSort::Degraded:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Degraded < b.Degraded);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Degraded;}, ReverseSort);
                     break;
                 case EGroupSort::Usage:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Usage < b.Usage);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Usage;}, ReverseSort);
                     break;
                 case EGroupSort::Used:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Used < b.Used);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Used;}, ReverseSort);
                     break;
                 case EGroupSort::Limit:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Limit < b.Limit);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Limit;}, ReverseSort);
                     break;
                 case EGroupSort::Read:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Read < b.Read);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Read;}, ReverseSort);
                     break;
                 case EGroupSort::Write:
-                    ::Sort(GroupRows, [reverse](const TGroupRow& a, const TGroupRow& b) {
-                        return reverse ^ (a.Write < b.Write);
-                    });
+                    SortCollection(GroupRows, [](const TGroupRow& node) { return node.Write;}, ReverseSort);
                     break;
             }
 

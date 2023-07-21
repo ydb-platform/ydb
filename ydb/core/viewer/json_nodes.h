@@ -8,6 +8,7 @@
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include "viewer.h"
+#include "viewer_helper.h"
 #include "json_pipe_req.h"
 #include "json_sysinfo.h"
 #include "json_pdiskinfo.h"
@@ -251,40 +252,27 @@ public:
 
     void ProcessNodeIds() {
         BLOG_TRACE("ProcessNodeIds()");
-        bool reverse = ReverseSort;
-        std::function<void(TVector<TEvInterconnect::TNodeInfo>&)> sortFunc;
+
         switch (Sort) {
             case ESort::NodeId: {
-                sortFunc = [=](TVector<TEvInterconnect::TNodeInfo>& nodes) {
-                    ::Sort(nodes, [=](const TEvInterconnect::TNodeInfo& a, const TEvInterconnect::TNodeInfo& b) {
-                        return reverse ^ (a.NodeId < b.NodeId);
-                    });
-                };
+                SortCollection(NodesInfo->Nodes, [](const TEvInterconnect::TNodeInfo& node) { return node.NodeId;}, ReverseSort);
+                SortedNodeList = true;
                 break;
             }
             case ESort::Host: {
-                sortFunc = [=](TVector<TEvInterconnect::TNodeInfo>& nodes) {
-                    ::Sort(nodes, [=](const TEvInterconnect::TNodeInfo& a, const TEvInterconnect::TNodeInfo& b) {
-                        return reverse ^ (a.Host < b.Host);
-                    });
-                };
+                SortCollection(NodesInfo->Nodes, [](const TEvInterconnect::TNodeInfo& node) { return node.Host;}, ReverseSort);
+                SortedNodeList = true;
                 break;
             }
             case ESort::DC: {
-                sortFunc = [=](TVector<TEvInterconnect::TNodeInfo>& nodes) {
-                    ::Sort(nodes, [=](const TEvInterconnect::TNodeInfo& a, const TEvInterconnect::TNodeInfo& b) {
-                        return reverse ^ (a.Location.GetDataCenterId() < b.Location.GetDataCenterId());
-                    });
-                };
+                SortCollection(NodesInfo->Nodes, [](const TEvInterconnect::TNodeInfo& node) { return node.Location.GetDataCenterId();}, ReverseSort);
+                SortedNodeList = true;
                 break;
             }
             default:
                 break;
         }
-        if (sortFunc) {
-            sortFunc(NodesInfo->Nodes);
-            SortedNodeList = true;
-        }
+
         for (const auto& ni : NodesInfo->Nodes) {
             if ((FilterNodeIds.empty() || FilterNodeIds.count(ni.NodeId) > 0) && ni.NodeId >= MinAllowedNodeId && ni.NodeId <= MaxAllowedNodeId) {
                 SendNodeRequest(ni.NodeId);
@@ -634,7 +622,6 @@ public:
 
         ui64 totalNodes = PassedNodeIds.size();
         ui64 foundNodes;
-        bool reverse = ReverseSort;
 
         if (With == EWith::Everything) {
             foundNodes = totalNodes;
@@ -650,34 +637,22 @@ public:
                     // already sorted
                     break;
                 case ESort::Rack:
-                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                        return reverse ^ (a.GetSystemState().GetRack() < b.GetSystemState().GetRack());
-                    });
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return node.GetSystemState().GetRack();}, ReverseSort);
                     break;
                 case ESort::Version:
-                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                        return reverse ^ (a.GetSystemState().GetVersion() < b.GetSystemState().GetVersion());
-                    });
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return node.GetSystemState().GetVersion();}, ReverseSort);
                     break;
                 case ESort::Uptime:
-                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                        return reverse ^ !(a.GetSystemState().GetStartTime() < b.GetSystemState().GetStartTime());
-                    });
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return node.GetSystemState().GetStartTime();}, ReverseSort);
                     break;
                 case ESort::Memory:
-                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                        return reverse ^ (a.GetSystemState().GetMemoryUsed() < b.GetSystemState().GetMemoryUsed());
-                    });
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return node.GetSystemState().GetMemoryUsed();}, ReverseSort);
                     break;
                 case ESort::CPU:
-                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                        return reverse ^ (GetCPU(a.GetSystemState()) < GetCPU(b.GetSystemState()));
-                    });
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return GetCPU(node.GetSystemState());}, ReverseSort);
                     break;
                 case ESort::LoadAverage:
-                    ::Sort(*result.MutableNodes(), [reverse](const NKikimrViewer::TNodeInfo& a, const NKikimrViewer::TNodeInfo& b) {
-                        return reverse ^ (GetLoadAverage(a.GetSystemState()) < GetLoadAverage(b.GetSystemState()));
-                    });
+                    SortCollection(*result.MutableNodes(), [](const NKikimrViewer::TNodeInfo& node) { return GetLoadAverage(node.GetSystemState());}, ReverseSort);
                     break;
             }
         }

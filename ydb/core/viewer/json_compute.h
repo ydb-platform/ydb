@@ -13,6 +13,7 @@
 #include <ydb/core/viewer/protos/viewer.pb.h>
 #include <ydb/core/viewer/json/json.h>
 #include "viewer.h"
+#include "viewer_helper.h"
 #include "json_pipe_req.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
@@ -372,52 +373,33 @@ public:
     }
 
     void PaginateNodes(::google::protobuf::RepeatedPtrField<NKikimrViewer::TComputeNodeInfo>& nodes) {
-        bool reverse = ReverseSort;
         switch (Sort) {
             case ESort::NodeId:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (a.GetNodeId() < b.GetNodeId());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetNodeId();}, ReverseSort);
                 break;
             case ESort::Host:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (a.GetHost() < b.GetHost());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetHost();}, ReverseSort);
                 break;
             case ESort::DC:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (a.GetDataCenter() < b.GetDataCenter());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetDataCenter();}, ReverseSort);
                 break;
             case ESort::Rack:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (a.GetRack() < b.GetRack());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetRack();}, ReverseSort);
                 break;
             case ESort::Version:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (a.GetVersion() < b.GetVersion());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetVersion();}, ReverseSort);
                 break;
             case ESort::Uptime:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ !(a.GetStartTime() < b.GetStartTime());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetStartTime();}, ReverseSort);
                 break;
             case ESort::Memory:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (a.GetMemoryUsed() < b.GetMemoryUsed());
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return node.GetMemoryUsed();}, ReverseSort);
                 break;
             case ESort::CPU:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (GetCPU(a) < GetCPU(b));
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return GetCPU(node);}, ReverseSort);
                 break;
             case ESort::LoadAverage:
-                ::Sort(nodes, [reverse](const NKikimrViewer::TComputeNodeInfo& a, const NKikimrViewer::TComputeNodeInfo& b) {
-                    return reverse ^ (GetLoadAverage(a) < GetLoadAverage(b));
-                });
+                SortCollection(nodes, [](const NKikimrViewer::TComputeNodeInfo& node) { return GetLoadAverage(node);}, ReverseSort);
                 break;
         }
 

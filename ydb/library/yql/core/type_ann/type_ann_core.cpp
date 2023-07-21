@@ -5804,7 +5804,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         const auto elseNode = input->Child(2);
         const auto thenType = thenNode->GetTypeAnn();
         const auto elseType = elseNode->GetTypeAnn();
-        if (IsStrict) {
+        if constexpr (IsStrict) {
             if (IsSameAnnotation(*thenType, *elseType)) {
                 output = ctx.Expr.RenameNode(*input, "If");
                 return IGraphTransformer::TStatus::Repeat;
@@ -5813,20 +5813,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     *thenType << ", else type: " << *elseType));
                 return IGraphTransformer::TStatus::Error;
             }
-        }
+        } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr)) {
+            if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr).Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr)); status != IGraphTransformer::TStatus::Ok)
+                return status;
 
-        const TTypeAnnotationNode* commonType = nullptr;
-        if (SilentInferCommonType(input->ChildRef(1), input->ChildRef(2), ctx.Expr, commonType) == IGraphTransformer::TStatus::Error) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Uncompatible types of branches, then type: " <<
-                *thenType << ", else type: " << *elseType));
+            input->SetTypeAnn(commonType);
+        } else
             return IGraphTransformer::TStatus::Error;
-        }
 
-        if (thenNode != input->Child(1) || elseNode != input->Child(2)) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        input->SetTypeAnn(commonType);
         return IGraphTransformer::TStatus::Ok;
     }
 

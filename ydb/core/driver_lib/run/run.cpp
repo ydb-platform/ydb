@@ -365,6 +365,21 @@ public:
     }
 };
 
+class TYamlConfigInitializer : public IAppDataInitializer {
+    const NKikimrConfig::TAppConfig& Config;
+
+public:
+    TYamlConfigInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig.AppConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        appData->YamlConfigEnabled = Config.GetYamlConfigEnabled();
+    }
+};
+
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
@@ -1143,6 +1158,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TLabelsInitializer(runConfig));
     // setup cluster name
     appDataInitializers.AddAppDataInitializer(new TClusterNameInitializer(runConfig));
+    // setup yaml config info
+    appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 }

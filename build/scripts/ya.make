@@ -102,7 +102,6 @@ ELSEIF(PY3)
 
     TEST_SRCS(
         build_info_gen.py
-        clang_profile.py
     )
 ENDIF()
 

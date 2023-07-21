@@ -1,6 +1,7 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_client/session_client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
@@ -96,7 +97,7 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
 }
 
 
-class TTableClient::TImpl: public TClientImplCommon<TTableClient::TImpl>, public IMigratorClient {
+class TTableClient::TImpl: public TClientImplCommon<TTableClient::TImpl>, public ISessionClient {
 public:
     using TReadTableStreamProcessorPtr = TTablePartIterator::TReaderImpl::TStreamProcessorPtr;
     using TScanQueryProcessorPtr = TScanQueryPartIterator::TReaderImpl::TStreamProcessorPtr;
@@ -109,7 +110,7 @@ public:
     NThreading::TFuture<void> Drain();
     NThreading::TFuture<void> Stop();
     void ScheduleTask(const std::function<void()>& fn, TDuration timeout);
-    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout);
+    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) override;
     void AsyncBackoff(const TBackoffSettings& settings, ui32 retryNumber, const std::function<void()>& fn);
     void StartPeriodicSessionPoolTask();
     static ui64 ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client);
@@ -194,11 +195,11 @@ public:
         const TReadTableSettings& settings);
     TAsyncReadRowsResult ReadRows(const TString& path, TValue&& keys, const TVector<TString>& columns, const TReadRowsSettings& settings);
 
-    TAsyncStatus Close(const TSession::TImpl* sessionImpl, const TCloseSessionSettings& settings);
-    TAsyncStatus CloseInternal(const TSession::TImpl* sessionImpl);
+    TAsyncStatus Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings);
+    TAsyncStatus CloseInternal(const TKqpSessionCommon* sessionImpl);
 
-    bool ReturnSession(TSession::TImpl* sessionImpl);
-    void DeleteSession(TSession::TImpl* sessionImpl);
+    bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
+    void DeleteSession(TKqpSessionCommon* sessionImpl) override;
     ui32 GetSessionRetryLimit() const;
     static void CloseAndDeleteSession(
         std::unique_ptr<TSession::TImpl>&& impl,

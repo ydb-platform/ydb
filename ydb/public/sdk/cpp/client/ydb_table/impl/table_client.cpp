@@ -824,7 +824,7 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&&
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::Close(const TSession::TImpl* sessionImpl, const TCloseSessionSettings& settings) {
+TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
     request.set_session_id(sessionImpl->GetId());
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
@@ -834,7 +834,7 @@ TAsyncStatus TTableClient::TImpl::Close(const TSession::TImpl* sessionImpl, cons
         sessionImpl->GetEndpointKey());
 }
 
-TAsyncStatus TTableClient::TImpl::CloseInternal(const TSession::TImpl* sessionImpl) {
+TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* sessionImpl) {
     static const auto internalCloseSessionSettings = TCloseSessionSettings()
             .ClientTimeout(TDuration::Seconds(2));
 
@@ -847,7 +847,7 @@ TAsyncStatus TTableClient::TImpl::CloseInternal(const TSession::TImpl* sessionIm
         });
 }
 
-bool TTableClient::TImpl::ReturnSession(TSession::TImpl* sessionImpl) {
+bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
     Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
             sessionImpl->GetState() == TSession::TImpl::S_IDLE);
 
@@ -867,7 +867,7 @@ bool TTableClient::TImpl::ReturnSession(TSession::TImpl* sessionImpl) {
     return true;
 }
 
-void TTableClient::TImpl::DeleteSession(TSession::TImpl* sessionImpl) {
+void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     // Closing not owned by session pool session should not fire getting new session
     if (sessionImpl->IsOwnedBySessionPool()) {
         if (SessionPool_.CheckAndFeedWaiterNewSession(shared_from_this(), sessionImpl->NeedUpdateActiveCounter())) {

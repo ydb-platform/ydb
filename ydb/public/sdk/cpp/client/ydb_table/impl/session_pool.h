@@ -48,7 +48,7 @@ public:
         std::shared_ptr<TTableClient::TImpl> client,
         const TCreateSessionSettings& settings);
     // Returns true if session returned to pool successfully
-    bool ReturnSession(TSession::TImpl* impl, bool active, std::shared_ptr<TTableClient::TImpl> client);
+    bool ReturnSession(TKqpSessionCommon* impl, bool active, std::shared_ptr<TTableClient::TImpl> client);
     // Returns trun if has waiter and scheduled to create new session
     // too feed it
     bool CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client, bool active);
@@ -67,7 +67,7 @@ public:
 private:
     void UpdateStats();
     void MakeSessionPromiseFromSession(
-        TSession::TImpl* session,
+        TKqpSessionCommon* session,
         NThreading::TPromise<TCreateSessionResult>& promise,
         std::shared_ptr<TTableClient::TImpl> client
     );

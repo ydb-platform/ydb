@@ -88,7 +88,7 @@ void TSessionPool::CreateFakeSession(
 }
 
 void TSessionPool::MakeSessionPromiseFromSession(
-    TSession::TImpl* session,
+    TKqpSessionCommon* session,
     NThreading::TPromise<TCreateSessionResult>& promise,
     std::shared_ptr<TTableClient::TImpl> client
 ) {
@@ -102,7 +102,8 @@ void TSessionPool::MakeSessionPromiseFromSession(
         TSession(
             client,
             std::shared_ptr<TSession::TImpl>(
-                session, TSession::TImpl::GetSmartDeleter(client)
+                static_cast<TSession::TImpl*>(session),
+                TSession::TImpl::GetSmartDeleter(client)
             )
         )
     );
@@ -201,7 +202,7 @@ bool TSessionPool::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TI
     return true;
 }
 
-bool TSessionPool::ReturnSession(TSession::TImpl* impl, bool active, std::shared_ptr<TTableClient::TImpl> client) {
+bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active, std::shared_ptr<TTableClient::TImpl> client) {
     // Do not set promise under the session pool lock
     NThreading::TPromise<TCreateSessionResult> createSessionPromise;
     {
@@ -214,7 +215,9 @@ bool TSessionPool::ReturnSession(TSession::TImpl* impl, bool active, std::shared
             if (!active)
                 IncrementActiveCounterUnsafe();
         } else {
-            Sessions_.emplace(std::make_pair(impl->GetTimeToTouchFast(), impl));
+            Sessions_.emplace(std::make_pair(
+                impl->GetTimeToTouchFast(),
+                static_cast<TSession::TImpl*>(impl)));
 
             if (active) {
                 Y_VERIFY(ActiveSessions_);

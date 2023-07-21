@@ -6,12 +6,15 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(common)
-add_subdirectory(db_driver_state)
-add_subdirectory(grpc_connections)
-add_subdirectory(kqp_session_common)
-add_subdirectory(logger)
-add_subdirectory(make_request)
-add_subdirectory(plain_status)
-add_subdirectory(thread_pool)
-add_subdirectory(value_helpers)
+
+add_library(impl-ydb_internal-kqp_session_common)
+target_link_libraries(impl-ydb_internal-kqp_session_common PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-threading-future
+  lib-operation_id-protos
+  client-impl-ydb_endpoints
+)
+target_sources(impl-ydb_internal-kqp_session_common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/kqp_session_common/kqp_session_common.cpp
+)

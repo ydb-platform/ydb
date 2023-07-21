@@ -2372,29 +2372,6 @@ const TMaybe<TQueryStats>& TCommitTransactionResult::GetStats() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::function<void(TSession::TImpl*)> TSession::TImpl::GetSmartDeleter(std::shared_ptr<TTableClient::TImpl> client) {
-    return [client](TSession::TImpl* sessionImpl) {
-        switch (sessionImpl->GetState()) {
-            case TSession::TImpl::S_STANDALONE:
-            case TSession::TImpl::S_BROKEN:
-            case TSession::TImpl::S_CLOSING:
-                client->DeleteSession(sessionImpl);
-            break;
-            case TSession::TImpl::S_IDLE:
-            case TSession::TImpl::S_ACTIVE: {
-                if (!client->ReturnSession(sessionImpl)) {
-                    client->DeleteSession(sessionImpl);
-                }
-                break;
-            }
-            default:
-            break;
-        }
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TCopyItem::TCopyItem(const TString& source, const TString& destination)
     : Source_(source)
     , Destination_(destination)

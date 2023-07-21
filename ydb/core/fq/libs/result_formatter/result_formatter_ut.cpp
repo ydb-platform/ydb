@@ -103,6 +103,38 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         }
     }
 
+    Y_UNIT_TEST(EmptyResultSet) {
+        Ydb::ResultSet rs;
+        {
+            NJson::TJsonValue root;
+            FormatResultSet(root, rs);
+
+            TStringStream stream;
+            NJson::WriteJson(&stream, &root);
+
+            // Cerr << stream.Str() << Endl;
+
+            TString expected = R"___({"data":[],"columns":[]})___";
+
+            UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+        }
+
+        // pretty format
+        {
+            NJson::TJsonValue root;
+            FormatResultSet(root, rs, true, true);
+
+            TStringStream stream;
+            NJson::WriteJson(&stream, &root);
+
+            // Cerr << stream.Str() << Endl;
+
+            TString expected = R"___({"data":[],"columns":[]})___";
+
+            UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+        }
+    }
+
     Y_UNIT_TEST(List) {
         Ydb::ResultSet rs;
         {

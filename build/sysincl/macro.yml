@@ -977,6 +977,7 @@
     - SYSTEM_PROJECT_CONFIG_INCLUDE: contrib/libs/connectedhomeip/config/standalone/SystemProjectConfig.h
     - CHIP_ADDRESS_RESOLVE_IMPL_INCLUDE_HEADER: contrib/libs/connectedhomeip/src/lib/address_resolve/AddressResolve_DefaultImpl.h
     - CONFIGURATION_HEADER: contrib/libs/connectedhomeip/src/app/util/config.h
+    - CHIP_DEVICE_PROJECT_CONFIG_INCLUDE: contrib/libs/connectedhomeip/src/platform/ESP32/CHIPDeviceProjectConfig.h
     - BLE_PLATFORM_CONFIG_INCLUDE
     - CHIP_PLATFORM_CONFIG_INCLUDE
     - INET_PLATFORM_CONFIG_INCLUDE

@@ -6,16 +6,10 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-threading-equeue)
-target_link_libraries(cpp-threading-equeue PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-atomic
-  cpp-threading-bounded_queue
-  cpp-yt-threading
-)
-target_sources(cpp-threading-equeue PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/threading/equeue/equeue.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64" AND NOT HAVE_CUDA)
+  include(CMakeLists.windows-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+endif()

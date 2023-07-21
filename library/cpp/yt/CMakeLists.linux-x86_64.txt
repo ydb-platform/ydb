@@ -6,16 +6,16 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-threading-equeue)
-target_link_libraries(cpp-threading-equeue PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-atomic
-  cpp-threading-bounded_queue
-  cpp-yt-threading
-)
-target_sources(cpp-threading-equeue PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/threading/equeue/equeue.cpp
-)
+add_subdirectory(assert)
+add_subdirectory(coding)
+add_subdirectory(cpu_clock)
+add_subdirectory(exception)
+add_subdirectory(malloc)
+add_subdirectory(memory)
+add_subdirectory(misc)
+add_subdirectory(small_containers)
+add_subdirectory(string)
+add_subdirectory(system)
+add_subdirectory(threading)
+add_subdirectory(yson)
+add_subdirectory(yson_string)

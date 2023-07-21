@@ -55,6 +55,11 @@ message PartitionWithGeneration {
 
     // Partition generation.
     int64 generation = 2;
+};
+
+message MetadataItem {
+    string key = 1;
+    bytes value = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -165,7 +170,7 @@ message StreamWriteMessage {
                 PartitionWithGeneration partition_with_generation = 8;                
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
-            map<string, string> message_meta = 7;
+            repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
         }
     }
 
@@ -373,7 +378,7 @@ message StreamReadMessage {
 
             // Filled if message_group_id was set on message write.
             string message_group_id = 7;
-            map<string, string> message_meta = 8;
+            repeated MetadataItem metadata_items = 8;
 
         }
 

@@ -6153,12 +6153,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-        std::unordered_map<TString, TString> metadata = {{"key1", "val1"}, {"key2", "val2"}};
-/*        writer->Write("Somedata", Nothing(), Nothing(), TDuration::Max(), metadata);
+        TVector<std::pair<TString, TString>> metadata = {{"key1", "val1"}, {"key2", "val2"}};
+        {
+            auto message = NYdb::NTopic::TWriteMessage{"Somedata"}.MessageMeta(metadata);
+            writer->Write(std::move(message));
+        }
         metadata = {{"key3", "val3"}};
-        writer->Write("Somedata2", Nothing(), Nothing(), TDuration::Max(), metadata);
+        {
+            auto message = NYdb::NTopic::TWriteMessage{"Somedata2"}.MessageMeta(metadata);
+            writer->Write(std::move(message));
+        }
         writer->Write("Somedata3");
-*/
         writer->Close();
         NYdb::NTopic::TReadSessionSettings rSettings;
         rSettings.ConsumerName("debug").AppendTopics({topicFullName});

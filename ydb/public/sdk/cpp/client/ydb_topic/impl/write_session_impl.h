@@ -173,9 +173,9 @@ private:
         TStringBuf DataRef;
         TMaybe<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
-        std::unordered_map<TString, TString> MessageMeta;
+        TVector<std::pair<TString, TString>> MessageMeta;
         TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {},
-                 ui32 originalSize = 0, const std::unordered_map<TString, TString>& messageMeta = {})
+                 ui32 originalSize = 0, const TVector<std::pair<TString, TString>>& messageMeta = {})
             : SeqNo(seqNo)
             , CreatedAt(createdAt)
             , DataRef(data)
@@ -193,7 +193,7 @@ private:
         bool Acquired = false;
         bool FlushRequested = false;
         void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
-                 const std::unordered_map<TString, TString>& messageMeta) {
+                 const TVector<std::pair<TString, TString>>& messageMeta) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
@@ -266,14 +266,14 @@ private:
         ui64 SeqNo;
         TInstant CreatedAt;
         size_t Size;
-        std::unordered_map<TString, TString> MessageMeta;
+        TVector<std::pair<TString, TString>> MessageMeta;
         TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size)
             : SeqNo(sequenceNumber)
             , CreatedAt(createdAt)
             , Size(size)
         {}
         TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size,
-                         std::unordered_map<TString, TString>&& messageMeta)
+                         TVector<std::pair<TString, TString>>&& messageMeta)
             : SeqNo(sequenceNumber)
             , CreatedAt(createdAt)
             , Size(size)
@@ -315,11 +315,21 @@ public:
                                                   TMaybe<size_t> maxEventsCount = Nothing()) override;
     NThreading::TFuture<ui64> GetInitSeqNo() override;
 
-    void Write(TContinuationToken&& continuationToken, TStringBuf data,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
-    void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
+    void Write(TContinuationToken&&, TStringBuf, TMaybe<ui64> seqNo = Nothing(),
+               TMaybe<TInstant> createTimestamp = Nothing()) override {
+        Y_UNUSED(seqNo);
+        Y_UNUSED(createTimestamp);
+        Y_FAIL("Do not use this method");
+    };
+
+    void WriteEncoded(TContinuationToken&&, TStringBuf, ECodec, ui32,
+                      TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override {
+        Y_UNUSED(seqNo);
+        Y_UNUSED(createTimestamp);
+        Y_FAIL("Do not use this method");
+    }
 
 
     NThreading::TFuture<void> WaitEvent() override;
@@ -337,8 +347,7 @@ private:
 
     void UpdateTokenIfNeededImpl();
 
-    void WriteInternal(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
+    void WriteInternal(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
     void FlushWriteIfRequiredImpl();
     size_t WriteBatchImpl();

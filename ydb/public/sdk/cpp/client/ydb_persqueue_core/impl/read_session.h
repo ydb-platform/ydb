@@ -50,6 +50,11 @@ using TAWriteSessionMeta = std::conditional_t<UseMigrationProtocol,
     NYdb::NTopic::TWriteSessionMeta>;
 
 template <bool UseMigrationProtocol>
+using TAMessageMeta = std::conditional_t<UseMigrationProtocol,
+    NYdb::NPersQueue::TMessageMeta,
+    NYdb::NTopic::TMessageMeta>;
+
+template <bool UseMigrationProtocol>
 using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TSessionClosedEvent,
     NYdb::NTopic::TSessionClosedEvent>;
@@ -266,7 +271,7 @@ public:
     }
 
     template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
-    typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr GetMessageMeta(size_t batchIndex, size_t messageIndex) const {
+    typename TAMessageMeta<UseMigrationProtocol>::TPtr GetMessageMeta(size_t batchIndex, size_t messageIndex) const {
         Y_ASSERT(batchIndex < MessagesMeta.size());
         Y_ASSERT(messageIndex < MessagesMeta[batchIndex].size());
         return MessagesMeta[batchIndex][messageIndex];
@@ -330,8 +335,9 @@ private:
 private:
     TPartitionData<UseMigrationProtocol> ServerMessage;
     using TMetadataPtrVector = std::vector<typename TAWriteSessionMeta<UseMigrationProtocol>::TPtr>;
+    using TMessageMetaPtrVector = std::vector<typename TAMessageMeta<UseMigrationProtocol>::TPtr>;
     TMetadataPtrVector BatchesMeta;
-    std::vector<TMetadataPtrVector> MessagesMeta;
+    std::vector<TMessageMetaPtrVector> MessagesMeta;
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     bool DoDecompress;
     i64 ServerBytesSize = 0;

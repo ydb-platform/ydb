@@ -319,6 +319,14 @@ struct TWriteSessionMeta : public TThrRefBase {
     THashMap<TString, TString> Fields;
 };
 
+//! Message levelmetainformation.
+struct TMessageMeta : public TThrRefBase {
+    using TPtr = TIntrusivePtr<TWriteSessionMeta>;
+
+    //! User defined fields.
+    TVector<std::pair<TString, TString>> Fields;
+};
+
 //! Event that is sent to client during session destruction.
 struct TSessionClosedEvent : public TStatus {
     using TStatus::TStatus;

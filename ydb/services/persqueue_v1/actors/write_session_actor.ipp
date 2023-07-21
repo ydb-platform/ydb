@@ -151,7 +151,7 @@ inline void FillChunkDataFromReq(
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
-    *msgMeta = msg.message_meta();
+    *msgMeta = msg.metadata_items();
 }
 
 namespace NGRpcProxy {
@@ -1433,8 +1433,8 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         payloadSize += w->GetData().size() + w->GetSourceId().size();
         const auto& msg = writeRequest.messages(messageIndex);
         ui64 currMetadataSize = 0;
-        for (const auto& [k, v] : msg.message_meta()) {
-            currMetadataSize += k.size() + v.size();
+        for (const auto& metaItem : msg.metadata_items()) {
+            currMetadataSize += metaItem.key().size() + metaItem.value().size();
         }
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
     };

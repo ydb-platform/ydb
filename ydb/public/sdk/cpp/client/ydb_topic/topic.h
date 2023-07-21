@@ -556,6 +556,13 @@ struct TWriteSessionMeta: public TThrRefBase {
     THashMap<TString, TString> Fields;
 };
 
+struct TMessageMeta: public TThrRefBase {
+    using TPtr = TIntrusivePtr<TMessageMeta>;
+
+    //! User defined fields.
+    TVector<std::pair<TString, TString>> Fields;
+};
+
 //! Event that is sent to client during session destruction.
 struct TSessionClosedEvent: public TStatus {
     using TStatus::TStatus;
@@ -690,7 +697,7 @@ struct TReadSessionEvent {
                                 TInstant createTime,
                                 TInstant writeTime,
                                 TWriteSessionMeta::TPtr meta,
-                                TWriteSessionMeta::TPtr messageMeta,
+                                TMessageMeta::TPtr messageMeta,
                                 ui64 uncompressedSize,
                                 TString messageGroupId);
             ui64 Offset;
@@ -699,7 +706,7 @@ struct TReadSessionEvent {
             TInstant CreateTime;
             TInstant WriteTime;
             TWriteSessionMeta::TPtr Meta;
-            TWriteSessionMeta::TPtr MessageMeta;
+            TMessageMeta::TPtr MessageMeta;
             ui64 UncompressedSize;
             TString MessageGroupId;
         };
@@ -759,7 +766,7 @@ struct TReadSessionEvent {
             const TWriteSessionMeta::TPtr& GetMeta() const;
 
             //! Message level meta info.
-            const TWriteSessionMeta::TPtr& GetMessageMeta() const;
+            const TMessageMeta::TPtr& GetMessageMeta() const;
 
             //! Commits single message.
             void Commit() override;
@@ -804,7 +811,7 @@ struct TReadSessionEvent {
             const TWriteSessionMeta::TPtr& GetMeta() const;
 
             //! Message level meta info.
-            const TWriteSessionMeta::TPtr& GetMessageMeta() const;
+            const TMessageMeta::TPtr& GetMessageMeta() const;
 
             //! Uncompressed size.
             ui64 GetUncompressedSize() const;
@@ -1472,12 +1479,60 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING_OPTIONAL(TLog, Log);
 };
 
+//! Contains the message to write and all the options.
+struct TWriteMessage {
+    using TSelf = TWriteMessage;
+    using TMessageMeta = TVector<std::pair<TString, TString>>;
+public:
+    TWriteMessage() = delete;
+    TWriteMessage(TStringBuf data)
+        : Data(data)
+    {}
+
+    //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
+    //! Compression will not be performed in SDK for such messages.
+    static TWriteMessage CompressedMessage(const TStringBuf& data, ECodec codec, ui32 originalSize) {
+        TWriteMessage result{data};
+        result.Codec = codec;
+        result.OriginalSize = originalSize;
+        return result;
+    }
+
+    bool Compressed() const {
+        return Codec.Defined();
+    }
+
+    //! Message body.
+    const TStringBuf Data;
+
+    //! Codec and original size for compressed message.
+    //! Do not specify or change these options directly, use CompressedMessage()
+    //! method to create an object for compressed message.
+    TMaybe<ECodec> Codec;
+    ui32 OriginalSize = 0;
+
+    //! Message SeqNo, optional. If not provided SDK core will calculate SeqNo automatically.
+    //! NOTICE: Either all messages within one write session must have SeqNo provided or none of them.
+    FLUENT_SETTING_OPTIONAL(ui64, SeqNo);
+
+    //! Message creation timestamp. If not provided, Now() will be used.
+    FLUENT_SETTING_OPTIONAL(TInstant, CreateTimestamp);
+
+    //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
+    FLUENT_SETTING(TMessageMeta, MessageMeta);
+
+};
+
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
 class ISimpleBlockingWriteSession : public TThrRefBase {
 public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
     //! no Ack is provided.
+    virtual bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) = 0;
+
+
+    //! Write single message. Deprecated method with only basic message options.
     virtual bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(),
                        const TDuration& blockTimeout = TDuration::Max()) = 0;
 
@@ -1519,12 +1574,15 @@ public:
 
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+    virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) = 0;
 
-    //! Write single message that is already coded by codec. Codec from settings does not apply to this message.
-    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    //! originalSize - size of unpacked message
-    virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+    //! Write single message. Old method with only basic message options.
+    virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(),
+                       TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+
+    //! Write single message that is already compressed by codec. Old method with only basic message options.
+    virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
+                              TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
 
 
     //! Wait for all writes to complete (no more that closeTimeout()), than close. Empty maybe - means infinite timeout.

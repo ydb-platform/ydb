@@ -6,5 +6,5 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(functional)
-add_subdirectory(tools)
+add_subdirectory(kqp_indexes)
+add_subdirectory(kqp_query_session)

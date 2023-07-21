@@ -9,6 +9,7 @@ RECURSE(
     dynumber
     encryption
     hive
+    kqp
     large_serializable
     limits
     open_source

@@ -754,10 +754,8 @@ TLogoBlobID TKeyValueState::AllocateLogoBlobId(ui32 size, ui32 storageChannelIdx
     }
     Y_VERIFY(!CollectOperation || THelpers::GenerationStep(id) >
         THelpers::TGenerationStep(CollectOperation->Header.GetCollectGeneration(), CollectOperation->Header.GetCollectStep()));
-    if (requestUid) {
-        ++InFlightForStep[id.Step()];
-        ++RequestUidStepToCount[std::make_tuple(requestUid, id.Step())];
-    }
+    ++InFlightForStep[id.Step()];
+    ++RequestUidStepToCount[std::make_tuple(requestUid, id.Step())];
     return id;
 }
 
@@ -784,7 +782,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_REJECTED);
             intermediate->Response.SetErrorReason(str.Str());
-            DropRefCountsOnErrorInTx(std::move(intermediate->RefCountsIncr), db, ctx);
+            DropRefCountsOnErrorInTx(std::move(intermediate->RefCountsIncr), db, ctx, intermediate->RequestUid);
             return;
         }
     }
@@ -816,7 +814,7 @@ void TKeyValueState::RequestExecute(THolder<TIntermediate> &intermediate, ISimpl
             // All reads done
             intermediate->Response.SetStatus(NMsgBusProxy::MSTATUS_INTERNALERROR);
             intermediate->Response.SetErrorReason(str.Str());
-            DropRefCountsOnErrorInTx(std::move(intermediate->RefCountsIncr), db, ctx);
+            DropRefCountsOnErrorInTx(std::move(intermediate->RefCountsIncr), db, ctx, intermediate->RequestUid);
             return;
         }
     }
@@ -831,14 +829,20 @@ void TKeyValueState::RequestComplete(THolder<TIntermediate> &intermediate, const
         const TTabletStorageInfo *info) {
 
     Reply(intermediate, ctx, info);
+
+    if (const auto it = TrashBeingCommitted.find(intermediate->RequestUid); it != TrashBeingCommitted.end()) {
+        Trash.insert(it->second.begin(), it->second.end());
+        TrashBeingCommitted.erase(it);
+    }
+
     // Make sure there is no way for a successfull delete transaction to end without getting here
     PrepareCollectIfNeeded(ctx);
 }
 
 void TKeyValueState::DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db,
-        const TActorContext& ctx) {
+        const TActorContext& ctx, ui64 requestUid) {
     for (const auto& [logoBlobId, initial] : refCountsIncr) {
-        Dereference(logoBlobId, db, ctx, initial);
+        Dereference(logoBlobId, db, ctx, initial, requestUid);
     }
 }
 
@@ -1025,10 +1029,10 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
         NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
-        TIntermediate* /*intermediate*/)
+        TIntermediate *intermediate)
 {
     TIndexRecord& record = Index[request.Key];
-    Dereference(record, db, ctx);
+    Dereference(record, db, ctx, intermediate->RequestUid);
 
     record.Chain = {};
     ui32 storage_channel = 0;
@@ -1077,12 +1081,16 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
         NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 /*unixTime*/,
-        TIntermediate* /*intermediate*/)
+        TIntermediate *intermediate)
 {
     TraverseRange(request.Range, [&](TIndex::iterator it) {
         stat.Deletes++;
         stat.DeleteBytes += it->second.GetFullValueSize();
-        Dereference(it->second, db, ctx);
+        for (const auto& chain : it->second.Chain) {
+            STLOG(PRI_DEBUG, KEYVALUE_GC, KVC99, "DeleteRange", (TabletId, TabletId), (Generation, ExecutorGeneration),
+                (Key, it->first), (Id, chain.LogoBlobId));
+        }
+        Dereference(it->second, db, ctx, intermediate->RequestUid);
         THelpers::DbEraseUserKey(it->first, db, ctx);
         Index.erase(it);
     });
@@ -1096,14 +1104,14 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
         NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
-        TIntermediate* /*intermediate*/)
+        TIntermediate *intermediate)
 {
     auto oldIter = Index.find(request.OldKey);
     Y_VERIFY(oldIter != Index.end());
     TIndexRecord& source = oldIter->second;
 
     TIndexRecord& dest = Index[request.NewKey];
-    Dereference(dest, db, ctx);
+    Dereference(dest, db, ctx, intermediate->RequestUid);
     dest.Chain = std::move(source.Chain);
     dest.CreationUnixTime = unixTime;
 
@@ -1142,7 +1150,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TCopyRange &request,
 
         TString newKey = request.PrefixToAdd + it->first.substr(request.PrefixToRemove.size());
         TIndexRecord& record = Index[newKey];
-        Dereference(record, db, ctx);
+        Dereference(record, db, ctx, intermediate->RequestUid);
         record.Chain = sourceRecord.Chain;
         record.CreationUnixTime = sourceRecord.CreationUnixTime;
         UpdateKeyValue(newKey, record, db, ctx);
@@ -1180,14 +1188,14 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
         }
 
         if (!request.KeepInputs) {
-            Dereference(input, db, ctx);
+            Dereference(input, db, ctx, intermediate->RequestUid);
             THelpers::DbEraseUserKey(it->first, db, ctx);
             Index.erase(it);
         }
     }
 
     TIndexRecord& record = Index[request.OutputKey];
-    Dereference(record, db, ctx);
+    Dereference(record, db, ctx, intermediate->RequestUid);
     record.Chain = std::move(chain);
     record.CreationUnixTime = unixTime;
     UpdateKeyValue(request.OutputKey, record, db, ctx);
@@ -1575,7 +1583,7 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
     success = success && CheckCmds(intermediate, ctx, keys, info);
     success = success && CheckCmdGetStatus(intermediate, ctx, keys, info);
     if (!success) {
-        DropRefCountsOnErrorInTx(std::exchange(intermediate->RefCountsIncr, {}), db, ctx);
+        DropRefCountsOnErrorInTx(std::exchange(intermediate->RefCountsIncr, {}), db, ctx, intermediate->RequestUid);
     } else {
         // Read + validate
         CmdRead(intermediate, db, ctx);
@@ -1621,21 +1629,22 @@ bool TKeyValueState::IncrementGeneration(THolder<TIntermediate> &intermediate, I
     return true;
 }
 
-void TKeyValueState::Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx) {
+void TKeyValueState::Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx, ui64 requestUid) {
     for (const TIndexRecord::TChainItem& item : record.Chain) {
         if (!item.IsInline()) {
-            Dereference(item.LogoBlobId, db, ctx, false);
+            Dereference(item.LogoBlobId, db, ctx, false, requestUid);
         }
     }
 }
 
-void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial) {
+void TKeyValueState::Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial,
+        ui64 requestUid) {
     auto it = RefCounts.find(id);
     Y_VERIFY(it != RefCounts.end());
     --it->second;
     if (!it->second) {
         RefCounts.erase(it);
-        Trash.insert(id);
+        TrashBeingCommitted[requestUid].push_back(id);
         THelpers::DbUpdateTrash(id, db, ctx);
         if (initial) {
             CountInitialTrashRecord(id.BlobSize());
@@ -2273,7 +2282,7 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
     TString msg;
     if (storageChannel == NKikimrClient::TKeyValueRequest::INLINE) {
         cmd.StorageChannel = storageChannel;
-        cmd.LogoBlobId = TLogoBlobID();
+        cmd.GroupId = 0;
         cmd.Status = NKikimrProto::OK;
         cmd.StatusFlags = TStorageStatusFlags(ui32(NKikimrBlobStorage::StatusIsValid));
         if (GetIsTabletYellowMove()) {
@@ -2294,7 +2303,7 @@ TKeyValueState::TPrepareResult TKeyValueState::InitGetStatusCommand(TIntermediat
         }
 
         cmd.StorageChannel = storageChannel;
-        cmd.LogoBlobId = AllocateLogoBlobId(1, storageChannelIdx, 0);
+        cmd.GroupId = info->GroupFor(storageChannelIdx, ExecutorGeneration);
         cmd.Status = NKikimrProto::UNKNOWN;
     }
     return {false, msg};

@@ -165,10 +165,12 @@ protected:
 
     struct TTxDropRefCountsOnError : NTabletFlatExecutor::ITransaction {
         std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
+        const ui64 RequestUid;
         TKeyValueFlat *Self;
 
-        TTxDropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, TKeyValueFlat *self)
+        TTxDropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ui64 requestUid, TKeyValueFlat *self)
             : RefCountsIncr(std::move(refCountsIncr))
+            , RequestUid(requestUid)
             , Self(self)
         {}
 
@@ -178,7 +180,7 @@ protected:
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Execute");
             if (!Self->State.GetIsDamaged()) {
                 TSimpleDbFlat db(txc.DB);
-                Self->State.DropRefCountsOnErrorInTx(std::move(RefCountsIncr), db, ctx);
+                Self->State.DropRefCountsOnErrorInTx(std::move(RefCountsIncr), db, ctx, RequestUid);
             }
             return true;
         }
@@ -385,7 +387,7 @@ protected:
         State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
         State.DropRefCountsOnError(event.RefCountsIncr, true, ctx);
         if (!event.RefCountsIncr.empty()) {
-            Execute(new TTxDropRefCountsOnError(std::move(event.RefCountsIncr), this), ctx);
+            Execute(new TTxDropRefCountsOnError(std::move(event.RefCountsIncr), event.RequestUid, this), ctx);
         }
     }
 

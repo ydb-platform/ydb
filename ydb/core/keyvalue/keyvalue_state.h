@@ -254,6 +254,7 @@ protected:
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
     TSet<TLogoBlobID> Trash;
+    THashMap<ui64, TVector<TLogoBlobID>> TrashBeingCommitted;
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
@@ -336,7 +337,8 @@ public:
     void RequestExecute(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx,
         const TTabletStorageInfo *info);
     void RequestComplete(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
-    void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db, const TActorContext& ctx);
+    void DropRefCountsOnErrorInTx(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ISimpleDb& db, const TActorContext& ctx,
+        ui64 requestUid);
     void DropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>& refCountsIncr /*in-out*/, bool writesMade,
         const TActorContext& ctx);
     void ProcessPostponedTrims(const TActorContext& ctx, const TTabletStorageInfo *info);
@@ -431,9 +433,10 @@ public:
         return CollectOperation;
     }
 
-    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
+    void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx, ui64 requestUid);
     void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
-    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial);
+    void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial,
+        ui64 requestUid);
 
     ui32 GetPerGenerationCounter() {
         return PerGenerationCounter;

@@ -87,7 +87,7 @@ struct TIntermediate {
     };
     struct TGetStatus {
         NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
-        TLogoBlobID LogoBlobId;
+        ui32 GroupId;
         NKikimrProto::EReplyStatus Status;
         TStorageStatusFlags StatusFlags;
     };

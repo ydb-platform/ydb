@@ -601,11 +601,8 @@ public:
             auto &getStatus = IntermediateResults->GetStatuses[i];
             if (getStatus.Status != NKikimrProto::OK) {
                 Y_VERIFY(getStatus.Status == NKikimrProto::UNKNOWN);
-                const ui32 groupId = TabletInfo->GroupFor(getStatus.LogoBlobId.Channel(), getStatus.LogoBlobId.Generation());
-                Y_VERIFY(groupId != Max<ui32>(), "GetStatus Blob# %s is mapped to an invalid group (-1)!",
-                        getStatus.LogoBlobId.ToString().c_str());
                 SendToBSProxy(
-                        ctx, groupId,
+                        ctx, getStatus.GroupId,
                         new TEvBlobStorage::TEvStatus(IntermediateResults->Deadline), i);
                 ++GetStatusRequestsSent;
             }

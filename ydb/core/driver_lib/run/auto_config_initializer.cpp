@@ -290,7 +290,7 @@ namespace NKikimr::NAutoConfigInitializer {
             }
             executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
             executor->SetThreads(threadsCount);
-            executor->SetThreads(Max(cfg.MaxThreadCount, threadsCount));
+            executor->SetMaxThreads(Max(cfg.MaxThreadCount, threadsCount));
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
 

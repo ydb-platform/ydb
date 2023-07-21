@@ -721,7 +721,7 @@ void TColumnShard::SetupIndexation() {
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    BackgroundController.StartIndexing();
+    indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
     if (Tiers) {
@@ -754,7 +754,6 @@ void TColumnShard::SetupCompaction() {
             CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
         }
 
-        const NOlap::TPlanCompactionInfo planInfo = compactionInfo->GetPlanCompaction();
         auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), limits);
         if (!indexChanges) {
             if (!BackgroundController.GetCompactionsCount()) {
@@ -763,14 +762,10 @@ void TColumnShard::SetupCompaction() {
             break;
         }
 
-        if (!BackgroundController.StartCompaction(planInfo)) {
-            LOG_S_DEBUG("Compaction not started: ignore portions with other activities at tablet " << TabletID());
-            break;
-        }
+        indexChanges->Start(*this);
 
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
-            Settings.CacheDataAfterCompaction);
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction);
         if (Tiers) {
             ev->SetTiering(Tiers->GetTiering());
         }
@@ -814,7 +809,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges =
+    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges =
         TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
 
     if (!indexChanges) {
@@ -828,7 +823,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     bool needWrites = !indexChanges->PortionsToEvict.empty();
     LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
-    BackgroundController.StartTtl(*indexChanges);
+    indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     ev->SetTiering(eviction);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
@@ -848,10 +843,6 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         LOG_S_INFO("Cannot prepare cleanup at tablet " << TabletID());
         return {};
     }
-
-    Y_VERIFY(!changes->CompactionInfo);
-    Y_VERIFY(changes->DataToIndex.empty());
-    Y_VERIFY(changes->AppendedPortions.empty());
 
     // Filter PortionsToDrop
     std::vector<NOlap::TPortionInfo> portionsCanBedropped;
@@ -880,7 +871,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 
-    BackgroundController.StartCleanup();
+    changes->Start(*this);
     return ev;
 }
 

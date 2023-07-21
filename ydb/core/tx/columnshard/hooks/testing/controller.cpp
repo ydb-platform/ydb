@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/order_control/pk_with_limit.h>
 #include <ydb/core/tx/columnshard/engines/reader/order_control/default.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -29,8 +30,8 @@ bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordB
 }
 
 bool TController::DoOnStartCompaction(const std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
-    if (changes->CompactionInfo) {
-        if (changes->CompactionInfo->InGranule()) {
+    if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
+        if (compaction->CompactionInfo->InGranule()) {
             InternalCompactions.Inc();
         } else {
             SplitCompactions.Inc();

@@ -40,6 +40,12 @@ struct TPortionMeta {
     std::optional<NArrow::TReplaceKey> IndexKeyStart;
     std::optional<NArrow::TReplaceKey> IndexKeyEnd;
 
+    TString DebugString() const {
+        return TStringBuilder() <<
+            "produced:" << Produced << ";"
+            ;
+    }
+
     bool HasMinMax(ui32 columnId) const {
         if (!ColumnMeta.contains(columnId)) {
             return false;
@@ -107,6 +113,14 @@ struct TPortionInfo {
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumRecords() const { return Records.size(); }
+
+    TString DebugString() const {
+        return TStringBuilder() <<
+            "portion_id:" << Portion() << ";" <<
+            "granule_id:" << Granule() << ";" <<
+            "meta:(" << Meta.DebugString() << ");"
+            ;
+    }
 
     bool CheckForCleanup(const TSnapshot& snapshot) const {
         if (!CheckForCleanup()) {
@@ -190,15 +204,15 @@ struct TPortionInfo {
         return sum;
     }
 
-    void UpdateRecords(ui64 portion, const THashMap<ui64, ui64>& granuleRemap) {
+    void UpdatePortionId(const ui64 portionId) {
         for (auto& rec : Records) {
-            rec.Portion = portion;
+            rec.Portion = portionId;
         }
-        if (!granuleRemap.empty()) {
-            for (auto& rec : Records) {
-                Y_VERIFY(granuleRemap.contains(rec.Granule));
-                rec.Granule = granuleRemap.find(rec.Granule)->second;
-            }
+    }
+
+    void UpdateGranuleId(const ui64 granuleId) {
+        for (auto& rec : Records) {
+            rec.Granule = granuleId;
         }
     }
 

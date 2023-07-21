@@ -1,5 +1,6 @@
 #include "blob_cache.h"
 #include "columnshard_impl.h"
+#include "engines/changes/indexation.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
@@ -30,20 +31,14 @@ public:
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
         Y_VERIFY(TxEvent);
-        auto& indexChanges = TxEvent->IndexChanges;
+        auto indexChanges = dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         Y_VERIFY(indexChanges);
         indexChanges->CachedBlobs = std::move(TxEvent->CachedBlobs);
 
-        auto& blobsToIndex = indexChanges->DataToIndex;
-        for (size_t i = 0; i < blobsToIndex.size(); ++i) {
-            auto& blobId = blobsToIndex[i].BlobId;
-            if (indexChanges->CachedBlobs.contains(blobId)) {
-                continue;
-            }
-
-            auto res = BlobsToRead.emplace(blobId, i);
-            Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str());
-            SendReadRequest(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
+        for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
+            Y_VERIFY(ranges.size() == 1);
+            Y_VERIFY(BlobsToRead.emplace(ranges.front().BlobId).second);
+            SendReadRequest(ranges.front());
             Counters.ReadBytes->Add(blobId.BlobSize());
         }
 
@@ -79,13 +74,11 @@ public:
             return;
         }
 
-        ui32 pos = BlobsToRead[blobId];
         BlobsToRead.erase(blobId);
 
         Y_VERIFY(TxEvent);
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
-        Y_VERIFY(indexChanges->DataToIndex[pos].BlobId == blobId);
         indexChanges->Blobs[event.BlobRange] = blobData;
 
         if (BlobsToRead.empty()) {
@@ -113,7 +106,7 @@ private:
     TActorId Parent;
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-    THashMap<TUnifiedBlobId, ui32> BlobsToRead;
+    THashSet<TUnifiedBlobId> BlobsToRead;
     TInstant LastActivationTime;
 
     void SendReadRequest(const NBlobCache::TBlobRange& blobRange) {

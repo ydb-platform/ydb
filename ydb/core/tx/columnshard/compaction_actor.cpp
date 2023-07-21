@@ -28,11 +28,12 @@ public:
         LastActivationTime = TAppData::TimeProvider->Now();
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
-        IsSplitCurrently = NOlap::TCompactionLogic::IsSplit(TxEvent->IndexChanges);
+        auto compactChanges = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(TxEvent->IndexChanges);
+        Y_VERIFY(compactChanges);
+        IsSplitCurrently = !compactChanges->CompactionInfo->InGranule();
 
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
-        Y_VERIFY(indexChanges->CompactionInfo);
         LOG_S_DEBUG("Granules compaction: " << *indexChanges << " at tablet " << TabletId);
 
         for (auto& [blobId, ranges] : event.GroupedBlobRanges) {

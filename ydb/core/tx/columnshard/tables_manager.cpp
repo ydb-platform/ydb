@@ -283,7 +283,7 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     }
 }
 
-std::shared_ptr<NOlap::TColumnEngineChanges> TTablesManager::StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords) {
+std::shared_ptr<NOlap::TCleanupColumnEngineChanges> TTablesManager::StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords) {
     Y_VERIFY(PrimaryIndex);
     return PrimaryIndex->StartCleanup(snapshot, limits, PathsToDrop, maxRecords);
 }

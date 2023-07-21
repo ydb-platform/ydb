@@ -17,7 +17,6 @@ private:
 
         const bool BlobGrouppingEnabled;
         const bool CacheData;
-        const bool EvictionFlag;
 
         TString AccumulatedBlob;
         std::vector<std::pair<size_t, TString>> RecordsInBlob;
@@ -36,12 +35,8 @@ private:
         bool RegisterBlobId(const TUnifiedBlobId& blobId) override;
         EStatus BuildNext() override;
 
-        const  TVector<NOlap::TPortionInfo>& GetPortionUpdates() const {
+        const TVector<NOlap::TPortionInfo>& GetPortionUpdates() const {
             return PortionUpdates;
-        }
-
-        bool IsEviction() const {
-            return EvictionFlag;
         }
 
     private:

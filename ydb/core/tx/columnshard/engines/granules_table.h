@@ -38,6 +38,10 @@ public:
         out << '}';
         return out;
     }
+
+    TString DebugString() const {
+        return TStringBuilder() << *this;
+    }
 };
 
 class TGranulesTable {

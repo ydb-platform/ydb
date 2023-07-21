@@ -10,6 +10,9 @@
 #include "tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
+#include "engines/changes/ttl.h"
+#include "engines/changes/compaction.h"
+#include "engines/changes/indexation.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -126,6 +129,11 @@ class TColumnShard
     friend class TTxRunGC;
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
+    friend class NOlap::TCleanupColumnEngineChanges;
+    friend class NOlap::TTTLColumnEngineChanges;
+    friend class NOlap::TChangesWithAppend;
+    friend class NOlap::TCompactColumnEngineChanges;
+    friend class NOlap::TInsertColumnEngineChanges;
 
     friend class TTxController;
 
@@ -358,12 +366,14 @@ private:
         }
 
         void StartTtl(const NOlap::TColumnEngineChanges& changes) {
+            const NOlap::TTTLColumnEngineChanges* ttlChanges = dynamic_cast<const NOlap::TTTLColumnEngineChanges*>(&changes);
+            Y_VERIFY(ttlChanges);
             Y_VERIFY(ActiveTtlGranules.empty());
 
-            for (const auto& portionInfo : changes.PortionsToDrop) {
+            for (const auto& portionInfo : ttlChanges->PortionsToDrop) {
                 ActiveTtlGranules.emplace(portionInfo.Granule());
             }
-            for (const auto& [portionInfo, _] : changes.PortionsToEvict) {
+            for (const auto& [portionInfo, _] : ttlChanges->PortionsToEvict) {
                 ActiveTtlGranules.emplace(portionInfo.Granule());
             }
         }
@@ -549,8 +559,6 @@ private:
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
 
-    void FinishWriteIndex(const TActorContext& ctx, TEvPrivate::TEvWriteIndex::TPtr& ev,
-                        bool ok = false, ui64 blobsWritten = 0, ui64 bytesWritten = 0);
     void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
     TActorId GetS3ActorForTier(const TString& tierId) const;
     void Reexport(const TActorContext& ctx);

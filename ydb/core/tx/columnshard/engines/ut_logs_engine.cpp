@@ -261,7 +261,7 @@ TCompactionLimits TestLimits() {
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
             std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartInsert(TestLimits(), std::move(dataToIndex));
+    std::shared_ptr<TInsertColumnEngineChanges> changes = engine.StartInsert(TestLimits(), std::move(dataToIndex));
     if (!changes) {
         return false;
     }
@@ -274,7 +274,11 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
 
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, blobs, step);
-    return engine.ApplyChanges(db, changes, snap);
+
+    changes->StartEmergency();
+    const bool result = engine.ApplyChanges(db, changes, snap);
+    changes->AbortEmergency();
+    return result;
 }
 
 struct TExpected {
@@ -289,7 +293,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT(!!compactionInfo);
     UNIT_ASSERT(!compactionInfo->InGranule());
 
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
+    std::shared_ptr<TCompactColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
 
@@ -298,28 +302,38 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
 
-    auto logsChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
-    UNIT_ASSERT_VALUES_EQUAL(logsChanges->TmpGranuleIds.size(), expected.NewGranules);
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
-    return engine.ApplyChanges(db, changes, snap);
+    changes->StartEmergency();
+    const bool result = engine.ApplyChanges(db, changes, snap);
+    changes->AbortEmergency();
+    return result;
 }
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, TestLimits(), pathsToDrop, 1000);
+    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, TestLimits(), pathsToDrop, 1000);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
-    return engine.ApplyChanges(db, changes, snap);
+
+    changes->StartEmergency();
+    const bool result = engine.ApplyChanges(db, changes, snap);
+    changes->AbortEmergency();
+    return result;
 }
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartTtl(pathEviction, engine.GetIndexInfo().ArrowSchema());
+    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, engine.GetIndexInfo().ArrowSchema());
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
-    return engine.ApplyChanges(db, changes, TSnapshot(1,0));
+
+    changes->StartEmergency();
+    const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,0));
+    changes->AbortEmergency();
+    return result;
 }
 
 std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NArrow::EOperation op) {

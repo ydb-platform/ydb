@@ -8,7 +8,6 @@ SRCS(
     column_engine_logs.cpp
     column_engine.cpp
     column_features.cpp
-    compaction_info.cpp
     db_wrapper.cpp
     index_info.cpp
     indexed_read_data.cpp
@@ -30,6 +29,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/predicate
     ydb/core/tx/columnshard/engines/storage
     ydb/core/tx/columnshard/engines/insert_table
+    ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
     ydb/core/formats/arrow/compression
     ydb/core/tx/program

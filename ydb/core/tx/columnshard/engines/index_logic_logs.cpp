@@ -4,15 +4,6 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::RecordBatch> TIndexLogicBase::GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const TIndexInfo& indexInfo) {
-    const auto& key = indexInfo.GetIndexKey();
-    auto resBatch = NArrow::ExtractColumns(batch, key);
-    Y_VERIFY_S(resBatch, "Cannot extract effective key " << key->ToString()
-        << " from batch " << batch->schema()->ToString());
-    return resBatch;
-}
-
 std::shared_ptr<arrow::RecordBatch> TIndexationLogic::AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                 const TIndexInfo& indexInfo, const TInsertedData& inserted) const {
     auto batch = TIndexInfo::AddSpecialColumns(srcBatch, inserted.GetSnapshot());
@@ -263,51 +254,9 @@ TCompactionLogic::PortionsToBatches(const std::vector<TPortionInfo>& portions, c
     return std::make_pair(std::move(batches), maxSnapshot);
 }
 
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TIndexLogicBase::SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                                                        const std::vector<std::pair<TMark, ui64>>& granules,
-                                                                                        const TIndexInfo& indexInfo) {
-    Y_VERIFY(batch);
-    if (batch->num_rows() == 0) {
-        return {};
-    }
-
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> out;
-
-    if (granules.size() == 1) {
-        out.emplace(granules[0].second, batch);
-    } else {
-        const auto effKey = GetEffectiveKey(batch, indexInfo);
-        Y_VERIFY(effKey->num_columns() && effKey->num_rows());
-
-        std::vector<NArrow::TRawReplaceKey> keys;
-        {
-            const auto& columns = effKey->columns();
-            keys.reserve(effKey->num_rows());
-            for (i64 i = 0; i < effKey->num_rows(); ++i) {
-                keys.emplace_back(NArrow::TRawReplaceKey(&columns, i));
-            }
-        }
-
-        i64 offset = 0;
-        for (size_t i = 0; i < granules.size() && offset < effKey->num_rows(); ++i) {
-            const i64 end = (i + 1 == granules.size())
-                                // Just take the number of elements in the key column for the last granule.
-                                ? effKey->num_rows()
-                                // Locate position of the next granule in the key.
-                                : NArrow::LowerBound(keys, granules[i + 1].first.GetBorder(), offset);
-
-            if (const i64 size = end - offset) {
-                Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);
-            }
-
-            offset = end;
-        }
-    }
-    return out;
-}
-
 TConclusion<std::vector<TString>> TIndexationLogic::DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept {
-    auto changes = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(indexChanges);
+    auto changes = std::dynamic_pointer_cast<TInsertColumnEngineChanges>(indexChanges);
+    Y_VERIFY(changes);
     Y_VERIFY(!changes->DataToIndex.empty());
     Y_VERIFY(changes->AppendedPortions.empty());
 
@@ -365,7 +314,7 @@ TConclusion<std::vector<TString>> TIndexationLogic::DoApply(std::shared_ptr<TCol
         Y_VERIFY(merged);
         Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, resultSchema->GetIndexInfo().GetReplaceKey()));
 
-        auto granuleBatches = SliceIntoGranules(merged, changes->PathToGranule[pathId], resultSchema->GetIndexInfo());
+        auto granuleBatches = TMarksGranules::SliceIntoGranules(merged, changes->PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {
             auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, changes->GetGranuleMeta());
             Y_VERIFY(portions.size() > 0);
@@ -405,7 +354,7 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TCompactionLogic::Comp
     return std::make_pair(sortedBatch, maxSnapshot);
 }
 
-std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const {
+std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TCompactColumnEngineChanges> changes) const {
     const ui64 pathId = changes->SrcGranule->PathId;
     std::vector<TString> blobs;
     auto& switchedPortions = changes->SwitchedPortions;
@@ -444,7 +393,7 @@ std::vector<TString> TCompactionLogic::CompactInGranule(std::shared_ptr<TColumnE
 
 std::vector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
 TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
-                                        const TColumnEngineForLogs::TChanges& changes,
+                                        const TCompactColumnEngineChanges& changes,
                                         const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                                         const TMark& ts0) const {
     std::vector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>> out;
@@ -460,7 +409,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
 
         numRows += batch->num_rows();
 
-        const auto effKey = GetEffectiveKey(batch, indexInfo);
+        const auto effKey = TMarksGranules::GetEffectiveKey(batch, indexInfo);
         Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
         auto effColumns = std::make_shared<NArrow::TArrayVec>(effKey->columns());
@@ -514,7 +463,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
         auto& batchOffsets = offsets[i];
         batchOffsets.reserve(borders.size() + 1);
 
-        const auto effKey = GetEffectiveKey(batch, indexInfo);
+        const auto effKey = TMarksGranules::GetEffectiveKey(batch, indexInfo);
         Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
         std::vector<NArrow::TRawReplaceKey> keys;
@@ -560,7 +509,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
                 Y_VERIFY(slice->num_rows());
                 granuleNumRows += slice->num_rows();
 #if 1 // Check correctness
-                const auto effKey = GetEffectiveKey(slice, indexInfo);
+                const auto effKey = TMarksGranules::GetEffectiveKey(slice, indexInfo);
                 Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
                 auto startKey = granuleNo ? borders[granuleNo - 1] : minTs;
@@ -592,7 +541,7 @@ TCompactionLogic::SliceGranuleBatches(const TIndexInfo& indexInfo,
                 startKey = borders[granuleNo - 1];
             }
 #if 1 // Check correctness
-            const auto effKey = GetEffectiveKey(batch, indexInfo);
+            const auto effKey = TMarksGranules::GetEffectiveKey(batch, indexInfo);
             Y_VERIFY(effKey->num_columns() && effKey->num_rows());
 
             Y_VERIFY(NArrow::TReplaceKey::FromBatch(effKey, 0) >= startKey);
@@ -687,7 +636,7 @@ ui64 TCompactionLogic::TryMovePortions(const TMark& ts0,
     return numRows;
 }
 
-std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const {
+std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr<TCompactColumnEngineChanges>& changes) const {
     const ui64 pathId = changes->SrcGranule->PathId;
     const TMark ts0 = changes->SrcGranule->Mark;
     std::vector<TPortionInfo>& portions = changes->SwitchedPortions;
@@ -741,7 +690,7 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
         }
         Y_VERIFY(tsIds.size() > 1);
         Y_VERIFY(tsIds[0] == std::make_pair(ts0, ui64(1)));
-        TColumnEngineForLogs::TMarksGranules marksGranules(std::move(tsIds));
+        TMarksGranules marksGranules(std::move(tsIds));
 
         // Slice inserted portions with granules' borders
         THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> idBatches;
@@ -812,28 +761,22 @@ std::vector<TString> TCompactionLogic::CompactSplitGranule(const std::shared_ptr
     return blobs;
 }
 
-bool TCompactionLogic::IsSplit(std::shared_ptr<TColumnEngineChanges> changes) {
-    auto castedChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
-    return !castedChanges->CompactionInfo->InGranule();
-}
-
 TConclusion<std::vector<TString>> TCompactionLogic::DoApply(std::shared_ptr<TColumnEngineChanges> changes) const noexcept {
-    Y_VERIFY(changes);
-    Y_VERIFY(changes->CompactionInfo);
-    Y_VERIFY(changes->DataToIndex.empty());       // not used
-    Y_VERIFY(!changes->Blobs.empty());            // src data
-    Y_VERIFY(!changes->SwitchedPortions.empty()); // src meta
-    Y_VERIFY(changes->AppendedPortions.empty());  // dst meta
+    auto castedChanges = std::dynamic_pointer_cast<TCompactColumnEngineChanges>(changes);
+    Y_VERIFY(castedChanges);
+    Y_VERIFY(!castedChanges->Blobs.empty());            // src data
+    Y_VERIFY(!castedChanges->SwitchedPortions.empty()); // src meta
+    Y_VERIFY(castedChanges->AppendedPortions.empty());  // dst meta
 
-    auto castedChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
-    if (!IsSplit(castedChanges)) {
+    if (castedChanges->CompactionInfo->InGranule()) {
         return CompactInGranule(castedChanges);
     } else {
         return CompactSplitGranule(castedChanges);
     }
 }
 
-TConclusion<std::vector<TString>> TEvictionLogic::DoApply(std::shared_ptr<TColumnEngineChanges> changes) const noexcept {
+TConclusion<std::vector<TString>> TEvictionLogic::DoApply(std::shared_ptr<TColumnEngineChanges> changesExt) const noexcept {
+    auto changes = std::dynamic_pointer_cast<TTTLColumnEngineChanges>(changesExt);
     Y_VERIFY(changes);
     Y_VERIFY(!changes->Blobs.empty());           // src data
     Y_VERIFY(!changes->PortionsToEvict.empty()); // src meta

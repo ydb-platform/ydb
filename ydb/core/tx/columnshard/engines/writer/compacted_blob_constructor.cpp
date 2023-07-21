@@ -12,9 +12,8 @@ TCompactedWriteController::TBlobsConstructor::TBlobsConstructor(TCompactedWriteC
     , Blobs(Owner.WriteIndexEv->Blobs)
     , BlobGrouppingEnabled(blobGrouppingEnabled)
     , CacheData(Owner.WriteIndexEv->CacheData)
-    , EvictionFlag(IndexChanges.PortionsToEvict.size() > 0)
 {
-    LastPortion = IndexChanges.AppendedPortions.size() + IndexChanges.PortionsToEvict.size();
+    LastPortion = IndexChanges.GetWritePortionsCount();
     Y_VERIFY(Blobs.size() > 0);
 }
 
@@ -49,10 +48,10 @@ IBlobConstructor::EStatus TCompactedWriteController::TBlobsConstructor::BuildNex
     AccumulatedBlob.clear();
     RecordsInBlob.clear();
 
-    if (EvictionFlag && CurrentPortionRecord == 0) {
+    if (CurrentPortionRecord == 0) {
         // Skip portions without data changes
         for (; CurrentPortion < LastPortion; ++CurrentPortion) {
-            if (IndexChanges.PortionsToEvict[CurrentPortion].second.DataChanges) {
+            if (IndexChanges.NeedWritePortion(CurrentPortion)) {
                 break;
             }
             PortionUpdates.push_back(GetPortionInfo(CurrentPortion));
@@ -95,13 +94,7 @@ IBlobConstructor::EStatus TCompactedWriteController::TBlobsConstructor::BuildNex
 }
 
 const NOlap::TPortionInfo& TCompactedWriteController::TBlobsConstructor::GetPortionInfo(const ui64 index) const {
-    if (EvictionFlag) {
-        Y_VERIFY(index < IndexChanges.PortionsToEvict.size());
-        return IndexChanges.PortionsToEvict[index].first;
-    } else {
-        Y_VERIFY(index < IndexChanges.AppendedPortions.size());
-        return IndexChanges.AppendedPortions[index];
-    }
+    return IndexChanges.GetWritePortionInfo(index);
 }
 
 TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool blobGrouppingEnabled)
@@ -112,17 +105,9 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
 
 void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
     WriteIndexEv->PutResult = putResult;
-    const auto& indexChanges = *WriteIndexEv->IndexChanges;
-
     for (ui64 index = 0; index < BlobConstructor->GetPortionUpdates().size(); ++index) {
         const auto& portionInfo = BlobConstructor->GetPortionUpdates()[index];
-        if (BlobConstructor->IsEviction()) {
-            Y_VERIFY(index < indexChanges.PortionsToEvict.size());
-            WriteIndexEv->IndexChanges->PortionsToEvict[index].first = portionInfo;
-        } else {
-            Y_VERIFY(index < indexChanges.AppendedPortions.size());
-            WriteIndexEv->IndexChanges->AppendedPortions[index] = portionInfo;
-        }
+        WriteIndexEv->IndexChanges->UpdateWritePortionInfo(index, portionInfo);
     }
     ctx.Send(DstActor, WriteIndexEv.Release());
 }

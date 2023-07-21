@@ -49,19 +49,12 @@ public:
         return result;
     }
 
-    static THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                                                const std::vector<std::pair<TMark, ui64>>& granules,
-                                                                                const TIndexInfo& indexInfo);
-
 protected:
     std::vector<TPortionInfo> MakeAppendedPortions(const ui64 pathId,
                                             const std::shared_ptr<arrow::RecordBatch> batch,
                                             const ui64 granule,
                                             const TSnapshot& minSnapshot,
                                             std::vector<TString>& blobs, const TGranuleMeta* granuleMeta) const;
-
-    static std::shared_ptr<arrow::RecordBatch> GetEffectiveKey(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                            const TIndexInfo& indexInfo);
 
     const THashMap<ui64, NKikimr::NOlap::TTiering>& GetTieringMap() const {
         if (TieringMap) {
@@ -87,20 +80,18 @@ class TCompactionLogic: public TIndexLogicBase {
 public:
     using TIndexLogicBase::TIndexLogicBase;
 
-    static bool IsSplit(std::shared_ptr<TColumnEngineChanges> changes);
-
 protected:
     virtual TConclusion<std::vector<TString>> DoApply(std::shared_ptr<TColumnEngineChanges> indexChanges) const noexcept override;
 private:
-    std::vector<TString> CompactSplitGranule(const std::shared_ptr<TColumnEngineForLogs::TChanges>& changes) const;
-    std::vector<TString> CompactInGranule(std::shared_ptr<TColumnEngineForLogs::TChanges> changes) const;
+    std::vector<TString> CompactSplitGranule(const std::shared_ptr<TCompactColumnEngineChanges>& changes) const;
+    std::vector<TString> CompactInGranule(std::shared_ptr<TCompactColumnEngineChanges> changes) const;
     std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> CompactInOneGranule(ui64 granule, const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs) const;
 
     /// @return vec({ts, batch}). ts0 <= ts1 <= ... <= tsN
     /// @note We use ts from PK for split but there could be lots PK with the same ts.
     std::vector<std::pair<TMark, std::shared_ptr<arrow::RecordBatch>>>
     SliceGranuleBatches(const TIndexInfo& indexInfo,
-                        const TColumnEngineForLogs::TChanges& changes,
+                        const TCompactColumnEngineChanges& changes,
                         const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
                         const TMark& ts0) const;
 

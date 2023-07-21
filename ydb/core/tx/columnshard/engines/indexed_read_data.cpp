@@ -233,7 +233,7 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
         if (mergedBatch) {
             // Init split by granules structures
             Y_VERIFY(ReadMetadata->SelectInfo);
-            TColumnEngineForLogs::TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
+            TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
 
             // committed data before the first granule would be placed in fake preceding granule
             // committed data after the last granule would be placed into the last granule

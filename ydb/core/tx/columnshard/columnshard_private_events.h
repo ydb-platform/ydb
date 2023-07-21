@@ -76,10 +76,13 @@ struct TEvPrivate {
 
     struct TEvIndexing : public TEventLocal<TEvIndexing, EvIndexing> {
         std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
 
         explicit TEvIndexing(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent)
             : TxEvent(std::move(txEvent))
-        {}
+        {
+            GroupedBlobRanges = TxEvent->IndexChanges->GetGroupedBlobRanges();
+        }
     };
 
     struct TEvCompaction : public TEventLocal<TEvCompaction, EvIndexing> {
@@ -93,7 +96,7 @@ struct TEvPrivate {
             TxEvent->GranuleCompaction = true;
             Y_VERIFY(TxEvent->IndexChanges);
 
-            GroupedBlobRanges = NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->SwitchedPortions);
+            GroupedBlobRanges = TxEvent->IndexChanges->GetGroupedBlobRanges();
 
             if (blobManager.HasExternBlobs()) {
                 for (const auto& [blobId, _] : GroupedBlobRanges) {
@@ -118,8 +121,7 @@ struct TEvPrivate {
             Y_VERIFY(TxEvent->IndexChanges);
 
             if (needWrites) {
-                GroupedBlobRanges =
-                    NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->PortionsToEvict);
+                GroupedBlobRanges = TxEvent->IndexChanges->GetGroupedBlobRanges();
 
                 if (blobManager.HasExternBlobs()) {
                     for (auto& [blobId, _] : GroupedBlobRanges) {

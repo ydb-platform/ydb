@@ -209,7 +209,7 @@ public:
 
     void OnTtlUpdate();
 
-    std::shared_ptr<NOlap::TColumnEngineChanges> StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords);
+    std::shared_ptr<NOlap::TCleanupColumnEngineChanges> StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords);
 
 private:
     void IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema);

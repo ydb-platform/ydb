@@ -1194,7 +1194,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
 
         UNIT_ASSERT(meta.HasReadStats());
         auto& readStats = meta.GetReadStats();
-
+        Cerr << readStats.DebugString() << Endl;
         UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
         UNIT_ASSERT(readStats.GetDurationUsec() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
@@ -2708,22 +2708,24 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             } else if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteIndex>(ev)) {
                 // Cerr <<  "EvWriteIndex" << Endl << *msg->IndexChanges << Endl;
 
-                if (!msg->IndexChanges->AppendedPortions.empty()) {
+                if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
+                    Y_VERIFY(append->AppendedPortions.size());
                     Cerr << "Added portions:";
-                    for (const auto& portion : msg->IndexChanges->AppendedPortions) {
+                    for (const auto& portion : append->AppendedPortions) {
                         ++addedPortions;
                         ui64 portionId = addedPortions;
                         Cerr << " " << portionId << "(" << portion.Records[0].Portion << ")";
                     }
                     Cerr << Endl;
                 }
-                if (msg->IndexChanges->CompactionInfo) {
+                if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
+                    Y_VERIFY(compact->SwitchedPortions.size());
                     ++compactionsHappened;
                     Cerr << "Compaction at snapshot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
                     ui64 srcGranule{0};
-                    for (const auto& portionInfo : msg->IndexChanges->SwitchedPortions) {
-                        const bool moved = msg->IndexChanges->IsMovedPortion(portionInfo);
+                    for (const auto& portionInfo : compact->SwitchedPortions) {
+                        const bool moved = compact->IsMovedPortion(portionInfo);
                         ui64 granule = portionInfo.Granule();
                         UNIT_ASSERT(!srcGranule || srcGranule == granule);
                         srcGranule = granule;
@@ -2737,11 +2739,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     }
                     Cerr << Endl;
                 }
-                if (!msg->IndexChanges->PortionsToDrop.empty()) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupColumnEngineChanges>(msg->IndexChanges)) {
+                    Y_VERIFY(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
                     Cerr << "Cleanup older than snapshot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
-                    for (const auto& portion : msg->IndexChanges->PortionsToDrop) {
+                    for (const auto& portion : cleanup->PortionsToDrop) {
                         ui64 portionId = portion.Records[0].Portion;
                         Cerr << " " << portionId;
                         deletedPortions.insert(portionId);
@@ -2843,7 +2846,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         --planStep;
         --txId;
-
+        Cerr << compactionsHappened << Endl;
         UNIT_ASSERT_GE(compactionsHappened, 3); // we catch it three times per action
 
         ui64 previousCompactionsHappened = compactionsHappened;

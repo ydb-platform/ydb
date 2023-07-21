@@ -42,6 +42,17 @@ struct TColumnRecord {
         return Granule && ColumnId && Portion && ValidBlob();
     }
 
+    TString DebugString() const {
+        return TStringBuilder()
+            << "portion:" << Portion << ";"
+            << "granule:" << Granule << ";"
+            << "column_id:" << ColumnId << ";"
+            << "blob_range:" << BlobRange << ";"
+            << "plan_step:" << PlanStep << ";"
+            << "tx_id:" << TxId << ";"
+            ;
+    }
+
     bool ValidBlob() const {
         return BlobRange.BlobId.IsValid() && BlobRange.Size;
     }

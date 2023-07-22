@@ -39,10 +39,10 @@ public:
             }
             Counters.CompactionInputSize(readBytes);
         }
-        const TInstant start = TInstant::Now();
+        const TMonotonic start = TMonotonic::Now();
         TConclusion<std::vector<TString>> result = DoApply(indexChanges);
         if (result.IsSuccess()) {
-            Counters.CompactionDuration->Collect((TInstant::Now() - start).MilliSeconds());
+            Counters.CompactionDuration->Collect((TMonotonic::Now() - start).MilliSeconds());
         } else {
             Counters.CompactionFails->Add(1);
         }

@@ -46,10 +46,15 @@ private:
     TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> WriteIndexEv;
     std::shared_ptr<TBlobsConstructor> BlobConstructor;
     TActorId DstActor;
+protected:
+    void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
 public:
     TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool blobGrouppingEnabled);
-
-    void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
+    ~TCompactedWriteController() {
+        if (WriteIndexEv && WriteIndexEv->IndexChanges) {
+            WriteIndexEv->IndexChanges->AbortEmergency();
+        }
+    }
 
     NOlap::IBlobConstructor::TPtr GetBlobConstructor() override {
         return BlobConstructor;

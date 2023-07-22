@@ -5660,79 +5660,45 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureComputable(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!IsSet && !EnsureTupleSize(input->Head(), 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto commonType = input->Head().GetTypeAnn();
-        bool needRetype = false;
-        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
-            const auto child = input->Child(i);
+        for (const auto& child : input->Children()) {
             if (!EnsureComputable(*child, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!IsSet && !EnsureTupleSize(*child, 2, ctx.Expr)) {
+            if constexpr (!IsSet) {
+                if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        if constexpr (IsStrict) {
+            std::set<const TTypeAnnotationNode*> set;
+            input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
+            if (1U != set.size()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
+                "Dict items types isn't same: " << **set.crbegin() << " and " << **set.cbegin()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (IsSameAnnotation(*commonType, *child->GetTypeAnn())) {
-                continue;
-            }
-
-            if (!IsStrict) {
-                auto arg1 = ctx.Expr.NewArgument(input->Pos(), "arg");
-                auto& arg2 = input->ChildRef(i);
-                auto item1 = arg1;
-                auto item2 = arg2;
-                if (SilentInferCommonType(item1, *commonType, item2, *arg2->GetTypeAnn(), ctx.Expr, commonType)
-                    != IGraphTransformer::TStatus::Error) {
-                    needRetype = needRetype || (item2 != arg2);
-                    arg2 = item2;
-                    if (item1 != arg1) {
-                        // need update all previous items
-                        for (ui32 index = 0; index < i; ++index) {
-                            input->ChildRef(index) = ctx.Expr.ReplaceNode(TExprNode::TPtr(item1), *arg1, input->ChildPtr(index));
-                        }
-
-                        return IGraphTransformer::TStatus::Repeat;
-                    }
-
-                    continue;
-                }
-            }
-
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<
-                "Cannot infer common type for : " << *commonType << " and " << *child->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (needRetype) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (IsStrict) {
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
-        }
+        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
+            if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
+                return status;
 
-        const TDictExprType* dictType;
-        if (!IsSet) {
-            auto tupleType = commonType->Cast<TTupleExprType>();
-            dictType = ctx.Expr.MakeType<TDictExprType>(tupleType->GetItems()[0], tupleType->GetItems()[1]);
-        } else {
-            dictType = ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>());
-        }
+            const auto dictType = IsSet ?
+                ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>()):
+                ctx.Expr.MakeType<TDictExprType>(commonType->Cast<TTupleExprType>()->GetItems().front(), commonType->Cast<TTupleExprType>()->GetItems().back());
 
-        if (!dictType->Validate(input->Pos(), ctx.Expr)) {
+            if (!dictType->Validate(input->Pos(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->SetTypeAnn(dictType);
+        } else
             return IGraphTransformer::TStatus::Error;
-        }
 
-        input->SetTypeAnn(dictType);
         return IGraphTransformer::TStatus::Ok;
     }
 

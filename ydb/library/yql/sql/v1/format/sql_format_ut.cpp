@@ -26,9 +26,15 @@ struct TSetup {
             auto expected = c.second;
             SubstGlobal(expected, "\t", TString(NSQLFormat::OneIndent, ' '));
             UNIT_ASSERT_NO_DIFF(formatted, expected);
-            auto mutatedQuery = NSQLFormat::MutateQuery(c.first);
-            auto res2 = Formatter->Format(mutatedQuery, formatted, issues);
+
+            TString formatted2;
+            auto res2 = Formatter->Format(formatted, formatted2, issues);
             UNIT_ASSERT_C(res2, issues.ToString());
+            UNIT_ASSERT_NO_DIFF(formatted, formatted2);
+
+            auto mutatedQuery = NSQLFormat::MutateQuery(c.first);
+            auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
+            UNIT_ASSERT_C(res3, issues.ToString());
         }
     }
 
@@ -207,7 +213,7 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         TCases cases = {
             {"values (1);","VALUES\n\t(1);\n\n"},
             {"values (1,2),(3,4);","VALUES\n\t(1, 2),\n\t(3, 4);\n\n"},
-            {"values ('a\nb');","VALUES\n\t(\n\t\t'a\nb'\n\t);\n\n"},
+            {"values ('a\nb');","VALUES\n\t('a\nb');\n\n"},
         };
 
         TSetup setup;

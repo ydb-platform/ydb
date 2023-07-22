@@ -354,6 +354,7 @@ private:
             Scopes.push_back(*scopePtr);
         }
 
+        bool suppressExpr = false;
         if (descr == TToken::GetDescriptor()) {
             const auto& token = dynamic_cast<const TToken&>(msg);
             MarkToken(token);
@@ -366,17 +367,40 @@ private:
         } else if (descr == TRule_in_atom_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_in_atom_expr&>(msg);
             if (value.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
-                AfterInAtom = true;
+                suppressExpr = true;
+            }
+        } else if (descr == TRule_select_kind_parenthesis::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_select_kind_parenthesis&>(msg);
+            if (value.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis2) {
+                suppressExpr = true;
             }
         }
 
+        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
+        if (expr) {
+            ++InsideExpr;
+        }
+
+        ui64 prevInsideExpr = InsideExpr;
+        if (suppressExpr) {
+            InsideExpr = 0;
+        }
+
         VisitAllFieldsImpl<&TVisitor::MarkTokens>(descr, msg);
+        if (suppressExpr) {
+            InsideExpr = prevInsideExpr;
+        }
+
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
                 --InsideType;
             }
 
             Scopes.pop_back();
+        }
+
+        if (expr) {
+            --InsideExpr;
         }
     }
 
@@ -390,7 +414,7 @@ private:
         if (str == "(" || str == "[" || str == "{" || str == "<|" || (InsideType && str == "<")) {
             MarkTokenStack.push_back(TokenIndex);
             auto& info = MarkedTokens[TokenIndex];
-            info.OpeningBracket = true;
+            info.OpeningBracket = (InsideExpr > 0);
         } else if (str == ")") {
             PopBracket("(");
         } else if (str == "]") {
@@ -401,12 +425,6 @@ private:
             PopBracket("<|");
         } else if (InsideType && str == ">") {
             PopBracket("<");
-        }
-
-        if (AfterInAtom) {
-            auto& info = MarkedTokens[TokenIndex];
-            info.OpeningBracket = false;
-            AfterInAtom = false;
         }
 
         TokenIndex++;
@@ -2019,7 +2037,7 @@ private:
     ui32 TokenIndex = 0;
     TMarkTokenStack MarkTokenStack;
     TVector<TTokenInfo> MarkedTokens;
-    bool AfterInAtom = false;
+    ui64 InsideExpr = 0;
 };
 
 template <typename T>

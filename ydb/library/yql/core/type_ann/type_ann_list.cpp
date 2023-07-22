@@ -2086,20 +2086,11 @@ namespace {
             {
                 return IGraphTransformer::TStatus::Error;
             }
-            const TTypeAnnotationNode* commonType = nullptr;
-            const auto status = SilentInferCommonType(input->ChildRef(idx1), input->ChildRef(idx2),
-                                                      ctx.Expr, commonType);
+            auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr);
+            if (!commonType)
+                return IGraphTransformer::TStatus::Error;
             if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
                 commonType = commonType->Cast<TOptionalExprType>()->GetItemType();
-            }
-            if (IGraphTransformer::TStatus::Ok != status) {
-                if (IGraphTransformer::TStatus::Error == status) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                             TStringBuilder() << "Uncompatible types: " <<
-                                             *input->Child(idx1)->GetTypeAnn() << " and "<<
-                                             *input->Child(idx2)->GetTypeAnn()));
-                }
-                return status;
             }
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
@@ -2150,17 +2141,13 @@ namespace {
                 return status;
             }
         } else {
-            const auto status = SilentInferCommonType(input->ChildRef(0U), input->ChildRef(1U),
-                                                      ctx.Expr, commonType);
-            if (IGraphTransformer::TStatus::Ok != status) {
-                if (IGraphTransformer::TStatus::Error == status) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                             TStringBuilder() << "Uncompatible types of bounds " <<
-                                             *input->Child(0U)->GetTypeAnn() << " and " <<
-                                             *input->Child(1U)->GetTypeAnn()));
-                }
+            commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr);
+            if (!commonType)
+                return IGraphTransformer::TStatus::Error;
+
+            if (const auto status = TryConvertTo(input->ChildRef(0U), *commonType, ctx.Expr).Combine(TryConvertTo(input->ChildRef(1U), *commonType, ctx.Expr)); status != IGraphTransformer::TStatus::Ok)
                 return status;
-            }
+
             if (stepIsOpt && ETypeAnnotationKind::Optional != commonType->GetKind()) {
                 commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
             }

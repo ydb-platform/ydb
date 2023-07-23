@@ -32,7 +32,7 @@ def postprocess_ctest(log_fp: TextIO, ctest_junit_report, is_mute_shard, dry_run
             remove_failure(testcase)
 
     if n_remove_failures:
-        update_suite_info(root, n_remove_failures, n_skipped)
+        update_suite_info(root, n_remove_failures, n_skipped=n_skipped)
         print(f"{'(dry-run) ' if dry_run else ''}update {ctest_junit_report}")
         if not dry_run:
             tree.write(ctest_junit_report, xml_declaration=True, encoding="UTF-8")

@@ -22,9 +22,10 @@ def postprocess_junit(is_mute_test, folder, dry_run):
     for fn in glob.glob(os.path.join(folder, "*.xml")):
         tree = ET.parse(fn)
         root = tree.getroot()
-        total_muted = 0
+        total_err = total_fail = 0
+
         for suite in root.findall("testsuite"):
-            muted_cnt = 0
+            fail_cnt = error_cnt = 0
 
             for case, cls, method in case_iterator(suite):
                 attach_filename(case, os.path.basename(fn))
@@ -32,14 +33,20 @@ def postprocess_junit(is_mute_test, folder, dry_run):
                 if is_mute_test(cls, method):
                     if mute_target(case):
                         print(f"mute {cls}::{method}")
-                        muted_cnt += 1
+                        fail_cnt += 1
+                    elif mute_target(case, "error"):
+                        print(f"mute error {cls}::{method}")
+                        error_cnt += 1
 
-            if muted_cnt:
-                update_suite_info(suite, n_skipped=muted_cnt, n_remove_failures=muted_cnt)
-                total_muted += muted_cnt
+            if fail_cnt or error_cnt:
+                update_suite_info(suite, n_remove_failures=fail_cnt, n_remove_errors=error_cnt,
+                                  n_skipped=fail_cnt + error_cnt)
+                total_err += error_cnt
+                total_fail += fail_cnt
 
-        if total_muted:
-            update_suite_info(root, n_skipped=total_muted, n_remove_failures=total_muted)
+        if total_fail or total_err:
+            update_suite_info(root, n_remove_errors=total_err, n_remove_failures=total_fail,
+                              n_skipped=total_err + total_fail)
 
         print(f"{'(dry-run) ' if dry_run else ''}patch {fn}")
 

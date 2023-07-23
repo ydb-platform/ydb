@@ -54,13 +54,15 @@ class MutedShardCheck:
         return target in self.muted
 
 
-def mute_target(node):
-    failure = node.find("failure")
+def mute_target(node, node_name="failure"):
+    failure = node.find(node_name)
 
     if failure is None:
         return False
 
     skipped = ET.Element("skipped", {"message": failure.attrib["message"]})
+    skipped.text = failure.text
+
     node.remove(failure)
     node.append(skipped)
 
@@ -92,9 +94,12 @@ def dec_attr(node, attr, value):
     return op_attr(node, attr, operator.sub, value)
 
 
-def update_suite_info(root, n_remove_failures=None, n_skipped=None):
+def update_suite_info(root, n_remove_failures=None, n_remove_errors=None, n_skipped=None):
     if n_remove_failures:
         dec_attr(root, "failures", n_remove_failures)
+
+    if n_remove_errors:
+        dec_attr(root, "errors", n_remove_errors)
 
     if n_skipped:
         inc_attr(root, "skipped", n_skipped)

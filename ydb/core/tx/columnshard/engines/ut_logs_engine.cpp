@@ -291,9 +291,9 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
              const TExpected& expected) {
     auto compactionInfo = engine.Compact(TestLimits(), {});
     UNIT_ASSERT(!!compactionInfo);
-    UNIT_ASSERT(!compactionInfo->InGranule());
 
     std::shared_ptr<TCompactColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
+    UNIT_ASSERT(changes->IsSplit());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
     changes->StartEmergency();

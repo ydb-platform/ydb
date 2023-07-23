@@ -1,4 +1,5 @@
 #pragma once
+#include "mark.h"
 #include <util/generic/string.h>
 #include <util/system/yassert.h>
 #include <util/stream/output.h>
@@ -97,6 +98,16 @@ public:
     friend IOutputStream& operator << (IOutputStream& out, const TCompactionInfo& info) {
         out << (info.InGranuleFlag ? "in granule" : "split granule") << " compaction of granule: " << info.CompactionObject->DebugString();
         return out;
+    }
+};
+
+struct TCompactionSrcGranule {
+    ui64 PathId = 0;
+    ui64 Granule = 0;
+    TMark Mark;
+
+    TCompactionSrcGranule(ui64 pathId, ui64 granule, const TMark& mark)
+        : PathId(pathId), Granule(granule), Mark(mark) {
     }
 };
 

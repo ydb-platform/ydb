@@ -1,4 +1,5 @@
 #include "indexation.h"
+#include "mark_granules.h"
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

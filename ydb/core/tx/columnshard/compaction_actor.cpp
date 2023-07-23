@@ -29,7 +29,7 @@ public:
         TxEvent = std::move(event.TxEvent);
         auto compactChanges = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(TxEvent->IndexChanges);
         Y_VERIFY(compactChanges);
-        IsSplitCurrently = !compactChanges->CompactionInfo->InGranule();
+        IsSplitCurrently = compactChanges->IsSplit();
 
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);

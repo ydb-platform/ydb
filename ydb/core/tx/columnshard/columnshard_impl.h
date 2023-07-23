@@ -10,9 +10,6 @@
 #include "tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
-#include "engines/changes/ttl.h"
-#include "engines/changes/compaction.h"
-#include "engines/changes/indexation.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -23,6 +20,16 @@
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/services/metadata/service.h>
+
+namespace NKikimr::NOlap {
+class TCleanupColumnEngineChanges;
+class TTTLColumnEngineChanges;
+class TChangesWithAppend;
+class TCompactColumnEngineChanges;
+class TInGranuleCompactColumnEngineChanges;
+class TSplitCompactColumnEngineChanges;
+class TInsertColumnEngineChanges;
+}
 
 namespace NKikimr::NColumnShard {
 
@@ -133,6 +140,8 @@ class TColumnShard
     friend class NOlap::TTTLColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
     friend class NOlap::TCompactColumnEngineChanges;
+    friend class NOlap::TInGranuleCompactColumnEngineChanges;
+    friend class NOlap::TSplitCompactColumnEngineChanges;
     friend class NOlap::TInsertColumnEngineChanges;
 
     friend class TTxController;
@@ -365,18 +374,7 @@ private:
             return ActiveCleanup;
         }
 
-        void StartTtl(const NOlap::TColumnEngineChanges& changes) {
-            const NOlap::TTTLColumnEngineChanges* ttlChanges = dynamic_cast<const NOlap::TTTLColumnEngineChanges*>(&changes);
-            Y_VERIFY(ttlChanges);
-            Y_VERIFY(ActiveTtlGranules.empty());
-
-            for (const auto& portionInfo : ttlChanges->PortionsToDrop) {
-                ActiveTtlGranules.emplace(portionInfo.Granule());
-            }
-            for (const auto& [portionInfo, _] : ttlChanges->PortionsToEvict) {
-                ActiveTtlGranules.emplace(portionInfo.Granule());
-            }
-        }
+        void StartTtl(const NOlap::TColumnEngineChanges& changes);
         void FinishTtl() {
             Y_VERIFY(!ActiveTtlGranules.empty());
             ActiveTtlGranules.clear();

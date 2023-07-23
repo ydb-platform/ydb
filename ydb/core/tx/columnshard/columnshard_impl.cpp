@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include "engines/changes/ttl.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/tiering/external_data.h>
@@ -81,6 +82,19 @@ bool ValidateTablePreset(const NKikimrSchemeOp::TColumnTableSchemaPreset& preset
     return ValidateTableSchema(preset.GetSchema());
 }
 
+}
+
+void TColumnShard::TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
+    const NOlap::TTTLColumnEngineChanges* ttlChanges = dynamic_cast<const NOlap::TTTLColumnEngineChanges*>(&changes);
+    Y_VERIFY(ttlChanges);
+    Y_VERIFY(ActiveTtlGranules.empty());
+
+    for (const auto& portionInfo : ttlChanges->PortionsToDrop) {
+        ActiveTtlGranules.emplace(portionInfo.Granule());
+    }
+    for (const auto& [portionInfo, _] : ttlChanges->PortionsToEvict) {
+        ActiveTtlGranules.emplace(portionInfo.Granule());
+    }
 }
 
 bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& schema) const {
@@ -746,13 +760,6 @@ void TColumnShard::SetupCompaction() {
         }
 
         LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
-
-        auto& g = compactionInfo->GetObject<NOlap::TGranuleMeta>();
-        if (compactionInfo->InGranule()) {
-            CSCounters.OnInternalCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
-        } else {
-            CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
-        }
 
         auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), limits);
         if (!indexChanges) {

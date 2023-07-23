@@ -1,10 +1,12 @@
 #include "split_compaction.h"
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule.h>
 
 namespace NKikimr::NOlap {
 
 TConclusion<std::vector<TString>> TSplitCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    const ui64 pathId = SrcGranule->PathId;
-    const TMark ts0 = SrcGranule->Mark;
+    const ui64 pathId = SrcGranule.PathId;
+    const TMark ts0 = SrcGranule.Mark;
     std::vector<TPortionInfo>& portions = SwitchedPortions;
 
     std::vector<std::pair<TMark, ui64>> tsIds;
@@ -386,6 +388,19 @@ ui64 TSplitCompactColumnEngineChanges::TryMovePortions(const TMark& ts0, std::ve
     portions.swap(out);
 
     return numRows;
+}
+
+void TSplitCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexComplete(self, context);
+    self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
+    self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
+    self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
+}
+
+void TSplitCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    TBase::DoStart(self);
+    auto& g = CompactionInfo->GetObject<TGranuleMeta>();
+    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
 }
 
 }

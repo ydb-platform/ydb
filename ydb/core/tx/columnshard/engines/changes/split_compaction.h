@@ -18,10 +18,22 @@ private:
         std::vector<std::pair<TMark, ui64>>& tsIds,
         std::vector<std::pair<TPortionInfo, ui64>>& toMove, TConstructionContext& context);
 
+    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
 protected:
     virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
+    virtual TPortionMeta::EProduced GetResultProducedClass() const override {
+        return TPortionMeta::SPLIT_COMPACTED;
+    }
+    virtual void DoStart(NColumnShard::TColumnShard& self) override;
 public:
+    virtual bool IsSplit() const override {
+        return true;
+    }
     using TBase::TBase;
+
+    virtual TString TypeString() const override {
+        return "SPLIT_COMPACTION";
+    }
 };
 
 }

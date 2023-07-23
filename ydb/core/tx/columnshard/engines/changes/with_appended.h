@@ -10,6 +10,12 @@ protected:
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) override;
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
+    virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& /*context*/) override {
+
+    }
+    virtual void DoStart(NColumnShard::TColumnShard& /*self*/) override {
+
+    }
     std::vector<TPortionInfo> MakeAppendedPortions(const ui64 pathId,
         const std::shared_ptr<arrow::RecordBatch> batch,
         const ui64 granule,

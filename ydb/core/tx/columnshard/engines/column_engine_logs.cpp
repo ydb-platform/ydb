@@ -16,123 +16,13 @@
 
 namespace NKikimr::NOlap {
 
-namespace {
-
-TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPortionInfo>& portions, const TCompactionLimits& limits,
-                        TMarksGranules& marksGranules) {
-    ui32 insertedCount = 0;
-
-    THashSet<ui64> filtered;
-    THashSet<ui64> goodCompacted;
-    THashSet<ui64> nextToGood;
-    {
-        TMap<NArrow::TReplaceKey, std::vector<const TPortionInfo*>> points;
-
-        for (const auto& portionInfo : portions) {
-            if (portionInfo.IsInserted()) {
-                ++insertedCount;
-            } else if (portionInfo.BlobsSizes().second >= limits.GoodBlobSize) {
-                goodCompacted.insert(portionInfo.Portion());
-            }
-
-            const NArrow::TReplaceKey& start = portionInfo.IndexKeyStart();
-            const NArrow::TReplaceKey& end = portionInfo.IndexKeyEnd();
-
-            points[start].push_back(&portionInfo);
-            points[end].push_back(nullptr);
-        }
-
-        ui32 countInBucket = 0;
-        ui64 bucketStartPortion = 0;
-        bool isGood = false;
-        int sum = 0;
-        for (const auto& [key, vec] : points) {
-            for (const auto* portionInfo : vec) {
-                if (portionInfo) {
-                    ++sum;
-                    ui64 currentPortion = portionInfo->Portion();
-                    if (!bucketStartPortion) {
-                        bucketStartPortion = currentPortion;
-                    }
-                    ++countInBucket;
-
-                    ui64 prevIsGood = isGood;
-                    isGood = goodCompacted.contains(currentPortion);
-                    if (prevIsGood && !isGood) {
-                        nextToGood.insert(currentPortion);
-                    }
-                } else {
-                    --sum;
-                }
-            }
-
-            if (!sum) { // count(start) == count(end), start new range
-                Y_VERIFY(bucketStartPortion);
-
-                if (countInBucket == 1) {
-                    // We do not want to merge big compacted portions with inserted ones if there's no intersections.
-                    if (isGood) {
-                        filtered.insert(bucketStartPortion);
-                    }
-                }
-                countInBucket = 0;
-                bucketStartPortion = 0;
-            }
-        }
-    }
-
-    Y_VERIFY(insertedCount);
-
-    // Nothing to filter. Leave portions as is, no borders needed.
-    if (filtered.empty() && goodCompacted.empty()) {
-        return TConclusionStatus::Success();
-    }
-
-    // It's a map for SliceIntoGranules(). We use fake granule ids here to slice batch with borders.
-    // We could merge inserted portions alltogether and slice result with filtered borders to prevent intersections.
-    std::vector<TMark> borders;
-    borders.push_back(granuleMark);
-
-    std::vector<TPortionInfo> tmp;
-    tmp.reserve(portions.size());
-    for (auto& portionInfo : portions) {
-        ui64 curPortion = portionInfo.Portion();
-
-        // Prevent merge of compacted portions with no intersections
-        if (filtered.contains(curPortion)) {
-            const auto& start = portionInfo.IndexKeyStart();
-            borders.emplace_back(TMark(start));
-        } else {
-            // nextToGood borders potentially split good compacted portions into 2 parts:
-            // the first one without intersections and the second with them
-            if (goodCompacted.contains(curPortion) || nextToGood.contains(curPortion)) {
-                const auto& start = portionInfo.IndexKeyStart();
-                borders.emplace_back(TMark(start));
-            }
-
-            tmp.emplace_back(std::move(portionInfo));
-        }
-    }
-    tmp.swap(portions);
-
-    if (borders.size() == 1) {
-        Y_VERIFY(borders[0] == granuleMark);
-        borders.clear();
-    }
-
-    marksGranules = TMarksGranules(std::move(borders));
-    return TConclusionStatus::Success();
-}
-
-} // namespace
-
 std::shared_ptr<NKikimr::NOlap::TCompactColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildCompactionChanges(std::unique_ptr<TCompactionInfo>&& info,
-    const TCompactionLimits& limits, const TSnapshot& initSnapshot) {
+    const TCompactionLimits& limits, const TSnapshot& initSnapshot, const TCompactionSrcGranule& srcGranule) {
     std::shared_ptr<TCompactColumnEngineChanges> result;
     if (info->InGranule()) {
-        result = std::make_shared<TInGranuleCompactColumnEngineChanges>(limits, std::move(info));
+        result = std::make_shared<TInGranuleCompactColumnEngineChanges>(limits, std::move(info), srcGranule);
     } else {
-        result = std::make_shared<TSplitCompactColumnEngineChanges>(limits, std::move(info));
+        result = std::make_shared<TSplitCompactColumnEngineChanges>(limits, std::move(info), srcGranule);
     }
     result->InitSnapshot = initSnapshot;
     return result;
@@ -417,41 +307,20 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(co
 
 std::shared_ptr<TCompactColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std::unique_ptr<TCompactionInfo>&& info,
                                                                             const TCompactionLimits& limits) {
-    auto changes = TChangesConstructor::BuildCompactionChanges(std::move(info), limits, LastSnapshot);
-
-    const auto& granuleInfo = changes->CompactionInfo->GetObject<TGranuleMeta>();
-
-    changes->SwitchedPortions.reserve(granuleInfo.GetPortions().size());
-    // Collect active portions for the granule.
-    for (const auto& [_, portionInfo] : granuleInfo.GetPortions()) {
-        if (portionInfo.IsActive()) {
-            changes->SwitchedPortions.push_back(portionInfo);
-            Y_VERIFY(portionInfo.Granule() == granuleInfo.GetGranuleId());
-        }
-    }
-
-    const ui64 pathId = granuleInfo.Record.PathId;
+    const ui64 pathId = info->GetPlanCompaction().GetPathId();
     Y_VERIFY(PathGranules.contains(pathId));
-    // Locate mark for the granule.
-    for (const auto& [mark, pathGranule] : PathGranules[pathId]) {
-        if (pathGranule == granuleInfo.GetGranuleId()) {
-            changes->SrcGranule = TCompactColumnEngineChanges::TSrcGranule(pathId, granuleInfo.GetGranuleId(), mark);
-            break;
-        }
-    }
-    Y_VERIFY(changes->SrcGranule);
 
-    if (changes->CompactionInfo->InGranule()) {
-        auto mergeInitResult = InitInGranuleMerge(changes->SrcGranule->Mark, changes->SwitchedPortions, limits, changes->MergeBorders);
-        if (!mergeInitResult) {
-            // Return granule to Compaction list. This is equal to single compaction worker behavior.
-            changes->CompactionInfo->CompactionCanceled("cannot init in granule merge: " + mergeInitResult.GetErrorMessage());
-            return {};
+    auto& g = info->GetObject<TGranuleMeta>();
+    for (const auto& [mark, pathGranule] : PathGranules[pathId]) {
+        if (pathGranule == g.GetGranuleId()) {
+            TCompactionSrcGranule srcGranule = TCompactionSrcGranule(pathId, g.GetGranuleId(), mark);
+            auto changes = TChangesConstructor::BuildCompactionChanges(std::move(info), limits, LastSnapshot, srcGranule);
+            NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
+            return changes;
         }
     }
-    NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
-    Y_VERIFY(!changes->SwitchedPortions.empty());
-    return changes;
+    Y_VERIFY(false);
+    return nullptr;
 }
 
 std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,

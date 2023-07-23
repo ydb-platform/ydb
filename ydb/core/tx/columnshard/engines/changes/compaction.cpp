@@ -40,6 +40,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
         id = granuleRemap[id];
     }
 
+    const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
         if (granuleRemap.size()) {
             auto it = granuleRemap.find(portionInfo.Granule());
@@ -50,7 +51,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
         TPortionMeta::EProduced produced = TPortionMeta::INSERTED;
         // If it's a split compaction with moves appended portions are INSERTED (could have overlaps with others)
         if (PortionsToMove.empty()) {
-            produced = CompactionInfo->InGranule() ? TPortionMeta::COMPACTED : TPortionMeta::SPLIT_COMPACTED;
+            produced = producedClassResultCompaction;
         }
         portionInfo.UpdateRecordsMeta(produced);
     }
@@ -178,16 +179,16 @@ void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
 THashMap<ui64, ui64> TCompactColumnEngineChanges::TmpToNewGranules(TFinalizationContext& context, THashMap<ui64, std::pair<ui64, TMark>>& newGranules) const {
     THashMap<ui64, ui64> granuleRemap;
     for (const auto& [mark, counter] : TmpGranuleIds) {
-        if (mark == SrcGranule->Mark) {
+        if (mark == SrcGranule.Mark) {
             Y_VERIFY(!counter);
-            granuleRemap[counter] = SrcGranule->Granule;
+            granuleRemap[counter] = SrcGranule.Granule;
         } else {
             Y_VERIFY(counter);
             auto it = granuleRemap.find(counter);
             if (it == granuleRemap.end()) {
                 it = granuleRemap.emplace(counter, context.NextGranuleId()).first;
             }
-            newGranules.emplace(it->second, std::make_pair(SrcGranule->PathId, mark));
+            newGranules.emplace(it->second, std::make_pair(SrcGranule.PathId, mark));
         }
     }
     return granuleRemap;
@@ -203,25 +204,44 @@ bool TCompactColumnEngineChanges::IsMovedPortion(const TPortionInfo& info) {
 }
 
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    TBase::DoStart(self);
     self.BackgroundController.StartCompaction(CompactionInfo->GetPlanCompaction());
 }
 
 void TCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    if (CompactionInfo->InGranule()) {
-        self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL);
-        self.IncCounter(NColumnShard::COUNTER_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
-        self.IncCounter(NColumnShard::COUNTER_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
-    } else {
-        self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
-        self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
-        self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
-    }
+    TBase::DoWriteIndexComplete(self, context);
     self.IncCounter(NColumnShard::COUNTER_COMPACTION_TIME, context.Duration.MilliSeconds());
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
     self.BackgroundController.FinishCompaction(CompactionInfo->GetPlanCompaction());
     CompactionInfo->GetObject<TGranuleMeta>().AllowedInsertion();
+}
+
+ui64 TCompactColumnEngineChanges::SetTmpGranule(ui64 pathId, const TMark& mark) {
+    Y_VERIFY(pathId == SrcGranule.PathId);
+    if (!TmpGranuleIds.contains(mark)) {
+        TmpGranuleIds[mark] = FirstGranuleId;
+        ++FirstGranuleId;
+    }
+    return TmpGranuleIds[mark];
+}
+
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::unique_ptr<TCompactionInfo>&& info, const TCompactionSrcGranule& srcGranule)
+    : Limits(limits)
+    , CompactionInfo(std::move(info))
+    , SrcGranule(srcGranule) {
+    Y_VERIFY(CompactionInfo);
+    const auto& granuleInfo = CompactionInfo->GetObject<TGranuleMeta>();
+
+    SwitchedPortions.reserve(granuleInfo.GetPortions().size());
+    for (const auto& [_, portionInfo] : granuleInfo.GetPortions()) {
+        if (portionInfo.IsActive()) {
+            SwitchedPortions.push_back(portionInfo);
+            Y_VERIFY(portionInfo.Granule() == granuleInfo.GetGranuleId());
+        }
+    }
+    Y_VERIFY(SwitchedPortions.size());
 }
 
 }

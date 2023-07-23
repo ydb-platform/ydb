@@ -6,6 +6,9 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include "storage/granule.h"
 #include "storage/storage.h"
+#include "changes/indexation.h"
+#include "changes/compaction.h"
+#include "changes/ttl.h"
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -39,7 +42,7 @@ public:
                  std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot);
 
         static std::shared_ptr<TCompactColumnEngineChanges> BuildCompactionChanges(std::unique_ptr<TCompactionInfo>&& info,
-                 const TCompactionLimits& limits, const TSnapshot& initSnapshot);
+                 const TCompactionLimits& limits, const TSnapshot& initSnapshot, const TCompactionSrcGranule& srcGranules);
 
         static std::shared_ptr<TCleanupColumnEngineChanges> BuildCleanupChanges(const TSnapshot& initSnapshot);
 

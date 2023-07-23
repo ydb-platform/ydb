@@ -15,8 +15,16 @@ protected:
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual void DoCompile(TFinalizationContext& /*context*/) override {
     }
+    virtual NKikimr::TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
+        return std::vector<TString>();
+    }
+    virtual bool NeedConstruction() const override {
+        return false;
+    }
 public:
     std::vector<TPortionInfo> PortionsToDrop;
+    bool NeedRepeat = false;
+
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override {
         return {};
     }

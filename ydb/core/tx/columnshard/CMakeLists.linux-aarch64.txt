@@ -11,6 +11,7 @@ add_subdirectory(counters)
 add_subdirectory(engines)
 add_subdirectory(hooks)
 add_subdirectory(resources)
+add_subdirectory(splitter)
 add_subdirectory(ut_rw)
 add_subdirectory(ut_schema)
 get_built_tool_path(
@@ -49,6 +50,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   columnshard-engines-writer
   tx-columnshard-counters
   tx-columnshard-common
+  tx-columnshard-splitter
   core-tx-tiering
   tx-conveyor-usage
   tx-long_tx_service-public

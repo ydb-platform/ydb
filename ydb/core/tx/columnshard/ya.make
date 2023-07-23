@@ -56,6 +56,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/common
+    ydb/core/tx/columnshard/splitter
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/long_tx_service/public

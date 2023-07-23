@@ -2,7 +2,6 @@
 #include "columnshard_impl.h"
 #include "engines/changes/indexation.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -128,8 +127,8 @@ private:
         virtual bool DoExecute() override {
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
-            NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = std::move(indexationLogic.Apply(TxEvent->IndexChanges).DetachResult());
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
+            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
             return true;
         }
     public:

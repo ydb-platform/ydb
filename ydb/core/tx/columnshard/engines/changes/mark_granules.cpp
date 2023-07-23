@@ -1,5 +1,4 @@
 #include "mark_granules.h"
-#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 
 namespace NKikimr::NOlap {
 TMarksGranules::TMarksGranules(std::vector<TPair>&& marks) noexcept

@@ -1,7 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "column_engine_logs.h"
 #include "predicate/predicate.h"
-#include "index_logic_logs.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 
@@ -267,15 +266,16 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     }
 
     changes->Blobs.insert(blobs.begin(), blobs.end());
+    changes->StartEmergency();
 
-    TIndexationLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
-    std::vector<TString> newBlobs = std::move(logic.Apply(changes).DetachResult());
+    NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
+    std::vector<TString> newBlobs = std::move(changes->ConstructBlobs(context).DetachResult());
+
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
 
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, blobs, step);
 
-    changes->StartEmergency();
     const bool result = engine.ApplyChanges(db, changes, snap);
     changes->AbortEmergency();
     return result;
@@ -296,15 +296,15 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
     std::shared_ptr<TCompactColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
+    changes->StartEmergency();
+    NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
+    std::vector<TString> newBlobs = std::move(changes->ConstructBlobs(context).DetachResult());
 
-    TCompactionLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
-    std::vector<TString> newBlobs = std::move(logic.Apply(changes).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
 
     UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
-    changes->StartEmergency();
     const bool result = engine.ApplyChanges(db, changes, snap);
     changes->AbortEmergency();
     return result;

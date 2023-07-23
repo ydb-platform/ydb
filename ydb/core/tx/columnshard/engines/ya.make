@@ -11,7 +11,6 @@ SRCS(
     db_wrapper.cpp
     index_info.cpp
     indexed_read_data.cpp
-    index_logic_logs.cpp
     filter.cpp
     portion_info.cpp
     tier_info.cpp

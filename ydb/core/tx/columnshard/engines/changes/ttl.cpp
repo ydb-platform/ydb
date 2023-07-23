@@ -169,4 +169,78 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     self.BackgroundController.FinishTtl();
 }
 
+bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TPortionEvictionFeatures& evictFeatures,
+    const THashMap<TBlobRange, TString>& srcBlobs, std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs,
+    TConstructionContext& context) const {
+    Y_VERIFY(portionInfo.TierName != evictFeatures.TargetTierName);
+
+    auto* tiering = context.GetTieringMap().FindPtr(evictFeatures.PathId);
+    Y_VERIFY(tiering);
+    auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
+    if (!compression) {
+        // Noting to recompress. We have no other kinds of evictions yet.
+        portionInfo.TierName = evictFeatures.TargetTierName;
+        evictFeatures.DataChanges = false;
+        return true;
+    }
+
+    Y_VERIFY(!evictFeatures.NeedExport);
+
+    TPortionInfo undo = portionInfo;
+
+    auto blobSchema = context.SchemaVersions.GetSchema(undo.GetSnapshot());
+    auto resultSchema = context.SchemaVersions.GetLastSchema();
+    auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, srcBlobs);
+
+    size_t undoSize = newBlobs.size();
+    TSaverContext saverContext;
+    saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);
+    for (auto& rec : portionInfo.Records) {
+        auto pos = resultSchema->GetFieldIndex(rec.ColumnId);
+        Y_VERIFY(pos >= 0);
+        auto field = resultSchema->GetFieldByIndex(pos);
+        auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
+
+        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(field->name()), field, columnSaver);
+        if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
+            portionInfo = undo;
+            newBlobs.resize(undoSize);
+            return false;
+        }
+        newBlobs.emplace_back(std::move(blob));
+        rec.BlobRange = TBlobRange{};
+    }
+
+    for (auto& rec : undo.Records) {
+        evictedRecords.emplace_back(std::move(rec));
+    }
+
+    portionInfo.AddMetadata(*resultSchema, batch, evictFeatures.TargetTierName);
+    return true;
+}
+
+NKikimr::TConclusion<std::vector<TString>> TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
+    Y_VERIFY(!Blobs.empty());           // src data
+    Y_VERIFY(!PortionsToEvict.empty()); // src meta
+    Y_VERIFY(EvictedRecords.empty());   // dst meta
+
+    std::vector<TString> newBlobs;
+    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> evicted;
+    evicted.reserve(PortionsToEvict.size());
+
+    for (auto& [portionInfo, evictFeatures] : PortionsToEvict) {
+        Y_VERIFY(!portionInfo.Empty());
+        Y_VERIFY(portionInfo.IsActive());
+
+        if (UpdateEvictedPortion(portionInfo, evictFeatures, Blobs,
+            EvictedRecords, newBlobs, context)) {
+            Y_VERIFY(portionInfo.TierName == evictFeatures.TargetTierName);
+            evicted.emplace_back(std::move(portionInfo), evictFeatures);
+        }
+    }
+
+    PortionsToEvict.swap(evicted);
+    return newBlobs;
+}
+
 }

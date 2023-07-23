@@ -6,10 +6,6 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include "storage/granule.h"
 #include "storage/storage.h"
-#include "changes/indexation.h"
-#include "changes/compaction.h"
-#include "changes/cleanup.h"
-#include "changes/ttl.h"
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -40,29 +36,14 @@ public:
     class TChangesConstructor : public TColumnEngineChanges {
     public:
         static std::shared_ptr<TInsertColumnEngineChanges> BuildInsertChanges(const TMark& defaultMark,
-                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot) {
-            auto changes = std::make_shared<TInsertColumnEngineChanges>(defaultMark);
-            changes->DataToIndex = std::move(blobsToIndex);
-            changes->InitSnapshot = initSnapshot;
-            return changes;
-        }
+                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot);
 
         static std::shared_ptr<TCompactColumnEngineChanges> BuildCompactionChanges(std::unique_ptr<TCompactionInfo>&& info,
-                 const TCompactionLimits& limits, const TSnapshot& initSnapshot) {
-            auto changes = std::make_shared<TCompactColumnEngineChanges>(limits, std::move(info));
-            changes->InitSnapshot = initSnapshot;
-            return changes;
-        }
+                 const TCompactionLimits& limits, const TSnapshot& initSnapshot);
 
-        static std::shared_ptr<TCleanupColumnEngineChanges> BuildCleanupChanges(const TSnapshot& initSnapshot) {
-            auto changes = std::make_shared<TCleanupColumnEngineChanges>();
-            changes->InitSnapshot = initSnapshot;
-            return changes;
-        }
+        static std::shared_ptr<TCleanupColumnEngineChanges> BuildCleanupChanges(const TSnapshot& initSnapshot);
 
-        static std::shared_ptr<TTTLColumnEngineChanges> BuildTtlChanges() {
-            return std::make_shared<TTTLColumnEngineChanges>();
-        }
+        static std::shared_ptr<TTTLColumnEngineChanges> BuildTtlChanges();
     };
 
     enum ETableIdx {

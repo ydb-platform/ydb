@@ -221,10 +221,11 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MinValue(ui32 columnId) const {
 }
 
 std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
-    if (!Meta.ColumnMeta.contains(columnId)) {
+    auto it = Meta.ColumnMeta.find(columnId);
+    if (it == Meta.ColumnMeta.end()) {
         return {};
     }
-    return Meta.ColumnMeta.find(columnId)->second.Max;
+    return it->second.Max;
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

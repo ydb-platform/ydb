@@ -150,6 +150,10 @@ public:
         return PathsToDrop;
     }
 
+    THashSet<ui64>& MutablePathsToDrop() {
+        return PathsToDrop;
+    }
+
     const THashMap<ui64, TTableInfo>& GetTables() const {
         return Tables;
     }
@@ -208,9 +212,6 @@ public:
     void AddTableVersion(const ui64 pathId, const TRowVersion& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db);
 
     void OnTtlUpdate();
-
-    std::shared_ptr<NOlap::TCleanupColumnEngineChanges> StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords);
-
 private:
     void IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema);
     static NOlap::TIndexInfo DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);

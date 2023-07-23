@@ -21,6 +21,7 @@ target_link_libraries(columnshard-engines-changes PUBLIC
   core-formats-arrow
   tx-columnshard-common
   columnshard-engines-insert_table
+  tx-columnshard-splitter
   ydb-core-tablet_flat
   core-tx-tiering
   ydb-core-protos
@@ -30,6 +31,8 @@ target_sources(columnshard-engines-changes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/mark.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/in_granule_compaction.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/split_compaction.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/ttl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/indexation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/cleanup.cpp

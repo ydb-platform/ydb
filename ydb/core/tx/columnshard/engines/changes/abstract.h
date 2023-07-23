@@ -23,6 +23,7 @@ class TBackgroundActivity;
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
+class TVersionedIndex;
 
 struct TCompactionLimits {
     static constexpr const ui64 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
@@ -134,6 +135,37 @@ public:
     }
 };
 
+class TConstructionContext: TNonCopyable {
+public:
+    using TTieringsHash = THashMap<ui64, NKikimr::NOlap::TTiering>;
+private:
+    const TTieringsHash* TieringMap = nullptr;
+public:
+    const TVersionedIndex& SchemaVersions;
+    const NColumnShard::TIndexationCounters Counters;
+
+    TConstructionContext(const TVersionedIndex& schemaVersions, const TTieringsHash& tieringMap, const NColumnShard::TIndexationCounters counters)
+        : TieringMap(&tieringMap)
+        , SchemaVersions(schemaVersions)
+        , Counters(counters)
+    {
+
+    }
+
+    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters counters)
+        : SchemaVersions(schemaVersions)
+        , Counters(counters) {
+
+    }
+
+    const THashMap<ui64, NKikimr::NOlap::TTiering>& GetTieringMap() const {
+        if (TieringMap) {
+            return *TieringMap;
+        }
+        return Default<THashMap<ui64, NKikimr::NOlap::TTiering>>();
+    }
+};
+
 class TGranuleMeta;
 
 class TColumnEngineChanges {
@@ -141,6 +173,7 @@ public:
     enum class EStage: ui32 {
         Created = 0,
         Started,
+        Constructed,
         Compiled,
         Applied,
         Written,
@@ -163,8 +196,15 @@ protected:
     virtual void DoAbort() {
 
     }
+    virtual bool NeedConstruction() const {
+        return true;
+    }
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
+    virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept = 0;
+
 public:
+    TConclusion<std::vector<TString>> ConstructBlobs(TConstructionContext& context);
+
     void AbortEmergency() {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency");
         Stage = EStage::Aborted;
@@ -178,80 +218,37 @@ public:
     }
 
     virtual ~TColumnEngineChanges() {
-        Y_VERIFY(Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
+        Y_VERIFY_DEBUG(Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
     }
 
     void Start(NColumnShard::TColumnShard& self) {
         Y_VERIFY(Stage == EStage::Created);
         DoStart(self);
         Stage = EStage::Started;
+        if (!NeedConstruction()) {
+            Stage = EStage::Constructed;
+        }
     }
 
     void StartEmergency() {
         Y_VERIFY(Stage == EStage::Created);
         Stage = EStage::Started;
+        if (!NeedConstruction()) {
+            Stage = EStage::Constructed;
+        }
     }
 
-    bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
-        Y_VERIFY(Stage != EStage::Aborted);
-        if ((ui32)Stage >= (ui32)EStage::Applied) {
-            return true;
-        }
-        Y_VERIFY(Stage == EStage::Compiled);
-
-        if (!DoApplyChanges(self, context, dryRun)) {
-            if (dryRun) {
-                OnChangesApplyFailed("problems on apply");
-            }
-            Y_VERIFY(dryRun);
-            return false;
-        } else if (!dryRun) {
-            OnChangesApplyFinished();
-            Stage = EStage::Applied;
-        }
-        return true;
-    }
+    bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun);
 
     virtual ui32 GetWritePortionsCount() const = 0;
     virtual const TPortionInfo& GetWritePortionInfo(const ui32 index) const = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
     virtual void UpdateWritePortionInfo(const ui32 index, const TPortionInfo& info) = 0;
 
-    void WriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
-        Y_VERIFY(Stage != EStage::Aborted);
-        if ((ui32)Stage >= (ui32)EStage::Written) {
-            return;
-        }
-        Y_VERIFY(Stage == EStage::Applied);
+    void WriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context);
+    void WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context);
 
-        DoWriteIndex(self, context);
-        Stage = EStage::Written;
-    }
-    void WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-        Y_VERIFY(Stage == EStage::Aborted || Stage == EStage::Written);
-        if (Stage == EStage::Aborted) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("stage", Stage);
-            return;
-        }
-        if (Stage == EStage::Written) {
-            Stage = EStage::Finished;
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
-            DoWriteIndexComplete(self, context);
-            DoOnFinish(self, context);
-        }
-    }
-
-    void Compile(TFinalizationContext& context) noexcept {
-        Y_VERIFY(Stage != EStage::Aborted);
-        if ((ui32)Stage >= (ui32)EStage::Compiled) {
-            return;
-        }
-        Y_VERIFY(Stage == EStage::Started);
-
-        DoCompile(context);
-
-        Stage = EStage::Compiled;
-    }
+    void Compile(TFinalizationContext& context) noexcept;
 
     void SetBlobs(THashMap<TBlobRange, TString>&& blobs) {
         Y_VERIFY(!blobs.empty());
@@ -260,7 +257,6 @@ public:
 
     TSnapshot InitSnapshot = TSnapshot::Zero();
     THashMap<TBlobRange, TString> Blobs;
-    bool NeedRepeat{false};
 
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const = 0;
     virtual TString TypeString() const = 0;

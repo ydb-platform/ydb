@@ -1,12 +1,16 @@
 #include "column_engine_logs.h"
 #include "filter.h"
-#include "index_logic_logs.h"
 #include "indexed_read_data.h"
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/formats/arrow/one_batch_input_stream.h>
 #include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
 #include <ydb/library/conclusion/status.h>
+#include "changes/indexation.h"
+#include "changes/in_granule_compaction.h"
+#include "changes/split_compaction.h"
+#include "changes/cleanup.h"
+#include "changes/ttl.h"
 
 #include <concepts>
 
@@ -121,6 +125,35 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
 }
 
 } // namespace
+
+std::shared_ptr<NKikimr::NOlap::TCompactColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildCompactionChanges(std::unique_ptr<TCompactionInfo>&& info,
+    const TCompactionLimits& limits, const TSnapshot& initSnapshot) {
+    std::shared_ptr<TCompactColumnEngineChanges> result;
+    if (info->InGranule()) {
+        result = std::make_shared<TInGranuleCompactColumnEngineChanges>(limits, std::move(info));
+    } else {
+        result = std::make_shared<TSplitCompactColumnEngineChanges>(limits, std::move(info));
+    }
+    result->InitSnapshot = initSnapshot;
+    return result;
+}
+
+std::shared_ptr<NKikimr::NOlap::TCleanupColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildCleanupChanges(const TSnapshot& initSnapshot) {
+    auto changes = std::make_shared<TCleanupColumnEngineChanges>();
+    changes->InitSnapshot = initSnapshot;
+    return changes;
+}
+
+std::shared_ptr<NKikimr::NOlap::TTTLColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildTtlChanges() {
+    return std::make_shared<TTTLColumnEngineChanges>();
+}
+
+std::shared_ptr<NKikimr::NOlap::TInsertColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildInsertChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot) {
+    auto changes = std::make_shared<TInsertColumnEngineChanges>(defaultMark);
+    changes->DataToIndex = std::move(blobsToIndex);
+    changes->InitSnapshot = initSnapshot;
+    return changes;
+}
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits))

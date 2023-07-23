@@ -2,6 +2,7 @@
 #include "indexed_read_data.h"
 #include "filter.h"
 #include "column_engine_logs.h"
+#include "changes/mark_granules.h"
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 #include <ydb/core/formats/arrow/one_batch_input_stream.h>

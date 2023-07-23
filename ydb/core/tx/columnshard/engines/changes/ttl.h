@@ -9,6 +9,10 @@ private:
     using TBase = TCleanupColumnEngineChanges;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
     ui64 ExportNo = 0;
+    bool UpdateEvictedPortion(TPortionInfo& portionInfo,
+        TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
+        std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs, TConstructionContext& context) const;
+
 protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
     virtual void DoCompile(TFinalizationContext& context) override;
@@ -17,6 +21,10 @@ protected:
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) override;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
+    virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
+    virtual bool NeedConstruction() const override {
+        return PortionsToEvict.size();
+    }
 public:
     std::vector<TColumnRecord> EvictedRecords;
     std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}

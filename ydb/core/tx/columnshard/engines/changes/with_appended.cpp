@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/splitter/splitter.h>
 
 namespace NKikimr::NOlap {
 
@@ -99,6 +100,49 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
         i.UpdatePortionId(context.NextPortionId());
         i.UpdateRecordsMeta(TPortionMeta::INSERTED);
     }
+}
+
+std::vector<NKikimr::NOlap::TPortionInfo> TChangesWithAppend::MakeAppendedPortions(
+    const ui64 pathId, const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot,
+    std::vector<TString>& blobs, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
+    Y_VERIFY(batch->num_rows());
+
+    auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
+    std::vector<TPortionInfo> out;
+
+    TString tierName;
+    std::optional<NArrow::TCompression> compression;
+    if (pathId) {
+        if (auto* tiering = context.GetTieringMap().FindPtr(pathId)) {
+            tierName = tiering->GetHottestTierName();
+            if (const auto& tierCompression = tiering->GetCompression(tierName)) {
+                compression = *tierCompression;
+            }
+        }
+    }
+    TSaverContext saverContext;
+    saverContext.SetTierName(tierName).SetExternalCompression(compression);
+
+    TSplitLimiter limiter(granuleMeta, context.Counters, resultSchema, batch);
+
+    std::vector<TString> portionBlobs;
+    std::shared_ptr<arrow::RecordBatch> portionBatch;
+    while (limiter.Next(portionBlobs, portionBatch, saverContext)) {
+        TPortionInfo portionInfo;
+        portionInfo.Records.reserve(resultSchema->GetSchema()->num_fields());
+        for (auto&& f : resultSchema->GetSchema()->fields()) {
+            const ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(f->name());
+            TColumnRecord record = TColumnRecord::Make(granule, columnId, snapshot, 0);
+            portionInfo.AppendOneChunkColumn(std::move(record));
+        }
+        for (auto&& i : portionBlobs) {
+            blobs.emplace_back(i);
+        }
+        portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
+        out.emplace_back(std::move(portionInfo));
+    }
+
+    return out;
 }
 
 }

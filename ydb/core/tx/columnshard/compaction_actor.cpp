@@ -2,7 +2,6 @@
 #include "blob_cache.h"
 
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -135,8 +134,8 @@ private:
         virtual bool DoExecute() override {
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
-            NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = std::move(compactionLogic.Apply(TxEvent->IndexChanges).DetachResult());
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
+            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
             return true;
         }
     public:

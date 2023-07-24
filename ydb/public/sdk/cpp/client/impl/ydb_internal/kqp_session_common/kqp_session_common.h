@@ -34,7 +34,6 @@ public:
     const TEndpointKey& GetEndpointKey() const;
     void MarkBroken();
     void MarkAsClosing();
-    void MarkStandalone();
     void MarkActive();
     void MarkIdle();
     bool IsOwnedBySessionPool() const;

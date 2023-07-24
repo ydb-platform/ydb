@@ -7,6 +7,12 @@ namespace NTable {
 
 using namespace NThreading;
 
+static const TStatus CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT = TStatus(
+    TPlainStatus(
+        EStatus::CLIENT_RESOURCE_EXHAUSTED,
+            "Active sessions limit exceeded"
+        )
+    );
 
 TSessionPool::TWaitersQueue::TWaitersQueue(ui32 maxQueueSize, TDuration maxWaitSessionTimeout)
     : MaxQueueSize_(maxQueueSize)
@@ -14,25 +20,25 @@ TSessionPool::TWaitersQueue::TWaitersQueue(ui32 maxQueueSize, TDuration maxWaitS
 {
 }
 
-bool TSessionPool::TWaitersQueue::TryPush(NThreading::TPromise<TCreateSessionResult>& p) {
+bool TSessionPool::TWaitersQueue::TryPush(std::unique_ptr<IGetSessionCtx>& p) {
     if (Waiters_.size() < MaxQueueSize_) {
-        Waiters_.insert(std::make_pair(TInstant::Now(), p));
+        Waiters_.insert(std::make_pair(TInstant::Now(), std::move(p)));
         return true;
     }
     return false;
 }
 
-TMaybe<NThreading::TPromise<TCreateSessionResult>> TSessionPool::TWaitersQueue::TryGet() {
+std::unique_ptr<IGetSessionCtx> TSessionPool::TWaitersQueue::TryGet() {
     if (Waiters_.empty()) {
         return {};
     }
     auto it = Waiters_.begin();
-    auto result = it->second;
+    auto result = std::move(it->second);
     Waiters_.erase(it);
     return result;
 }
 
-void TSessionPool::TWaitersQueue::GetOld(TInstant now, TVector<NThreading::TPromise<TCreateSessionResult>>& oldWaiters) {
+void TSessionPool::TWaitersQueue::GetOld(TInstant now, TVector<std::unique_ptr<IGetSessionCtx>>& oldWaiters) {
     auto it = Waiters_.begin();
     while (it != Waiters_.end()) {
         if (now < it->first + MaxWaitSessionTimeout_)
@@ -65,63 +71,20 @@ void TTableClient::TImpl::CloseAndDeleteSession(std::unique_ptr<TSession::TImpl>
     deleteSession->MarkBroken();
 }
 
-void TSessionPool::CreateFakeSession(
-    NThreading::TPromise<TCreateSessionResult>& promise,
-    std::shared_ptr<TTableClient::TImpl> client)
-{
-    TSession session(client, "", "", false);
-    // Mark standalone to prevent returning to session pool
-    session.SessionImpl_->MarkStandalone();
-    TCreateSessionResult val(
-        TStatus(
-            TPlainStatus(
-                EStatus::CLIENT_RESOURCE_EXHAUSTED,
-                "Active sessions limit exceeded"
-            )
-        ),
-        std::move(session)
-    );
-
-    client->ScheduleTaskUnsafe([promise, val{std::move(val)}]() mutable {
-        promise.SetValue(std::move(val));
-    }, TDuration());
-}
-
-void TSessionPool::MakeSessionPromiseFromSession(
+void TSessionPool::ReplySessionToUser(
     TKqpSessionCommon* session,
-    NThreading::TPromise<TCreateSessionResult>& promise,
-    std::shared_ptr<TTableClient::TImpl> client
-) {
+    std::unique_ptr<IGetSessionCtx> ctx)
+{
     Y_VERIFY(session->GetState() == TSession::TImpl::S_IDLE);
     Y_VERIFY(!session->GetTimeInterval());
     session->MarkActive();
     session->SetNeedUpdateActiveCounter(true);
-
-    TCreateSessionResult val(
-        TStatus(TPlainStatus()),
-        TSession(
-            client,
-            std::shared_ptr<TSession::TImpl>(
-                static_cast<TSession::TImpl*>(session),
-                TSession::TImpl::GetSmartDeleter(client)
-            )
-        )
-    );
-
-    client->ScheduleTaskUnsafe(
-        [promise, val{std::move(val)}]() mutable {
-            promise.SetValue(std::move(val));
-        },
-        TDuration()
-    );
+    ctx->ReplySessionToUser(session);
 }
 
-TAsyncCreateSessionResult TSessionPool::GetSession(
-    std::shared_ptr<TTableClient::TImpl> client,
-    const TCreateSessionSettings& settings)
+void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
 {
-    auto createSessionPromise = NewPromise<TCreateSessionResult>();
-    std::unique_ptr<TSession::TImpl> sessionImpl;
+    std::unique_ptr<TKqpSessionCommon> sessionImpl;
     enum class TSessionSource {
         Pool,
         Waiter,
@@ -133,7 +96,7 @@ TAsyncCreateSessionResult TSessionPool::GetSession(
 
         if (MaxActiveSessions_ == 0 || ActiveSessions_ < MaxActiveSessions_) {
             IncrementActiveCounterUnsafe();
-        } else if (WaitersQueue_.TryPush(createSessionPromise)) {
+        } else if (WaitersQueue_.TryPush(ctx)) {
             sessionSource = TSessionSource::Waiter;
         } else {
             sessionSource = TSessionSource::Error;
@@ -143,33 +106,31 @@ TAsyncCreateSessionResult TSessionPool::GetSession(
             sessionImpl = std::move(it->second);
             Sessions_.erase(it);
         }
-        
+
         UpdateStats();
     }
+
     if (sessionSource == TSessionSource::Waiter) {
         // Nothing to do here
     } else if (sessionSource == TSessionSource::Error) {
         FakeSessionsCounter_.Inc();
-        CreateFakeSession(createSessionPromise, client);
+        ctx->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
     } else if (sessionImpl) {
-        MakeSessionPromiseFromSession(sessionImpl.release(), createSessionPromise, client);
+        ReplySessionToUser(sessionImpl.release(), std::move(ctx));
     } else {
-        const auto& sessionResult = client->CreateSession(settings, false);
-        sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(createSessionPromise, client, settings, 0, true));
+        ctx->ReplyNewSession();
     }
-
-    return createSessionPromise.GetFuture();
 }
 
-bool TSessionPool::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TImpl> client, bool active) {
-    NThreading::TPromise<TCreateSessionResult> createSessionPromise;
+bool TSessionPool::CheckAndFeedWaiterNewSession(bool active) {
+    std::unique_ptr<IGetSessionCtx> getSessionCtx;
     {
         std::lock_guard guard(Mtx_);
         if (Closed_)
             return false;
 
-        if (auto prom = WaitersQueue_.TryGet()) {
-            createSessionPromise = std::move(*prom);
+        if (auto maybeCtx = WaitersQueue_.TryGet()) {
+            getSessionCtx = std::move(maybeCtx);
         } else {
             return false;
         }
@@ -186,32 +147,24 @@ bool TSessionPool::CheckAndFeedWaiterNewSession(std::shared_ptr<TTableClient::TI
         // The above mentioned conditions is quite rare so
         // we can just return an error. In this case uplevel code should
         // start retry.
-        CreateFakeSession(createSessionPromise, client);
+        getSessionCtx->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
         return true;
     }
 
-    // This code can be called from client dtors. It may be unsafe to
-    // execute grpc call directly...
-    client->ScheduleTaskUnsafe([createSessionPromise, client]() mutable {
-        TCreateSessionSettings settings;
-        settings.ClientTimeout(CREATE_SESSION_INTERNAL_TIMEOUT);
-
-        const auto& sessionResult = client->CreateSession(settings, false);
-        sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(createSessionPromise, client, settings, 0, true));
-    }, TDuration());
+    getSessionCtx->ReplyNewSession();
     return true;
 }
 
-bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active, std::shared_ptr<TTableClient::TImpl> client) {
-    // Do not set promise under the session pool lock
-    NThreading::TPromise<TCreateSessionResult> createSessionPromise;
+bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
+    // Do not call ReplySessionToUser under the session pool lock
+    std::unique_ptr<IGetSessionCtx> getSessionCtx;
     {
         std::lock_guard guard(Mtx_);
         if (Closed_)
             return false;
 
-        if (auto prom = WaitersQueue_.TryGet()) {
-            createSessionPromise = std::move(*prom);
+        if (auto maybeCtx = WaitersQueue_.TryGet()) {
+            getSessionCtx = std::move(maybeCtx);
             if (!active)
                 IncrementActiveCounterUnsafe();
         } else {
@@ -228,8 +181,8 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active, std::shar
         UpdateStats();
     }
 
-    if (createSessionPromise.Initialized()) {
-        MakeSessionPromiseFromSession(impl, createSessionPromise, client);
+    if (getSessionCtx) {
+        ReplySessionToUser(impl, std::move(getSessionCtx));
     }
 
     return true;
@@ -278,7 +231,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> 
             sessionsToTouch.reserve(keepAliveBatchSize);
             TVector<std::unique_ptr<TSession::TImpl>> sessionsToDelete;
             sessionsToDelete.reserve(keepAliveBatchSize);
-            TVector<NThreading::TPromise<TCreateSessionResult>> waitersToReplyError;
+            TVector<std::unique_ptr<IGetSessionCtx>> waitersToReplyError;
             waitersToReplyError.reserve(keepAliveBatchSize);
             const auto now = TInstant::Now();
             {
@@ -324,7 +277,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> 
 
             for (auto& waiter : waitersToReplyError) {
                 FakeSessionsCounter_.Inc();
-                CreateFakeSession(waiter, strongClient);
+                waiter->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);
             }
         }
 

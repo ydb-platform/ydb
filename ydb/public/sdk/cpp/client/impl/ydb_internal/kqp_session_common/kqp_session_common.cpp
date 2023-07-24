@@ -73,11 +73,6 @@ void TKqpSessionCommon::MarkAsClosing() {
     }
 }
 
-void TKqpSessionCommon::MarkStandalone() {
-    State_ = EState::S_STANDALONE;
-    NeedUpdateActiveCounter_ = false;
-}
-
 void TKqpSessionCommon::MarkActive() {
     State_ = EState::S_ACTIVE;
     NeedUpdateActiveCounter_ = false;

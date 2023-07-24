@@ -1,14 +1,12 @@
 #include "table_client.h"
 
-
 namespace NYdb {
+
 namespace NTable {
 
 using namespace NThreading;
 
-
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
-
 
 bool IsSessionCloseRequested(const TStatus& status) {
     const auto& meta = status.GetResponseMetadata();
@@ -341,7 +339,63 @@ void TTableClient::TImpl::StartPeriodicHostScanTask() {
 }
 
 TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSettings& settings) {
-    return SessionPool_.GetSession(shared_from_this(), settings);
+    using namespace NSessionPool;
+
+    class TTableClientGetSessionCtx : public IGetSessionCtx {
+    public:
+        TTableClientGetSessionCtx(std::shared_ptr<TTableClient::TImpl> client, TDuration clientTimeout)
+            : Promise(NewPromise<TCreateSessionResult>())
+            , Client(client)
+            , ClientTimeout(clientTimeout)
+        {}
+
+        TAsyncCreateSessionResult GetFuture() {
+            return Promise.GetFuture();
+        }
+
+        void ReplyError(TStatus status) override {
+            TSession session(Client, "", "", false);
+            ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
+        }
+
+        void ReplySessionToUser(TKqpSessionCommon* session) override {
+            TCreateSessionResult val(
+                TStatus(TPlainStatus()),
+                TSession(
+                    Client,
+                    std::shared_ptr<TSession::TImpl>(
+                        static_cast<TSession::TImpl*>(session),
+                        TSession::TImpl::GetSmartDeleter(Client)
+                    )
+                )
+            );
+
+            ScheduleReply(std::move(val));
+        }
+
+        void ReplyNewSession() override {
+            TCreateSessionSettings settings;
+            settings.ClientTimeout(ClientTimeout);
+            const auto& sessionResult = Client->CreateSession(settings, false);
+            sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(Promise, Client, settings, 0, true));
+        }
+
+    private:
+        void ScheduleReply(TCreateSessionResult val) {
+            //TODO: Do we realy need it?
+            Client->ScheduleTaskUnsafe([promise{std::move(Promise)}, val{std::move(val)}]() mutable {
+                promise.SetValue(std::move(val));
+            }, TDuration());
+        }
+        NThreading::TPromise<TCreateSessionResult> Promise;
+        std::shared_ptr<TTableClient::TImpl> Client;
+        const TDuration ClientTimeout;
+    };
+
+    auto ctx = std::make_unique<TTableClientGetSessionCtx>(shared_from_this(), settings.ClientTimeout_);
+    auto future = ctx->GetFuture();
+    SessionPool_.GetSession(std::move(ctx));
+    return future;
 }
 
 i64 TTableClient::TImpl::GetActiveSessionCount() const {
@@ -374,9 +428,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
             }
             auto session = TSession(self, result.session_id(), status.Endpoint, !standalone);
             if (status.Ok()) {
-                if (standalone) {
-                    session.SessionImpl_->MarkStandalone();
-                } else {
+                if (!standalone) {
                     session.SessionImpl_->MarkActive();
                 }
                 self->DbDriverState_->StatCollector.IncSessionsOnHost(status.Endpoint);
@@ -860,7 +912,7 @@ bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
     // Also removes NeedUpdateActiveCounter flag
     sessionImpl->MarkIdle();
     sessionImpl->SetTimeInterval(TDuration::Zero());
-    if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter, shared_from_this())) {
+    if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
         sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
         return false;
     }
@@ -870,7 +922,7 @@ bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
 void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     // Closing not owned by session pool session should not fire getting new session
     if (sessionImpl->IsOwnedBySessionPool()) {
-        if (SessionPool_.CheckAndFeedWaiterNewSession(shared_from_this(), sessionImpl->NeedUpdateActiveCounter())) {
+        if (SessionPool_.CheckAndFeedWaiterNewSession(sessionImpl->NeedUpdateActiveCounter())) {
             // We requested new session for waiter which already incremented
             // active session counter and old session will be deleted
             // - skip update active counter in this case

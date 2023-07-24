@@ -27,7 +27,7 @@ TNodePtr TSqlExpression::Build(const TRule_expr& node) {
             case TRule_expr::kAltExpr2: {
                 return TypeNode(node.GetAlt_expr2().GetRule_type_name_composite1());
             }
-            default:
+            case TRule_expr::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
         }
     }
@@ -392,7 +392,11 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             result.Expr = BuildEmptyAction(Ctx.Pos());
             break;
         }
-        default:
+        case TRule_literal_value::kAltLiteralValue4:
+        case TRule_literal_value::kAltLiteralValue6:
+        case TRule_literal_value::kAltLiteralValue7:
+        case TRule_literal_value::kAltLiteralValue8:
+        case TRule_literal_value::ALT_NOT_SET:
             AltNotImplemented("literal_value", node);
     }
     if (!result.Expr) {
@@ -488,7 +492,7 @@ void TSqlExpression::AddJsonVariable(const TRule_json_variable& node, TVector<TN
             nameFlags = parsed->Flags;
             break;
         }
-        default:
+        case TRule_json_variable_name::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -552,7 +556,7 @@ TNodePtr TSqlExpression::JsonValueCaseHandler(const TRule_json_case_handler& nod
         case TRule_json_case_handler::kAltJsonCaseHandler3:
             mode = EJsonValueHandlerMode::DefaultValue;
             return Build(node.GetAlt_json_case_handler3().GetBlock1().GetRule_expr2());
-        default:
+        case TRule_json_case_handler::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -734,7 +738,7 @@ EJsonQueryHandler TSqlExpression::JsonQueryHandler(const TRule_json_query_handle
             return EJsonQueryHandler::EmptyArray;
         case TRule_json_query_handler::kAltJsonQueryHandler4:
             return EJsonQueryHandler::EmptyObject;
-        default:
+        case TRule_json_query_handler::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -804,7 +808,7 @@ TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
             result = JsonQueryExpr(jsonQuery);
             break;
         }
-        default:
+        case TRule_json_api_expr::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -860,7 +864,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             }
             break;
         }
-        default:
+        case TUnaryCasualExprRule::TBlock1::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -888,7 +892,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             // dot
             break;
         }
-        default:
+        case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:
             AltNotImplemented("unary_subexpr_suffix", b);
             return nullptr;
         }
@@ -1013,7 +1017,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                     ids.push_back(Id(bb.GetAlt3().GetRule_an_id_or_type1(), *this));
                     break;
                 }
-                default:
+                case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
                     Y_FAIL("You should change implementation according to grammar changes");
             }
 
@@ -1024,7 +1028,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
 
             break;
         }
-        default:
+        case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:
             AltNotImplemented("unary_subexpr_suffix", b);
             return nullptr;
         }
@@ -1180,7 +1184,7 @@ TNodePtr TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
             source = values.Build(alt, pos);
             break;
         }
-        default:
+        case TRule_exists_expr::TBlock3::ALT_NOT_SET:
             AltNotImplemented("exists_expr", rule.GetBlock3());
     }
 
@@ -1301,7 +1305,7 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
                     }
                     break;
                 }
-                default:
+                case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
                     Y_FAIL("Unsigned number: you should change implementation according to grammar changes");
             }
             result.Expr = BuildCallable(pos, module, name, {});
@@ -1323,7 +1327,7 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
         case TRule_atom_expr::kAltAtomExpr12:
             result.Expr = StructLiteral(node.GetAlt_atom_expr12().GetRule_struct_literal1());
             break;
-        default:
+        case TRule_atom_expr::ALT_NOT_SET:
             AltNotImplemented("atom_expr", node);
     }
     if (!result.Expr) {
@@ -1387,7 +1391,7 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
                 }
                 break;
             }
-            default:
+            case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
             }
             result.Expr = BuildCallable(pos, module, name, {});
@@ -1429,7 +1433,7 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
         case TRule_in_atom_expr::kAltInAtomExpr12:
             result.Expr = StructLiteral(node.GetAlt_in_atom_expr12().GetRule_struct_literal1());
             break;
-        default:
+        case TRule_in_atom_expr::ALT_NOT_SET:
             AltNotImplemented("in_atom_expr", node);
     }
     if (!result.Expr) {
@@ -1524,7 +1528,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
                 }
                 break;
             }
-            default:
+            case TRule_lambda_stmt::ALT_NOT_SET:
                 Y_FAIL("SampleClause: does not correspond to grammar changes");
         }
     }
@@ -1571,7 +1575,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             auto expr = UnaryExpr(node.GetAlt_con_subexpr2().GetRule_unary_subexpr2(), tail);
             return expr ? expr->ApplyUnaryOp(Ctx, pos, opName) : expr;
         }
-        default:
+        case TRule_con_subexpr::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     return nullptr;
@@ -1857,7 +1861,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 auto getNode = [](const TRule_cond_expr::TAlt5::TBlock1& b) -> const TRule_eq_subexpr& { return b.GetRule_eq_subexpr2(); };
                 return BinOpList(node.GetRule_eq_subexpr1(), getNode, alt.GetBlock1().begin(), alt.GetBlock1().end(), tail);
             }
-            default:
+            case TRule_cond_expr::ALT_NOT_SET:
                 Ctx.IncrementMonCounter("sql_errors", "UnknownConditionExpr");
                 AltNotImplemented("cond_expr", cond);
                 return nullptr;
@@ -2059,7 +2063,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
                 Ctx.IncrementMonCounter("sql_binary_operations", "BitXor");
                 break;
             }
-            default:
+            case TRule_neq_subexpr_TBlock2_TBlock1::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
         }
 
@@ -2128,7 +2132,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNod
                 Ctx.IncrementMonCounter("sql_binary_operations", opName);
                 break;
             }
-            default:
+            case TRule_cond_expr::TAlt5::TBlock1::TBlock1::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
         }
 

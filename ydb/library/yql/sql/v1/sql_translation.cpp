@@ -43,7 +43,7 @@ TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
             return GetIdentifier(ctx, node.GetAlt_keyword7().GetRule_keyword_window_uncompat1());
         case TRule_keyword::kAltKeyword8:
             return GetIdentifier(ctx, node.GetAlt_keyword8().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_keyword::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -55,7 +55,7 @@ TString Id(const TRule_id& node, TTranslation& ctx) {
             return Id(node.GetAlt_id1().GetRule_identifier1(), ctx);
         case TRule_id::kAltId2:
             return GetKeyword(ctx, node.GetAlt_id2().GetRule_keyword1());
-        default:
+        case TRule_id::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -66,7 +66,7 @@ TString Id(const TRule_id_or_type& node, TTranslation& ctx) {
             return Id(node.GetAlt_id_or_type1().GetRule_id1(), ctx);
         case TRule_id_or_type::kAltIdOrType2:
             return ctx.Identifier(node.GetAlt_id_or_type2().GetRule_type_id1().GetToken1());
-        default:
+        case TRule_id_or_type::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -77,7 +77,7 @@ TString Id(const TRule_id_as_compat& node, TTranslation& ctx) {
             return Id(node.GetAlt_id_as_compat1().GetRule_identifier1(), ctx);
         case TRule_id_as_compat::kAltIdAsCompat2:
             return ctx.Token(node.GetAlt_id_as_compat2().GetRule_keyword_as_compat1().GetToken1());
-        default:
+        case TRule_id_as_compat::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -88,7 +88,7 @@ TString Id(const TRule_an_id_as_compat& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_as_compat1().GetRule_id_as_compat1(), ctx);
         case TRule_an_id_as_compat::kAltAnIdAsCompat2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_as_compat2().GetToken1()));
-        default:
+        case TRule_an_id_as_compat::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -120,7 +120,7 @@ TString Id(const TRule_id_schema& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_schema6().GetRule_keyword_window_uncompat1());
         case TRule_id_schema::kAltIdSchema7:
             return GetKeyword(ctx, node.GetAlt_id_schema7().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_id_schema::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -132,7 +132,7 @@ TString Id(const TRule_an_id_or_type& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_or_type1().GetRule_id_or_type1(), ctx);
         case TRule_an_id_or_type::kAltAnIdOrType2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_or_type2().GetToken1()));
-        default:
+        case TRule_an_id_or_type::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -169,7 +169,7 @@ TString Id(const TRule_id_table& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_table6().GetRule_keyword_window_uncompat1());
         case TRule_id_table::kAltIdTable7:
             return GetKeyword(ctx, node.GetAlt_id_table7().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_id_table::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -181,7 +181,7 @@ TString Id(const TRule_an_id_table& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_table1().GetRule_id_table1(), ctx);
         case TRule_an_id_table::kAltAnIdTable2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_table2().GetToken1()));
-        default:
+        case TRule_an_id_table::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -192,7 +192,7 @@ TString Id(const TRule_id_table_or_type& node, TTranslation& ctx) {
             return Id(node.GetAlt_id_table_or_type1().GetRule_an_id_table1(), ctx);
         case TRule_id_table_or_type::kAltIdTableOrType2:
             return ctx.Identifier(node.GetAlt_id_table_or_type2().GetRule_type_id1().GetToken1());
-        default:
+        case TRule_id_table_or_type::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -222,7 +222,7 @@ TString Id(const TRule_id_expr& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_expr5().GetRule_keyword_window_uncompat1());
         case TRule_id_expr::kAltIdExpr6:
             return GetKeyword(ctx, node.GetAlt_id_expr6().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_id_expr::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -259,7 +259,7 @@ TString Id(const TRule_id_expr_in& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_expr_in4().GetRule_keyword_window_uncompat1());
         case TRule_id_expr_in::kAltIdExprIn5:
             return GetKeyword(ctx, node.GetAlt_id_expr_in5().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_id_expr_in::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -293,7 +293,7 @@ TString Id(const TRule_id_window& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_window7().GetRule_keyword_in_uncompat1());
         case TRule_id_window::kAltIdWindow8:
             return GetKeyword(ctx, node.GetAlt_id_window8().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_id_window::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -325,7 +325,7 @@ TString Id(const TRule_id_without& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_without6().GetRule_keyword_window_uncompat1());
         case TRule_id_without::kAltIdWithout7:
             return GetKeyword(ctx, node.GetAlt_id_without7().GetRule_keyword_hint_uncompat1());
-        default:
+        case TRule_id_without::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -359,7 +359,7 @@ TString Id(const TRule_id_hint& node, TTranslation& ctx) {
             return GetKeyword(ctx, node.GetAlt_id_hint7().GetRule_keyword_in_uncompat1());
         case TRule_id_hint::kAltIdHint8:
             return GetKeyword(ctx, node.GetAlt_id_hint8().GetRule_keyword_window_uncompat1());
-        default:
+        case TRule_id_hint::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -371,7 +371,7 @@ TString Id(const TRule_an_id& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id1().GetRule_id1(), ctx);
         case TRule_an_id::kAltAnId2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id2().GetToken1()));
-        default:
+        case TRule_an_id::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -383,7 +383,7 @@ TString Id(const TRule_an_id_schema& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_schema1().GetRule_id_schema1(), ctx);
         case TRule_an_id_schema::kAltAnIdSchema2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_schema2().GetToken1()));
-        default:
+        case TRule_an_id_schema::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -395,7 +395,7 @@ TString Id(const TRule_an_id_expr& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_expr1().GetRule_id_expr1(), ctx);
         case TRule_an_id_expr::kAltAnIdExpr2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_expr2().GetToken1()));
-        default:
+        case TRule_an_id_expr::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -407,7 +407,7 @@ TString Id(const TRule_an_id_window& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_window1().GetRule_id_window1(), ctx);
         case TRule_an_id_window::kAltAnIdWindow2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_window2().GetToken1()));
-        default:
+        case TRule_an_id_window::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -419,7 +419,7 @@ TString Id(const TRule_an_id_without& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_without1().GetRule_id_without1(), ctx);
         case TRule_an_id_without::kAltAnIdWithout2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_without2().GetToken1()));
-        default:
+        case TRule_an_id_without::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -431,7 +431,7 @@ TString Id(const TRule_an_id_hint& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_hint1().GetRule_id_hint1(), ctx);
         case TRule_an_id_hint::kAltAnIdHint2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_hint2().GetToken1()));
-        default:
+        case TRule_an_id_hint::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -443,7 +443,7 @@ TString Id(const TRule_an_id_pure& node, TTranslation& ctx) {
             return Id(node.GetAlt_an_id_pure1().GetRule_identifier1(), ctx);
         case TRule_an_id_pure::kAltAnIdPure2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_pure2().GetToken1()));
-        default:
+        case TRule_an_id_pure::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -461,7 +461,7 @@ bool NamedNodeImpl(const TRule_bind_parameter& node, TString& name, TTranslation
         case TRule_bind_parameter::TBlock2::kAlt3:
             id = ctx.Token(node.GetBlock2().GetAlt3().GetToken1());
             break;
-        default:
+        case TRule_bind_parameter::TBlock2::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     auto dollar = ctx.Token(node.GetToken1());
@@ -522,7 +522,7 @@ TDeferredAtom PureColumnOrNamed(const TRule_pure_column_or_named& node, TTransla
 
     case TRule_pure_column_or_named::kAltPureColumnOrNamed2:
         return TDeferredAtom(ctx.Context().Pos(), Id(node.GetAlt_pure_column_or_named2().GetRule_an_id1(), ctx));
-    default:
+    case TRule_pure_column_or_named::ALT_NOT_SET:
         Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -569,7 +569,7 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
         case TRule_table_index_type::kAltTableIndexType2:
             ctx.AltNotImplemented("local", indexType);
             return false;
-        default:
+        case TRule_table_index_type::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -900,7 +900,7 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
 
         return true;
     }
-    default:
+    case TRule_cluster_expr::TBlock2::ALT_NOT_SET:
         Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -1127,7 +1127,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             result.Source = ret;
             return true;
         }
-        default:
+        case TRule_table_ref::TBlock3::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -1224,7 +1224,7 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
 
     auto typeNameNode = node.GetAlt_type_name_or_bind1().GetRule_type_name1();
     if (typeNameNode.Alt_case() != TRule_type_name::kAltTypeName2) {
-        return nullptr;   
+        return nullptr;
     }
 
     auto alt = typeNameNode.GetAlt_type_name2();
@@ -1232,7 +1232,7 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
     if (block.Alt_case() != TRule_type_name::TAlt2::TBlock1::kAlt2) {
         return nullptr;
     }
-    
+
     auto alt2 = block.GetAlt2().GetRule_type_name_simple1();
     const TString name = Id(alt2.GetRule_an_id_pure1(), *this);
     if (name.empty()) {
@@ -2240,7 +2240,7 @@ TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
             auto atom = MakeAtomFromExpression(Ctx, namedNode);
             return atom.Build();
         }
-        default:
+        case TRule_integer_or_bind::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -2274,7 +2274,7 @@ TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
             MakeTableFromExpression(Ctx, namedNode, atom);
             return atom.Build();
         }
-        default:
+        case TRule_type_name_tag::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -2386,7 +2386,7 @@ TNodePtr TSqlTranslation::TypeNodeOrBind(const TRule_type_name_or_bind& node) {
             }
             return GetNamedNode(bindName);
         }
-        default:
+        case TRule_type_name_or_bind::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -2415,7 +2415,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
             result = TypeSimple(simpleType, false);
             break;
         }
-        default:
+        case TRule_type_name::TAlt2::TBlock1::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -2485,7 +2485,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             }
             case TRule_type_name_tuple::TBlock2::kAlt2:
                 break;
-            default:
+            case TRule_type_name_tuple::TBlock2::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
             }
 
@@ -2527,7 +2527,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                 }
                 case TRule_type_name_struct::TBlock2::kAlt2:
                     break;
-                default:
+                case TRule_type_name_struct::TBlock2::ALT_NOT_SET:
                     Y_FAIL("You should change implementation according to grammar changes");
             }
 
@@ -2713,7 +2713,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             result = new TAstListNodeImpl(pos, items);
             break;
         }
-        default:
+        case TRule_type_name_composite_TBlock1::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -2876,7 +2876,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
                     }
                     break;
                 }
-                default:
+                case TRule_table_hint_TAlt1_TBlock2_TBlock2::ALT_NOT_SET:
                     Y_FAIL("You should change implementation according to grammar changes");
             }
         }
@@ -2960,7 +2960,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         break;
     }
 
-    default:
+    case TRule_table_hint::ALT_NOT_SET:
         Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -2984,7 +2984,7 @@ TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& nod
 
         break;
     }
-    default:
+    case TRule_table_hints::TBlock2::ALT_NOT_SET:
         Y_FAIL("You should change implementation according to grammar changes");
     }
     if (hasErrors) {
@@ -3069,7 +3069,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, at ? "@" : "");
         break;
     }
-    default:
+    case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
         Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -3132,7 +3132,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                 source = expr.Build(subselect_rule.GetBlock1().GetAlt2().GetRule_select_unparenthesized_stmt1(), pos);
                 break;
 
-            default:
+            case TRule_subselect_stmt::TBlock1::ALT_NOT_SET:
                 AltNotImplemented("subselect_stmt", subselect_rule.GetBlock1());
                 Ctx.IncrementMonCounter("sql_errors", "UnknownNamedNode");
                 return nullptr;
@@ -3145,7 +3145,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
         return BuildSourceNode(pos, std::move(source));
     }
 
-    default:
+    case TRule_named_nodes_stmt::TBlock3::ALT_NOT_SET:
         AltNotImplemented("named_node", rule.GetBlock3());
         Ctx.IncrementMonCounter("sql_errors", "UnknownNamedNode");
         return nullptr;
@@ -3269,7 +3269,7 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
             }
             break;
         }
-        default:
+        case TRule_role_name::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -3411,7 +3411,7 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_id& node, TDef
             handleOneOrTwoIdentifiers(node.GetAlt_permission_id12());
             break;
         }
-        default:
+        case TRule_permission_id::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     return true;
@@ -3435,7 +3435,7 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name& node, TD
             result = TDeferredAtom(Ctx.Pos(), unescaped->Content);
             break;
         }
-        default:
+        case TRule_permission_name::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     return true;
@@ -3464,7 +3464,7 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& n
             result.emplace_back(Ctx.Pos(), "all_privileges");
             break;
         }
-        default:
+        case TRule_permission_name_target::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     if (withGrantOption) {
@@ -3602,7 +3602,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
                 case TRule_window_frame_bound_TAlt2_TBlock1::kAlt2:
                     bound->Pos = GetPos(block.GetAlt2().GetToken1());
                     break;
-                default:
+                case TRule_window_frame_bound_TAlt2_TBlock1::ALT_NOT_SET:
                     Y_FAIL("You should change implementation according to grammar changes");
             }
 
@@ -3616,7 +3616,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             }
             break;
         }
-        default:
+        case TRule_window_frame_bound::ALT_NOT_SET:
             Y_FAIL("FrameClause: frame bound not corresond to grammar changes");
     }
     return true;
@@ -3661,7 +3661,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
             }
             break;
         }
-        default:
+        case TRule_window_frame_extent::ALT_NOT_SET:
             Y_FAIL("FrameClause: frame extent not correspond to grammar changes");
     }
     YQL_ENSURE(frameSpec->FrameBegin);
@@ -3685,7 +3685,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
             case TRule_window_frame_exclusion::kAltWindowFrameExclusion4:
                 frameSpec->FrameExclusion = FrameExclNone;
                 break;
-            default:
+            case TRule_window_frame_exclusion::ALT_NOT_SET:
                 Y_FAIL("FrameClause: frame exclusion not correspond to grammar changes");
         }
     }
@@ -3832,7 +3832,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
         case TRule_call_action_TBlock1::kAlt2:
             action = BuildEmptyAction(Ctx.Pos());
             break;
-        default:
+        case TRule_call_action_TBlock1::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownDoStmt");
             AltNotImplemented("do_stmt", callAction.GetBlock1());
             return nullptr;
@@ -3899,7 +3899,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
 
         return BuildLambda(Ctx.Pos(), params, blockNode);
     }
-    default:
+    case TRule_do_stmt_TBlock2::ALT_NOT_SET:
         Y_FAIL("You should change implementation according to grammar changes");
     }
 }
@@ -4102,7 +4102,7 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
             }
             break;
         }
-        default:
+        case TRule_object_feature_value::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     return true;

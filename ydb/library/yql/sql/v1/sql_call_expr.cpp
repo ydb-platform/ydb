@@ -148,7 +148,7 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             }
             break;
         }
-        default:
+        case TRule_value_constructor::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     PositionalArgs = Args;
@@ -227,7 +227,7 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
             IsExternalCall = true;
             break;
         }
-        default:
+        case TRule_using_call_expr::TBlock1::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     YQL_ENSURE(!DistinctAllowed);
@@ -343,7 +343,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 Args.push_back(new TAsteriskNode(Pos));
             }
             break;
-        default:
+        case TRule_invoke_expr::TBlock2::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
         }
     }
@@ -372,7 +372,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
             Ctx.Error() << "FILTER clause is not supported yet";
             return false;
         }
-        default:
+        case TRule_invoke_expr_tail::TBlock1::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
         }
     }
@@ -408,7 +408,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
             specs[WindowName] = spec;
             break;
         }
-        default:
+        case TRule_window_name_or_specification::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
         }
         Ctx.IncrementMonCounter("sql_features", "WindowFunctionOver");

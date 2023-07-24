@@ -56,7 +56,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt6:
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
-        default:
+        case TRule_into_table_stmt_TBlock1::AltCase::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
@@ -134,7 +134,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             nameOrAt = std::make_pair(at, table);
             break;
         }
-        default:
+        case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
 

@@ -457,7 +457,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     stmt = BuildRenameUser(pos, service, cluster, roleName, tgtRoleName,Ctx.Scoped);
                     break;
                 }
-                default:
+                case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
                     Y_FAIL("You should change implementation according to grammar changes");
             }
 
@@ -542,7 +542,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     stmt = BuildRenameGroup(pos, service, cluster, roleName, tgtRoleName, Ctx.Scoped);
                     break;
                 }
-                default:
+                case TRule_alter_group_stmt_TBlock4::ALT_NOT_SET:
                     Y_FAIL("You should change implementation according to grammar changes");
             }
 
@@ -932,7 +932,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks, BuildUpsertObjectOperation(Ctx.Pos(), objectId, typeId, std::move(kv), context));
             break;
         }
-        default:
+        case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);
             return false;
@@ -1141,7 +1141,7 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         break;
     }
 
-    default:
+    case TRule_alter_table_action::ALT_NOT_SET:
         AltNotImplemented("alter_table_action", node);
         return false;
     }
@@ -1318,7 +1318,7 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
             break;
         }
 
-        default:
+        case TRule_changefeed_alter_settings::ALT_NOT_SET:
             AltNotImplemented("changefeed_alter_settings", alter);
             return false;
     }
@@ -2008,7 +2008,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
                 return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::DeleteOn, std::move(values));
             }
 
-            default:
+            case TRule_delete_stmt_TBlock4::ALT_NOT_SET:
                 return nullptr;
         }
     }
@@ -2059,7 +2059,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
             return BuildWriteColumns(Ctx.Pos(), Ctx.Scoped, table, EWriteColumnMode::UpdateOn, std::move(values));
         }
 
-        default:
+        case TRule_update_stmt_TBlock3::ALT_NOT_SET:
             return nullptr;
     }
 }
@@ -2070,7 +2070,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_choice& stmt) {
             return Build(stmt.GetAlt_set_clause_choice1().GetRule_set_clause_list1());
         case TRule_set_clause_choice::kAltSetClauseChoice2:
             return Build(stmt.GetAlt_set_clause_choice2().GetRule_multiple_column_assignment1());
-        default:
+        case TRule_set_clause_choice::ALT_NOT_SET:
             AltNotImplemented("set_clause_choice", stmt);
             return nullptr;
     }
@@ -2125,7 +2125,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
             }
             return BuildWriteValues(pos, "UPDATE", targetList, std::move(source));
         }
-        default:
+        case TRule_simple_values_source::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownSimpleValuesSourceAlt");
             AltNotImplemented("simple_values_source", simpleValuesNode);
             return nullptr;
@@ -2230,7 +2230,7 @@ namespace {
             }
             case TRule_type_name_or_bind::kAltTypeNameOrBind2:
                 return false;
-            default:
+            case TRule_type_name_or_bind::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
         }
 
@@ -2266,7 +2266,7 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & resul
             result["ACTION"] = TDeferredAtom(Ctx.Pos(), "DROP_COLUMN");
             break;
         }
-        default:
+        case TRule_alter_table_store_action::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }
     return true;

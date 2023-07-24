@@ -11,7 +11,7 @@
 namespace NKikimr::NCms {
 
 struct TCmsSentinelConfig {
-    bool Enable = false;
+    bool Enable = true;
     bool DryRun = false;
 
     TDuration UpdateConfigInterval;

@@ -131,6 +131,10 @@ public:
         size_t RetryAttempt = 0;
         size_t SuccessBatches = 0;
 
+        TMaybe<ui32> NodeId = {};
+        bool IsFirst = false;
+
+
         TShardState(ui64 tabletId)
             : TabletId(tabletId)
         {
@@ -875,6 +879,11 @@ public:
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
             IEventHandle::FlagTrackDelivery);
 
+        if (!FirstShardStarted) {
+            state->IsFirst = true;
+        }
+        FirstShardStarted = true;
+
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(*delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
         }
@@ -903,6 +912,22 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
+        }
+
+        if (!record.HasNodeId()) {
+            Counters->ReadActorAbsentNodeId->Inc();
+        } else if (record.GetNodeId() != SelfId().NodeId()) {
+            auto* state = Reads[id].Shard;
+            if (!state->NodeId) {
+                state->NodeId = record.GetNodeId();
+                CA_LOG_D("Node mismatch for tablet " << state->TabletId << " " << *state->NodeId << " != SelfId: " << SelfId().NodeId());
+                if (state->IsFirst) {
+                    Counters->ReadActorRemoteFirstFetch->Inc();
+                }
+                Counters->ReadActorRemoteFetch->Inc();
+            }
+        } else {
+            CA_LOG_T("Node match for tablet " << Reads[id].Shard->TabletId);
         }
 
         Counters->DataShardIteratorMessages->Inc();
@@ -1402,6 +1427,8 @@ private:
     NActors::TActorId PipeCacheId;
 
     size_t TotalRetries = 0;
+
+    bool FirstShardStarted = false;
 };
 
 

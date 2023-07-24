@@ -1726,6 +1726,8 @@ message TEvReadResult {
 
     optional uint64 RowCount = 12;
 
+    optional uint32 NodeId = 13;
+
     // Data for the possibly partial result
     oneof ReadResult {
         TArrowBatch ArrowBatch = 900;

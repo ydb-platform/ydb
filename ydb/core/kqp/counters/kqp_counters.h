@@ -384,6 +384,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr SentIteratorCancels;
     ::NMonitoring::TDynamicCounters::TCounterPtr CreatedIterators;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRemoteFirstFetch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRemoteFetch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorAbsentNodeId;
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupActorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;

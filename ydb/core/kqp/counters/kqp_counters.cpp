@@ -787,6 +787,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SentIteratorCancels = KqpGroup->GetCounter("IteratorReads/SentCancels", true);
     CreatedIterators = KqpGroup->GetCounter("IteratorReads/Created", true);
     ReadActorsCount = KqpGroup->GetCounter("IteratorReads/ReadActorCount", false);
+    ReadActorRemoteFetch = KqpGroup->GetCounter("IteratorReads/ReadActorRemoteFetch", true);
+    ReadActorRemoteFirstFetch = KqpGroup->GetCounter("IteratorReads/ReadActorRemoteFirstFetch", true);
+    ReadActorAbsentNodeId = KqpGroup->GetCounter("IteratorReads/AbsentNodeId", true);
     StreamLookupActorsCount = KqpGroup->GetCounter("IteratorReads/StreamLookupActorCount", false);
     ReadActorRetries = KqpGroup->GetCounter("IteratorReads/Retries", true);
     DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);

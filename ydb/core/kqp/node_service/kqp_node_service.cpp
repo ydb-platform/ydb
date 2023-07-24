@@ -146,6 +146,9 @@ public:
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
         }
+        if (config.HasIteratorReadQuotaSettings()) {
+            SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
+        }
     }
 
     void Bootstrap() {
@@ -593,8 +596,16 @@ private:
             SetIteratorReadsRetrySettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadsRetrySettings());
         }
 
+        if (event.GetConfig().GetTableServiceConfig().HasIteratorReadQuotaSettings()) {
+            SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
+        }
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+    }
+
+    void SetIteratorReadsQuotaSettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadQuotaSettings& settings) {
+        SetDefaultIteratorQuotaSettings(settings.GetMaxRows(), settings.GetMaxBytes());
     }
 
     void SetIteratorReadsRetrySettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadsRetrySettings& settings) {

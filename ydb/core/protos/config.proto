@@ -1272,6 +1272,11 @@ message TTableServiceConfig {
         optional uint32 MaxTotalRetries = 7;
     }
 
+    message TIteratorReadQuotaSettings {
+        optional uint32 MaxRows = 1;
+        optional uint32 MaxBytes = 2;
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1325,6 +1330,7 @@ message TTableServiceConfig {
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
     optional bool PredicateExtract20 = 44 [default = false];
+    optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 };
 
 // Config describes immediate controls and allows

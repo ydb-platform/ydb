@@ -27,35 +27,39 @@ bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-struct TDefaultRangeEvReadSettings {
-    NKikimrTxDataShard::TEvRead Data;
+struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
+    NKikimrTxDataShard::TEvRead Read;
+    NKikimrTxDataShard::TEvReadAck Ack;
 
-    TDefaultRangeEvReadSettings() {
-        Data.SetMaxRows(32767);
-        Data.SetMaxBytes(5_MB);
+    TEvReadSettings() {
+        Read.SetMaxRows(32767);
+        Read.SetMaxBytes(5_MB);
+
+        Ack.SetMaxRows(32767);
+        Ack.SetMaxBytes(5_MB);
+    }
+};
+
+struct TEvReadDefaultSettings {
+    THotSwap<TEvReadSettings> Settings;
+
+    TEvReadDefaultSettings() {
+        Settings.AtomicStore(MakeIntrusive<TEvReadSettings>());
     }
 
-} DefaultRangeEvReadSettings;
+} DefaultSettings;
 
 THolder<NKikimr::TEvDataShard::TEvRead> DefaultReadSettings() {
     auto result = MakeHolder<NKikimr::TEvDataShard::TEvRead>();
-    result->Record.MergeFrom(DefaultRangeEvReadSettings.Data);
+    auto ptr = DefaultSettings.Settings.AtomicLoad();
+    result->Record.MergeFrom(ptr->Read);
     return result;
 }
 
-struct TDefaultRangeEvReadAckSettings {
-    NKikimrTxDataShard::TEvReadAck Data;
-
-    TDefaultRangeEvReadAckSettings() {
-        Data.SetMaxRows(32767);
-        Data.SetMaxBytes(5_MB);
-    }
-
-} DefaultRangeEvReadAckSettings;
-
 THolder<NKikimr::TEvDataShard::TEvReadAck> DefaultAckSettings() {
     auto result = MakeHolder<NKikimr::TEvDataShard::TEvReadAck>();
-    result->Record.MergeFrom(DefaultRangeEvReadAckSettings.Data);
+    auto ptr = DefaultSettings.Settings.AtomicLoad();
+    result->Record.MergeFrom(ptr->Ack);
     return result;
 }
 
@@ -1442,11 +1446,30 @@ void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<T
 }
 
 void InjectRangeEvReadSettings(const NKikimrTxDataShard::TEvRead& read) {
-    ::DefaultRangeEvReadSettings.Data.MergeFrom(read);
+    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
+    TEvReadSettings settings = *ptr;
+    settings.Read.MergeFrom(read);
+    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
 }
 
 void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck& ack) {
-    ::DefaultRangeEvReadAckSettings.Data.MergeFrom(ack);
+    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
+    TEvReadSettings settings = *ptr;
+    settings.Ack.MergeFrom(ack);
+    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
+}
+
+void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes) {
+    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
+    TEvReadSettings settings = *ptr;
+
+    settings.Read.SetMaxRows(rows);
+    settings.Ack.SetMaxRows(rows);
+
+    settings.Read.SetMaxBytes(bytes);
+    settings.Ack.SetMaxBytes(bytes);
+
+    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
 }
 
 void InterceptReadActorPipeCache(NActors::TActorId id) {

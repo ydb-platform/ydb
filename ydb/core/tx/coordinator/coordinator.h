@@ -48,7 +48,7 @@ struct TEvTxCoordinator {
         TEvCoordinatorStep(const NFlatTxCoordinator::TMediatorStep &mediatorStep, ui64 prevStep, ui64 mediatorId, ui64 coordinatorId, ui64 activeGeneration);
     };
 
-    struct TEvCoordinatorStepResult : public TEventPB<TEvCoordinatorStep, NKikimrTx::TEvCoordinatorStepResult, EvCoordinatorStepResult> {
+    struct TEvCoordinatorStepResult : public TEventPB<TEvCoordinatorStepResult, NKikimrTx::TEvCoordinatorStepResult, EvCoordinatorStepResult> {
         TEvCoordinatorStepResult()
         {}
 

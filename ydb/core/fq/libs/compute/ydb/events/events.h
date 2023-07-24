@@ -37,6 +37,7 @@ struct TEvYdbCompute {
         EvExecuterResponse,
         EvStatusTrackerResponse,
         EvResultWriterResponse,
+        EvResultSetWriterResponse,
         EvResourcesCleanerResponse,
         EvFinalizerResponse,
         EvStopperResponse,
@@ -89,13 +90,15 @@ struct TEvYdbCompute {
             , Status(status)
         {}
 
-        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, NYql::TIssues issues)
+        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, NYql::TIssues issues)
             : ExecStatus(execStatus)
+            , ResultSetsMeta(resultSetsMeta)
             , Issues(std::move(issues))
             , Status(NYdb::EStatus::SUCCESS)
         {}
 
         NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
+        TVector<Ydb::Query::ResultSetMeta> ResultSetsMeta;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
     };
@@ -282,6 +285,23 @@ struct TEvYdbCompute {
 
         NYql::TIssues Issues;
         NYdb::EStatus Status;
+    };
+
+
+    struct TEvResultSetWriterResponse : public NActors::TEventLocal<TEvResultSetWriterResponse, EvResultSetWriterResponse> {
+        TEvResultSetWriterResponse(NYql::TIssues issues, NYdb::EStatus status)
+            : Issues(std::move(issues))
+            , Status(status)
+        {}
+
+        TEvResultSetWriterResponse(int64_t rowsCount)
+            : Status(NYdb::EStatus::SUCCESS)
+            , RowsCount(rowsCount)
+        {}
+
+        NYql::TIssues Issues;
+        NYdb::EStatus Status;
+        int64_t RowsCount = 0;
     };
 };
 

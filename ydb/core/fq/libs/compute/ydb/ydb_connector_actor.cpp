@@ -66,7 +66,7 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, response.Status().GetIssues()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, response.Metadata().ResultSetsMeta, response.Status().GetIssues()), 0, cookie);
                     } else {
                         actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Status().GetIssues(), response.Status().GetStatus()), 0, cookie);
                     }

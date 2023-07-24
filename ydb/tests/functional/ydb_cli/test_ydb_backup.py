@@ -54,7 +54,7 @@ def columns_to_string(columns):
     return list_to_string(columns, lambda col: col.name + ":" + str(col.type.item).strip())
 
 
-def create_table_with_data(session, path, not_null = False):
+def create_table_with_data(session, path, not_null=False):
     path = "/Root/" + path
     session.create_table(
         path,

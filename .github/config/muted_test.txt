@@ -1,10 +1,2 @@
 KqpFederatedQuery
-TPersQueueTest
-KqpScanSpilling::SelfJoin
 KqpSpillingFileTests::StartError
-RetryPolicy::TWriteSession_SeqNoShift
-TPgCodegen::PgFixedFuncBC
-TPgCodegen::PgStrFuncBC
-TTopicYqlTest::DropTopicYql
-KqpOlapScheme::DropColumn
-

@@ -1,4 +1,4 @@
-
+#include "format/sql_format.h"
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
@@ -198,8 +198,32 @@ Y_UNIT_TEST_SUITE(AnsiMode) {
 }
 
 Y_UNIT_TEST_SUITE(SqlParsingOnly) {
-    Y_UNIT_TEST(CoverColumnName) {
-        UNIT_ASSERT(SqlToYql("SELECT cover FROM plato.Input").IsOk());
+    Y_UNIT_TEST(TokensAsColumnName) {
+        const auto& forbidden = THashSet<TString>{
+                "ALL", "ANY", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "SELECT", "SET", "STREAM", "STRUCT", "TAGGED", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
+                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+            };
+
+        THashMap<TString, bool> tokens;
+        for (const auto& t: NSQLFormat::GetKeywords()) {
+            tokens[t] = !forbidden.contains((t));
+        }
+        for (const auto& f: forbidden) {
+            UNIT_ASSERT(tokens.contains(f)); //check that forbidden list contains tokens only(self check)
+        }
+        TStringBuilder failed;
+        for (const auto& [token, allowed]: tokens) {
+            TStringBuilder req;
+            req << "SELECT " << token << " FROM plato.Input";
+            if (SqlToYql(req).IsOk() != allowed)
+                failed << token << " ";
+        }
+        UNIT_ASSERT_EQUAL_C(TString{}, failed, failed);
     }
 
     Y_UNIT_TEST(TableHints) {

@@ -211,37 +211,6 @@ enum class EScope {
     DoubleQuestion
 };
 
-THashSet<TString> GetKeywords() {
-    TString grammar;
-    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
-    THashSet<TString> res;
-    TVector<TString> lines;
-    Split(grammar, "\n", lines);
-    for (auto s : lines) {
-        s = StripString(s);
-        if (s.StartsWith("//")) {
-            continue;
-        }
-
-        auto pos1 = s.find(':');
-        auto pos2 = s.find(';');
-        if (pos1 == TString::npos || pos2 == TString::npos || pos2 < pos1 + 2) {
-            continue;
-        }
-
-        auto before = s.substr(0, pos1);
-        auto after = s.substr(pos1 + 1, pos2 - pos1 - 1);
-        SubstGlobal(after, " ", "");
-        SubstGlobal(after, "'", "");
-        if (after == before) {
-            //Cerr << before << "\n";
-            res.insert(before);
-        }
-    }
-
-    return res;
-}
-
 class TVisitor;
 using TFunctor = std::function<void(TVisitor&, const NProtoBuf::Message& msg)>;
 
@@ -2324,6 +2293,37 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
         error = e.what();
         return false;
     }
+}
+
+THashSet<TString> GetKeywords() {
+    TString grammar;
+    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
+    THashSet<TString> res;
+    TVector<TString> lines;
+    Split(grammar, "\n", lines);
+    for (auto s : lines) {
+        s = StripString(s);
+        if (s.StartsWith("//")) {
+            continue;
+        }
+
+        auto pos1 = s.find(':');
+        auto pos2 = s.find(';');
+        if (pos1 == TString::npos || pos2 == TString::npos || pos2 < pos1 + 2) {
+            continue;
+        }
+
+        auto before = s.substr(0, pos1);
+        auto after = s.substr(pos1 + 1, pos2 - pos1 - 1);
+        SubstGlobal(after, " ", "");
+        SubstGlobal(after, "'", "");
+        if (after == before) {
+            //Cerr << before << "\n";
+            res.insert(before);
+        }
+    }
+
+    return res;
 }
 
 } // namespace NSQLFormat

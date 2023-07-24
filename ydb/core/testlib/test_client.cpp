@@ -103,6 +103,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
@@ -850,7 +851,11 @@ namespace Tests {
                 }
             }
         }
-
+        {
+            IActor* icNodeCache = NIcNodeCache::CreateICNodesInfoCacheService(Runtime->GetDynamicCounters());
+            TActorId icCacheId = Runtime->Register(icNodeCache, nodeIdx);
+            Runtime->RegisterService(NIcNodeCache::CreateICNodesInfoCacheServiceId(), icCacheId, nodeIdx);
+        }
         {
             auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
             if (!Driver) {

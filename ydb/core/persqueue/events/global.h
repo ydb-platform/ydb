@@ -47,6 +47,8 @@ struct TEvPersQueue {
         EvProposeTransactionResult,
         EvCancelTransactionProposal,
         EvPeriodicTopicStats,
+        EvGetPartitionsLocation,
+        EvGetPartitionsLocationResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -83,9 +85,16 @@ struct TEvPersQueue {
 
     struct TEvGetReadSessionsInfo: public TEventPB<TEvGetReadSessionsInfo,
             NKikimrPQ::TGetReadSessionsInfo, EvGetReadSessionsInfo> {
-            TEvGetReadSessionsInfo(const TString& consumer = "") {
+            explicit TEvGetReadSessionsInfo(const TString& consumer = "") {
                 if (!consumer.empty()) {
                     Record.SetClientId(consumer);
+                }
+            }
+            explicit TEvGetReadSessionsInfo(const TVector<ui32>& partitions) {
+                if (!partitions.empty()) {
+                    for (auto p: partitions) {
+                        Record.AddPartitions(p);
+                    }
                 }
             }
     };
@@ -93,6 +102,19 @@ struct TEvPersQueue {
     struct TEvReadSessionsInfoResponse: public TEventPB<TEvReadSessionsInfoResponse,
             NKikimrPQ::TReadSessionsInfoResponse, EvReadSessionsInfoResponse> {
             TEvReadSessionsInfoResponse() {}
+    };
+
+    struct TEvGetPartitionsLocation: public TEventPB<TEvGetPartitionsLocation,
+            NKikimrPQ::TGetPartitionsLocation, EvGetPartitionsLocation> {
+            TEvGetPartitionsLocation(const TVector<ui64>& partitionIds = {}) {
+                for (const auto& p : partitionIds) {
+                    Record.AddPartitions(p);
+                }
+            }
+    };
+
+    struct TEvGetPartitionsLocationResponse: public TEventPB<TEvGetPartitionsLocationResponse,
+            NKikimrPQ::TPartitionsLocationResponse, EvGetPartitionsLocationResponse> {
     };
 
     struct TEvLockPartition : public TEventPB<TEvLockPartition,

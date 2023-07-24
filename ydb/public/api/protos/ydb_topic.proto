@@ -760,7 +760,7 @@ message PartitionLocation {
     int32 node_id = 1;
 
     // Partition generation.
-    uint64 generation = 2;
+    int64 generation = 2;
 }
 
 // Describe topic request sent from client to server.

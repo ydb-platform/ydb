@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(describes_ut)
 add_subdirectory(new_schemecache_ut)
 
 add_executable(ydb-services-persqueue_v1-ut)

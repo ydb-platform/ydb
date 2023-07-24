@@ -1459,6 +1459,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
     
+    if (serviceMask.EnableIcNodeCacheService) {
+        sil->AddServiceInitializer(new TIcNodeCacheServiceInitializer(runConfig));
+    }
+
     if (BusServer && serviceMask.EnableMessageBusServices) {
         sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer));
     }

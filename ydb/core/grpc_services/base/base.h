@@ -137,6 +137,7 @@ struct TRpcServices {
         EvAlterTopic,
         EvDescribeTopic,
         EvDescribeConsumer,
+        EvDescribePartition,
         EvGetDiskSpaceUsage,
         EvStopServingDatabase,
         EvCoordinationSession,

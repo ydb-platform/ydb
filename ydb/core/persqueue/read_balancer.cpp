@@ -663,24 +663,33 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
-    RestartPipe(ev->Get()->TabletId, ctx);
+    ClosePipe(ev->Get()->TabletId, ctx);
     RequestTabletIfNeeded(ev->Get()->TabletId, ctx);
 }
 
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
 {
+    auto tabletId = ev->Get()->TabletId;
+    PipesRequested.erase(tabletId);
+
     if (ev->Get()->Status != NKikimrProto::OK) {
-        RestartPipe(ev->Get()->TabletId, ctx);
+        ClosePipe(ev->Get()->TabletId, ctx);
         RequestTabletIfNeeded(ev->Get()->TabletId, ctx);
+    } else {
+        auto it = TabletPipes.find(tabletId);
+        if (!it.IsEnd()) {
+            it->second.Generation = ev->Get()->Generation;
+            it->second.NodeId = ev->Get()->ServerId.NodeId();
+        }
     }
 }
 
-void TPersQueueReadBalancer::RestartPipe(const ui64 tabletId, const TActorContext& ctx)
+void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
 {
     auto it = TabletPipes.find(tabletId);
     if (it != TabletPipes.end()) {
-        NTabletPipe::CloseClient(ctx, it->second);
+        NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
     }
 }
@@ -692,9 +701,11 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
     if (it == TabletPipes.end()) {
         NTabletPipe::TClientConfig clientConfig;
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
-        TabletPipes[tabletId] = pipeClient;
+        TabletPipes[tabletId].PipeActor = pipeClient;
+        auto res = PipesRequested.insert(tabletId);
+        Y_VERIFY(res.second);
     } else {
-        pipeClient = it->second;
+        pipeClient = it->second.PipeActor;
     }
 
     return pipeClient;
@@ -1163,11 +1174,17 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
     auto it = ClientsInfo.find(record.GetClientId());
     THolder<TEvPersQueue::TEvReadSessionsInfoResponse> response(new TEvPersQueue::TEvReadSessionsInfoResponse());
 
+    THashSet<ui32> partitionsRequested;
+    for (auto p : record.GetPartitions()) {
+        partitionsRequested.insert(p);
+    }
     response->Record.SetTabletId(TabletID());
 
     if (it != ClientsInfo.end()) {
         for (auto& c : it->second.ClientGroupsInfo) {
             for (auto& p : c.second.PartitionsInfo) {
+                if (partitionsRequested && !partitionsRequested.contains(p.first))
+                    continue;
                 auto pi = response->Record.AddPartitionInfo();
                 pi->SetPartition(p.first);
                 if (p.second.State == EPS_ACTIVE) {
@@ -1305,6 +1322,55 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev
     cit->second.ScheduleBalance(ctx);
 }
 
+void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
+    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+    evResponse->Record.SetStatus(false);
+    ctx.Send(ev->Sender, evResponse);
+}
+
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
+    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+    const auto& request = ev->Get()->Record;
+    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
+        auto* pResponse = evResponse->Record.AddLocations();
+        pResponse->SetPartitionId(partitionId);
+        if (PipesRequested.contains(tabletId)) {
+            return false;
+        }
+        auto iter = TabletPipes.find(tabletId);
+        if (iter.IsEnd()) {
+            GetPipeClient(tabletId, ctx);
+            return false;
+        }
+        pResponse->SetNodeId(iter->second.NodeId.GetRef());
+        pResponse->SetGeneration(iter->second.Generation.GetRef());
+        return true;
+    };
+    auto sendResponse = [&](bool status) {
+        evResponse->Record.SetStatus(status);
+        ctx.Send(ev->Sender, evResponse);
+    };
+    bool ok = true;
+    if (request.PartitionsSize() == 0) {
+        if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
+            // Do not have all pipes connected.
+            return sendResponse(false);
+        }
+        for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
+            ok = addPartitionToResponse(partitionId, partitionInfo.TabletId) && ok;
+        }
+    } else {
+        for (const auto& partitionInRequest : request.GetPartitions()) {
+            auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
+            if (partitionInfoIter.IsEnd()) {
+                return sendResponse(false);
+            }
+            ok = addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId) && ok;
+        }
+    }
+    return sendResponse(ok);
+}
 
 
 void TPersQueueReadBalancer::RebuildStructs() {

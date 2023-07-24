@@ -1505,7 +1505,7 @@ void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
     } else if (PipeConnectAcceptor->IsActive()) {
-        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader);
+        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader, SuggestedGeneration);
     } else {
         PipeConnectAcceptor->Enqueue(ev, SelfId());
     }

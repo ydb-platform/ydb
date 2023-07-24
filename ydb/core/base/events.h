@@ -161,7 +161,8 @@ struct TKikimrEvents : TEvents {
         ES_DISCOVERY,
         ES_EXT_INDEX,
         ES_CONVEYOR,
-        ES_KQP_SCAN_EXCHANGE
+        ES_KQP_SCAN_EXCHANGE,
+        ES_IC_NODE_CACHE
     };
 };
 

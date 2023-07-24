@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/percentile_counter.h>
 
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/services/lib/actors/type_definitions.h>
 
@@ -63,6 +64,7 @@ struct TEvPQProxy {
         EvTopicUpdateToken,
         EvCommitRange,
         EvRequestTablet,
+        EvPartitionLocationResponse,
         EvEnd
     };
 
@@ -443,6 +445,50 @@ struct TEvPQProxy {
 
         ui64 TabletId;
     };
+
+    struct TLocalResponseBase {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+    };
+
+    struct TPartitionLocationInfo {
+        ui64 PartitionId;
+        ui64 IncGeneration;
+        ui64 NodeId;
+        TString Hostname;
+    };
+
+    struct TEvPartitionLocationResponse : public NActors::TEventLocal<TEvRequestTablet, EvPartitionLocationResponse>
+                                        , public TLocalResponseBase
+                                        
+    {
+        TEvPartitionLocationResponse() {}
+        TVector<TPartitionLocationInfo> Partitions;
+    };
+
+};
+
+struct TLocalRequestBase {
+    TLocalRequestBase(const TString& topic, const TString& database, const TString& token)
+        : Topic(topic)
+        , Database(database)
+        , Token(token)
+        {}
+    
+    TString Topic;
+    TString Database;
+    TString Token;
+
+};
+
+struct TGetPartitionsLocationRequest : public TLocalRequestBase {
+    TGetPartitionsLocationRequest() = default;
+    TGetPartitionsLocationRequest(const TString& topic, const TString& database, const TString& token, const TVector<ui32>& partitionIds)
+        : TLocalRequestBase(topic, database, token)
+        , PartitionIds(partitionIds)
+    {}
+
+    TVector<ui32> PartitionIds;
 
 };
 }

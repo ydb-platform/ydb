@@ -141,6 +141,11 @@ void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvDescribeConsumerRequest:
     ctx.Register(new TDescribeConsumerActor(ev->Release().Release()));
 }
 
+void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvDescribePartitionRequest::TPtr& ev, const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Describe partition request");
+    ctx.Register(new TDescribePartitionActor(ev->Release().Release()));
+}
+
 }
 
 namespace NKikimr {
@@ -178,6 +183,10 @@ void TGRpcRequestProxyHandleMethods::Handle(TEvDescribeTopicRequest::TPtr& ev, c
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
 
+void TGRpcRequestProxyHandleMethods::Handle(TEvDescribePartitionRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
+}
+
 void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvDescribeConsumerRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQSchemaServiceActorID(), ev->Release().Release());
 }
@@ -201,6 +210,7 @@ void TGRpcRequestProxyHandleMethods::Handle(TEvPQRemoveReadRuleRequest::TPtr& ev
 
 DECLARE_RPC(DescribeTopic);
 DECLARE_RPC(DescribeConsumer);
+DECLARE_RPC(DescribePartition);
 
 #undef DECLARE_RPC
 

@@ -31,6 +31,7 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 
 #include <ydb/core/cms/cms.h>
@@ -2626,6 +2627,23 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         );
     }
 }
+
+
+TIcNodeCacheServiceInitializer::TIcNodeCacheServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TIcNodeCacheServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (appData->FeatureFlags.GetEnableIcNodeCache()) {
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NIcNodeCache::CreateICNodesInfoCacheService(appData->Counters),
+                           TMailboxType::HTSwap, appData->UserPoolId)
+        );
+    }
+}
+
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

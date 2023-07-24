@@ -284,6 +284,7 @@ namespace NTabletPipe {
 
             ServerId = ActorIdFromProto(record.GetServerId());
             Leader = record.GetLeader();
+            Generation = record.GetGeneration();
             SupportsDataInPayload = record.GetSupportsDataInPayload();
 
             Y_VERIFY(!ServerId || record.GetStatus() == NKikimrProto::OK);
@@ -295,7 +296,8 @@ namespace NTabletPipe {
 
             Become(&TThis::StateWork);
 
-            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::OK, ctx.SelfID, ServerId, Leader, false));
+            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::OK, ctx.SelfID, ServerId,
+                                                                  Leader, false, Generation));
 
             BLOG_D("send queued");
             while (TAutoPtr<IEventHandle> x = PayloadQueue->Pop())
@@ -423,7 +425,7 @@ namespace NTabletPipe {
                 }
             }
 
-            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, definitelyDead));
+            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, definitelyDead, Generation));
             return Die(ctx);
         }
 
@@ -445,7 +447,7 @@ namespace NTabletPipe {
                 return;
             auto *msg = ev->Get();
             if (msg->Status != NKikimrProto::OK) {
-                ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false));
+                ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false, Generation));
                 return Die(ctx);
             }
         }
@@ -453,7 +455,7 @@ namespace NTabletPipe {
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
             if (HiveClient != ev->Sender)
                 return;
-            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false));
+            ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false, Generation));
             return Die(ctx);
         }
 
@@ -468,7 +470,7 @@ namespace NTabletPipe {
                 Become(&TThis::StateCheckDead, RetryState.MakeCheckDelay(), new TEvTabletPipe::TEvClientCheckDelay());
             } else {
                 BLOG_D("connect failed");
-                ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false));
+                ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false, Generation));
                 return Die(ctx);
             }
         }
@@ -674,6 +676,7 @@ namespace NTabletPipe {
         TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue;
         TClientRetryState RetryState;
         bool Leader;
+        ui64 Generation = 0;
         TActorId HiveClient;
         ui32 CurrentHiveForwards = 0;
         static constexpr ui32 MAX_HIVE_FORWARDS = 10;

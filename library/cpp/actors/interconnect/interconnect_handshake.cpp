@@ -755,6 +755,7 @@ namespace NActors {
                 request.SetRequestExtendedTraceFmt(true);
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
+                request.SetRequestXdcShuffle(true);
                 request.SetHandshakeId(*HandshakeId);
 
                 SendExBlock(MainChannel, request, "ExRequest");
@@ -793,6 +794,7 @@ namespace NActors {
                 Params.AuthOnly = Params.Encryption && success.GetAuthOnly();
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
+                Params.UseXdcShuffle = success.GetUseXdcShuffle();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -1044,6 +1046,7 @@ namespace NActors {
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
+                Params.UseXdcShuffle = request.GetRequestXdcShuffle();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1083,6 +1086,7 @@ namespace NActors {
                     success.SetUseExtendedTraceFmt(true);
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
+                    success.SetUseXdcShuffle(Params.UseXdcShuffle);
                     SendExBlock(MainChannel, record, "ExReply");
 
                     // extract sender actor id (self virtual id)

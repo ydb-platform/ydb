@@ -449,7 +449,7 @@ namespace NActors {
             } else if (IgnorePayload) { // throw payload out
                 Payload.EraseFront(part.Size);
             } else if (!part.IsLastPart()) { // just ordinary inline event data
-                Payload.ExtractFront(part.Size, &pendingEvent.Payload);
+                Payload.ExtractFront(part.Size, &pendingEvent.InternalPayload);
             } else { // event final block
                 TEventDescr2 v2;
 
@@ -529,8 +529,9 @@ namespace NActors {
         const char *ptr = XdcCommands.data();
         const char *end = ptr + XdcCommands.size();
         while (ptr != end) {
-            switch (static_cast<EXdcCommand>(*ptr++)) {
-                case EXdcCommand::DECLARE_SECTION: {
+            switch (const auto cmd = static_cast<EXdcCommand>(*ptr++)) {
+                case EXdcCommand::DECLARE_SECTION:
+                case EXdcCommand::DECLARE_SECTION_INLINE: {
                     // extract and validate command parameters
                     const ui64 headroom = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
                     const ui64 size = NInterconnect::NDetail::DeserializeNumber(&ptr, end);
@@ -542,17 +543,22 @@ namespace NActors {
                     }
 
                     if (!IgnorePayload) { // process command if packet is being applied
-                        // allocate buffer and push it into the payload
                         auto& pendingEvent = context.PendingEvents.back();
-                        pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom, alignment});
-                        auto buffer = TRcBuf::Uninitialized(size, headroom, tailroom);
-                        if (size) {
-                            context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
-                        }
-                        pendingEvent.Payload.Insert(pendingEvent.Payload.End(), TRope(std::move(buffer)));
-                        pendingEvent.XdcSizeLeft += size;
+                        const bool isInline = cmd == EXdcCommand::DECLARE_SECTION_INLINE;
+                        pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,
+                            alignment, isInline});
 
-                        ++XdcSections;
+                        Y_VERIFY(!isInline || Params.UseXdcShuffle);
+                        if (!isInline) {
+                            // allocate buffer and push it into the payload
+                            auto buffer = TRcBuf::Uninitialized(size, headroom, tailroom);
+                            if (size) {
+                                context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
+                            }
+                            pendingEvent.ExternalPayload.Insert(pendingEvent.ExternalPayload.End(), TRope(std::move(buffer)));
+                            pendingEvent.XdcSizeLeft += size;
+                            ++XdcSections;
+                        }
                     }
                     continue;
                 }
@@ -608,18 +614,57 @@ namespace NActors {
             if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft) {
                 break; // event is not ready yet
             }
-
             auto& descr = *pendingEvent.EventData;
+
+            // create aggregated payload
+            TRope payload;
+            if (!pendingEvent.SerializationInfo.Sections.empty()) {
+                // unshuffle inline and external payloads into single event content
+                TRope *prev = nullptr;
+                size_t accumSize = 0;
+                for (const auto& s : pendingEvent.SerializationInfo.Sections) {
+                    TRope *rope = s.IsInline
+                        ? &pendingEvent.InternalPayload
+                        : &pendingEvent.ExternalPayload;
+                    if (rope != prev) {
+                        if (accumSize) {
+                            prev->ExtractFront(accumSize, &payload);
+                        }
+                        prev = rope;
+                        accumSize = 0;
+                    }
+                    accumSize += s.Size;
+                }
+                if (accumSize) {
+                    prev->ExtractFront(accumSize, &payload);
+                }
+
+                if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
+                    LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"
+                        " Type# 0x%08" PRIx32 " InternalPayload.size# %zu ExternalPayload.size# %zu",
+                        descr.Type, pendingEvent.InternalPayload.size(), pendingEvent.ExternalPayload.size());
+                    Y_VERIFY_DEBUG(false);
+                    throw TExReestablishConnection{TDisconnectReason::FormatError()};
+                }
+            }
+
+            // we add any remains of internal payload to the end
+            if (auto& rope = pendingEvent.InternalPayload) {
+                rope.ExtractFront(rope.size(), &payload);
+            }
+            // and ensure there is no unprocessed external payload
+            Y_VERIFY(!pendingEvent.ExternalPayload);
+
 #if IC_FORCE_HARDENED_PACKET_CHECKS
-            if (descr.Len != pendingEvent.Payload.GetSize()) {
+            if (descr.Len != payload.GetSize()) {
                 LOG_CRIT_IC_SESSION("ICIS17", "event length mismatch Type# 0x%08" PRIx32 " received# %zu expected# %" PRIu32,
-                    descr.Type, pendingEvent.Payload.GetSize(), descr.Len);
+                    descr.Type, payload.GetSize(), descr.Len);
                 throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
             }
 #endif
             if (descr.Checksum) {
                 ui32 checksum = 0;
-                for (const auto&& [data, size] : pendingEvent.Payload) {
+                for (const auto&& [data, size] : payload) {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
                 if (checksum != descr.Checksum) {
@@ -633,7 +678,7 @@ namespace NActors {
                 descr.Flags & ~IEventHandle::FlagExtendedFormat,
                 descr.Recipient,
                 descr.Sender,
-                MakeIntrusive<TEventSerializedData>(std::move(pendingEvent.Payload), std::move(pendingEvent.SerializationInfo)),
+                MakeIntrusive<TEventSerializedData>(std::move(payload), std::move(pendingEvent.SerializationInfo)),
                 descr.Cookie,
                 Params.PeerScopeId,
                 std::move(descr.TraceId));

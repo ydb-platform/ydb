@@ -126,7 +126,8 @@ namespace NActors {
         struct TPerChannelContext {
             struct TPendingEvent {
                 TEventSerializationInfo SerializationInfo;
-                TRope Payload;
+                TRope InternalPayload;
+                TRope ExternalPayload;
                 std::optional<TEventData> EventData;
 
                 // number of bytes remaining through XDC channel

@@ -6,8 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(compute)
-add_subdirectory(iam)
-add_subdirectory(operation)
-add_subdirectory(resourcemanager)
-add_subdirectory(servicecontrol)
+add_subdirectory(inner)

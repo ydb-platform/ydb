@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.compute.v1.inner;
+
+service DiskService {
+  // Create iam-token for encrypted disk
+  rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse);
+}
+
+message CreateTokenRequest {
+  string disk_id = 1;
+  string task_id = 2;
+}
+
+message CreateTokenResponse {
+  string token = 1;
+}
+

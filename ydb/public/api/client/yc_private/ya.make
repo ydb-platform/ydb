@@ -1,4 +1,5 @@
 RECURSE(
+    compute
     iam
     operation
     resourcemanager

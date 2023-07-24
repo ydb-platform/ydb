@@ -56,7 +56,7 @@ public:
     NYdb::NPersQueue::TReadSessionSettings GetReadSessionSettings() {
         NYdb::NPersQueue::TReadSessionSettings settings;
         settings
-                .ConsumerName(GetTestClient())
+                .ConsumerName(GetTestConsumer())
                 .AppendTopics(GetTestTopic());
         return settings;
     }

@@ -19,17 +19,35 @@ namespace NYdb::NTopic::NTests {
             auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
             TTopicClient client(setup->GetDriver());
 
-            auto result = client.DescribeTopic(setup->GetTestTopicPath()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            // DescribeTopic
+            {
+                auto result = client.DescribeTopic(setup->GetTestTopicPath()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-            const auto& description = result.GetTopicDescription();
+                const auto& description = result.GetTopicDescription();
 
-            auto& partitions = description.GetPartitions();
-            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                auto& partitions = description.GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
-            auto& partition = partitions[0];
-            UNIT_ASSERT(partition.GetActive());
-            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+                auto& partition = partitions[0];
+                UNIT_ASSERT(partition.GetActive());
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+            }
+
+            // DescribeConsumer
+            {
+                auto result = client.DescribeConsumer(setup->GetTestTopicPath(), setup->GetTestConsumer()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                auto& description = result.GetConsumerDescription();
+
+                auto& partitions = description.GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+
+                auto& partition = partitions[0];
+                UNIT_ASSERT(partition.GetActive());
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+            }
         }
 
         Y_UNIT_TEST(Statistics) {

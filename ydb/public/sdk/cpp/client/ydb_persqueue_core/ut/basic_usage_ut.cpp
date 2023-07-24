@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSession->Close();
 
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .AppendTopics(setup->GetTestTopic());
         auto readSession = client.CreateReadSession(readSettings);
 

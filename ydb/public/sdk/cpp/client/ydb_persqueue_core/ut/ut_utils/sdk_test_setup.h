@@ -86,8 +86,8 @@ public:
         return "test-topic";
     }
 
-    static TString GetTestClient() {
-        return "test-reader";
+    static TString GetTestConsumer() {
+        return "shared/user";
     }
 
     static TString GetTestMessageGroupId() {

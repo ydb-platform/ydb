@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .AppendTopics(setup->GetTestTopic());
         auto readSession = client.CreateReadSession(readSettings);
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSession->Close();
 
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .AppendTopics(setup->GetTestTopic());
         auto readSession = client.CreateReadSession(readSettings);
 
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
@@ -173,11 +173,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ReadSession->Close(TDuration::MilliSeconds(10));
         AtomicSet(check, 0);
 
-        auto status = topicClient.CommitOffset(setup->GetTestTopic(), 0, "shared/user", 50);
+        auto status = topicClient.CommitOffset(setup->GetTestTopic(), 0, setup->GetTestConsumer(), 50);
         UNIT_ASSERT(status.GetValueSync().IsSuccess());
 
         auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--" + setup->GetTestTopic(), "shared/user", describeConsumerSettings).GetValueSync();
+        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--" + setup->GetTestTopic(), setup->GetTestConsumer(), describeConsumerSettings).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
         auto description = result.GetConsumerDescription();
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup->GetTestClient())
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic())
             .DecompressionExecutor(stepByStepExecutor);
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create read session.
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 

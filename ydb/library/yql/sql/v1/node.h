@@ -553,8 +553,10 @@ namespace NSQLTranslationV1 {
         bool All = false;
         bool QualifiedAll = false;
         bool HasUnreliable = false;
+        bool HasUnnamed = false;
 
-        bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true, bool hasName = true);
+        bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true);
+        TString AddUnnamed();
         void Merge(const TColumns& columns);
         void SetPrefix(const TString& prefix);
         void SetAll();

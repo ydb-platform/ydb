@@ -9124,9 +9124,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        THashSet<TStringBuf> addedInProjectionFields;
+        THashSet<TString> addedInProjectionFields;
         TVector<const TItemExprType*> allItems;
-        for (auto& item : input->Child(1)->Children()) {
+        TVector<size_t> autoNameIndexes;
+        for (size_t i = 0; i < input->Child(1)->ChildrenSize(); ++i) {
+            auto item = input->Child(1)->Child(i);
             if (!item->IsCallable({"SqlProjectItem", "SqlProjectStarItem"})) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Pos()),
                     TStringBuilder() << "Expected SqlProjectItem or SqlProjectStarItem as argument"));
@@ -9142,9 +9144,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             } else {
                 YQL_ENSURE(item->Child(1)->IsAtom());
                 const auto fieldName = item->Child(1)->Content();
-                allItems.push_back(ctx.Expr.MakeType<TItemExprType>(fieldName, item->GetTypeAnn()));
-                addedInProjectionFields.emplace(fieldName);
+                if (item->ChildrenSize() == 4 && HasSetting(*item->Child(3), "autoName")) {
+                    autoNameIndexes.push_back(i);
+                } else {
+                    addedInProjectionFields.emplace(fieldName);                    
+                    allItems.push_back(ctx.Expr.MakeType<TItemExprType>(fieldName, item->GetTypeAnn()));
+                }
             }
+        }
+
+        if (!autoNameIndexes.empty()) {
+            auto sqlProjectItems = input->Child(1)->ChildrenList();
+            for (size_t nameSuffix = autoNameIndexes.front(), i = 0; i < autoNameIndexes.size(); ) {
+                TString autoName = "column" + ToString(nameSuffix);
+                if (!addedInProjectionFields.insert(autoName).second) {
+                    ++nameSuffix;
+                    continue;
+                }
+
+                if (i + 1 != autoNameIndexes.size()) {
+                    nameSuffix = autoNameIndexes[i + 1];
+                }
+
+                auto& sqlProjectItem = sqlProjectItems[autoNameIndexes[i++]];
+                YQL_ENSURE(sqlProjectItem->IsCallable("SqlProjectItem"));
+                YQL_ENSURE(sqlProjectItem->ChildrenSize() == 4);
+
+                sqlProjectItem = ctx.Expr.ChangeChild(*sqlProjectItem, 1, ctx.Expr.NewAtom(sqlProjectItem->Child(1)->Pos(), autoName));
+                sqlProjectItem = ctx.Expr.ChangeChild(*sqlProjectItem, 3, RemoveSetting(*sqlProjectItem->Child(3), "autoName", ctx.Expr));
+            }
+
+            output = ctx.Expr.ChangeChild(*input, 1, ctx.Expr.NewList(input->Child(1)->Pos(), std::move(sqlProjectItems)));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         TVector<TStringBuf> transparentFields;
@@ -9201,7 +9232,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus SqlProjectItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         YQL_ENSURE(input->IsCallable({"SqlProjectItem", "SqlProjectStarItem"}));
         const bool isStar = input->IsCallable("SqlProjectStarItem");
         if (!EnsureMinMaxArgsCount(*input, 3, 4, ctx.Expr)) {
@@ -9244,6 +9274,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        bool warnShadow = false;
         if (input->ChildrenSize() == 4) {
             // validate options
             THashSet<TStringBuf> seenOptions;
@@ -9281,7 +9312,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureAtom(*optionNode->Child(1), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else if (!isStar && name == "warnShadow") {
+                } else if (!isStar && (name == "warnShadow" || name == "autoName")) {
                     // no params
                     if (!EnsureTupleSize(*optionNode, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
@@ -9299,23 +9330,39 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (seenOptions.contains("warnShadow")) {
-                auto alias = input->Child(1)->Content();
-                if (itemType->Cast<TStructExprType>()->FindItem(alias)) {
-                    auto issue = TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
-                        TStringBuilder() << "Alias `" << alias << "` shadows column with the same name. It looks like comma is missed here. "
-                                            "If not, it is recommended to use ... AS `" << alias << "` to avoid confusion");
-                    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_ALIAS_SHADOWS_COLUMN, issue);
-                    if (!ctx.Expr.AddWarning(issue)) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
+            if (seenOptions.contains("autoName")) {
+                if (seenOptions.contains("warnShadow")) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()),
+                        TStringBuilder() << "Options warnShadow and autoName cannot be used at the same time"));
+                    return IGraphTransformer::TStatus::Error;
                 }
-                auto newChildren = input->ChildrenList();
-                // drop options
-                newChildren.pop_back();
-                output = ctx.Expr.ChangeChildren(*input, std::move(newChildren));
-                return IGraphTransformer::TStatus::Repeat;
+                auto alias = input->Child(1)->Content();
+                if (!alias.empty()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
+                        TStringBuilder() << "Non-empty name '" << alias << "' is used with autoName set"));
+                    return IGraphTransformer::TStatus::Error;
+                }
             }
+
+            if (seenOptions.contains("warnShadow")) {
+                warnShadow = true;
+            }
+        }
+
+        if (warnShadow) {
+            auto alias = input->Child(1)->Content();
+            if (itemType->Cast<TStructExprType>()->FindItem(alias)) {
+                auto issue = TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
+                    TStringBuilder() << "Alias `" << alias << "` shadows column with the same name. It looks like comma is missed here. "
+                                        "If not, it is recommended to use ... AS `" << alias << "` to avoid confusion");
+                SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_ALIAS_SHADOWS_COLUMN, issue);
+                if (!ctx.Expr.AddWarning(issue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+            auto newOptions = RemoveSetting(*input->Child(3), "warnShadow", ctx.Expr);
+            output = ctx.Expr.ChangeChild(*input, 3, std::move(newOptions));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         auto& lambda = input->ChildRef(2);
@@ -9340,6 +9387,100 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         input->SetTypeAnn(lambdaResult);
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus SqlRenameWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsEmptyList(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!itemType) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
+                TStringBuilder() << "Expected Struct as a sequence item type, but got lambda"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+
+        if (!EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        const ui32 numColumns = structType->GetSize();
+        if (!EnsureTupleSize(*input->Child(1), numColumns, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTupleOfAtoms(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto childColumnOrder = ctx.Types.LookupColumnOrder(input->Head());
+        if (!childColumnOrder.Defined()) {
+            // somewhat ugly attempt to find SqlProject to obtain column order
+            auto currInput = input->HeadPtr();
+            TString path = ToString(input->Content());
+            while (currInput->IsCallable({"PersistableRepr", "SqlAggregateAll", "RemoveSystemMembers", "Sort"})) {
+                path = path + " -> " + ToString(currInput->Content());
+                currInput = currInput->HeadPtr();
+            }
+            if (!currInput->IsCallable({"SqlProject", "OrderedSqlProject"})) {
+                path = path + " -> " + ToString(currInput->Content());
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
+                    TStringBuilder() << "Failed to deduce column order for input - unable to locate SqlProject: " << path));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            childColumnOrder.ConstructInPlace();
+            for (const auto& item : currInput->Child(1)->ChildrenList()) {
+                if (!item->IsCallable("SqlProjectItem")) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Pos()),
+                        TStringBuilder() << "Failed to deduce column order for input - star / qualified star is prosent in projection"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                childColumnOrder->push_back(ToString(item->Child(1)->Content()));
+            }
+
+        }
+        YQL_ENSURE(childColumnOrder->size() == numColumns);
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("AssumeColumnOrder")
+                .Callable(0, input->IsCallable("OrderedSqlRename") ? "OrderedMap" : "Map")
+                    .Add(0, input->HeadPtr())
+                    .Lambda(1)
+                        .Param("item")
+                        .Callable("AsStruct")
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0; i < numColumns; ++i) {
+                                    parent
+                                        .List(i)
+                                            .Add(0, input->Child(1)->ChildPtr(i))
+                                            .Callable(1, "Member")
+                                                .Arg(0, "item")
+                                                .Atom(1, (*childColumnOrder)[i])
+                                            .Seal()
+                                        .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Add(1, input->ChildPtr(1))
+            .Seal()
+            .Build();
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     IGraphTransformer::TStatus SqlTypeFromYsonWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -11933,6 +12074,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
         ExtFunctions["BlockMergeManyFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
+
+        ExtFunctions["SqlRename"] = &SqlRenameWrapper;
+        ExtFunctions["OrderedSqlRename"] = &SqlRenameWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

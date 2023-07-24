@@ -2860,15 +2860,11 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithCollisionConflict1) {
-        NYql::TAstParseResult res = SqlToYql("select LENGTH(Value), key as column0 from plato.Input;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column0\n");
+        UNIT_ASSERT(SqlToYql("select LENGTH(Value), key as column0 from plato.Input;").IsOk());
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithCollisionConflict2) {
-        NYql::TAstParseResult res = SqlToYql("select key as column1, LENGTH(Value) from plato.Input;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column1\n");
+        UNIT_ASSERT(SqlToYql("select key as column1, LENGTH(Value) from plato.Input;").IsOk());
     }
 
     Y_UNIT_TEST(MissedSourceTableForQualifiedAsteriskOnSimpleSelect) {

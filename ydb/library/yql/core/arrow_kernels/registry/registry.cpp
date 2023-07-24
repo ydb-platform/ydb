@@ -37,6 +37,7 @@ namespace {
                 }
             }
 
+            Alloc_.Ref().UseRefLocking = true;
             Pattern_ = NKikimr::NMiniKQL::MakeComputationPattern(Explorer_, Pgm_, entryPoints, opts);
             RandomProvider_ = CreateDefaultRandomProvider();
             TimeProvider_ = CreateDefaultTimeProvider();

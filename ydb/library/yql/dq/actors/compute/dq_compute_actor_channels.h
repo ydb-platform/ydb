@@ -7,59 +7,17 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 
 #include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/core/log.h>
-#include <util/generic/noncopyable.h>
 
 namespace NYql::NDq {
 
 class TDqComputeActorChannels : public NActors::TActor<TDqComputeActorChannels> {
 public:
-    struct TPeerState: NNonCopyable::TMoveOnly {
-    private:
-        static const ui32 InterconnectHeadersSize = 96;
-        i64 InFlightBytes = 0;
-        i64 InFlightRows = 0;
-        i32 InFlightCount = 0;
+    struct TPeerState {
         i64 PeerFreeSpace = 0;
-    public:
-        i64 GetFreeMemory() const {
-            return PeerFreeSpace - InFlightBytes;
-        }
-
-        bool NeedAck() const {
-            return (InFlightCount % 16 == 0) || !HasFreeMemory();
-        }
-
-        TString DebugString() const {
-            return TStringBuilder() <<
-                "freeSpace:" << PeerFreeSpace << ";" <<
-                "inFlightBytes:" << InFlightBytes << ";" <<
-                "inFlightCount:" << InFlightCount << ";"
-                ;
-        }
-
-        bool HasFreeMemory() const {
-            return PeerFreeSpace >= InFlightBytes;
-        }
-
-        void ActualizeFreeSpace(const i64 actual) {
-            PeerFreeSpace = actual;
-        }
-
-        void AddInFlight(const ui64 bytes, const ui64 rows) {
-            InFlightBytes += bytes + InterconnectHeadersSize;
-            InFlightRows += rows;
-            InFlightCount += 1;
-        }
-
-        void RemoveInFlight(const ui64 bytes, const ui64 rows) {
-            InFlightBytes -= (bytes + InterconnectHeadersSize);
-            Y_VERIFY(InFlightBytes >= 0);
-            InFlightRows -= rows;
-            Y_VERIFY(InFlightRows >= 0);
-            InFlightCount -= 1;
-            Y_VERIFY(InFlightCount >= 0);
-        }
+        ui64 InFlightBytes = 0;
+        ui64 InFlightRows = 0;
+        ui32 InFlightCount = 0;
+        i64 PrevPeerFreeSpace = 0;
     };
 
     struct ICallbacks {
@@ -117,9 +75,8 @@ public:
     void SetCheckpointsSupport(); // Finished channels will be polled for checkpoints.
     void SetInputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
-    bool CanSendChannelData(const ui64 channelId) const;
-    bool HasFreeMemoryInChannel(const ui64 channelId) const;
-    void SendChannelData(TChannelDataOOB&& channelData, const bool needAck);
+    bool CanSendChannelData(ui64 channelId);
+    void SendChannelData(TChannelDataOOB&& channelData);
     void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);
@@ -222,7 +179,6 @@ private:
     ui32 CalcMessageFlags(const NActors::TActorId& peer);
     TInputChannelState& InCh(ui64 channelId);
     TOutputChannelState& OutCh(ui64 channelId);
-    const TOutputChannelState& OutCh(const ui64 channelId) const;
 
 private:
     const NActors::TActorId Owner;

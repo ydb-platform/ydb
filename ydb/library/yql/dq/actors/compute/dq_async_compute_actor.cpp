@@ -194,7 +194,7 @@ private:
         return TaskRunnerStats.GetInputTransformStats(inputIdx);
     }
 
-    void DrainOutputChannel(TOutputChannelInfo& outputChannel) override {
+    void DrainOutputChannel(TOutputChannelInfo& outputChannel, const TDqComputeActorChannels::TPeerState& peerState) override {
         YQL_ENSURE(!outputChannel.Finished || Checkpoints);
 
         if (outputChannel.PopStarted) {
@@ -204,29 +204,37 @@ private:
         const bool wasFinished = outputChannel.Finished;
         auto channelId = outputChannel.ChannelId;
 
-        const auto& peerState = Channels->GetOutputChannelInFlightState(channelId);
+        const ui32 allowedOvercommit = AllowedChannelsOvercommit();
+
+        const i64 toSend = peerState.PeerFreeSpace + allowedOvercommit - peerState.InFlightBytes;
 
         CA_LOG_T("About to drain channelId: " << channelId
             << ", hasPeer: " << outputChannel.HasPeer
-            << ", peerState:(" << peerState.DebugString() << ")"
+            << ", peerFreeSpace: " << peerState.PeerFreeSpace
+            << ", inFlightBytes: " << peerState.InFlightBytes
+            << ", inFlightRows: " << peerState.InFlightRows
+            << ", inFlightCount: " << peerState.InFlightCount
+            << ", allowedOvercommit: " << allowedOvercommit
+            << ", toSend: " << toSend
 //            << ", finished: " << outputChannel.Channel->IsFinished());
             );
 
         outputChannel.PopStarted = true;
-        const bool hasFreeMemory = peerState.HasFreeMemory();
-        UpdateBlocked(outputChannel, !hasFreeMemory);
-        if (!hasFreeMemory) {
+        ProcessOutputsState.Inflight++;
+        UpdateBlocked(outputChannel, toSend);
+        if (toSend <= 0) {
             CA_LOG_T("Can not drain channel because it is blocked by capacity. ChannelId: " << channelId
-                << ", peerState:(" << peerState.DebugString() << ")"
-            );
+                << ". To send: " << toSend
+                << ". Free space: " << peerState.PeerFreeSpace
+                << ". Inflight: " << peerState.InFlightBytes
+                << ". Allowed overcommit: " << allowedOvercommit);
             auto ev = MakeHolder<NTaskRunnerActor::TEvChannelPopFinished>(channelId);
             Y_VERIFY(!ev->Finished);
             Send(SelfId(), std::move(ev));  // try again, ev.Finished == false
             return;
         }
-        ProcessOutputsState.Inflight++;
 
-        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvPop(channelId, wasFinished, peerState.GetFreeMemory()));
+        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvPop(channelId, wasFinished, toSend));
     }
 
     void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& sinkInfo) override {
@@ -576,9 +584,6 @@ private:
         if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
             return false;
         }
-        if (!Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
-            return false;
-        }
 
         auto& asyncData = *outputChannel.AsyncData;
         outputChannel.Finished = asyncData.Finished || shouldSkipData;
@@ -623,7 +628,7 @@ private:
                 if (lastChunk && asyncData.Checkpoint.Defined()) {
                     channelData.Proto.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
                 }
-                Channels->SendChannelData(std::move(channelData), i + 1 == asyncData.Data.size());
+                Channels->SendChannelData(std::move(channelData));
             }
             if (asyncData.Data.empty() && asyncData.Changed) {
                 TChannelDataOOB channelData;
@@ -635,7 +640,7 @@ private:
                 if (asyncData.Checkpoint.Defined()) {
                     channelData.Proto.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
                 }
-                Channels->SendChannelData(std::move(channelData), true);
+                Channels->SendChannelData(std::move(channelData));
             }
         }
 

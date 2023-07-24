@@ -368,7 +368,7 @@ private:
         ui32 adjustArgsCount = isFactory ? 0 : 2;
         if (exprs.size() != adjustArgsCount) {
             ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires " <<
-                adjustArgsCount << "arguments, given: " << exprs.size();
+                adjustArgsCount << " arguments, given: " << exprs.size();
             return false;
         }
 

@@ -350,7 +350,7 @@ protected:
 
         // Send checkpoints to output channels.
         ProcessOutputsImpl(ERunStatus::Finished);
-        return true;  // returns true, when channels were handled syncronously
+        return true;  // returns true, when channels were handled synchronously
     }
 
     void ProcessOutputsImpl(ERunStatus status) {
@@ -379,8 +379,7 @@ protected:
 
             if (!outputChannel.Finished || Checkpoints) {
                 if (Channels->CanSendChannelData(channelId)) {
-                    auto peerState = Channels->GetOutputChannelInFlightState(channelId);
-                    DrainOutputChannel(outputChannel, peerState);
+                    DrainOutputChannel(outputChannel);
                 } else {
                     ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
                 }
@@ -1017,6 +1016,87 @@ protected:
             bool Changed = false;
         };
         TMaybe<TAsyncData> AsyncData;
+
+        class TDrainedChannelMessage {
+        private:
+            TDqSerializedBatch Data;
+            NDqProto::TWatermark Watermark;
+            NDqProto::TCheckpoint Checkpoint;
+
+            ui32 DataSize = 0;
+            ui32 WatermarkSize = 0;
+            ui32 CheckpointSize = 0;
+
+            bool HasData = false;
+            bool HasWatermark = false;
+            bool HasCheckpoint = false;
+            bool Finished = false;
+        public:
+            const NDqProto::TWatermark* GetWatermarkOptional() const {
+                return HasWatermark ? &Watermark : nullptr;
+            }
+            const NDqProto::TCheckpoint* GetCheckpointOptional() const {
+                return HasCheckpoint ? &Checkpoint : nullptr;
+            }
+
+            TChannelDataOOB BuildChannelData(const ui64 channelId) {
+                TChannelDataOOB channelData;
+                channelData.Proto.SetChannelId(channelId);
+                channelData.Proto.SetFinished(Finished);
+                if (HasData) {
+                    channelData.Proto.MutableData()->Swap(&Data.Proto);
+                    channelData.Payload = std::move(Data.Payload);
+                }
+                if (HasWatermark) {
+                    channelData.Proto.MutableWatermark()->Swap(&Watermark);
+                }
+                if (HasCheckpoint) {
+                    channelData.Proto.MutableCheckpoint()->Swap(&Checkpoint);
+                }
+
+                Y_VERIFY(HasData || HasWatermark || HasCheckpoint || Finished);
+                return channelData;
+            }
+
+            bool ReadData(const TOutputChannelInfo& outputChannel) {
+                auto channel = outputChannel.Channel;
+
+                HasData = channel->Pop(Data);
+                HasWatermark = channel->Pop(Watermark);
+                HasCheckpoint = channel->Pop(Checkpoint);
+                Finished = !outputChannel.Finished && channel->IsFinished();
+
+                if (!HasData && !HasWatermark && !HasCheckpoint && !Finished) {
+                    return false;
+                }
+
+                DataSize = Data.Size();
+                WatermarkSize = Watermark.ByteSize();
+                CheckpointSize = Checkpoint.ByteSize();
+
+                return true;
+            }
+        };
+
+        std::vector<TDrainedChannelMessage> DrainChannel(const ui32 countLimit) {
+            std::vector<TDrainedChannelMessage> result;
+            if (Finished) {
+                Y_VERIFY(Channel->IsFinished());
+                return result;
+            }
+            result.reserve(countLimit);
+            for (ui32 i = 0; i < countLimit && !Finished; ++i) {
+                TDrainedChannelMessage message;
+                if (!message.ReadData(*this)) {
+                    break;
+                }
+                result.emplace_back(std::move(message));
+                if (Channel->IsFinished()) {
+                    Finished = true;
+                }
+            }
+            return result;
+        }
     };
 
     struct TAsyncOutputInfoBase {
@@ -1265,9 +1345,9 @@ protected:
 
 protected:
 
-    void UpdateBlocked(TOutputChannelInfo& outputChannel, i64 toSend) {
+    void UpdateBlocked(TOutputChannelInfo& outputChannel, const bool blocked) {
         if (Y_UNLIKELY(outputChannel.Stats)) {
-            if (toSend <= 0) {
+            if (blocked) {
                 outputChannel.Stats->BlockedByCapacity++;
                 if (!outputChannel.Stats->StartBlockedTime) {
                     outputChannel.Stats->StartBlockedTime = TInstant::Now();
@@ -1287,94 +1367,54 @@ private:
         return MemoryQuota->GetProfileStats();
     }
 
-    virtual void DrainOutputChannel(TOutputChannelInfo& outputChannel, const TDqComputeActorChannels::TPeerState& peerState) {
+    virtual void DrainOutputChannel(TOutputChannelInfo& outputChannel) {
         YQL_ENSURE(!outputChannel.Finished || Checkpoints);
 
         const bool wasFinished = outputChannel.Finished;
         auto channelId = outputChannel.Channel->GetChannelId();
 
-        const ui32 allowedOvercommit = AllowedChannelsOvercommit();
-
-        const i64 toSend = peerState.PeerFreeSpace + allowedOvercommit - peerState.InFlightBytes;
-
         CA_LOG_T("About to drain channelId: " << channelId
             << ", hasPeer: " << outputChannel.HasPeer
-            << ", peerFreeSpace: " << peerState.PeerFreeSpace
-            << ", inFlightBytes: " << peerState.InFlightBytes
-            << ", inFlightRows: " << peerState.InFlightRows
-            << ", inFlightCount: " << peerState.InFlightCount
-            << ", allowedOvercommit: " << allowedOvercommit
-            << ", toSend: " << toSend
             << ", finished: " << outputChannel.Channel->IsFinished());
 
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
 
-        UpdateBlocked(outputChannel, toSend);
+        UpdateBlocked(outputChannel, !Channels->HasFreeMemoryInChannel(channelId));
 
-        i64 remains = toSend;
-        while (remains > 0 && (!outputChannel.Finished || Checkpoints)) {
-            ui32 sent = this->SendChannelDataChunk(outputChannel);
-            if (sent == 0) {
+        ui32 sentChunks = 0;
+        while ((!outputChannel.Finished || Checkpoints) &&
+            Channels->HasFreeMemoryInChannel(outputChannel.ChannelId))
+        {
+            const static ui32 drainPackSize = 16;
+            std::vector<typename TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
+            ui32 idx = 0;
+            for (auto&& i : channelData) {
+                if (auto* w = i.GetWatermarkOptional()) {
+                    CA_LOG_I("Resume inputs by watermark");
+                    // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
+                    // But, let it be here, it's better to have the same code as in checkpoints
+                    ResumeInputsByWatermark(TInstant::MicroSeconds(w->GetTimestampUs()));
+                }
+                if (i.GetCheckpointOptional()) {
+                    CA_LOG_I("Resume inputs by checkpoint");
+                    ResumeInputsByCheckpoint();
+                }
+
+                Channels->SendChannelData(i.BuildChannelData(outputChannel.ChannelId), ++idx == channelData.size());
+                ++sentChunks;
+            }
+            if (drainPackSize != channelData.size()) {
+                if (!outputChannel.Finished) {
+                    CA_LOG_T("output channelId: " << outputChannel.ChannelId << ", nothing to send and is not finished");
+                }
                 break;
             }
-            remains -= sent;
         }
 
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
-        ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || remains != toSend;
-    }
-
-    ui32 SendChannelDataChunk(TOutputChannelInfo& outputChannel) {
-        auto channel = outputChannel.Channel;
-
-        TDqSerializedBatch data;
-        NDqProto::TWatermark watermark;
-        NDqProto::TCheckpoint checkpoint;
-
-        bool hasData = channel->Pop(data);
-        bool hasWatermark = channel->Pop(watermark);
-        bool hasCheckpoint = channel->Pop(checkpoint);
-        if (!hasData && !hasWatermark && !hasCheckpoint) {
-            if (!channel->IsFinished()) {
-                CA_LOG_T("output channelId: " << channel->GetChannelId() << ", nothing to send and is not finished");
-                return 0; // channel is empty and not finished yet
-            }
-        }
-        const bool wasFinished = outputChannel.Finished;
-        outputChannel.Finished = channel->IsFinished();
-        const bool becameFinished = !wasFinished && outputChannel.Finished;
-
-        ui32 dataSize = data.Size();
-        ui32 watermarkSize = watermark.ByteSize();
-        ui32 checkpointSize = checkpoint.ByteSize();
-
-        TChannelDataOOB channelData;
-        channelData.Proto.SetChannelId(channel->GetChannelId());
-        channelData.Proto.SetFinished(outputChannel.Finished);
-        if (hasData) {
-            channelData.Proto.MutableData()->Swap(&data.Proto);
-            channelData.Payload = std::move(data.Payload);
-        }
-        if (hasWatermark) {
-            channelData.Proto.MutableWatermark()->Swap(&watermark);
-            CA_LOG_I("Resume inputs by watermark");
-            // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
-            // But, let it be here, it's better to have the same code as in checkpoints
-            ResumeInputsByWatermark(TInstant::MicroSeconds(watermark.GetTimestampUs()));
-        }
-        if (hasCheckpoint) {
-            channelData.Proto.MutableCheckpoint()->Swap(&checkpoint);
-            CA_LOG_I("Resume inputs by checkpoint");
-            ResumeInputsByCheckpoint();
-        }
-
-        if (hasData || hasWatermark || hasCheckpoint || becameFinished) {
-            Channels->SendChannelData(std::move(channelData));
-            return dataSize + watermarkSize + checkpointSize;
-        }
-        return 0;
+        ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
     }
 
     virtual void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& outputInfo) {

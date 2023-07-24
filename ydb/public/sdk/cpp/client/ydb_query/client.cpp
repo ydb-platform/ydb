@@ -72,10 +72,10 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TFetchScriptResultsSettings& settings) {
+    TAsyncFetchScriptResultsResult FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex, const TFetchScriptResultsSettings& settings) {
         auto request = MakeRequest<Ydb::Query::FetchScriptResultsRequest>();
         request.set_operation_id(NKikimr::NOperationId::ProtoToString(operationId));
-        request.set_result_set_id(resultSetId);
+        request.set_result_set_index(resultSetIndex);
         return FetchScriptResultsImpl(std::move(request), settings);
     }
 
@@ -167,10 +167,10 @@ NThreading::TFuture<TScriptExecutionOperation> TQueryClient::ExecuteScript(const
     return Impl_->ExecuteScript(script, settings);
 }
 
-TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId,
+TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetIndex,
     const TFetchScriptResultsSettings& settings)
 {
-    return Impl_->FetchScriptResults(operationId, resultSetId, settings);
+    return Impl_->FetchScriptResults(operationId, resultSetIndex, settings);
 }
 
 } // namespace NYdb::NQuery

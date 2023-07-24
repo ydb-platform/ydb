@@ -804,7 +804,7 @@ public:
             WHERE database = $database AND execution_id = $execution_id;
 
             UPDATE `.metadata/result_sets`
-            SET 
+            SET
                 expire_at = CurrentUtcTimestamp() + $results_ttl
             where database = $database AND execution_id = $execution_id;
         )";
@@ -879,7 +879,7 @@ TMaybe<std::pair<TDuration, TDuration>> GetTtlFromSerializedMeta(const TString& 
     } catch (NJson::TJsonException &e) {
         return Nothing();
     }
-} 
+}
 
 class TScriptExecutionFinisher : public TScriptExecutionFinisherBase {
 public:
@@ -972,7 +972,7 @@ public:
             }
 
             const auto [operationTtl, resultsTtl] = *ttl;
-            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, operationTtl, resultsTtl, 
+            FinishScriptExecution(Database, ExecutionId, OperationStatus, ExecStatus, operationTtl, resultsTtl,
                                   Issues, TTxControl::ContinueAndCommitTx(), std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst));
             FinishWasRun = true;
         } else {
@@ -1015,7 +1015,7 @@ public:
             DECLARE $execution_id AS Text;
 
             SELECT operation_status, execution_status, issues, run_script_actor_id, meta FROM `.metadata/script_executions`
-                WHERE database = $database AND execution_id = $execution_id AND 
+                WHERE database = $database AND execution_id = $execution_id AND
                       (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
             SELECT lease_deadline FROM `.metadata/script_execution_leases`
@@ -1075,8 +1075,8 @@ public:
             } else if (*leaseDeadline < RunStartTime) {
                 auto serializedMeta = result.ColumnParser("meta").GetOptionalJsonDocument();
                 if (!serializedMeta) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing opeartion metainformation");  
-                    return;        
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Missing opeartion metainformation");
+                    return;
                 }
                 const auto ttl = GetTtlFromSerializedMeta(*serializedMeta);
                 if (!ttl) {
@@ -1279,7 +1279,7 @@ public:
                 plan,
                 issues,
                 stats,
-                ast, 
+                ast,
                 meta
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
@@ -1993,11 +1993,11 @@ private:
 
 class TGetScriptExecutionResultQuery : public TQueryBase {
 public:
-    TGetScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit)
-        : Database(database), ExecutionId(executionId), ResultSetId(resultSetId), Offset(offset), Limit(limit)
+    TGetScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit)
+        : Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), Limit(limit)
     {
         Response = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
-        Response->Record.SetResultSetIndex(ResultSetId);
+        Response->Record.SetResultSetIndex(ResultSetIndex);
     }
 
     void OnRunQuery() override {
@@ -2011,7 +2011,7 @@ public:
 
             SELECT result_set_metas,  operation_status, issues, end_ts, meta
             FROM `.metadata/script_executions`
-            WHERE database = $database 
+            WHERE database = $database
               AND execution_id = $execution_id
               AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
 
@@ -2034,7 +2034,7 @@ public:
                 .Utf8(ExecutionId)
                 .Build()
             .AddParam("$result_set_id")
-                .Int32(ResultSetId)
+                .Int32(ResultSetIndex)
                 .Build()
             .AddParam("$offset")
                 .Int64(Offset)
@@ -2113,11 +2113,11 @@ public:
             }
 
             const NJson::TJsonValue* metaValue;
-            if (!value.GetValuePointer(ResultSetId, &metaValue)) {
+            if (!value.GetValuePointer(ResultSetIndex, &metaValue)) {
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Result set index is invalid");
                 return;
             }
-            
+
             Ydb::Query::ResultSetMeta meta;
             NProtobufJson::Json2Proto(*metaValue, meta);
 
@@ -2160,7 +2160,7 @@ public:
 private:
     const TString Database;
     const TString ExecutionId;
-    const i32 ResultSetId;
+    const i32 ResultSetIndex;
     const i64 Offset;
     const i64 Limit;
     THolder<TEvKqp::TEvFetchScriptResultsResponse> Response;
@@ -2168,13 +2168,13 @@ private:
 
 class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
 public:
-    TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit)
-        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetId(resultSetId), Offset(offset), Limit(limit)
+    TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit)
+        : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), Limit(limit)
     {
     }
 
     void Bootstrap() {
-        Register(new TGetScriptExecutionResultQuery(Database, ExecutionId, ResultSetId, Offset, Limit));
+        Register(new TGetScriptExecutionResultQuery(Database, ExecutionId, ResultSetIndex, Offset, Limit));
 
         Become(&TGetScriptExecutionResultActor::StateFunc);
     }
@@ -2192,7 +2192,7 @@ private:
     const NActors::TActorId ReplyActorId;
     const TString Database;
     const TString ExecutionId;
-    const i32 ResultSetId;
+    const i32 ResultSetIndex;
     const i64 Offset;
     const i64 Limit;
 };
@@ -2250,8 +2250,8 @@ NActors::IActor* CreateSaveScriptExecutionResultActor(const NActors::TActorId& r
     return new TSaveScriptExecutionResultActor(replyActorId, database, executionId, resultSetId, expireAt, firstRow, std::move(serializedRows));
 }
 
-NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetId, i64 offset, i64 limit) {
-    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, resultSetId, offset, limit);
+NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit) {
+    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, resultSetIndex, offset, limit);
 }
 
 namespace NPrivate {

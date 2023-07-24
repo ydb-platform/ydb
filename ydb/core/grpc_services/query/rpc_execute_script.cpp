@@ -23,25 +23,12 @@ using TEvExecuteScriptRequest = TGrpcRequestNoOperationCall<Ydb::Query::ExecuteS
 bool FillQueryContent(const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
     NYql::TIssues& issues)
 {
-    switch (req.script_case()) {
-        case Ydb::Query::ExecuteScriptRequest::kScriptContent:
-            if (!CheckQuery(req.script_content().text(), issues)) {
-                return false;
-            }
-
-            kqpRequest.MutableRequest()->SetQuery(req.script_content().text());
-            return true;
-
-        case Ydb::Query::ExecuteScriptRequest::kScriptId:
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                "Execution by script id is not supported yet"));
-            return false;
-
-        default:
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                "Unexpected query option"));
-            return false;
+    if (!CheckQuery(req.script_content().text(), issues)) {
+        return false;
     }
+
+    kqpRequest.MutableRequest()->SetQuery(req.script_content().text());
+    return true;
 }
 
 std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(

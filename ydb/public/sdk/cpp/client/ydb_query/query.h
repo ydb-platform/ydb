@@ -133,30 +133,6 @@ struct TExecuteScriptSettings : public TOperationRequestSettings<TExecuteScriptS
     FLUENT_SETTING(TDuration, ResultsTtl);
 };
 
-class TVersionedScriptId {
-public:
-    TVersionedScriptId(const TString& id, TMaybe<i64> revision = Nothing())
-        : Id_(id)
-        , Revision_(revision)
-    {}
-
-    const TString& Id() const {
-        return Id_;
-    }
-
-    TMaybe<i64> Revision() const {
-        return Revision_;
-    }
-
-    void SetRevision(i64 revision) {
-        Revision_ = revision;
-    }
-
-private:
-    TString Id_;
-    TMaybe<i64> Revision_;
-};
-
 class TQueryContent {
 public:
     TQueryContent() = default;
@@ -177,8 +153,6 @@ public:
         EExecStatus ExecStatus = EExecStatus::Unspecified;
         EExecMode ExecMode = EExecMode::Unspecified;
 
-        // Not greater than one of SavedScriptId or QueryContent is set.
-        std::optional<TVersionedScriptId> ScriptId;
         TQueryContent ScriptContent;
         Ydb::TableStats::QueryStats ExecStats;
         TVector<Ydb::Query::ResultSetMeta> ResultSetsMeta;

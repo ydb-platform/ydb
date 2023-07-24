@@ -30,9 +30,6 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
         Metadata_.ScriptContent.Syntax = static_cast<ESyntax>(metadata.script_content().syntax());
         Metadata_.ScriptContent.Text = metadata.script_content().text();
     }
-    if (metadata.has_script_id()) {
-        Metadata_.ScriptId = TVersionedScriptId(metadata.script_id().id(), metadata.script_id().revision());
-    }
 }
 
 } // namespace NYdb::NQuery

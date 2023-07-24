@@ -70,7 +70,7 @@ public:
             return;
         }
 
-        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_id(), RowsOffset, req->rows_limit() + 1));
+        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit() + 1));
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }

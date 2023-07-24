@@ -13,6 +13,7 @@ PEERDIR(
     contrib/libs/llvm14
     contrib/libs/llvm14/lib/Support
     contrib/libs/llvm14/lib/TableGen
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

@@ -538,26 +538,6 @@
     - tls.h: contrib/libs/glibcasm/glibc/sysdeps/x86_64/nptl/tls.h
     - unistd.h: contrib/libs/glibcasm/glibc/include/unistd.h
     - unwind.h: contrib/libs/glibcasm/glibc/sysdeps/generic/unwind.h
-    # includes under ifdef
-    - bits/select2.h: contrib/libs/glibcasm/dummy.h
-    - bits/setjmp2.h: contrib/libs/glibcasm/dummy.h
-    - bits/socket2.h: contrib/libs/glibcasm/dummy.h
-    - bits/socket-constants.h: contrib/libs/glibcasm/dummy.h
-    - bits/stdlib.h: contrib/libs/glibcasm/dummy.h
-    - bits/stdlib-ldbl.h: contrib/libs/glibcasm/dummy.h
-    - bits/string_fortified.h: contrib/libs/glibcasm/dummy.h
-    - bits/strings_fortified.h: contrib/libs/glibcasm/dummy.h
-    - bits/struct_stat_time64_helper.h: contrib/libs/glibcasm/dummy.h
-    - bits/unistd.h: contrib/libs/glibcasm/dummy.h
-    - dl-cet.h: contrib/libs/glibcasm/dummy.h
-    - dl-mman.h: contrib/libs/glibcasm/dummy.h
-    - dl-unistd.h: contrib/libs/glibcasm/dummy.h
-    - elf/dl-tunables.h: contrib/libs/glibcasm/dummy.h
-    - linux/close_range.h: contrib/libs/glibcasm/dummy.h
-    - sysdeps/i386/dl-procinfo.c: contrib/libs/glibcasm/dummy.h
-    - sysdeps/generic/hp-timing.h: contrib/libs/glibcasm/dummy.h
-    - sysdeps/unix/sysv/linux/bits/pthread_stack_min-dynamic.h: contrib/libs/glibcasm/dummy.h
-    - sysdeps/unix/sysv/linux/sys/syscall.h: contrib/libs/glibcasm/dummy.h
 
 - source_filter: "^contrib/libs/libunwind/include/unwind.h"
   includes:

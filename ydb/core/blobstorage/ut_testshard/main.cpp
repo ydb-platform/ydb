@@ -76,6 +76,7 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
                 auto& record = ev->Record;
                 record.SetTabletId(tabletId);
                 auto *cmd = record.MutableInitialize();
+                cmd->SetStorageServerHost("");
                 cmd->SetMaxDataBytes(1'000'000'000);
                 cmd->SetMinDataBytes(100'000'000);
                 cmd->SetMaxInFlight(2);

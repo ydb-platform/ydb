@@ -13,15 +13,21 @@ namespace NKikimr::NTestShard {
     void TLoadActor::Bootstrap(const TActorId& parentId) {
         STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
         TabletActorId = parentId;
-        Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
-            Settings.GetStorageServerPort()));
-        Send(parentId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+        if (Settings.HasStorageServerHost()) {
+            Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
+                Settings.GetStorageServerPort()));
+            Send(parentId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+        } else {
+            RunValidation(true);
+        }
         NextWriteTimestamp = TActivationContext::Monotonic();
         Become(&TThis::StateFunc);
     }
 
     void TLoadActor::PassAway() {
-        Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+        if (Settings.HasStorageServerHost()) {
+            Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+        }
         if (ValidationActorId) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ValidationActorId, SelfId(), nullptr, 0));
         }

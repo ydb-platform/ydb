@@ -62,15 +62,21 @@ namespace NKikimr::NTestShard {
 
         void Bootstrap(const TActorId& parentId) {
             ParentId = parentId;
-            Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
-                Settings.GetStorageServerPort()));
+            if (Settings.HasStorageServerHost()) {
+                Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
+                    Settings.GetStorageServerPort()));
+            } else {
+                StateReadComplete = true;
+            }
             IssueNextReadRangeQuery();
             STLOG(PRI_INFO, TEST_SHARD, TS07, "starting read&validate", (TabletId, TabletId));
             Become(&TThis::StateFunc);
         }
 
         void PassAway() override {
-            Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+            if (Settings.HasStorageServerHost()) {
+                Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+            }
             TActorBootstrapped::PassAway();
         }
 
@@ -441,6 +447,15 @@ namespace NKikimr::NTestShard {
         }
 
         void RegisterTransition(TString key, ::NTestShard::TStateServer::EEntityState from, ::NTestShard::TStateServer::EEntityState to) {
+            const auto it = Keys.find(key);
+            Y_VERIFY(it != Keys.end());
+            it->second.PendingState = to;
+
+            if (!Settings.HasStorageServerHost()) {
+                it->second.ConfirmedState = to;
+                return;
+            }
+
             auto request = std::make_unique<TEvStateServerRequest>();
             auto& r = request->Record;
             auto *write = r.MutableWrite();
@@ -451,9 +466,6 @@ namespace NKikimr::NTestShard {
             write->SetTargetState(to);
             Send(MakeStateServerInterfaceActorId(), request.release());
 
-            const auto it = Keys.find(key);
-            Y_VERIFY(it != Keys.end());
-            it->second.PendingState = to;
             TransitionInFlight.push_back(&*it);
         }
 

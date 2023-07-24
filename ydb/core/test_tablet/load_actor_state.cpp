@@ -15,6 +15,25 @@ namespace NKikimr::NTestShard {
         Y_VERIFY(from != ::NTestShard::TStateServer::DELETED);
         Y_VERIFY(to != ::NTestShard::TStateServer::ABSENT);
 
+        if (!Settings.HasStorageServerHost()) {
+            if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
+                BytesOfData += key.second.Len;
+            }
+            if (to == ::NTestShard::TStateServer::DELETED) {
+                Keys.erase(key.first);
+            } else {
+                key.second.ConfirmedState = key.second.PendingState = to;
+            }
+            if (ev) {
+                Send(TabletActorId, ev.release());
+            }
+            if (!DoSomeActionInFlight) {
+                TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                DoSomeActionInFlight = true;
+            }
+            return;
+        }
+
         // generate transition command and send it to state server
         auto request = std::make_unique<TEvStateServerRequest>();
         auto& r = request->Record;

@@ -167,6 +167,7 @@ private:
             FinalStatusIsSaved = true;
             Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
                                                      Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst)));
+            return;
         }
         
         if (RunState != ERunState::Cancelled && RunState != ERunState::Finished) {

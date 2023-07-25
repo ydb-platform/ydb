@@ -1,6 +1,7 @@
 #include "abstract.h"
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/blob_manager_db.h>
+#include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr::NOlap {
 
@@ -87,6 +88,39 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
     DoCompile(context);
 
     Stage = EStage::Compiled;
+}
+
+TColumnEngineChanges::~TColumnEngineChanges() {
+    Y_VERIFY(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
+}
+
+void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    Y_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
+    Stage = EStage::Aborted;
+    DoAbort();
+    DoOnFinish(self, context);
+}
+
+void TColumnEngineChanges::Start(NColumnShard::TColumnShard& self) {
+    Y_VERIFY(Stage == EStage::Created);
+    DoStart(self);
+    Stage = EStage::Started;
+    if (!NeedConstruction()) {
+        Stage = EStage::Constructed;
+    }
+}
+
+void TColumnEngineChanges::StartEmergency() {
+    Y_VERIFY(Stage == EStage::Created);
+    Stage = EStage::Started;
+    if (!NeedConstruction()) {
+        Stage = EStage::Constructed;
+    }
+}
+
+void TColumnEngineChanges::AbortEmergency() {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency");
+    Stage = EStage::Aborted;
 }
 
 TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)

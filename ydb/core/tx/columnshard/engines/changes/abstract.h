@@ -204,40 +204,13 @@ protected:
 
 public:
     TConclusion<std::vector<TString>> ConstructBlobs(TConstructionContext& context);
+    virtual ~TColumnEngineChanges();
 
-    void AbortEmergency() {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency");
-        Stage = EStage::Aborted;
-    }
+    void StartEmergency();
+    void AbortEmergency();
 
-    void Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-        Y_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
-        Stage = EStage::Aborted;
-        DoAbort();
-        DoOnFinish(self, context);
-    }
-
-    virtual ~TColumnEngineChanges() {
-        Y_VERIFY_DEBUG(Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
-    }
-
-    void Start(NColumnShard::TColumnShard& self) {
-        Y_VERIFY(Stage == EStage::Created);
-        DoStart(self);
-        Stage = EStage::Started;
-        if (!NeedConstruction()) {
-            Stage = EStage::Constructed;
-        }
-    }
-
-    void StartEmergency() {
-        Y_VERIFY(Stage == EStage::Created);
-        Stage = EStage::Started;
-        if (!NeedConstruction()) {
-            Stage = EStage::Constructed;
-        }
-    }
-
+    void Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
+    void Start(NColumnShard::TColumnShard& self);
     bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun);
 
     virtual ui32 GetWritePortionsCount() const = 0;

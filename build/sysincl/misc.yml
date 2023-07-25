@@ -9,10 +9,9 @@
 
 
 - includes:
-  - gelf.h: contrib/restricted/libelf/include/libelf/gelf.h
-  - libelf.h: contrib/restricted/libelf/include/libelf/libelf.h
-  - libelf/libelf.h: contrib/restricted/libelf/include/libelf/libelf.h
-  - libelf/sys_elf.h: contrib/restricted/libelf/include/libelf/sys_elf.h
+  - gelf.h: contrib/restricted/libelf/include/gelf.h
+  - libelf.h: contrib/restricted/libelf/include/libelf.h
+  - sys_elf.h: contrib/restricted/libelf/include/sys_elf.h
 
 # We have lots of ADDINCLs to contrib/libs/libiconv all around the repo
 # so we need to add it to sysincl for consistent resolving.

@@ -159,7 +159,10 @@ class OutputNameGenerator:
         self._objc_name = self._framework.objc_framework_prefix + self._objc_name_core
 
     def set_objc_infix(self, objc_infix):
-        self._objc_name = self._framework.objc_framework_prefix + objc_infix + self._objc_name_core
+        if self._objc_name_core.startswith(objc_infix):
+            self._objc_name = self._framework.objc_framework_prefix + self._objc_name_core
+        else:
+            self._objc_name = self._framework.objc_framework_prefix + objc_infix + self._objc_name_core
 
     def is_header(self, output_type):
         return output_type in [

@@ -5,9 +5,9 @@
 
 using namespace NYdb::NConsoleClient;
 
-TString TCommandWorkloadTopicDescribe::GenerateConsumerName(ui32 consumerIdx)
+TString TCommandWorkloadTopicDescribe::GenerateConsumerName(const TString& consumerPrefix, ui32 consumerIdx)
 {
-    TString consumerName = TStringBuilder() << CONSUMER_PREFIX << '-' << consumerIdx;
+    TString consumerName = TStringBuilder() << consumerPrefix << '-' << consumerIdx;
     return consumerName;
 }
 

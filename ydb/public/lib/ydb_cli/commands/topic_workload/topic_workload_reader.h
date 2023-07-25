@@ -20,6 +20,7 @@ namespace NYdb {
             TString Database;
             TString TopicName;
             ui32 ConsumerIdx;
+            TString ConsumerPrefix;
             ui64 ReaderIdx;
         };
 

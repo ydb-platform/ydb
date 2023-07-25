@@ -85,7 +85,7 @@ private:
         if (retryCount > MAX_RETRIES_COUNT) {
             TString reply = TStringBuilder() << "Failed to resolve tablet: " << msg->TabletId << " after several retries.";
             LOG_W(reply);
-            ReplyErrorAndDie(Ydb::StatusIds::GENERIC_ERROR, std::move(reply));
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, std::move(reply));
             return;
 
         }

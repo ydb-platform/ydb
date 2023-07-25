@@ -112,6 +112,7 @@ struct TEvPGEvents {
         TString Tag;
         bool EmptyQuery = false;
         bool CommandCompleted = true;
+        bool ReadyForQuery = true;
         char TransactionStatus = 0;
     };
 
@@ -215,6 +216,7 @@ struct TEvPGEvents {
         TString Tag;
         bool EmptyQuery = false;
         bool CommandCompleted = true;
+        bool ReadyForQuery = true;
         char TransactionStatus = 0;
     };
 

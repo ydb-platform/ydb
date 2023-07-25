@@ -1,5 +1,7 @@
 #include "log_impl.h"
 #include "local_pgwire_util.h"
+#include "sql_parser.h"
+#include "pgwire_kqp_proxy.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/pgproxy/pg_proxy_events.h>
@@ -20,14 +22,6 @@ namespace NLocalPgWire {
 using namespace NActors;
 using namespace NKikimr;
 
-extern NActors::IActor* CreatePgwireKqpProxy(
-    std::unordered_map<TString, TString> params
-);
-
-NActors::IActor* CreatePgwireKqpProxyQuery(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
-NActors::IActor* CreatePgwireKqpProxyParse(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvParse::TPtr&& evParse);
-NActors::IActor* CreatePgwireKqpProxyExecute(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute, const TParsedStatement& statement);
-
 class TPgYdbConnection : public TActor<TPgYdbConnection> {
     using TBase = TActor<TPgYdbConnection>;
 
@@ -44,23 +38,49 @@ public:
         , ConnectionParams(std::move(params))
     {}
 
-    void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
-        BLOG_D("TEvQuery " << ev->Sender);
-        if (IsQueryEmpty(ev->Get()->Message->GetQuery())) {
+    void ProcessEventsQueue() {
+        while (!Events.empty() && Inflight == 0) {
+            StateWork(Events.front());
+            Events.pop_front();
+        }
+    }
+
+    void Handle(TEvEvents::TEvSingleQuery::TPtr& ev) {
+        BLOG_D("TEvSingleQuery " << ev->Sender);
+        if (IsQueryEmpty(ev->Get()->Query)) {
             auto response = std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
             response->EmptyQuery = true;
+            response->ReadyForQuery = ev->Get()->FinalQuery;
             Send(ev->Sender, response.release(), 0, ev->Cookie);
             return;
         }
+
         ++Inflight;
-        TActorId actorId = Register(CreatePgwireKqpProxyQuery(SelfId(), ConnectionParams, Connection, std::move(ev)));
+        TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyQuery(SelfId(), ConnectionParams, Connection, std::move(ev)));
         BLOG_D("Created pgwireKqpProxyQuery: " << actorId);
+    }
+
+    void Handle(NPG::TEvPGEvents::TEvQuery::TPtr& ev) {
+        BLOG_D("TEvQuery " << ev->Sender);
+
+        TStatementIterator stmtIter((TString(ev->Get()->Message->GetQuery())));
+        std::vector<TString> statements;
+
+        for (auto pStmt = stmtIter.Next(); pStmt != nullptr; pStmt = stmtIter.Next()) {
+            statements.push_back(*pStmt);
+        }
+
+        for (std::size_t n = 0; n < statements.size(); ++n) {
+            Events.push_front(new NActors::IEventHandle(SelfId(), ev->Sender, new TEvEvents::TEvSingleQuery(statements[statements.size() - n - 1], n == 0), 0, ev->Cookie));
+        }
+
+        ProcessEventsQueue();
     }
 
     void Handle(NPG::TEvPGEvents::TEvParse::TPtr& ev) {
         BLOG_D("TEvParse " << ev->Sender);
         ++Inflight;
-        TActorId actorId = Register(CreatePgwireKqpProxyParse(SelfId(), ConnectionParams, Connection, std::move(ev)));
+        TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyParse(SelfId(), ConnectionParams, Connection, std::move(ev)));
         BLOG_D("Created pgwireKqpProxyParse: " << actorId);
         return;
     }
@@ -136,7 +156,7 @@ public:
         }
 
         ++Inflight;
-        TActorId actorId = Register(CreatePgwireKqpProxyExecute(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
+        TActorId actorId = RegisterWithSameMailbox(CreatePgwireKqpProxyExecute(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
         BLOG_D("Created pgwireKqpProxyExecute: " << actorId);
     }
 
@@ -170,10 +190,7 @@ public:
                 Connection.SessionId = connection.SessionId;
             }
         }
-        while (!Events.empty() && Inflight == 0) {
-            StateWork(Events.front());
-            Events.pop_front();
-        }
+        ProcessEventsQueue();
     }
 
     void PassAway() override {
@@ -203,6 +220,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NPG::TEvPGEvents::TEvQuery, Handle);
+            hFunc(TEvEvents::TEvSingleQuery, Handle);
             hFunc(NPG::TEvPGEvents::TEvParse, Handle);
             hFunc(NPG::TEvPGEvents::TEvBind, Handle);
             hFunc(NPG::TEvPGEvents::TEvDescribe, Handle);

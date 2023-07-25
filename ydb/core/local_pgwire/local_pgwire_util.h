@@ -44,6 +44,7 @@ enum EFormatType : int16_t {
 struct TEvEvents {
     enum EEv {
         EvProxyCompleted = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvSingleQuery,
         EvEnd
     };
 
@@ -61,6 +62,16 @@ struct TEvEvents {
 
         TEvProxyCompleted(const TParsedStatement& parsedStatement)
             : ParsedStatement(parsedStatement)
+        {}
+    };
+
+    struct TEvSingleQuery : NActors::TEventLocal<TEvSingleQuery, EvSingleQuery> {
+        TString Query;
+        bool FinalQuery = true;
+
+        TEvSingleQuery(const TString& query, bool finalQuery)
+            : Query(query)
+            , FinalQuery(finalQuery)
         {}
     };
 };

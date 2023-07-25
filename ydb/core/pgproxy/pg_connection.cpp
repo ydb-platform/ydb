@@ -564,7 +564,7 @@ protected:
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
             }
-            if (ev->Get()->CommandCompleted) {
+            if (ev->Get()->ReadyForQuery) {
                 BecomeReadyForQuery();
             }
         } else {
@@ -629,7 +629,7 @@ protected:
             } else {
                 SendErrorResponse(ev->Get()->ErrorFields);
             }
-            if (ev->Get()->CommandCompleted) {
+            if (ev->Get()->ReadyForQuery) {
                 ++OutgoingSequenceNumber;
                 BecomeReadyForQuery();
             }

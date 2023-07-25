@@ -8,6 +8,8 @@ SRCS(
     local_pgwire_util.h
     log_impl.h
     pgwire_kqp_proxy.cpp
+    sql_parser.cpp
+    sql_parser.h
 )
 
 PEERDIR(

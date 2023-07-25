@@ -33,4 +33,5 @@ target_sources(ydb-core-local_pgwire PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/local_pgwire_util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/pgwire_kqp_proxy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/local_pgwire/sql_parser.cpp
 )

@@ -57,8 +57,8 @@ class TDiscoveryConverter {
 private:
     void BuildForFederation(const TStringBuf& databaseBuf, TStringBuf topicPath);
     void BuildFstClassNames();
-    void BuildFromFederationPath(const TString& rootPrefix);
-    void BuildFromShortModernName();
+    [[nodiscard]] bool BuildFromFederationPath(const TString& rootPrefix);
+    [[nodiscard]] bool BuildFromShortModernName();
 
 protected:
     TDiscoveryConverter() = default;
@@ -70,9 +70,9 @@ protected:
     TDiscoveryConverter(bool firstClass, const TString& pqNormalizedPrefix,
                         const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& ydbDatabaseRootOverride);
 
-    void BuildFromLegacyName(const TString& rootPrefix, bool forceFullname = false);
-    bool TryParseModernMirroredPath(TStringBuf path);
-    void ParseModernPath(const TStringBuf& path);
+    [[nodiscard]] bool BuildFromLegacyName(const TString& rootPrefix, bool forceFullname = false);
+    [[nodiscard]] bool TryParseModernMirroredPath(TStringBuf path);
+    [[nodiscard]] bool ParseModernPath(const TStringBuf& path);
 
 public:
     bool IsValid() const;

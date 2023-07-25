@@ -1601,6 +1601,23 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(res);
     }
 
+    Y_UNIT_TEST(BadTopic) {
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+        auto writer = CreateSimpleWriter(*driver, "/topic/", "test source ID");
+        bool gotException = false;
+        try {
+        writer->GetInitSeqNo();
+        } catch(...) {
+            gotException = true;
+        }
+        UNIT_ASSERT(gotException);
+    }
+
+
     Y_UNIT_TEST(SetupWriteSessionOnDisabledCluster) {
         TPersQueueV1TestServer server;
         SET_LOCALS;

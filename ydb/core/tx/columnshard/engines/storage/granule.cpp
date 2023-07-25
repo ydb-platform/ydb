@@ -67,13 +67,13 @@ void TGranuleMeta::OnAfterChangePortion() {
 void TGranuleMeta::OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter) {
     HardSummaryCache = {};
     if (!!AdditiveSummaryCache) {
+        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionBefore && portionBefore->IsActive()) {
-            AdditiveSummaryCache->RemovePortion(*portionBefore);
+            g.RemovePortion(*portionBefore);
         }
         if (portionAfter && portionAfter->IsActive()) {
-            AdditiveSummaryCache->AddPortion(*portionAfter);
+            g.AddPortion(*portionAfter);
         }
-        OnAdditiveSummaryChange();
     }
 }
 
@@ -152,12 +152,14 @@ void TGranuleMeta::RebuildHardMetrics() const {
 
 void TGranuleMeta::RebuildAdditiveMetrics() const {
     TGranuleAdditiveSummary result;
-
-    for (auto&& i : Portions) {
-        if (!i.second.IsActive()) {
-            continue;
+    {
+        auto g = result.StartEdit(Counters);
+        for (auto&& i : Portions) {
+            if (!i.second.IsActive()) {
+                continue;
+            }
+            g.AddPortion(i.second);
         }
-        result.AddPortion(i.second);
     }
     AdditiveSummaryCache = result;
 }
@@ -165,17 +167,8 @@ void TGranuleMeta::RebuildAdditiveMetrics() const {
 const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary() const {
     if (!AdditiveSummaryCache) {
         RebuildAdditiveMetrics();
-        OnAdditiveSummaryChange();
     }
     return *AdditiveSummaryCache;
-}
-
-void TGranuleMeta::OnAdditiveSummaryChange() const {
-    if (AdditiveSummaryCache) {
-        Counters.OnCompactedData(AdditiveSummaryCache->GetOther());
-        Counters.OnInsertedData(AdditiveSummaryCache->GetInserted());
-        Counters.OnFullData(AdditiveSummaryCache->GetOther() + AdditiveSummaryCache->GetInserted());
-    }
 }
 
 } // namespace NKikimr::NOlap

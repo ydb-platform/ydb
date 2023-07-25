@@ -34,7 +34,7 @@ public:
 
     }
 
-    class TModificationGuard {
+    class TModificationGuard: TNonCopyable {
     private:
         TGranulesStorage& Owner;
     public:

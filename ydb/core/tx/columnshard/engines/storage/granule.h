@@ -181,20 +181,45 @@ public:
     ui64 GetMaxColumnsSize() const {
         return (Inserted + Other).GetMaxColumnsSize();
     }
-    void AddPortion(const TPortionInfo& info) {
-        if (info.IsInserted()) {
-            Inserted.AddPortion(info);
-        } else {
-            Other.AddPortion(info);
+
+    class TEditGuard: TNonCopyable {
+    private:
+        const NColumnShard::TGranuleDataCounters& Counters;
+        TGranuleAdditiveSummary& Owner;
+    public:
+        TEditGuard(const NColumnShard::TGranuleDataCounters& counters, TGranuleAdditiveSummary& owner)
+            : Counters(counters)
+            , Owner(owner)
+        {
+
         }
-    }
-    void RemovePortion(const TPortionInfo& info) {
-        if (info.IsInserted()) {
-            Inserted.RemovePortion(info);
-        } else {
-            Other.RemovePortion(info);
+
+        ~TEditGuard() {
+            Counters.OnCompactedData(Owner.GetOther());
+            Counters.OnInsertedData(Owner.GetInserted());
+            Counters.OnFullData(Owner.GetOther() + Owner.GetInserted());
         }
+
+        void AddPortion(const TPortionInfo& info) {
+            if (info.IsInserted()) {
+                Owner.Inserted.AddPortion(info);
+            } else {
+                Owner.Other.AddPortion(info);
+            }
+        }
+        void RemovePortion(const TPortionInfo& info) {
+            if (info.IsInserted()) {
+                Owner.Inserted.RemovePortion(info);
+            } else {
+                Owner.Other.RemovePortion(info);
+            }
+        }
+    };
+
+    TEditGuard StartEdit(const NColumnShard::TGranuleDataCounters& counters) {
+        return TEditGuard(counters, *this);
     }
+
     TString DebugString() const {
         return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Other.DebugString() << "); ";
     }

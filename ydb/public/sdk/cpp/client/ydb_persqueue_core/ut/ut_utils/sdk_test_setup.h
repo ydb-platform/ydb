@@ -199,6 +199,7 @@ public:
             Server.AnnoyingClient->KickNodeInHive(Server.CleverServer->GetRuntime(), i);
         }
     }
+   
     void AllowTablets() {
         for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
             Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, true);
@@ -213,6 +214,17 @@ public:
         auto describeResult = Server.AnnoyingClient->Ls(TStringBuilder() << "/Root/PQ/" << BuildFullTopicName(topic, cluster));
         UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasPersQueueGroup(), describeResult->Record);
         Server.AnnoyingClient->KillTablet(*Server.CleverServer, describeResult->Record.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID());
+    }
+
+    void KillTopicTablets(const TString& topicName) {
+        auto pqGroup = Server.AnnoyingClient->Ls(TString("/Root/PQ/" + topicName))->Record.GetPathDescription().GetPersQueueGroup();
+
+        THashSet<ui64> restartedTablets;
+        for (const auto& p : pqGroup.GetPartitions()) 
+            if (restartedTablets.insert(p.GetTabletId()).second) 
+                Server.AnnoyingClient->KillTablet(*Server.CleverServer, p.GetTabletId());
+
+        Server.CleverServer->GetRuntime()->DispatchEvents();
     }
 };
 }

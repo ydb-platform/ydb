@@ -194,6 +194,10 @@ public:
             request.set_include_stats(true);
         }
 
+        if (settings.IncludeLocation_) {
+            request.set_include_location(true);
+        }
+
         auto promise = NThreading::NewPromise<TDescribeTopicResult>();
 
         auto extractor = [promise]
@@ -227,6 +231,10 @@ public:
             request.set_include_stats(true);
         }
 
+        if (settings.IncludeLocation_) {
+            request.set_include_location(true);
+        }
+
         auto promise = NThreading::NewPromise<TDescribeConsumerResult>();
 
         auto extractor = [promise]
@@ -244,6 +252,42 @@ public:
             std::move(request),
             extractor,
             &Ydb::Topic::V1::TopicService::Stub::AsyncDescribeConsumer,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
+
+    TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, const TDescribePartitionSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Topic::DescribePartitionRequest>(settings);
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+
+        if (settings.IncludeStats_) {
+            request.set_include_stats(true);
+        }
+
+        if (settings.IncludeLocation_) {
+            request.set_include_location(true);
+        }
+
+        auto promise = NThreading::NewPromise<TDescribePartitionResult>();
+
+        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
+            Ydb::Topic::DescribePartitionResult result;
+            if (any) {
+                any->UnpackTo(&result);
+            }
+
+            TDescribePartitionResult val(TStatus(std::move(status)), std::move(result));
+            promise.SetValue(std::move(val));
+        };
+
+        Connections_->RunDeferred<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::Topic::V1::TopicService::Stub::AsyncDescribePartition,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));

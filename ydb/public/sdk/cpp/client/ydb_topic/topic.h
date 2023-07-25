@@ -128,6 +128,21 @@ private:
     TString ReadSessionId_;
 };
 
+// Topic partition location
+class TPartitionLocation {
+public:
+    TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    i32 GetNodeId() const;
+    i64 GetGeneration() const;
+
+private:    
+    // Node identificator.
+    i32 NodeId_ = 1;
+
+    // Partition generation.
+    i64 Generation_ = 2;
+};
+
 class TPartitionInfo {
 public:
     TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo);
@@ -140,6 +155,7 @@ public:
 
     const TMaybe<TPartitionStats>& GetPartitionStats() const;
     const TMaybe<TPartitionConsumerStats>& GetPartitionConsumerStats() const;
+    const TMaybe<TPartitionLocation>& GetPartitionLocation() const;
 
 private:
     ui64 PartitionId_;
@@ -148,8 +164,8 @@ private:
     TVector<ui64> ParentPartitionIds_;
     TMaybe<TPartitionStats> PartitionStats_;
     TMaybe<TPartitionConsumerStats> PartitionConsumerStats_;
+    TMaybe<TPartitionLocation> PartitionLocation_;
 };
-
 
 class TPartitioningSettings {
 public:
@@ -245,8 +261,21 @@ private:
     TConsumer Consumer_;
 };
 
+class TPartitionDescription {
+    friend class NYdb::TProtoAccessor;
 
-// Result for describe resource request.
+public:
+    TPartitionDescription(Ydb::Topic::DescribePartitionResult&& desc);
+
+    const TPartitionInfo& GetPartition() const;
+private:
+    const Ydb::Topic::DescribePartitionResult& GetProto() const;
+
+    const Ydb::Topic::DescribePartitionResult Proto_;
+    TPartitionInfo Partition_;
+};
+
+// Result for describe topic request.
 struct TDescribeTopicResult : public TStatus {
     friend class NYdb::TProtoAccessor;
 
@@ -259,7 +288,7 @@ private:
     TTopicDescription TopicDescription_;
 };
 
-// Result for describe resource request.
+// Result for describe consumer request.
 struct TDescribeConsumerResult : public TStatus {
     friend class NYdb::TProtoAccessor;
 
@@ -272,9 +301,21 @@ private:
     TConsumerDescription ConsumerDescription_;
 };
 
+// Result for describe partition request.
+struct TDescribePartitionResult: public TStatus {
+    friend class NYdb::TProtoAccessor;
+
+    TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result);
+
+    const TPartitionDescription& GetPartitionDescription() const;
+
+private:
+    TPartitionDescription PartitionDescription_;
+};
 
 using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
 using TAsyncDescribeConsumerResult = NThreading::TFuture<TDescribeConsumerResult>;
+using TAsyncDescribePartitionResult = NThreading::TFuture<TDescribePartitionResult>;
 
 template <class TSettings>
 class TAlterAttributesBuilderImpl {
@@ -529,18 +570,31 @@ struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings>
     using TOperationRequestSettings<TDropTopicSettings>::TOperationRequestSettings;
 };
 
-// Settings for describe resource request.
+// Settings for describe topic request.
 struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {
     using TSelf = TDescribeTopicSettings;
 
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
 };
 
-// Settings for describe resource request.
+// Settings for describe consumer request.
 struct TDescribeConsumerSettings : public TOperationRequestSettings<TDescribeConsumerSettings> {
     using TSelf = TDescribeConsumerSettings;
 
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
+};
+
+// Settings for describe partition request.
+struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePartitionSettings> {
+    using TSelf = TDescribePartitionSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
 };
 
 // Settings for commit offset request.
@@ -1675,12 +1729,14 @@ public:
     // Delete a topic.
     TAsyncStatus DropTopic(const TString& path, const TDropTopicSettings& settings = {});
 
-    // Describe settings of topic.
+    // Describe a topic.
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings = {});
 
-    // Describe settings of topic's consumer.
-    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer,
-        const TDescribeConsumerSettings& settings = {});
+    // Describe a topic consumer.
+    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings = {});
+
+    // Describe a topic partition
+    TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, const TDescribePartitionSettings& settings = {});
 
     //! Create read session.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);

@@ -178,13 +178,11 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         auto pqGroup = server.AnnoyingClient->Ls(TString("/Root/PQ/" + topicName))->Record.GetPathDescription()
                                                                                                 .GetPersQueueGroup();
 
-        THashSet<ui64> tablets;
-        for (const auto& p : pqGroup.GetPartitions()) {
-            auto res = tablets.insert(p.GetTabletId());
-            if (res.second) {
+        THashSet<ui64> restartedTablets;
+        for (const auto& p : pqGroup.GetPartitions())
+            if (restartedTablets.insert(p.GetTabletId()).second)
                 server.AnnoyingClient->KillTablet(*server.CleverServer, p.GetTabletId());
-            }
-        }
+
         server.CleverServer->GetRuntime()->DispatchEvents();
     }
 

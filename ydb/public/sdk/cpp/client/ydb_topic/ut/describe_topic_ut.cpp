@@ -14,102 +14,313 @@
 
 namespace NYdb::NTopic::NTests {
 
-    Y_UNIT_TEST_SUITE(DescribeTopic) {
-        Y_UNIT_TEST(Basic) {
-            auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-            TTopicClient client(setup->GetDriver());
+    Y_UNIT_TEST_SUITE(Describe) {
 
-            // DescribeTopic
+        void DescribeTopic(NPersQueue::NTests::TPersQueueYdbSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        {
+            TDescribeTopicSettings settings;
+            settings.IncludeStats(requireStats);
+            settings.IncludeLocation(requireLocation);
+
             {
-                auto result = client.DescribeTopic(setup->GetTestTopicPath()).GetValueSync();
+                auto result = client.DescribeTopic(setup.GetTestTopicPath(), settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetTopicDescription();
 
-                auto& partitions = description.GetPartitions();
+                const auto& partitions = description.GetPartitions();
                 UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
-                auto& partition = partitions[0];
+                const auto& partition = partitions[0];
                 UNIT_ASSERT(partition.GetActive());
                 UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+
+                if (requireStats)
+                {
+                    const auto& stats = description.GetTopicStats();
+
+                    if (requireNonEmptyStats)
+                    {
+                        UNIT_ASSERT_GT(stats.GetStoreSizeBytes(), 0);
+                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerMinute(), 0);
+                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerHour(), 0);
+                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerDay(), 0);
+                        UNIT_ASSERT_GT(stats.GetMaxWriteTimeLag(), TDuration::Zero());
+                        UNIT_ASSERT_GT(stats.GetMinLastWriteTime(), TInstant::Zero());
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.GetStoreSizeBytes(), 0);
+                    }
+                }
+
+                if (requireLocation)
+                {
+                    UNIT_ASSERT(partition.GetPartitionLocation());
+                    const auto& partitionLocation = *partition.GetPartitionLocation();
+                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                    UNIT_ASSERT_GE(partitionLocation.GetGeneration(), 0); // greater-or-equal 0
+                }
             }
 
-            // DescribeConsumer
+            if (killTablets)
             {
-                auto result = client.DescribeConsumer(setup->GetTestTopicPath(), setup->GetTestConsumer()).GetValueSync();
+                setup.KillTopicTablets(setup.GetTestTopicPath());
+
+                auto result = client.DescribeTopic(setup.GetTestTopicPath(), settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-                auto& description = result.GetConsumerDescription();
+                const auto& description = result.GetTopicDescription();
 
-                auto& partitions = description.GetPartitions();
+                const auto& partitions = description.GetPartitions();
                 UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
-                auto& partition = partitions[0];
+                const auto& partition = partitions[0];
                 UNIT_ASSERT(partition.GetActive());
                 UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+
+                if (requireStats)
+                {
+                    const auto& stats = description.GetTopicStats();
+
+                    if (requireNonEmptyStats)
+                    {
+                        UNIT_ASSERT_GT(stats.GetStoreSizeBytes(), 0);
+                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerMinute(), 0);
+                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerHour(), 0);
+                        UNIT_ASSERT_GT(stats.GetBytesWrittenPerDay(), 0);
+                        UNIT_ASSERT_GT(stats.GetMaxWriteTimeLag(), TDuration::Zero());
+                        UNIT_ASSERT_GT(stats.GetMinLastWriteTime(), TInstant::Zero());
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.GetStoreSizeBytes(), 0);
+                    }
+                }
+
+                if (requireLocation)
+                {
+                    UNIT_ASSERT(partition.GetPartitionLocation());
+                    const auto& partitionLocation = *partition.GetPartitionLocation();
+                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                    UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
+                }
             }
         }
 
-        Y_UNIT_TEST(Statistics) {
-            auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-            TTopicClient client(setup->GetDriver());
+        void DescribeConsumer(NPersQueue::NTests::TPersQueueYdbSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        {
+            TDescribeConsumerSettings settings;
+            settings.IncludeStats(requireStats);
+            settings.IncludeLocation(requireLocation);
 
-            TDescribeTopicSettings settings;
-            settings.IncludeStats(true);
-
-            // Get empty topic description
             {
-                auto result = client.DescribeTopic(setup->GetTestTopicPath(), settings).GetValueSync();
+                auto result = client.DescribeConsumer(setup.GetTestTopicPath(), ::NPersQueue::SDKTestSetup::GetTestConsumer(), settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-                auto& description = result.GetTopicDescription();
-                UNIT_ASSERT_VALUES_EQUAL(description.GetPartitions().size(), 1);
+                const auto& description = result.GetConsumerDescription();
 
-                auto& stats = description.GetTopicStats();
-                UNIT_ASSERT_VALUES_EQUAL(stats.GetStoreSizeBytes(), 0);
+                const auto& partitions = description.GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+
+                const auto& partition = partitions[0];
+                UNIT_ASSERT(partition.GetActive());
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+
+                if (requireStats)
+                {
+                    const auto& stats = partition.GetPartitionStats();
+                    const auto& consumerStats = partition.GetPartitionConsumerStats();
+                    UNIT_ASSERT(stats);
+                    UNIT_ASSERT(consumerStats);
+
+                    if (requireNonEmptyStats)
+                    {
+                        UNIT_ASSERT_GE(stats->GetStartOffset(), 0);
+                        UNIT_ASSERT_GE(stats->GetEndOffset(), 0);
+                        UNIT_ASSERT_GT(stats->GetStoreSizeBytes(), 0);
+                        UNIT_ASSERT_GT(stats->GetLastWriteTime(), TInstant::Zero());
+                        UNIT_ASSERT_GT(stats->GetMaxWriteTimeLag(), TDuration::Zero());
+                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerMinute(), 0);
+                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerHour(), 0);
+                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerDay(), 0);
+
+                        UNIT_ASSERT_GT(consumerStats->GetLastReadOffset(), 0);
+                        UNIT_ASSERT_GT(consumerStats->GetCommittedOffset(), 0);
+                        UNIT_ASSERT_GE(consumerStats->GetReadSessionId(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetReaderName(), "");
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(stats->GetStartOffset(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(consumerStats->GetLastReadOffset(), 0);
+                    }
+                }
+
+                if (requireLocation)
+                {
+                    UNIT_ASSERT(partition.GetPartitionLocation());
+                    const auto& partitionLocation = *partition.GetPartitionLocation();
+                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                    UNIT_ASSERT_GE(partitionLocation.GetGeneration(), 0); // greater-or-equal 0
+                }
             }
+
+            if (killTablets)
+            {
+                setup.KillTopicTablets(setup.GetTestTopicPath());
+
+                auto result = client.DescribeConsumer(setup.GetTestTopicPath(), ::NPersQueue::SDKTestSetup::GetTestConsumer(), settings).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& description = result.GetConsumerDescription();
+
+                const auto& partitions = description.GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+
+                const auto& partition = partitions[0];
+                UNIT_ASSERT(partition.GetActive());
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+
+                if (requireLocation)
+                {
+                    UNIT_ASSERT(partition.GetPartitionLocation());
+                    const auto& partitionLocation = *partition.GetPartitionLocation();
+                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                    UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
+                }
+            }
+        }
+
+        void DescribePartition(NPersQueue::NTests::TPersQueueYdbSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        {
+            TDescribePartitionSettings settings;
+            settings.IncludeStats(requireStats);
+            settings.IncludeLocation(requireLocation);
+
+            i64 testPartitionId = 0;
+
+            {
+                auto result = client.DescribePartition(setup.GetTestTopicPath(), testPartitionId, settings).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& description = result.GetPartitionDescription();
+
+                const auto& partition = description.GetPartition();
+                UNIT_ASSERT(partition.GetActive());
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), testPartitionId);
+
+                if (requireStats)
+                {
+                    const auto& stats = partition.GetPartitionStats();
+                    UNIT_ASSERT(stats);
+
+                    if (requireNonEmptyStats)
+                    {
+                        UNIT_ASSERT_GE(stats->GetStartOffset(), 0);
+                        UNIT_ASSERT_GE(stats->GetEndOffset(), 0);
+                        UNIT_ASSERT_GT(stats->GetStoreSizeBytes(), 0);
+                        UNIT_ASSERT_GT(stats->GetLastWriteTime(), TInstant::Zero());
+                        UNIT_ASSERT_GT(stats->GetMaxWriteTimeLag(), TDuration::Zero());
+                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerMinute(), 0);
+                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerHour(), 0);
+                        UNIT_ASSERT_GT(stats->GetBytesWrittenPerDay(), 0);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(stats->GetStoreSizeBytes(), 0);
+                    }
+                }
+
+                if (requireLocation)
+                {
+                    UNIT_ASSERT(partition.GetPartitionLocation());
+                    const auto& partitionLocation = *partition.GetPartitionLocation();
+                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                    UNIT_ASSERT_GE(partitionLocation.GetGeneration(), 0); // greater-or-equal 0
+                }
+            }
+
+            if (killTablets)
+            {
+                setup.KillTopicTablets(setup.GetTestTopicPath());
+
+                auto result = client.DescribePartition(setup.GetTestTopicPath(), testPartitionId, settings).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const auto& description = result.GetPartitionDescription();
+
+                const auto& partition = description.GetPartition();
+                UNIT_ASSERT(partition.GetActive());
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), testPartitionId);
+
+                if (requireLocation)
+                {
+                    UNIT_ASSERT(partition.GetPartitionLocation());
+                    const auto& partitionLocation = *partition.GetPartitionLocation();
+                    UNIT_ASSERT_GT(partitionLocation.GetNodeId(), 0);
+                    UNIT_ASSERT_GT(partitionLocation.GetGeneration(), 0); // greater-then 0 after tablet restart
+                }
+            }
+        }
+
+        Y_UNIT_TEST(Basic) {
+            NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            TTopicClient client(setup.GetDriver());
+
+            DescribeTopic(setup, client, false, false, false, false);
+            DescribeConsumer(setup, client, false, false, false, false);
+            DescribePartition(setup, client, false, false, false, false);
+        }
+
+        Y_UNIT_TEST(Statistics) {
+            NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            TTopicClient client(setup.GetDriver());
+
+            // Get empty description
+            DescribeTopic(setup, client, true, false, false, false);
+            DescribeConsumer(setup, client, true, false, false, false);
+            DescribePartition(setup, client, true, false, false, false);
 
             // Write a message
             {
-                auto writeSettings = TWriteSessionSettings().Path(setup->GetTestTopic()).MessageGroupId(::NPersQueue::SDKTestSetup::GetTestMessageGroupId());
+                auto writeSettings = TWriteSessionSettings().Path(setup.GetTestTopicPath()).MessageGroupId(::NPersQueue::SDKTestSetup::GetTestMessageGroupId());
                 auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
                 std::string message(10_KB, 'x');
                 UNIT_ASSERT(writeSession->Write(message));
                 writeSession->Close();
             }
 
-            // Get non-empty topic description
+            // Read a message
             {
-                auto result = client.DescribeTopic(setup->GetTestTopicPath(), settings).GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                auto readSettings = TReadSessionSettings()
+                                        .ConsumerName(setup.GetTestConsumer())
+                                        .AppendTopics(setup.GetTestTopicPath());
+                auto readSession = client.CreateReadSession(readSettings);
 
-                auto& description = result.GetTopicDescription();
+                auto event = readSession->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
 
-                auto& stats = description.GetTopicStats();
-                UNIT_ASSERT_GT(stats.GetStoreSizeBytes(), 0);
-                UNIT_ASSERT_GT(stats.GetBytesWrittenPerMinute(), 0);
-                UNIT_ASSERT_GT(stats.GetBytesWrittenPerHour(), 0);
-                UNIT_ASSERT_GT(stats.GetBytesWrittenPerDay(), 0);
-                UNIT_ASSERT_GT(stats.GetMaxWriteTimeLag(), TDuration::Zero());
-                UNIT_ASSERT_GT(stats.GetMinLastWriteTime(), TInstant::Zero());
+                auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+                startPartitionSession.Confirm();
 
-                auto& partitions = description.GetPartitions();
-                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                event = readSession->GetEvent(true);
+                UNIT_ASSERT(event.Defined());
 
-                auto& partition = partitions[0];
-                UNIT_ASSERT(partition.GetActive());
-                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-
-                auto& partitionStats = *partition.GetPartitionStats();
-                UNIT_ASSERT_VALUES_EQUAL(partitionStats.GetStartOffset(), 0);
-                UNIT_ASSERT_GT(partitionStats.GetEndOffset(), 0);
-                UNIT_ASSERT_GT(partitionStats.GetStoreSizeBytes(), 0);
-                UNIT_ASSERT_GT(partitionStats.GetBytesWrittenPerMinute(), 0);
-                UNIT_ASSERT_GT(partitionStats.GetBytesWrittenPerHour(), 0);
-                UNIT_ASSERT_GT(partitionStats.GetBytesWrittenPerDay(), 0);
-                UNIT_ASSERT_GT(partitionStats.GetMaxWriteTimeLag(), TDuration::Zero());
-                UNIT_ASSERT_GT(partitionStats.GetLastWriteTime(), TInstant::Zero());
+                auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+                dataReceived.Commit();
             }
+
+            // Get non-empty description
+            DescribeTopic(setup, client, true, true, false, false);
+            DescribeConsumer(setup, client, true, true, false, false);
+            DescribePartition(setup, client, true, true, false, false);
+        }
+
+        Y_UNIT_TEST(Location) {
+            NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            TTopicClient client(setup.GetDriver());
+
+            DescribeTopic(setup, client, false, false, true, false);
+            DescribeConsumer(setup, client, false, false, true, false);
+            DescribePartition(setup, client, false, false, true, false);
+
+            // Describe with KillTablets
+            DescribeTopic(setup, client, false, false, true, true);
+            DescribeConsumer(setup, client, false, false, true, true);
+            DescribePartition(setup, client, false, false, true, true);
         }
     }
 }

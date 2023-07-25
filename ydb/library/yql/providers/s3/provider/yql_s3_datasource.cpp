@@ -32,7 +32,12 @@ public:
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
         auto& settings = State_->Configuration->Clusters[name];
         settings.Url = properties.Value("location", "");
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
+        auto signReference = properties.Value("serviceAccountIdSignatureReference", "");
+        if (signReference) {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), signReference);
+        } else {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
+        }
     }
 
     TStringBuf GetName() const override {

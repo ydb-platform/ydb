@@ -1678,7 +1678,7 @@ private:
                             }
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo);
+                            BuildReadTasksFromSource(stageInfo, {});
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");

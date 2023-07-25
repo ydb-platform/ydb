@@ -31,6 +31,7 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -704,7 +705,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, TMap<TString, TString> secureParams) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -720,7 +721,14 @@ protected:
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
 
-            task.Meta.DqTaskParams.emplace(externalSource.GetTaskParamKey(), partitionParam);
+            task.Meta.TaskParams.emplace(externalSource.GetTaskParamKey(), partitionParam);
+
+            auto sourceName = externalSource.GetSourceName();
+            if (sourceName) {
+                auto structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+                task.Meta.SecureParams.emplace(sourceName, structuredToken);
+            }
+
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
         }

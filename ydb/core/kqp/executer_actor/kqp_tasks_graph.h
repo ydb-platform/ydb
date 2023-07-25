@@ -161,8 +161,8 @@ public:
     TActorId ExecuterId;
     ui32 Type = Unknown;
 
-    THashMap<TString, TString> DqTaskParams; // Params for sources/sinks
-    THashMap<TString, TString> DqSecureParams;
+    THashMap<TString, TString> TaskParams; // Params for sources/sinks
+    THashMap<TString, TString> SecureParams;
 
     enum TTaskType : ui32 {
         Unknown = 0,

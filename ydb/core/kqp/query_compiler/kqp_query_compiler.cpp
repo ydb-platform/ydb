@@ -17,6 +17,7 @@
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NKikimr {
@@ -834,6 +835,10 @@ private:
 
             FillTable(*tableMeta, std::move(tableColumns), *txProto.AddTables());
         }
+
+        for (const auto& secretName : SecretNames) {
+            txProto.AddSecretNames(secretName);
+        }
     }
 
     void FillKqpSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
@@ -929,6 +934,17 @@ private:
             externalSource.SetTaskParamKey(TString(dataSourceCategory));
             for (const TString& partitionParam : partitionParams) {
                 externalSource.AddPartitionedTaskParams(partitionParam);
+            }
+
+            THashMap<TString, TString> secureParams;
+            NYql::NCommon::FillSecureParams(source.Ptr(), TypesCtx, secureParams);
+            if (!secureParams.empty()) {
+                YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per source allowed");
+                auto it = secureParams.begin();
+                externalSource.SetSourceName(it->first);
+                auto token = it->second;
+                externalSource.SetAuthInfo(token);
+                CreateStructuredTokenParser(token).ListReferences(SecretNames);
             }
         }
     }
@@ -1101,6 +1117,7 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    TSet<TString> SecretNames;
 };
 
 } // namespace

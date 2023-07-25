@@ -307,6 +307,9 @@ message TKqpExternalSource {
     // Partitioning
     string TaskParamKey = 3;
     repeated string PartitionedTaskParams = 4;
+
+    string SourceName = 5;
+    string AuthInfo = 6;
 }
 
 message TKqpSource {
@@ -363,6 +366,7 @@ message TKqpPhyTx {
     bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set
     repeated TKqpPhyTable Tables = 7;
     TKqpSchemeOperation SchemeOperation = 8;
+    repeated string SecretNames = 9;
 }
 
 message TKqpTableInfo {

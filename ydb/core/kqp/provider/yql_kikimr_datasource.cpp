@@ -197,10 +197,19 @@ public:
             LoadResults.clear();
             return false;
         }
-        it->second->AddCluster(metadata.ExternalSource.DataSourcePath, {{
+
+        THashMap<TString, TString> properties = {{
             {"location", metadata.ExternalSource.DataSourceLocation },
             {"installation", metadata.ExternalSource.DataSourceInstallation }
-            }});
+        }};
+
+        if (metadata.ExternalSource.DataSourceAuth.identity_case() == NKikimrSchemeOp::TAuth::kServiceAccount) {
+            properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetId();
+            properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
+        }
+
+        it->second->AddCluster(metadata.ExternalSource.DataSourcePath, properties);
+
         return true;
     }
 

@@ -1035,11 +1035,11 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
         result->SetMetaId(task.GetMetaIdUnsafe());
     }
 
-    for (const auto& [paramName, paramValue] : task.Meta.DqTaskParams) {
+    for (const auto& [paramName, paramValue] : task.Meta.TaskParams) {
         (*result->MutableTaskParams())[paramName] = paramValue;
     }
 
-    for (const auto& [paramName, paramValue] : task.Meta.DqSecureParams) {
+    for (const auto& [paramName, paramValue] : task.Meta.SecureParams) {
         (*result->MutableSecureParams())[paramName] = paramValue;
     }
 

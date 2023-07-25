@@ -11,18 +11,15 @@ IF (SANITIZER_TYPE)
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
+
+REQUIREMENTS(
+    cpu:4
+    ram:32
+)
 
 DEPENDS(
     ydb/apps/ydbd

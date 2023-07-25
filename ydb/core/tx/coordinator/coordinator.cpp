@@ -18,10 +18,6 @@ NKikimr::TEvTxCoordinator::TEvCoordinatorStep::TEvCoordinatorStep(const NFlatTxC
     }
 }
 
-NKikimr::TEvTxCoordinator::TEvMediatorQueueConfirmations::TEvMediatorQueueConfirmations(TAutoPtr<NKikimr::NFlatTxCoordinator::TMediatorConfirmations> &confirmations)
-: Confirmations(confirmations)
-{}
-
 NKikimr::TEvTxCoordinator::TEvCoordinatorStepResult::TEvCoordinatorStepResult(NKikimrTx::TEvCoordinatorStepResult::EStatus status, ui64 step, ui64 completeStep, ui64 latestKnown, ui64 subjectiveTime, ui64 mediator, ui64 coordinator)
 {
     Record.SetStatus(status);
@@ -55,22 +51,3 @@ NKikimr::TEvTxCoordinator::TEvCoordinatorSyncResult::TEvCoordinatorSyncResult(ui
     Record.SetMediatorID(mediator);
     Record.SetCoordinatorID(coordinator);
 }
-
-NKikimr::TEvTxCoordinator::TEvMediatorQueueStep::TEvMediatorQueueStep(ui64 genCookie, TAutoPtr<NKikimr::NFlatTxCoordinator::TMediatorStep> step)
-: GenCookie(genCookie)
-, Step(step)
-{}
-
-NKikimr::TEvTxCoordinator::TEvMediatorQueueRestart::TEvMediatorQueueRestart(ui64 mediatorId, ui64 startFrom, ui64 genCookie)
-: MediatorId(mediatorId)
-, StartFrom(startFrom)
-, GenCookie(genCookie)
-{}
-
-NKikimr::TEvTxCoordinator::TEvMediatorQueueStop::TEvMediatorQueueStop(ui64 mediatorId)
-: MediatorId(mediatorId)
-{}
-
-NKikimr::TEvTxCoordinator::TEvCoordinatorConfirmPlan::TEvCoordinatorConfirmPlan(TAutoPtr<NFlatTxCoordinator::TCoordinatorStepConfirmations> &confirmations)
-: Confirmations(confirmations)
-{}

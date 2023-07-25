@@ -16,6 +16,7 @@ target_link_libraries(core-tx-coordinator PUBLIC
   cpp-actors-core
   cpp-actors-helpers
   cpp-actors-interconnect
+  cpp-containers-absl_flat_hash
   ydb-core-actorlib_impl
   ydb-core-base
   core-engine-minikql
@@ -40,7 +41,6 @@ target_sources(core-tx-coordinator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__plan_step.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__read_step_subscriptions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restore_params.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restart_mediator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restore_transaction.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema_upgrade.cpp

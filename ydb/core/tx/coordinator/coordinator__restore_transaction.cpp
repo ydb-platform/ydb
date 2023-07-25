@@ -13,6 +13,52 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         : TBase(coordinator)
     {}
 
+    struct TMediatorState {
+        TMediatorStepList Steps;
+        THashMap<TStepId, TMediatorStepList::iterator> Index;
+    };
+
+    THashMap<TTabletId, TMediatorState> Mediators;
+
+    TMediatorStep& GetMediatorStep(TTabletId mediatorId, TStepId step) {
+        auto& state = Mediators[mediatorId];
+
+        auto it = state.Index.find(step);
+        if (it != state.Index.end()) {
+            return *it->second;
+        }
+
+        auto& entry = state.Steps.emplace_back(mediatorId, step);
+        state.Index[step] = --state.Steps.end();
+        return entry;
+    }
+
+    TMediatorStep::TTx& GetMediatorTx(TTabletId mediatorId, TStepId step, TTxId txId) {
+        auto& medStep = GetMediatorStep(mediatorId, step);
+        if (medStep.Transactions.empty() || medStep.Transactions.back().TxId < txId) {
+            return medStep.Transactions.emplace_back(txId);
+        }
+        auto& medTx = medStep.Transactions.back();
+        Y_VERIFY_S(medTx.TxId == txId, "Transaction loading must be ordered by TxId:"
+            << " Mediator# " << mediatorId
+            << " step# " << step
+            << " TxId# " << txId
+            << " PrevTxId# " << medTx.TxId);
+        return medTx;
+    }
+
+    void EnsureLastMediatorStep(TTabletId mediatorId, TStepId step) {
+        auto& state = Mediators[mediatorId];
+        if (!state.Steps.empty()) {
+            auto it = --state.Steps.end();
+            if (step <= it->Step) {
+                return; // nothing to do
+            }
+        }
+        state.Steps.emplace_back(mediatorId, step);
+        state.Index[step] = --state.Steps.end();
+    }
+
     bool Restore(TTransactions &transactions, TTransactionContext &txc, const TActorContext &ctx) {
         Y_UNUSED(ctx);
         NIceDb::TNiceDb db(txc.DB);
@@ -35,6 +81,8 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
             }
         }
 
+        Mediators.clear();
+
         {
             int errors = 0;
             auto rowset = db.Table<Schema::AffectedSet>().Range().Select();
@@ -48,7 +96,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
                 auto itTransaction = transactions.find(txId);
                 if (itTransaction != transactions.end()) {
-                    itTransaction->second.UnconfirmedAffectedSet[medId].insert(affectedShardId);
+                    auto& tx = itTransaction->second;
+                    tx.UnconfirmedAffectedSet[medId].insert(affectedShardId);
+                    auto& medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
+                    medTx.PushToAffected.push_back(affectedShardId);
                 } else {
                     LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR, "Transaction not found: MedId = " << medId << " TxId = " << txId << " DataShardId = " << affectedShardId);
                     ++errors;
@@ -85,14 +136,36 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         Self->Transactions.swap(transactions);
         *Self->MonCounters.TxInFly += txCounter;
         Self->MonCounters.CurrentTxInFly = txCounter;
+
+        // Prepare mediator queues
+        for (ui64 mediatorId : Self->Config.Mediators->List()) {
+            auto& state = Mediators[mediatorId];
+            // We need to slice steps in a sorted order
+            state.Steps.sort([](const TMediatorStep& a, const TMediatorStep& b) -> bool {
+                return a.Step < b.Step;
+            });
+            // Make sure each mediator will receive last planned step
+            if (Self->VolatileState.LastPlanned != 0) {
+                EnsureLastMediatorStep(mediatorId, Self->VolatileState.LastPlanned);
+            }
+            // Splice all steps to the queue
+            TMediator& mediator = Self->Mediator(mediatorId, ctx);
+            Y_VERIFY(mediator.Queue.empty());
+            mediator.Queue.splice(mediator.Queue.end(), state.Steps);
+        }
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
-        // start mediator queues
+        // Send steps to connected queues
         for (ui64 mediatorId: Self->Config.Mediators->List()) {
             TMediator &mediator = Self->Mediator(mediatorId, ctx);
-            Y_UNUSED(mediator);
+            auto& state = Mediators[mediatorId];
+            for (auto& pr : state.Index) {
+                Y_VERIFY(!pr.second->Confirmed);
+                pr.second->Confirmed = true;
+            }
+            Self->SendMediatorStep(mediator, ctx);
         }
 
         // start plan process.

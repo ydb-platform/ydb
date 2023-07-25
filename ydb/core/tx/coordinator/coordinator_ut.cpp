@@ -32,9 +32,9 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
             ui64 lastMediatorStep = 0;
             auto observeMediatorSteps = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
                 switch (ev->GetTypeRewrite()) {
-                    case TEvTxCoordinator::TEvMediatorQueueStep::EventType: {
-                        auto* msg = ev->Get<TEvTxCoordinator::TEvMediatorQueueStep>();
-                        ui64 step = msg->Step->Step;
+                    case TEvMediatorQueueStep::EventType: {
+                        auto* msg = ev->Get<TEvMediatorQueueStep>();
+                        ui64 step = msg->Steps.back().Step;
                         lastMediatorStep = Max(lastMediatorStep, step);
                         break;
                     }
@@ -474,6 +474,59 @@ namespace NKikimr::NFlatTxCoordinator::NTest {
 
             runtime.SimulateSleep(TDuration::MilliSeconds(50));
             UNIT_ASSERT_C(hooks.PersistConfig_.empty(), "Unexpected persist attempt after a second reboot");
+        }
+
+        Y_UNIT_TEST(LastEmptyStepResent) {
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root")
+                .SetNodeCount(1)
+                .SetUseRealThreads(false);
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+
+            auto &runtime = *server->GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
+
+            auto sender = runtime.AllocateEdgeActor();
+            ui64 mediatorId = ChangeStateStorage(Mediator, server->GetSettings().Domain);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+
+            std::vector<ui64> emptySteps;
+            auto stepsObserver = [&](auto&, auto& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvTxCoordinator::TEvCoordinatorStep::EventType: {
+                        auto* msg = ev->template Get<TEvTxCoordinator::TEvCoordinatorStep>();
+                        ui64 step = msg->Record.GetStep();
+                        bool empty = msg->Record.TransactionsSize() == 0;
+                        Cerr << "... observed " << step << ": " << (empty ? "empty" : "not empty") << Endl;
+                        if (empty) {
+                            emptySteps.push_back(step);
+                        }
+                        break;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+            auto prevObserverFunc = runtime.SetObserverFunc(stepsObserver);
+
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            UNIT_ASSERT_C(emptySteps.size() > 1, "Expected multiple empty steps, not " << emptySteps.size());
+            ui64 lastObserved = emptySteps.back();
+            emptySteps.clear();
+
+            RebootTablet(runtime, mediatorId, sender);
+            if (emptySteps.empty()) {
+                Cerr << "... waiting for empty steps" << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return !emptySteps.empty();
+                };
+                runtime.DispatchEvents(options);
+            }
+            UNIT_ASSERT_C(!emptySteps.empty(), "Expected at least one empty step");
+            UNIT_ASSERT_C(emptySteps.front() == lastObserved,
+                "Expected to observe " << lastObserved << " empty step, not " << emptySteps.front());
         }
 
     } // Y_UNIT_TEST_SUITE(Coordinator)

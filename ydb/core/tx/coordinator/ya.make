@@ -14,7 +14,6 @@ SRCS(
     coordinator__plan_step.cpp
     coordinator__read_step_subscriptions.cpp
     coordinator__restore_params.cpp
-    coordinator__restart_mediator.cpp
     coordinator__restore_transaction.cpp
     coordinator__schema.cpp
     coordinator__schema_upgrade.cpp
@@ -27,6 +26,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/helpers
     library/cpp/actors/interconnect
+    library/cpp/containers/absl_flat_hash
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/engine/minikql

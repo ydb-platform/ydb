@@ -19,24 +19,24 @@ struct TInFlyAccountant {
 
 struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     const ui64 PlanOnStep;
-    TVector<TQueueType::TSlot> Slots;
+    std::deque<TQueueType::TSlot> Slots;
 
-    TMap<ui64, std::pair<ui64, bool *>> StepsToConfirm;
-    TAutoPtr<TCoordinatorStepConfirmations> ProxyPlanConfirmations;
+    TMap<ui64, TMediatorStepList::iterator> StepsToConfirm;
+    TCoordinatorStepConfirmations ProxyPlanConfirmations;
 
     TInstant ExecStartMoment;
     ui64 PlannedCounter;
     ui64 DeclinedCounter;
     TInFlyAccountant InFlyAccountant;
 
-    TTxPlanStep(ui64 toPlan, TVector<TQueueType::TSlot> &slots, TSelf *coordinator)
+    TTxPlanStep(ui64 toPlan, std::deque<TQueueType::TSlot> &&slots, TSelf *coordinator)
         : TBase(coordinator)
         , PlanOnStep(toPlan)
+        , Slots(std::move(slots))
         , PlannedCounter(0)
         , DeclinedCounter(0)
         , InFlyAccountant(Self->MonCounters.StepsInFly)
     {
-        Slots.swap(slots);
     }
 
     void Plan(TTransactionContext &txc, const TActorContext &ctx) {
@@ -46,40 +46,37 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         const bool lowDiskSpace = Self->Executor()->GetStats().IsAnyChannelYellowStop;
 
         THashSet<TTxId> newTransactions;
-        TVector<TAutoPtr<TMediatorStep>> mediatorSteps;
+        TVector<TMediatorStep> mediatorSteps;
         THashMap<TTabletId, TVector<TTabletId>> byMediatorAffected;
 
         // first fill every mediator with something (every mediator must receive step)
         const ui32 mediatorsSize = Self->Config.Mediators->List().size();
         mediatorSteps.reserve(mediatorsSize);
         for (TTabletId mediatorId : Self->Config.Mediators->List()) {
-            mediatorSteps.push_back(new TMediatorStep(mediatorId, PlanOnStep));
+            mediatorSteps.emplace_back(mediatorId, PlanOnStep);
         }
 
         // create mediator steps
-        ProxyPlanConfirmations.Reset(new TCoordinatorStepConfirmations(PlanOnStep));
-        for (const auto &slot : Slots) {
-            TQueueType::TQ &queue = *slot.Queue;
-            TQueueType::TQ::TReadIterator iterator = queue.Iterator();
-            while (TTransactionProposal *proposal = iterator.Next()) {
+        for (auto &slot : Slots) {
+            for (auto &proposal : slot) {
                 for (auto &x : byMediatorAffected) {
                     x.second.clear();
                 }
 
-                const TTxId txId = proposal->TxId;
+                const TTxId txId = proposal.TxId;
                 Y_VERIFY(txId);
 
                 Self->MonCounters.StepConsideredTx->Inc();
-                auto durationMs = (ExecStartMoment - proposal->AcceptMoment).MilliSeconds();
+                auto durationMs = (ExecStartMoment - proposal.AcceptMoment).MilliSeconds();
                 Self->MonCounters.TxFromReceiveToPlan->Collect(durationMs);
 
-                if (proposal->MaxStep < PlanOnStep) {
+                if (proposal.MaxStep < PlanOnStep) {
                     Self->MonCounters.StepOutdatedTx->Inc();
-                    ProxyPlanConfirmations->Queue->Push(new TCoordinatorStepConfirmations::TEntry {
+                    ProxyPlanConfirmations.Queue.emplace_back(
                         txId,
-                        proposal->Proxy,
+                        proposal.Proxy,
                         TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated,
-                        0 });
+                        0);
                     ++DeclinedCounter;
                     continue;
                 }
@@ -87,11 +84,11 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 // check is transactions already processed?
                 if (newTransactions.insert(txId).second == false) {
                     Self->MonCounters.StepPlannedDeclinedTx->Inc();
-                    ProxyPlanConfirmations->Queue->Push(new TCoordinatorStepConfirmations::TEntry {
+                    ProxyPlanConfirmations.Queue.emplace_back(
                         txId,
-                        proposal->Proxy,
+                        proposal.Proxy,
                         TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned,
-                        PlanOnStep });
+                        PlanOnStep);
                     ++DeclinedCounter;
                     continue;
                 }
@@ -100,24 +97,23 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     auto it = Self->Transactions.find(txId);
                     if (it != Self->Transactions.end()) {
                         Self->MonCounters.StepPlannedDeclinedTx->Inc();
-                        ProxyPlanConfirmations->Queue->Push(new TCoordinatorStepConfirmations::TEntry {
+                        ProxyPlanConfirmations.Queue.emplace_back(
                             txId,
-                            proposal->Proxy,
+                            proposal.Proxy,
                             TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned,
-                            it->second.PlanOnStep });
+                            it->second.PlanOnStep);
                         ++DeclinedCounter;
                         continue;
                     }
                 }
 
-                if (lowDiskSpace && !proposal->IgnoreLowDiskSpace) {
+                if (lowDiskSpace && !proposal.IgnoreLowDiskSpace) {
                     Self->MonCounters.StepDeclinedNoSpaceTx->Inc();
-                    ProxyPlanConfirmations->Queue->Push(new TCoordinatorStepConfirmations::TEntry{
+                    ProxyPlanConfirmations.Queue.emplace_back(
                         txId,
-                        proposal->Proxy,
+                        proposal.Proxy,
                         TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace,
-                        0
-                    });
+                        0);
                     ++DeclinedCounter;
                     continue;
                 }
@@ -128,8 +124,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     TTransaction& transaction = Self->Transactions[txId];
 
                     transaction.PlanOnStep = PlanOnStep;
-                    Y_VERIFY(!proposal->AffectedSet.empty());
-                    for (const auto &txprop : proposal->AffectedSet) {
+                    Y_VERIFY(!proposal.AffectedSet.empty());
+                    for (const auto &txprop : proposal.AffectedSet) {
                         const TTabletId affectedTablet = txprop.TabletId;
                         const TTabletId mediatorId = Self->Config.Mediators->Select(affectedTablet);
 
@@ -149,10 +145,10 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 }
 
                 for (ui32 idx = 0; idx < mediatorsSize; ++idx) {
-                    TTabletId mediatorId = mediatorSteps[idx]->MediatorId;
+                    TTabletId mediatorId = mediatorSteps[idx].MediatorId;
                     TVector<TTabletId> &affected = byMediatorAffected[mediatorId];
                     if (!affected.empty()) {
-                        mediatorSteps[idx]->Transactions.push_back(TMediatorStep::TTx(txId, &affected.front(), affected.size(), 0));
+                        mediatorSteps[idx].Transactions.emplace_back(txId, affected.data(), affected.size(), 0);
                     }
                 }
 
@@ -160,19 +156,19 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 ++PlannedCounter;
 
                 Self->MonCounters.StepPlannedTx->Inc();
-                ProxyPlanConfirmations->Queue->Push(new TCoordinatorStepConfirmations::TEntry {
+                ProxyPlanConfirmations.Queue.emplace_back(
                     txId,
-                    proposal->Proxy,
+                    proposal.Proxy,
                     TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned,
-                    PlanOnStep } );
+                    PlanOnStep);
             }
         }
 
-        for (const TAutoPtr<TMediatorStep> &mp : mediatorSteps) {
-            const ui64 mediatorId = mp->MediatorId;
+        for (TMediatorStep& m : mediatorSteps) {
+            const ui64 mediatorId = m.MediatorId;
 
             // write mediator entry
-            for (const auto &tx : mp->Transactions) {
+            for (const auto &tx : m.Transactions) {
                 for (TTabletId tablet : tx.PushToAffected) {
                     db.Table<Schema::AffectedSet>().Key(mediatorId, tx.TxId, tablet).Update();
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Planned transaction " << tx.TxId << " for mediator " << mediatorId << " tablet " << tablet);
@@ -180,12 +176,12 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             }
 
             TMediator& mediator = Self->Mediator(mediatorId, ctx);
-            if (mediator.PushUpdates) {
-                StepsToConfirm[mediatorId] = std::pair<ui64, bool *>(mediator.GenCookie, &mp->Confirmed);
-                mediator.Queue->Push(mp.Release());
-            } else if (!StepsToConfirm.empty()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "PushUpdates false for mediator " << mediatorId << " step " << PlanOnStep);
+            if (!mediator.Queue.empty() && mediator.Queue.back().Confirmed && mediator.Queue.back().Transactions.empty()) {
+                // Remove the last confirmed empty step
             }
+            mediator.Queue.emplace_back(std::move(m));
+            auto it = --mediator.Queue.end();
+            StepsToConfirm[mediatorId] = it;
         }
         db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Update(NIceDb::TUpdate<Schema::State::StateValue>(PlanOnStep));
     }
@@ -210,24 +206,31 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         auto durationMs = (ctx.Now() - ExecStartMoment).MilliSeconds();
         Self->MonCounters.TxPlanLatency->Collect(durationMs);
 
-        for (auto &cx : StepsToConfirm) {
-            const ui64 mediatorId = cx.first;
+        for (auto &pr : StepsToConfirm) {
+            const ui64 mediatorId = pr.first;
             TMediator &mediator = Self->Mediator(mediatorId, ctx);
-            if (mediator.GenCookie == cx.second.first) {
-                *cx.second.second = true;
-                Self->SendMediatorStep(mediator, ctx);
+            Y_VERIFY(!mediator.Queue.empty());
+            pr.second->Confirmed = true;
+            for (auto it = pr.second; it != mediator.Queue.begin();) {
+                --it;
+                if (!it->Confirmed) break;
+                if (!it->Transactions.empty()) break;
+                // Remove empty confirmed steps before us
+                // Needed so the queue does not grow for disconnected mediators
+                mediator.Queue.erase(it++);
             }
+            Self->SendMediatorStep(mediator, ctx);
         }
 
-        ctx.Send(ctx.SelfID, new TEvTxCoordinator::TEvCoordinatorConfirmPlan(ProxyPlanConfirmations));
+        Self->SendStepConfirmations(ProxyPlanConfirmations, ctx);
 
         // uncomment this to enable consistency self-check
         //Self->Execute(Self->CreateTxConsistencyCheck(), ctx);
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxPlanStep(ui64 toStep, TVector<TQueueType::TSlot> &slots) {
-    return new TTxPlanStep(toStep, slots, this);
+ITransaction* TTxCoordinator::CreateTxPlanStep(ui64 toStep, std::deque<TQueueType::TSlot> &&slots) {
+    return new TTxPlanStep(toStep, std::move(slots), this);
 }
 
 }

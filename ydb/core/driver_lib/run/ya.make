@@ -145,6 +145,7 @@ PEERDIR(
     ydb/services/discovery
     ydb/services/fq
     ydb/services/kesus
+    ydb/services/keyvalue
     ydb/services/local_discovery
     ydb/services/maintenance
     ydb/services/metadata/ds_table

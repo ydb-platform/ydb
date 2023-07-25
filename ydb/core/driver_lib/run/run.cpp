@@ -91,6 +91,7 @@
 #include <ydb/services/fq/grpc_service.h>
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/kesus/grpc_service.h>
+#include <ydb/services/keyvalue/grpc_service.h>
 #include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -638,6 +639,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["auth"] = &hasAuth;
         TServiceCfg hasQueryService = services.empty();
         names["query_service"] = &hasQueryService;
+        TServiceCfg hasKeyValue = services.empty();
+        names["keyvalue"] = &hasKeyValue;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -894,6 +897,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasLogStore) {
             server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasLogStore.IsRlAllowed()));
+        }
+
+        if (hasKeyValue) {
+            server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {

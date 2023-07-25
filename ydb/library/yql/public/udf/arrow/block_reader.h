@@ -449,7 +449,7 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
     if (typePg) {
         auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
         if (desc->PassByValue) {
-            *props.MaxSize += desc->Typelen;
+            *props.MaxSize += 1 + desc->Typelen;
         } else {
             props.MaxSize = {};
             props.IsFixed = false;

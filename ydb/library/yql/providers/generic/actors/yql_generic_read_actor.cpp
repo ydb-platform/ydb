@@ -45,11 +45,11 @@ namespace NYql::NDq {
             };
 
             struct TEvReadError: public TEventLocal<TEvReadError, EvReadError> {
-                TEvReadError(TIssues&& error)
-                    : Error(std::move(error))
+                TEvReadError(const NYql::NConnector::NApi::TError& error)
+                    : Error(error)
                 {
                 }
-                TIssues Error;
+                NYql::NConnector::NApi::TError Error;
             };
         };
 
@@ -79,13 +79,13 @@ namespace NYql::NDq {
 
             auto listSplitsResult = ConnectorClient_->ListSplits(listSplitsRequest);
             if (!NConnector::ErrorIsSuccess(listSplitsResult->Error)) {
-                YQL_CLOG(ERROR, ProviderGeneric) << "ListSplits failure" << listSplitsResult->Error.DebugString();
+                YQL_CLOG(ERROR, ProviderGeneric) << "ListSplits failure: " << listSplitsResult->Error.DebugString();
                 ActorSystem_->Send(new IEventHandle(
-                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(NConnector::ErrorToIssues(listSplitsResult->Error))));
+                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(listSplitsResult->Error)));
                 return;
             }
 
-            YQL_CLOG(INFO, ProviderGeneric) << "ListSplits succeess, total splits: " << listSplitsResult->Splits.size();
+            YQL_CLOG(INFO, ProviderGeneric) << "ListSplits success, total splits: " << listSplitsResult->Splits.size();
 
             NConnector::NApi::TReadSplitsRequest readSplitsRequest;
             readSplitsRequest.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
@@ -96,14 +96,14 @@ namespace NYql::NDq {
             readSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
 
             auto readSplitsResult = ConnectorClient_->ReadSplits(readSplitsRequest);
-            if (!NConnector::ErrorIsSuccess(listSplitsResult->Error)) {
-                YQL_CLOG(ERROR, ProviderGeneric) << "ReadSplits failure" << readSplitsResult->Error.DebugString();
+            if (!NConnector::ErrorIsSuccess(readSplitsResult->Error)) {
+                YQL_CLOG(ERROR, ProviderGeneric) << "ReadSplits failure: " << readSplitsResult->Error.DebugString();
                 ActorSystem_->Send(new IEventHandle(
-                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(NConnector::ErrorToIssues(listSplitsResult->Error))));
+                    SelfId(), TActorId(), new TEvPrivate::TEvReadError(readSplitsResult->Error)));
                 return;
             }
 
-            YQL_CLOG(INFO, ProviderGeneric) << "ReadSplits succeess, total batches: "
+            YQL_CLOG(INFO, ProviderGeneric) << "ReadSplits success, total batches: "
                                             << readSplitsResult->RecordBatches.size();
 
             ActorSystem_->Send(new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvReadResult(readSplitsResult)));
@@ -186,7 +186,10 @@ namespace NYql::NDq {
 
         void Handle(TEvPrivate::TEvReadError::TPtr& result) {
             Send(ComputeActorId_,
-                 new TEvAsyncInputError(InputIndex_, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+                 new TEvAsyncInputError(
+                     InputIndex_,
+                     NConnector::ErrorToIssues(result->Get()->Error),
+                     NConnector::ErrorToDqStatus(result->Get()->Error)));
         }
 
         // IActor & IDqComputeActorAsyncInput

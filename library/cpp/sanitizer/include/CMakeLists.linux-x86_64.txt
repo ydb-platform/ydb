@@ -13,6 +13,4 @@ target_include_directories(cpp-sanitizer-include INTERFACE
 )
 target_link_libraries(cpp-sanitizer-include INTERFACE
   contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
 )

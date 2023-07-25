@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/replace_key.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NOlap {

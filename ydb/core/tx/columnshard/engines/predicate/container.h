@@ -1,6 +1,7 @@
 #pragma once
 #include "predicate.h"
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/library/accessor/accessor.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <optional>

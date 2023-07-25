@@ -85,7 +85,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> TMarksGranules::SliceIntoGra
                 // Just take the number of elements in the key column for the last granule.
                 ? effKey->num_rows()
                 // Locate position of the next granule in the key.
-                : NArrow::LowerBound(keys, granules[i + 1].first.GetBorder(), offset);
+                : NArrow::TReplaceKeyHelper::LowerBound(keys, granules[i + 1].first.GetBorder(), offset);
 
             if (const i64 size = end - offset) {
                 Y_VERIFY(out.emplace(granules[i].second, batch->Slice(offset, size)).second);

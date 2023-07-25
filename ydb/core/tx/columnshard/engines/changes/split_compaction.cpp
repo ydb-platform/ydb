@@ -232,7 +232,7 @@ std::vector<std::pair<NKikimr::NOlap::TMark, std::shared_ptr<arrow::RecordBatch>
 
         batchOffsets.push_back(0);
         for (const auto& border : borders) {
-            int offset = NArrow::LowerBound(keys, border, batchOffsets.back());
+            int offset = NArrow::TReplaceKeyHelper::LowerBound(keys, border, batchOffsets.back());
             Y_VERIFY(offset >= batchOffsets.back());
             Y_VERIFY(offset <= batch->num_rows());
             batchOffsets.push_back(offset);

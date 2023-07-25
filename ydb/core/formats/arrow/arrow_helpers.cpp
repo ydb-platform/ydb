@@ -501,16 +501,6 @@ std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema) {
     return out;
 }
 
-size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset) {
-    Y_VERIFY(offset <= batchKeys.size());
-    if (offset == batchKeys.size()) {
-        return offset;
-    }
-    auto start = batchKeys.begin() + offset;
-    auto it = std::lower_bound(start, batchKeys.end(), key.ToRaw());
-    return it - batchKeys.begin();
-}
-
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size) {
     auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(value), size);
     Y_VERIFY(res.ok());

@@ -1,5 +1,6 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
+#include "replace_key.h"
 #include <ydb/core/formats/arrow/common/validation.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 

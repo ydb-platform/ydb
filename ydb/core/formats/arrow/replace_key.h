@@ -1,4 +1,5 @@
 #pragma once
+#include "arrow_helpers.h"
 #include "permutations.h"
 #include "common/validation.h"
 #include <ydb/core/base/defs.h>
@@ -7,8 +8,6 @@
 #include <compare>
 
 namespace NKikimr::NArrow {
-
-bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
 
@@ -383,6 +382,22 @@ private:
 using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
 using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 
+class TStoreReplaceKey: public TReplaceKey {
+private:
+    using TBase = TReplaceKey;
+public:
+    TStoreReplaceKey(const TReplaceKey& baseKey)
+        : TBase(baseKey)
+    {
+        TBase::ShrinkToFit();
+    }
+};
+
+class TReplaceKeyHelper {
+public:
+    static size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset);
+};
+
 }
 
 template<>
@@ -398,3 +413,4 @@ struct THash<NKikimr::NArrow::TRawReplaceKey> {
         return x.Hash();
     }
 };
+

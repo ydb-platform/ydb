@@ -6,6 +6,8 @@
 #include <ydb/core/formats/arrow/compression/object.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
+#include <util/generic/set.h>
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap {
 

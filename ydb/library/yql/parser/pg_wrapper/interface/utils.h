@@ -14,6 +14,5 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret);
 
 std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder();
 bool HasPgKernel(ui32 procOid);
-void RegisterPgKernels();
 
 } // NYql

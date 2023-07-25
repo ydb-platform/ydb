@@ -28,7 +28,6 @@ target_link_libraries(minikql-invoke_builtins-llvm PUBLIC
   ydb-library-binary_json
   library-yql-minikql
   yql-minikql-arrow
-  parser-pg_wrapper-interface
   yql-public-udf
   libs-apache-arrow
 )

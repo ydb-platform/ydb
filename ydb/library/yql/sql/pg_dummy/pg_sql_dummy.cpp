@@ -343,9 +343,6 @@ bool HasPgKernel(ui32 procOid) {
     return false;
 }
 
-void RegisterPgKernels() {
-}
-
 std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,
     const NKikimr::NMiniKQL::TComputationNodeFactoryContext&)> GetPgFactory()
 {

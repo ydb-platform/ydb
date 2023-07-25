@@ -26,6 +26,7 @@ struct TExecs {
         return *Singleton<TExecs>();
     }
 
+    TExecs();
     THashMap<Oid, TExecFunc> Table;
 };
 
@@ -39,33 +40,18 @@ TExecFunc FindExec(Oid oid) {
     return it->second;
 }
 
-void RegisterExec(Oid oid, TExecFunc func) {
-    auto& table = TExecs::Instance().Table;
-    table[oid] = func;
-}
-
 bool HasPgKernel(ui32 procOid) {
     return FindExec(procOid) != nullptr;
 }
 
-namespace {
-    TAtomicCounter Initialized = 0;
-    TMutex InitializationLock;
-}
-
-void RegisterPgKernels() {
-    if (Initialized.Val()) {
-        return;
-    }
-    TGuard<TMutex> g(InitializationLock);
-    if (Initialized.Val()) {
-        return;
-    }
+TExecs::TExecs()
+{
+#define RegisterExec(oid, func) Table[oid] = func
 #include "pg_kernels_register.0.inc"
 #include "pg_kernels_register.1.inc"
 #include "pg_kernels_register.2.inc"
 #include "pg_kernels_register.3.inc"
-    Initialized = 1;
+#undef RegisterExec
 }
 
 const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMiniKQL::TTupleType* tupleType, const std::vector<ui32>& argsColumns, NKikimr::NMiniKQL::TType* returnType) {

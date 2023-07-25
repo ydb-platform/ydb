@@ -1,0 +1,2 @@
+open_source.test_yatest_common.TestYaTestContext::test_source_path
+::suite_tests.test_postgres

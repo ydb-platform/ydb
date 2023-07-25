@@ -53,6 +53,7 @@ runs:
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
       echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
       echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
+      echo "functestfilterfile=$(pwd)/.github/config/muted_functest.txt" >> $GITHUB_OUTPUT
       echo "logurlprefix=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_OUTPUT
       echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
 
@@ -251,6 +252,19 @@ runs:
         tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
         grep -E '(FAILED|ERROR)\s*\[.*\]' | \
         tee $WORKDIR/pytest-short.log
+
+  - name: postprocess functional test reports
+    if: always() && inputs.run_functional_tests == 'true'
+    shell: bash
+    run: |
+      echo "::group::junit-postprocess"
+      
+      .github/scripts/tests/junit-postprocess.py \
+        --filter-file ${{ steps.init.outputs.functestfilterfile }} \
+        $PYTESTREPDIR/
+
+      echo "::endgroup::"
+
 
   - name: write functional tests summary
     if: always() && inputs.run_functional_tests == 'true'

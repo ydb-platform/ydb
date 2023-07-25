@@ -1,6 +1,8 @@
 #include "session_pool.h"
-#include "table_client.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 namespace NYdb {
 namespace NTable {
@@ -62,20 +64,19 @@ TSessionPool::TSessionPool(ui32 maxActiveSessions)
     , MaxActiveSessions_(maxActiveSessions)
 {}
 
-void TTableClient::TImpl::CloseAndDeleteSession(std::unique_ptr<TSession::TImpl>&& impl,
-                                  std::shared_ptr<TTableClient::TImpl> client) {
-    std::shared_ptr<TSession::TImpl> deleteSession(
-        impl.release(),
-        TSession::TImpl::GetSmartDeleter(client));
-
-    deleteSession->MarkBroken();
+static void CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
+                                  std::shared_ptr<ISessionClient> client) {
+    auto deleter = TKqpSessionCommon::GetSmartDeleter(client);
+    TKqpSessionCommon* p = impl.release();
+    p->MarkBroken();
+    deleter(p);
 }
 
 void TSessionPool::ReplySessionToUser(
     TKqpSessionCommon* session,
     std::unique_ptr<IGetSessionCtx> ctx)
 {
-    Y_VERIFY(session->GetState() == TSession::TImpl::S_IDLE);
+    Y_VERIFY(session->GetState() == TKqpSessionCommon::S_IDLE);
     Y_VERIFY(!session->GetTimeInterval());
     session->MarkActive();
     session->SetNeedUpdateActiveCounter(true);
@@ -170,7 +171,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
         } else {
             Sessions_.emplace(std::make_pair(
                 impl->GetTimeToTouchFast(),
-                static_cast<TSession::TImpl*>(impl)));
+                impl));
 
             if (active) {
                 Y_VERIFY(ActiveSessions_);
@@ -200,7 +201,7 @@ void TSessionPool::IncrementActiveCounterUnsafe() {
     UpdateStats();
 }
 
-void TSessionPool::Drain(std::function<bool(std::unique_ptr<TSession::TImpl>&&)> cb, bool close) {
+void TSessionPool::Drain(std::function<bool(std::unique_ptr<TKqpSessionCommon>&&)> cb, bool close) {
     std::lock_guard guard(Mtx_);
     Closed_ = close;
     for (auto it = Sessions_.begin(); it != Sessions_.end();) {
@@ -212,7 +213,7 @@ void TSessionPool::Drain(std::function<bool(std::unique_ptr<TSession::TImpl>&&)>
     UpdateStats();
 }
 
-TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient,
+TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakClient,
     TKeepAliveCmd&& cmd, TDeletePredicate&& deletePredicate)
 {
     auto periodicCb = [this, weakClient, cmd=std::move(cmd), deletePredicate=std::move(deletePredicate)](NYql::TIssues&&, EStatus status) {
@@ -227,9 +228,9 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> 
             return false;
         } else {
             auto keepAliveBatchSize = PERIODIC_ACTION_BATCH_SIZE;
-            TVector<std::unique_ptr<TSession::TImpl>> sessionsToTouch;
+            TVector<std::unique_ptr<TKqpSessionCommon>> sessionsToTouch;
             sessionsToTouch.reserve(keepAliveBatchSize);
-            TVector<std::unique_ptr<TSession::TImpl>> sessionsToDelete;
+            TVector<std::unique_ptr<TKqpSessionCommon>> sessionsToDelete;
             sessionsToDelete.reserve(keepAliveBatchSize);
             TVector<std::unique_ptr<IGetSessionCtx>> waitersToReplyError;
             waitersToReplyError.reserve(keepAliveBatchSize);
@@ -244,7 +245,7 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> 
                         if (now < it->second->GetTimeToTouchFast())
                             break;
 
-                        if (deletePredicate(it->second.get(), strongClient.get(), sessions.size())) {
+                        if (deletePredicate(it->second.get(), sessions.size())) {
                             sessionsToDelete.emplace_back(std::move(it->second));
                         } else {
                             sessionsToTouch.emplace_back(std::move(it->second));
@@ -260,18 +261,15 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> 
 
             for (auto& sessionImpl : sessionsToTouch) {
                 if (sessionImpl) {
-                    Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_IDLE);
-                    TSession session(strongClient, std::shared_ptr<TSession::TImpl>(
-                        sessionImpl.release(),
-                        TSession::TImpl::GetSmartDeleter(strongClient)));
-                    cmd(session);
+                    Y_VERIFY(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
+                    cmd(sessionImpl.release());
                 }
             }
 
             for (auto& sessionImpl : sessionsToDelete) {
                 if (sessionImpl) {
-                    Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_IDLE);
-                    TTableClient::TImpl::CloseAndDeleteSession(std::move(sessionImpl), strongClient);
+                    Y_VERIFY(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
+                    CloseAndDeleteSession(std::move(sessionImpl), strongClient);
                 }
             }
 

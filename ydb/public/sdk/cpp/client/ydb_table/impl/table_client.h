@@ -201,10 +201,6 @@ public:
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
     void DeleteSession(TKqpSessionCommon* sessionImpl) override;
     ui32 GetSessionRetryLimit() const;
-    static void CloseAndDeleteSession(
-        std::unique_ptr<TSession::TImpl>&& impl,
-        std::shared_ptr<TTableClient::TImpl> client);
-
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 

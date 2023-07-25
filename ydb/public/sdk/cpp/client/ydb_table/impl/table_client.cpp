@@ -100,10 +100,10 @@ void TTableClient::TImpl::InitStopper() {
 }
 
 NThreading::TFuture<void> TTableClient::TImpl::Drain() {
-    TVector<std::unique_ptr<TSession::TImpl>> sessions;
+    TVector<std::unique_ptr<TKqpSessionCommon>> sessions;
     // No realocations under lock
     sessions.reserve(Settings_.SessionPoolSettings_.MaxActiveSessions_);
-    auto drainer = [&sessions](std::unique_ptr<TSession::TImpl>&& impl) mutable {
+    auto drainer = [&sessions](std::unique_ptr<TKqpSessionCommon>&& impl) mutable {
         sessions.push_back(std::move(impl));
         return true;
     };
@@ -144,10 +144,11 @@ void TTableClient::TImpl::AsyncBackoff(const TBackoffSettings& settings, ui32 re
 
 void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
 
-    auto deletePredicate = [](TSession::TImpl* session, TTableClient::TImpl* client, size_t sessionsCount) {
+    // Session pool guarantees than client is alive during call callbacks
+    auto deletePredicate = [this](TKqpSessionCommon* s, size_t sessionsCount) {
 
-        const auto sessionPoolSettings = client->Settings_.SessionPoolSettings_;
-        const auto spentTime = session->GetTimeToTouchFast() - session->GetTimeInPastFast();
+        const auto& sessionPoolSettings = Settings_.SessionPoolSettings_;
+        const auto spentTime = s->GetTimeToTouchFast() - s->GetTimeInPastFast();
 
         if (spentTime >= sessionPoolSettings.CloseIdleThreshold_) {
             if (sessionsCount > sessionPoolSettings.MinPoolSize_) {
@@ -158,7 +159,14 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
         return false;
     };
 
-    auto keepAliveCmd = [](TSession session) {
+    auto keepAliveCmd = [this](TKqpSessionCommon* s) {
+        auto strongClient = shared_from_this();
+        TSession session(
+            strongClient,
+            std::shared_ptr<TSession::TImpl>(
+                static_cast<TSession::TImpl*>(s),
+                TSession::TImpl::GetSmartDeleter(strongClient)
+            ));
 
         Y_VERIFY(session.GetId());
 

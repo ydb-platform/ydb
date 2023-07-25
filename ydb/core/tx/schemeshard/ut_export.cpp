@@ -345,6 +345,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
       }
     }
   }
+  not_null: false
 }
 columns {
   name: "value"
@@ -355,6 +356,7 @@ columns {
       }
     }
   }
+  not_null: false
 }
 primary_key: "key"
 storage_settings {
@@ -1044,7 +1046,7 @@ partitioning_settings {
             });
             runtime.DispatchEvents(opts);
         }
-        
+
         THolder<IEventHandle> proposeTxResult;
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {

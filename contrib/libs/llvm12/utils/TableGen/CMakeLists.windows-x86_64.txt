@@ -22,6 +22,7 @@ target_link_libraries(llvm-tblgen PUBLIC
   llvm12-lib-Support
   llvm12-lib-TableGen
   utils-TableGen-GlobalISel
+  cpp-sanitizer-include
 )
 target_sources(llvm-tblgen PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/utils/TableGen/AsmMatcherEmitter.cpp

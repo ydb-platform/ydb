@@ -18,6 +18,10 @@ ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-15.0.5.tar.
 
 SET(SANITIZER_CFLAGS)
 
+PEERDIR(
+    library/cpp/sanitizer/include
+)
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

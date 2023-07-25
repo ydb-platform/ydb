@@ -58,7 +58,7 @@ public:
         const auto valTypePtr = PointerType::getUnqual(valType);
 
         const bool useMulAddDiv = Divider > 1;
-        const auto name = useMulAddDiv ? "DecimalMul" : "DecimalMulAndDivNormalDivider";
+        const auto name = useMulAddDiv ? "DecimalMulAndDivNormalDivider" : "DecimalMul";
         const auto fnType = useMulAddDiv ?
             NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
                     FunctionType::get(valType, { valType, valType, valType }, false):

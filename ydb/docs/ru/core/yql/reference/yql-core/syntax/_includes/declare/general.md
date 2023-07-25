@@ -33,3 +33,4 @@ DECLARE $z AS List<String>;
 SELECT $x, $y, $z;
 ```
 
+Примеры передачи параметров для DECLARE можно найти [здесь](../../../types/_includes/json.md).

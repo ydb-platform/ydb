@@ -201,39 +201,40 @@ namespace NPage {
 
             if (Raw = raw ? *raw : TSharedData{ }) {
                 const void* base = Raw.data();
-                auto got = NPage::TLabelWrapper().Read(Raw, EPage::DataPage);
+                auto data = NPage::TLabelWrapper().Read(Raw, EPage::DataPage);
 
-                Y_VERIFY(got.Version == 1, "Unknown EPage::DataPage version");
+                Y_VERIFY(data.Version == 1, "Unknown EPage::DataPage version");
 
-                if (got.Codec != ECodec::Plain) {
+                if (data.Codec != ECodec::Plain) {
                     /* Compressed, should convert to regular page */
 
-                    Y_VERIFY(got == ECodec::LZ4, "Only LZ4 encoding allowed");
+                    Y_VERIFY(data == ECodec::LZ4, "Only LZ4 encoding allowed");
 
                     Codec = Codec ? Codec : NBlockCodecs::Codec("lz4fast");
-                    auto size = Codec->DecompressedLength(got.Page);
+                    auto size = Codec->DecompressedLength(data.Page);
 
                     // We expect original page had the same label size as a compressed page
-                    size_t labelSize = reinterpret_cast<const char*>(got.Page.data()) - reinterpret_cast<const char*>(base);
+                    size_t labelSize = reinterpret_cast<const char*>(data.Page.data()) - reinterpret_cast<const char*>(base);
 
                     Decoded.Resize(labelSize + size);
 
-                    size = Codec->Decompress(got.Page, Decoded.Begin() + labelSize);
+                    size = Codec->Decompress(data.Page, Decoded.Begin() + labelSize);
 
                     Decoded.Resize(labelSize + size);
                     ::memset(Decoded.Begin(), 0, labelSize);
 
                     base = Decoded.Begin();
-                    got.Page = { Decoded.Begin() + labelSize, Decoded.End() };
+                    data.Page = { Decoded.Begin() + labelSize, Decoded.End() };
                 }
 
-                auto *hdr = TDeref<TRecordsHeader>::At(got.Page.data(), 0);
-                auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
+                auto *recordsHeader = TDeref<TRecordsHeader>::At(data.Page.data(), 0);
+                auto count = recordsHeader->Count;
 
-                BaseRow_ = TDeref<const TExtra>::At(hdr + 1, 0)->BaseRow;
+                BaseRow_ = TDeref<const TExtra>::At(recordsHeader + 1, 0)->BaseRow;
                 Page.Base = base;
-                Page.Array = TDeref<const TRecordsEntry>::At(hdr, skip);
-                Page.Records = hdr->Records;
+                auto offsetsOffset = data.Page.size() - count * sizeof(TPgSize);
+                Page.Offsets = TDeref<const TRecordsEntry>::At(recordsHeader, offsetsOffset);
+                Page.Count = count;
             }
 
             return *this;

@@ -64,19 +64,18 @@ namespace NPage {
         TIndex(TSharedData raw)
             : Raw(std::move(raw))
         {
-            const auto got = NPage::TLabelWrapper().Read(Raw, EPage::Index);
+            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::Index);
+            Y_VERIFY(data == ECodec::Plain && (data.Version == 2 || data.Version == 3));
 
-            Y_VERIFY(got == ECodec::Plain && (got.Version == 2 || got.Version == 3));
-
-            auto *hdr = TDeref<const TRecordsHeader>::At(got.Page.data(), 0);
-            auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
-
-            Y_VERIFY(hdr->Records >= 1u + (got.Version < 3 ? 0u : 1u));
+            auto *recordsHeader = TDeref<const TRecordsHeader>::At(data.Page.data(), 0);
+            auto count = recordsHeader->Count;
+            Y_VERIFY(count >= 1u + (data.Version == 3 ? 1 : 0));
 
             Page.Base = Raw.data();
-            Page.Array = TDeref<const TRecordsEntry>::At(hdr, skip);
-            Page.Records = hdr->Records - (got.Version == 3 ? 1 : 0);
-            LastKey = (got.Version == 3) ? Page.Record(Page.Records) : nullptr;
+            auto offsetsOffset = data.Page.size() - count * sizeof(TPgSize);
+            Page.Offsets = TDeref<const TRecordsEntry>::At(recordsHeader, offsetsOffset);
+            Page.Count = count - (data.Version == 3 ? 1 : 0);
+            LastKey = (data.Version == 3) ? Page.Record(Page.Count) : nullptr;
             EndRowId = LastKey ? LastKey->GetRowId() + 1 : Max<TRowId>();
         }
 

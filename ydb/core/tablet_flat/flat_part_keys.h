@@ -170,7 +170,7 @@ namespace NTable {
                     return false;
                 }
                 Y_VERIFY(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
-                auto lastRowId = Page.BaseRow() + (Page->Records - 1);
+                auto lastRowId = Page.BaseRow() + (Page->Count - 1);
                 if (lastRowId < rowId) {
                     // Row is out of range for this page
                     RowId = Max<TRowId>();
@@ -194,7 +194,7 @@ namespace NTable {
                 return false;
             }
             Y_VERIFY(Page.BaseRow() == it->GetRowId(), "Index and data are out of sync");
-            auto lastRowId = Page.BaseRow() + (Page->Records - 1);
+            auto lastRowId = Page.BaseRow() + (Page->Count - 1);
             LoadRow(lastRowId);
             return true;
         }

@@ -166,7 +166,7 @@ struct TDataRef {
 } Y_PACKED;
 
 struct TRecordsHeader {
-    TRecIdx Records;
+    TRecIdx Count;
 } Y_PACKED;
 
 struct TRecordsEntry {
@@ -249,22 +249,22 @@ struct TBlockWithRecords {
 
     const TRecord* Record(TRecIdx idx) const noexcept
     {
-        return TDeref<TRecord>::At(Base, Array[idx].Offset);
+        return TDeref<TRecord>::At(Base, Offsets[idx].Offset);
     }
 
     TIterator Begin() const noexcept
     {
-        return TIterator(this, 0, Records);
+        return TIterator(this, 0, Count);
     }
 
     TIterator End() const noexcept
     {
-        return TIterator(this, Records, Records);
+        return TIterator(this, Count, Count);
     }
 
     const void *Base  = nullptr;
-    const TRecordsEntry *Array = nullptr;
-    ui32 Records = 0;
+    const TRecordsEntry *Offsets = nullptr;
+    ui32 Count = 0;
 };
 
 using TCells = TArrayRef<const TCell>;

@@ -150,7 +150,7 @@ namespace {
             Out
                 << " + Rows{" << page << "} Label{" << page << (ui16)label.Type
                 << " rev " << label.Format << ", " << label.Size << "b}"
-                << ", [" << data.BaseRow() << ", +" << data->Records << ")row"
+                << ", [" << data.BaseRow() << ", +" << data->Count << ")row"
                 << Endl;
 
         } else {

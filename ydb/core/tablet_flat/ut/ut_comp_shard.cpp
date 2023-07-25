@@ -848,7 +848,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         {
             auto partView = source.ToPartView();
             UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Records, pageCount);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Count, pageCount);
         }
 
         TVector<TSerializedCellVec> splitKeyValues;
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         {
             auto partView = born.ToPartView();
             UNIT_ASSERT_VALUES_EQUAL(partView.Slices->size(), 3u);
-            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Records, 6u);
+            UNIT_ASSERT_VALUES_EQUAL(partView->Index->Count, 6u);
 
             UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(0)->GetRowId(), 0u);
             UNIT_ASSERT_VALUES_EQUAL(partView->Index->Record(1)->GetRowId(), 4u);

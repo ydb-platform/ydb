@@ -93,7 +93,7 @@ namespace NPage {
             }
 
             if (auto *hdr = TDeref<TRecordsHeader>::At(ptr, 0)) {
-                hdr->Records = Offsets.size();
+                hdr->Count = Offsets.size();
             }
 
             { /* Place on the end reconds offsets */

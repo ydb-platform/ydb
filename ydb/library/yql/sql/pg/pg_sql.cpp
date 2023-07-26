@@ -1175,8 +1175,6 @@ private:
     }
 
     bool AddColumn(TCreateTableCtx& ctx, const ColumnDef* node) {
-        auto success = true;
-
         if (node->constraints) {
             for (ui32 i = 0; i < ListLength(node->constraints); ++i) {
                 auto constraintNode =
@@ -1190,8 +1188,7 @@ private:
                     case CONSTR_PRIMARY: {
                         if (!ctx.PrimaryKey.empty()) {
                             AddError("Only a single PK is allowed per table");
-                            success = false;
-                            break;
+                            return false;
                         }
                         AddNonNullColumn(ctx, node->colname);
                         ctx.PrimaryKey.push_back(QA(node->colname));
@@ -1199,18 +1196,15 @@ private:
 
                     default:
                         AddError("column constraint not supported");
-                        success = false;
+                        return false;
                 }
             }
         }
         auto [it, inserted] = ctx.ColumnsSet.insert(node->colname);
         if (!inserted) {
             AddError("duplicated column names found");
-            success = false;
+            return false;
         }
-
-        if (!success)
-            return success;
 
         // for now we pass just the last part of the type name
         auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
@@ -1226,20 +1220,19 @@ private:
                 QL(QA(node->colname), L(A("PgType"), QA(colType)))
                 );
 
-        return success;
+        return true;
     }
 
     bool AddConstraint(TCreateTableCtx& ctx, const Constraint* node) {
-        auto success = true;
-
         switch (node->contype) {
             case CONSTR_PRIMARY: {
                 if (!ctx.PrimaryKey.empty()) {
                     AddError("Only a single PK is allowed per table");
-                    success = false;
-                    break;
+                    return false;
                 }
-                success &= FillPrimaryKeyColumns(ctx, node);
+                if (!FillPrimaryKeyColumns(ctx, node)) {
+                    return false;
+                }
             } break;
 
             // TODO: support table-level not null constraints like:
@@ -1247,9 +1240,9 @@ private:
 
             default:
                 AddError("table constraint not supported");
-                success = false;
+                return false;
         }
-        return success;
+        return true;
     }
 
     TAstNode* BuildCreateTableOptions(TCreateTableCtx& ctx) {
@@ -1294,53 +1287,51 @@ private:
 public:
     [[nodiscard]]
     TAstNode* ParseCreateStmt(const CreateStmt* value) {
-        auto success = true;
-
         // See also transformCreateStmt() in parse_utilcmd.c
         if (0 < ListLength(value->inhRelations)) {
             AddError("table inheritance not supported");
-            success = false;
+            return nullptr;
         }
 
         if (value->partspec) {
             AddError("PARTITION BY clause not supported");
-            success = false;
+            return nullptr;
         }
 
         if (value->partbound) {
             AddError("FOR VALUES clause not supported");
-            success = false;
+            return nullptr;
         }
 
         // if we ever support typed tables, check transformOfType() in parse_utilcmd.c
         if (value->ofTypename) {
             AddError("typed tables not supported");
-            success = false;
+            return nullptr;
         }
 
         if (0 < ListLength(value->options)) {
             AddError("table options not supported");
-            success = false;
+            return nullptr;
         }
 
         if (value->oncommit != ONCOMMIT_NOOP && value->oncommit != ONCOMMIT_PRESERVE_ROWS) {
             AddError("ON COMMIT actions not supported");
-            success = false;
+            return nullptr;
         }
 
         if (value->tablespacename) {
             AddError("TABLESPACE not supported");
-            success = false;
+            return nullptr;
         }
 
         if (value->accessMethod) {
             AddError("USING not supported");
-            success = false;
+            return nullptr;
         }
 
         if (value->if_not_exists) {
             AddError("IF NOT EXISTS not supported");
-            success = false;
+            return nullptr;
         }
 
         TCreateTableCtx ctx {};
@@ -1352,7 +1343,7 @@ public:
                 break;
             case NPg::ERelPersistence::Unlogged:
                 AddError("UNLOGGED tables not supported");
-                success = false;
+                return nullptr;
                 break;
             case NPg::ERelPersistence::Permanent:
                 break;
@@ -1360,29 +1351,31 @@ public:
 
         auto [sink, key] = ParseWriteRangeVar(value->relation, true);
 
-        if (!sink || !key)
-            success = false;
+        if (!sink || !key) {
+            return nullptr;
+        }
 
         for (ui32 i = 0; i < ListLength(value->tableElts); ++i) {
             auto rawNode = ListNodeNth(value->tableElts, i);
 
             switch (NodeTag(rawNode)) {
                 case T_ColumnDef:
-                    success &= AddColumn(ctx, CAST_NODE(ColumnDef, rawNode));
+                    if (!AddColumn(ctx, CAST_NODE(ColumnDef, rawNode))) {
+                        return nullptr;
+                    }
                     break;
 
                 case T_Constraint:
-                    success &= AddConstraint(ctx, CAST_NODE(Constraint, rawNode));
+                    if (!AddConstraint(ctx, CAST_NODE(Constraint, rawNode))) {
+                        return nullptr;
+                    }
                     break;
 
                 default:
                     NodeNotImplemented(value, rawNode);
-                    success = false;
+                    return nullptr;
             }
         }
-
-        if (!success)
-            return nullptr;
 
         Statements.push_back(
                 L(A("let"), A("world"),

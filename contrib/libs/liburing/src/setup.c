@@ -106,6 +106,7 @@ __cold int io_uring_queue_mmap(int fd, struct io_uring_params *p,
 		ring->flags = p->flags;
 		ring->ring_fd = ring->enter_ring_fd = fd;
 		ring->int_flags = 0;
+		return 0;
 	}
 	return ret;
 }
@@ -206,7 +207,8 @@ __cold void io_uring_queue_exit(struct io_uring *ring)
 	 */
 	if (ring->int_flags & INT_FLAG_REG_RING)
 		io_uring_unregister_ring_fd(ring);
-	__sys_close(ring->ring_fd);
+	if (ring->ring_fd != -1)
+		__sys_close(ring->ring_fd);
 }
 
 __cold struct io_uring_probe *io_uring_get_probe_ring(struct io_uring *ring)
@@ -216,7 +218,7 @@ __cold struct io_uring_probe *io_uring_get_probe_ring(struct io_uring *ring)
 	int r;
 
 	len = sizeof(*probe) + 256 * sizeof(struct io_uring_probe_op);
-	probe = uring_malloc(len);
+	probe = malloc(len);
 	if (!probe)
 		return NULL;
 	memset(probe, 0, len);
@@ -225,7 +227,7 @@ __cold struct io_uring_probe *io_uring_get_probe_ring(struct io_uring *ring)
 	if (r >= 0)
 		return probe;
 
-	uring_free(probe);
+	free(probe);
 	return NULL;
 }
 
@@ -246,7 +248,7 @@ __cold struct io_uring_probe *io_uring_get_probe(void)
 
 __cold void io_uring_free_probe(struct io_uring_probe *probe)
 {
-	uring_free(probe);
+	free(probe);
 }
 
 static inline int __fls(unsigned long x)
@@ -305,11 +307,13 @@ static size_t rings_size(struct io_uring_params *p, unsigned entries,
 __cold ssize_t io_uring_mlock_size_params(unsigned entries,
 					  struct io_uring_params *p)
 {
-	struct io_uring_params lp = { };
+	struct io_uring_params lp;
 	struct io_uring ring;
 	unsigned cq_entries;
 	long page_size;
 	ssize_t ret;
+
+	memset(&lp, 0, sizeof(lp));
 
 	/*
 	 * We only really use this inited ring to see if the kernel is newer
@@ -364,7 +368,105 @@ __cold ssize_t io_uring_mlock_size_params(unsigned entries,
  */
 __cold ssize_t io_uring_mlock_size(unsigned entries, unsigned flags)
 {
-	struct io_uring_params p = { .flags = flags, };
+	struct io_uring_params p;
 
+	memset(&p, 0, sizeof(p));
+	p.flags = flags;
 	return io_uring_mlock_size_params(entries, &p);
+}
+
+#if defined(__hppa__)
+static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
+					  unsigned int nentries, int bgid,
+					  unsigned int flags, int *ret)
+{
+	struct io_uring_buf_ring *br;
+	struct io_uring_buf_reg reg;
+	size_t ring_size;
+	off_t off;
+	int lret;
+
+	memset(&reg, 0, sizeof(reg));
+	reg.ring_entries = nentries;
+	reg.bgid = bgid;
+	reg.flags = IOU_PBUF_RING_MMAP;
+
+	*ret = 0;
+	lret = io_uring_register_buf_ring(ring, &reg, flags);
+	if (lret) {
+		*ret = lret;
+		return NULL;
+	}
+
+	off = IORING_OFF_PBUF_RING | (unsigned long long) bgid << IORING_OFF_PBUF_SHIFT;
+	ring_size = nentries * sizeof(struct io_uring_buf);
+	br = __sys_mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
+			MAP_SHARED | MAP_POPULATE, ring->ring_fd, off);
+	if (IS_ERR(br)) {
+		*ret = PTR_ERR(br);
+		return NULL;
+	}
+
+	return br;
+}
+#else
+static struct io_uring_buf_ring *br_setup(struct io_uring *ring,
+					  unsigned int nentries, int bgid,
+					  unsigned int flags, int *ret)
+{
+	struct io_uring_buf_ring *br;
+	struct io_uring_buf_reg reg;
+	size_t ring_size;
+	int lret;
+
+	memset(&reg, 0, sizeof(reg));
+	ring_size = nentries * sizeof(struct io_uring_buf);
+	br = __sys_mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
+			MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	if (IS_ERR(br)) {
+		*ret = PTR_ERR(br);
+		return NULL;
+	}
+
+	reg.ring_addr = (unsigned long) (uintptr_t) br;
+	reg.ring_entries = nentries;
+	reg.bgid = bgid;
+
+	*ret = 0;
+	lret = io_uring_register_buf_ring(ring, &reg, flags);
+	if (lret) {
+		__sys_munmap(br, ring_size);
+		*ret = lret;
+		br = NULL;
+	}
+
+	return br;
+}
+#endif
+
+struct io_uring_buf_ring *io_uring_setup_buf_ring(struct io_uring *ring,
+						  unsigned int nentries,
+						  int bgid, unsigned int flags,
+						  int *ret)
+{
+	struct io_uring_buf_ring *br;
+
+	br = br_setup(ring, nentries, bgid, flags, ret);
+	if (br)
+		io_uring_buf_ring_init(br);
+
+	return br;
+}
+
+int io_uring_free_buf_ring(struct io_uring *ring, struct io_uring_buf_ring *br,
+			   unsigned int nentries, int bgid)
+{
+	int ret;
+
+	ret = io_uring_unregister_buf_ring(ring, bgid);
+	if (ret)
+		return ret;
+
+	__sys_munmap(br, nentries * sizeof(struct io_uring_buf));
+	return 0;
 }

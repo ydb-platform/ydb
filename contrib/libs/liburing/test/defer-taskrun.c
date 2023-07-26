@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <error.h>
 #include <sys/eventfd.h>
 #include <signal.h>
 #include <poll.h>
@@ -58,9 +57,14 @@ static void eventfd_trigger(int fd)
 	assert(ret == sizeof(val));
 }
 
-#define CHECK(x) if (!(x)) { \
-		fprintf(stderr, "%s:%d %s failed\n", __FILE__, __LINE__, #x); \
-		return -1; }
+#define CHECK(x)								\
+do {										\
+	if (!(x)) {								\
+		fprintf(stderr, "%s:%d %s failed\n", __FILE__, __LINE__, #x);	\
+		return -1;							\
+	}									\
+} while (0)
+
 
 static int test_eventfd(void)
 {
@@ -120,7 +124,7 @@ struct thread_data {
 	char buff[8];
 };
 
-void *thread(void *t)
+static void *thread(void *t)
 {
 	struct thread_data *td = t;
 
@@ -179,11 +183,11 @@ static int test_exec(const char *filename)
 		int wstatus;
 
 		CHECK(waitpid(fork_pid, &wstatus, 0) != (pid_t)-1);
-		if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus) != T_EXIT_SKIP) {
+		if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus) == T_EXIT_FAIL) {
 			fprintf(stderr, "child failed %i\n", WEXITSTATUS(wstatus));
 			return -1;
 		}
-		return 0;
+		return T_EXIT_PASS;
 	}
 
 	ret = io_uring_queue_init(8, &ring, IORING_SETUP_SINGLE_ISSUER |
@@ -193,9 +197,15 @@ static int test_exec(const char *filename)
 
 	if (filename) {
 		fd = open(filename, O_RDONLY | O_DIRECT);
+		if (fd < 0 && errno == EINVAL)
+			return T_EXIT_SKIP;
 	} else {
 		t_create_file(EXEC_FILENAME, EXEC_FILESIZE);
 		fd = open(EXEC_FILENAME, O_RDONLY | O_DIRECT);
+		if (fd < 0 && errno == EINVAL) {
+			unlink(EXEC_FILENAME);
+			return T_EXIT_SKIP;
+		}
 		unlink(EXEC_FILENAME);
 	}
 	buff = (char*)malloc(EXEC_FILESIZE);
@@ -208,7 +218,7 @@ static int test_exec(const char *filename)
 	ret = execve("/proc/self/exe", new_argv, new_env);
 	/* if we get here it failed anyway */
 	fprintf(stderr, "execve failed %d\n", ret);
-	return -1;
+	return T_EXIT_FAIL;
 }
 
 static int test_flag(void)
@@ -284,6 +294,45 @@ static int test_ring_shutdown(void)
 	return 0;
 }
 
+static int test_drain(void)
+{
+	struct io_uring ring;
+	int ret, i, fd[2];
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	struct iovec iovecs[128];
+	char buff[ARRAY_SIZE(iovecs)];
+
+	ret = io_uring_queue_init(8, &ring, IORING_SETUP_SINGLE_ISSUER |
+					    IORING_SETUP_DEFER_TASKRUN |
+					    IORING_SETUP_TASKRUN_FLAG);
+	CHECK(!ret);
+
+	for (i = 0; i < ARRAY_SIZE(iovecs); i++) {
+		iovecs[i].iov_base = &buff[i];
+		iovecs[i].iov_len = 1;
+	}
+
+	ret = t_create_socket_pair(fd, true);
+	CHECK(!ret);
+
+	sqe = io_uring_get_sqe(&ring);
+	io_uring_prep_writev(sqe, fd[1], &iovecs[0], ARRAY_SIZE(iovecs), 0);
+	sqe->flags |= IOSQE_IO_DRAIN;
+	io_uring_submit(&ring);
+
+	for (i = 0; i < ARRAY_SIZE(iovecs); i++)
+		iovecs[i].iov_base = NULL;
+
+	CHECK(io_uring_wait_cqe(&ring, &cqe) == 0);
+	CHECK(cqe->res == 128);
+
+	close(fd[0]);
+	close(fd[1]);
+	io_uring_queue_exit(&ring);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ret;
@@ -310,7 +359,7 @@ int main(int argc, char *argv[])
 	}
 
 	ret = test_exec(filename);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test_exec failed\n");
 		return T_EXIT_FAIL;
 	}
@@ -330,6 +379,12 @@ int main(int argc, char *argv[])
 	ret = test_ring_shutdown();
 	if (ret) {
 		fprintf(stderr, "test_ring_shutdown failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	ret = test_drain();
+	if (ret) {
+		fprintf(stderr, "test_drain failed\n");
 		return T_EXIT_FAIL;
 	}
 

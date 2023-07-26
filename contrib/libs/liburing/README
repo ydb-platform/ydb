@@ -47,6 +47,54 @@ the kernel io_uring support. Please note that this suite isn't expected to
 pass on older kernels, and may even crash or hang older kernels!
 
 
+Building liburing
+-----------------
+
+    #
+    # Prepare build config (optional).
+    #
+    #  --cc  specifies the C   compiler.
+    #  --cxx speficies the C++ compiler.
+    #
+    ./configure --cc=gcc --cxx=g++;
+
+    #
+    # Build liburing.
+    #
+    make -j$(nproc);
+
+    #
+    # Install liburing (headers, shared/static libs, and manpage).
+    #
+    sudo make install;
+
+See './configure --help' for more information about build config options.
+
+
+FFI support
+-----------
+
+By default, the build results in 4 lib files:
+
+    2 shared libs:
+
+        liburing.so
+        liburing-ffi.so
+
+    2 static libs:
+
+        liburing.a
+        liburing-ffi.a
+
+Languages and applications that can't use 'static inline' functions in
+liburing.h should use the FFI variants.
+
+liburing's main public interface lives in liburing.h as 'static inline'
+functions. Users wishing to consume liburing purely as a binary dependency
+should link against liburing-ffi. It contains definitions for every 'static
+inline' function.
+
+
 License
 -------
 

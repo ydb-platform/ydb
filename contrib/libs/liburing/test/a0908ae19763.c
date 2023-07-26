@@ -15,13 +15,13 @@
 #include "helpers.h"
 #include "../src/syscall.h"
 
-uint64_t r[1] = {0xffffffffffffffff};
+static uint64_t r[1] = {0xffffffffffffffff};
 
 int main(int argc, char *argv[])
 {
   if (argc > 1)
     return T_EXIT_SKIP;
-  mmap((void *) 0x20000000, 0x1000000, 3, 0x32, -1, 0);
+  mmap((void *) 0x20000000, 0x1000000, 3, MAP_ANON|MAP_PRIVATE, -1, 0);
   intptr_t res = 0;
   *(uint32_t*)0x20000080 = 0;
   *(uint32_t*)0x20000084 = 0;

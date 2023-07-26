@@ -242,7 +242,6 @@ int main(int argc, char *argv[])
 				update);
 			return 1;
 		}
-		break;
 	}
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sp) != 0) {

@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 
 #include "liburing.h"
 #include "helpers.h"
@@ -257,6 +258,13 @@ static int test_connect_timeout(struct io_uring *ring)
 	struct sockaddr_in addr;
 	struct io_uring_sqe *sqe;
 	struct __kernel_timespec ts = {.tv_sec = 0, .tv_nsec = 100000};
+	struct stat sb;
+
+	/*
+	 * Test reliably fails if syncookies isn't enabled
+	 */
+	if (stat("/proc/sys/net/ipv4/tcp_syncookies", &sb) < 0)
+		return T_EXIT_SKIP;
 
 	connect_fd[0] = create_socket();
 	if (connect_fd[0] == -1)

@@ -58,7 +58,7 @@ static int init_context(struct test_context *ctx, struct io_uring *ring, int nr,
 		case OP_REMOVE_BUFFERS:
 			io_uring_prep_remove_buffers(sqe, 10, 1);
 			break;
-		};
+		}
 		sqe->user_data = i;
 		ctx->sqes[i] = sqe;
 	}

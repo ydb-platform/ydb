@@ -6,10 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include <liburing.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/time.h>
+#include "liburing.h"
 
 struct thread_data {
 	struct io_uring *ring;

@@ -25,7 +25,7 @@ SRCDIR(contrib/libs/liburing/test)
 
 SRCS(
     helpers.c
-    timeout-overflow.c
+    pipe-bug.c
 )
 
 END()

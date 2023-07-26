@@ -17,8 +17,8 @@
 #include "helpers.h"
 #include "liburing.h"
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 static int recv_thread_ready = 0;
 static int recv_thread_done = 0;
@@ -72,7 +72,7 @@ static void *send_thread(void *arg)
 	return 0;
 }
 
-void *recv_thread(void *arg)
+static void *recv_thread(void *arg)
 {
 	struct sockaddr_in addr = { };
 	struct data *data = arg;

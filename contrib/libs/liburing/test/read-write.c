@@ -77,6 +77,8 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 
 	fd = open(file, open_flags);
 	if (fd < 0) {
+		if (errno == EINVAL)
+			return 0;
 		perror("file open");
 		goto err;
 	}
@@ -636,6 +638,53 @@ static int test_rem_buf(int batch, int sqe_flags)
 	return ret;
 }
 
+static int test_rem_buf_single(int to_rem)
+{
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	struct io_uring ring;
+	int ret, expected;
+	int bgid = 1;
+
+	if (no_buf_select)
+		return 0;
+
+	ret = io_uring_queue_init(64, &ring, 0);
+	if (ret) {
+		fprintf(stderr, "ring create failed: %d\n", ret);
+		return 1;
+	}
+
+	ret = provide_buffers_iovec(&ring, bgid);
+	if (ret)
+		return ret;
+
+	expected = (to_rem > BUFFERS) ? BUFFERS : to_rem;
+
+	sqe = io_uring_get_sqe(&ring);
+	io_uring_prep_remove_buffers(sqe, to_rem, bgid);
+
+	ret = io_uring_submit(&ring);
+	if (ret != 1) {
+		fprintf(stderr, "submit: %d\n", ret);
+		return -1;
+	}
+
+	ret = io_uring_wait_cqe(&ring, &cqe);
+	if (ret) {
+		fprintf(stderr, "wait_cqe=%d\n", ret);
+		return 1;
+	}
+	if (cqe->res != expected) {
+		fprintf(stderr, "cqe->res=%d, expected=%d\n", cqe->res, expected);
+		return 1;
+	}
+	io_uring_cqe_seen(&ring, cqe);
+
+	io_uring_queue_exit(&ring);
+	return ret;
+}
+
 static int test_io_link(const char *file)
 {
 	const int nr_links = 100;
@@ -947,6 +996,12 @@ int main(int argc, char *argv[])
 				write, buffered, sqthread, fixed, nonvec);
 			goto err;
 		}
+	}
+
+	ret = test_rem_buf_single(BUFFERS + 1);
+	if (ret) {
+		fprintf(stderr, "test_rem_buf_single(BUFFERS + 1) failed\n");
+		goto err;
 	}
 
 	if (fname != argv[1])

@@ -9,6 +9,7 @@
 #include <assert.h>
 
 #include "liburing.h"
+#include "helpers.h"
 
 #define LINK_SIZE 		6
 #define TIMEOUT_USER_DATA	(-1)
@@ -324,10 +325,8 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	if (!(ring.features & IORING_FEAT_CQE_SKIP)) {
-		printf("IOSQE_CQE_SKIP_SUCCESS is not supported, skip\n");
-		return 0;
-	}
+	if (!(ring.features & IORING_FEAT_CQE_SKIP))
+		return T_EXIT_SKIP;
 
 	for (i = 0; i < 4; i++) {
 		bool skip_last = i & 1;

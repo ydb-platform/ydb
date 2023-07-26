@@ -44,7 +44,8 @@ err:
 	return 1;
 }
 
-int test_link_contents(const char* linkname, const char *expected_contents)
+static int test_link_contents(const char* linkname,
+			      const char *expected_contents)
 {
 	char buf[128];
 	int ret = readlink(linkname, buf, 127);

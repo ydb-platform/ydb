@@ -20,86 +20,10 @@
 
 #include "../syscall.h"
 
-char *features_string(struct io_uring_params *p)
-{
-	static char flagstr[64];
-
-	if (!p || !p->features)
-		return "none";
-
-	if (p->features & ~IORING_FEAT_SINGLE_MMAP) {
-		snprintf(flagstr, 64, "0x%.8x", p->features);
-		return flagstr;
-	}
-
-	if (p->features & IORING_FEAT_SINGLE_MMAP)
-		strncat(flagstr, "IORING_FEAT_SINGLE_MMAP", 64 - strlen(flagstr));
-
-	return flagstr;
-}
-
-/*
- * Attempt the call with the given args.  Return 0 when expect matches
- * the return value of the system call, 1 otherwise.
- */
-char *
-flags_string(struct io_uring_params *p)
-{
-	static char flagstr[64];
-	int add_pipe = 0;
-
-	memset(flagstr, 0, sizeof(flagstr));
-
-	if (!p || p->flags == 0)
-		return "none";
-
-	/*
-	 * If unsupported flags are present, just print the bitmask.
-	 */
-	if (p->flags & ~(IORING_SETUP_IOPOLL | IORING_SETUP_SQPOLL |
-			 IORING_SETUP_SQ_AFF)) {
-		snprintf(flagstr, 64, "0x%.8x", p->flags);
-		return flagstr;
-	}
-
-	if (p->flags & IORING_SETUP_IOPOLL) {
-		strncat(flagstr, "IORING_SETUP_IOPOLL", 64 - strlen(flagstr));
-		add_pipe = 1;
-	}
-	if (p->flags & IORING_SETUP_SQPOLL) {
-		if (add_pipe)
-			strncat(flagstr, "|", 64 - strlen(flagstr));
-		else
-			add_pipe = 1;
-		strncat(flagstr, "IORING_SETUP_SQPOLL", 64 - strlen(flagstr));
-	}
-	if (p->flags & IORING_SETUP_SQ_AFF) {
-		if (add_pipe)
-			strncat(flagstr, "|", 64 - strlen(flagstr));
-		strncat(flagstr, "IORING_SETUP_SQ_AFF", 64 - strlen(flagstr));
-	}
-
-	return flagstr;
-}
-
-char *
-dump_resv(struct io_uring_params *p)
-{
-	static char resvstr[4096];
-
-	if (!p)
-		return "";
-
-	sprintf(resvstr, "0x%.8x 0x%.8x 0x%.8x", p->resv[0],
-		p->resv[1], p->resv[2]);
-
-	return resvstr;
-}
-
 /* bogus: setup returns a valid fd on success... expect can't predict the
    fd we'll get, so this really only takes 1 parameter: error */
-int
-try_io_uring_setup(unsigned entries, struct io_uring_params *p, int expect)
+static int try_io_uring_setup(unsigned entries, struct io_uring_params *p,
+			      int expect)
 {
 	int ret;
 
@@ -124,8 +48,7 @@ try_io_uring_setup(unsigned entries, struct io_uring_params *p, int expect)
 	return 0;
 }
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	int fd;
 	unsigned int status = 0;

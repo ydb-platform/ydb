@@ -90,12 +90,13 @@ int main(int argc, char *argv[])
 	vecs = t_create_buffers(BUFFERS, BS);
 
 	fd = open(fname, O_RDONLY | O_DIRECT);
-	if (fname != argv[1])
-		unlink(fname);
 	if (fd < 0) {
 		perror("open");
 		return -1;
 	}
+
+	if (fname != argv[1])
+		unlink(fname);
 
 	for (i = 0; i < NR_RINGS; i++) {
 		struct io_uring_params p = { };

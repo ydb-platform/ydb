@@ -19,6 +19,7 @@
 #define BUFFERS		(FILE_SIZE / BS)
 
 static struct iovec *vecs;
+static int no_pt;
 
 /*
  * Each offset in the file has the ((test_case / 2) * FILE_SIZE)
@@ -35,7 +36,8 @@ static int verify_buf(int tc, void *buf, off_t off)
 	ptr = buf;
 	for (i = 0; i < u_in_buf; i++) {
 		if (off != *ptr) {
-			fprintf(stderr, "Found %u, wanted %lu\n", *ptr, off);
+			fprintf(stderr, "Found %u, wanted %llu\n", *ptr,
+					(unsigned long long) off);
 			return 1;
 		}
 		ptr++;
@@ -206,6 +208,10 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 			goto err;
 		}
 		if (cqe->res != 0) {
+			if (!no_pt) {
+				no_pt = 1;
+				goto skip;
+			}
 			fprintf(stderr, "cqe res %d, wanted 0\n", cqe->res);
 			goto err;
 		}
@@ -235,6 +241,7 @@ static int __test_io(const char *file, struct io_uring *ring, int tc, int read,
 		}
 	}
 
+skip:
 	close(fd);
 	return 0;
 err:
@@ -259,6 +266,10 @@ static int test_io(const char *file, int tc, int read, int sqthread,
 	if (ret == T_SETUP_SKIP)
 		return 0;
 	if (ret != T_SETUP_OK) {
+		if (ret == -EINVAL) {
+			no_pt = 1;
+			return T_SETUP_SKIP;
+		}
 		fprintf(stderr, "ring create failed: %d\n", ret);
 		return 1;
 	}
@@ -268,8 +279,6 @@ static int test_io(const char *file, int tc, int read, int sqthread,
 
 	return ret;
 }
-
-extern unsigned __io_uring_flush_sq(struct io_uring *ring);
 
 /*
  * Send a passthrough command that nvme will fail during submission.
@@ -283,8 +292,7 @@ static int test_invalid_passthru_submit(const char *file)
 	struct io_uring_sqe *sqe;
 	struct nvme_uring_cmd *cmd;
 
-	ring_flags = IORING_SETUP_IOPOLL | IORING_SETUP_SQE128;
-	ring_flags |= IORING_SETUP_CQE32;
+	ring_flags = IORING_SETUP_CQE32 | IORING_SETUP_SQE128;
 
 	ret = t_create_ring(1, &ring, ring_flags);
 	if (ret != T_SETUP_OK) {
@@ -347,6 +355,8 @@ static int test_io_uring_submit_enters(const char *file)
 	int fd, i, ret, ring_flags, open_flags;
 	unsigned head;
 	struct io_uring_cqe *cqe;
+	struct nvme_uring_cmd *cmd;
+	struct io_uring_sqe *sqe;
 
 	ring_flags = IORING_SETUP_IOPOLL;
 	ring_flags |= IORING_SETUP_SQE128;
@@ -366,12 +376,28 @@ static int test_io_uring_submit_enters(const char *file)
 	}
 
 	for (i = 0; i < BUFFERS; i++) {
-		struct io_uring_sqe *sqe;
 		off_t offset = BS * (rand() % BUFFERS);
+		__u64 slba;
+		__u32 nlb;
 
 		sqe = io_uring_get_sqe(&ring);
-		io_uring_prep_writev(sqe, fd, &vecs[i], 1, offset);
-		sqe->user_data = 1;
+		io_uring_prep_readv(sqe, fd, &vecs[i], 1, offset);
+		sqe->user_data = i;
+		sqe->opcode = IORING_OP_URING_CMD;
+		sqe->cmd_op = NVME_URING_CMD_IO;
+		cmd = (struct nvme_uring_cmd *)sqe->cmd;
+		memset(cmd, 0, sizeof(struct nvme_uring_cmd));
+
+		slba = offset >> lba_shift;
+		nlb = (BS >> lba_shift) - 1;
+
+		cmd->opcode = nvme_cmd_read;
+		cmd->cdw10 = slba & 0xffffffff;
+		cmd->cdw11 = slba >> 32;
+		cmd->cdw12 = nlb;
+		cmd->addr = (__u64)(uintptr_t)&vecs[i];
+		cmd->data_len = 1;
+		cmd->nsid = nsid;
 	}
 
 	/* submit manually to avoid adding IORING_ENTER_GETEVENTS */
@@ -427,12 +453,17 @@ int main(int argc, char *argv[])
 		int nonvec = (i & 8) != 0;
 
 		ret = test_io(fname, i, read, sqthread, fixed, nonvec);
+		if (no_pt)
+			break;
 		if (ret) {
 			fprintf(stderr, "test_io failed %d/%d/%d/%d\n",
 				read, sqthread, fixed, nonvec);
 			goto err;
 		}
 	}
+
+	if (no_pt)
+		return T_EXIT_SKIP;
 
 	ret = test_io_uring_submit_enters(fname);
 	if (ret) {

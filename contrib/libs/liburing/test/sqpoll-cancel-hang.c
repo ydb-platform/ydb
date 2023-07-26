@@ -10,7 +10,15 @@
 #include <time.h>
 #include <unistd.h>
 #include "liburing.h"
+#include "helpers.h"
 #include "../src/syscall.h"
+
+/*
+ * This syzbot test is known broken on some archs, just allow the ones that
+ * are regularly tested.
+ */
+#if defined(__i386__) || defined(__x86_64__) || defined(__arm__) || \
+    defined(__aarch64__)
 
 static uint64_t current_time_ms(void)
 {
@@ -40,7 +48,7 @@ static void kill_and_wait(int pid, int* status)
 
 #define WAIT_FLAGS __WALL
 
-uint64_t r[3] = {0xffffffffffffffff, 0x0, 0x0};
+static uint64_t r[3] = {0xffffffffffffffff, 0x0, 0x0};
 
 static long syz_io_uring_setup(volatile long a0, volatile long a1,
 volatile long a2, volatile long a3, volatile long a4, volatile long
@@ -93,7 +101,7 @@ SIZEOF_IO_URING_CQE + 63) & ~63;
 }
 
 
-void trigger_bug(void)
+static void trigger_bug(void)
 {
     intptr_t res = 0;
     *(uint32_t*)0x20000204 = 0;
@@ -134,7 +142,7 @@ void trigger_bug(void)
 }
 int main(void)
 {
-    mmap((void *)0x20000000ul, 0x1000000ul, 7ul, 0x32ul, -1, 0ul);
+    mmap((void *)0x20000000ul, 0x1000000ul, 7ul, MAP_ANON|MAP_PRIVATE, -1, 0ul);
     int pid = fork();
     if (pid < 0)
         exit(1);
@@ -153,6 +161,9 @@ int main(void)
     }
     return 0;
 }
-
-
-
+#else
+int main(void)
+{
+	return T_EXIT_SKIP;
+}
+#endif

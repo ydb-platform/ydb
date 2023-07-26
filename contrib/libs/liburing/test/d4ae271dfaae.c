@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
 
 	memset(&p, 0, sizeof(p));
 	p.flags = IORING_SETUP_SQPOLL;
-	ret = t_create_ring_params(4, &ring, &p);
+	ret = t_create_ring_params(16, &ring, &p);
 	if (ret == T_SETUP_SKIP)
 		return T_EXIT_SKIP;
 	else if (ret < 0)

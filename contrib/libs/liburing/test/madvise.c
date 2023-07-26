@@ -183,7 +183,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* too hard to reliably test, just ignore */
-	if (0 && bad > good)
+	if ((0) && bad > good)
 		fprintf(stderr, "Suspicious timings (%u > %u)\n", bad, good);
 	if (fname != argv[1])
 		unlink(fname);

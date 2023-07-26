@@ -22,9 +22,9 @@
 
 #define PORT 9100
 
-struct io_uring ring;
+static struct io_uring ring;
 
-struct __kernel_timespec ts = {
+static struct __kernel_timespec ts = {
 	.tv_sec		= 300,
 	.tv_nsec	= 0,
 };

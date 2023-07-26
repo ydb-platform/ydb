@@ -27,7 +27,7 @@ static pthread_barrier_t init_barrier;
 static int sleep_fd, notify_fd;
 static sem_t sem;
 
-void *thread_func(void *arg)
+static void *thread_func(void *arg)
 {
 	struct io_uring ring;
 	int res;

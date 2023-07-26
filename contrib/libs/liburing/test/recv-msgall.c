@@ -19,14 +19,18 @@
 #define MAX_MSG	128
 #define HOST	"127.0.0.1"
 static __be16 bind_port;
+struct recv_data {
+	pthread_barrier_t barrier;
+	int use_recvmsg;
+	struct msghdr msg;
+};
 
 static int recv_prep(struct io_uring *ring, struct iovec *iov, int *sock,
-		     int use_recvmsg)
+		     struct recv_data *rd)
 {
 	struct sockaddr_in saddr;
 	struct io_uring_sqe *sqe;
 	int sockfd, ret, val;
-	struct msghdr msg = { };
 
 	memset(&saddr, 0, sizeof(saddr));
 	saddr.sin_family = AF_INET;
@@ -48,14 +52,17 @@ static int recv_prep(struct io_uring *ring, struct iovec *iov, int *sock,
 	bind_port = saddr.sin_port;
 
 	sqe = io_uring_get_sqe(ring);
-	if (!use_recvmsg) {
+	if (!rd->use_recvmsg) {
 		io_uring_prep_recv(sqe, sockfd, iov->iov_base, iov->iov_len,
 					MSG_WAITALL);
 	} else {
-		msg.msg_namelen = sizeof(struct sockaddr_in);
-		msg.msg_iov = iov;
-		msg.msg_iovlen = 1;
-		io_uring_prep_recvmsg(sqe, sockfd, &msg, MSG_WAITALL);
+		struct msghdr *msg = &rd->msg;
+
+		memset(msg, 0, sizeof(*msg));
+		msg->msg_namelen = sizeof(struct sockaddr_in);
+		msg->msg_iov = iov;
+		msg->msg_iovlen = 1;
+		io_uring_prep_recvmsg(sqe, sockfd, msg, MSG_WAITALL);
 	}
 
 	sqe->user_data = 2;
@@ -102,11 +109,6 @@ err:
 	return 1;
 }
 
-struct recv_data {
-	pthread_mutex_t mutex;
-	int use_recvmsg;
-};
-
 static void *recv_fn(void *data)
 {
 	struct recv_data *rd = data;
@@ -121,20 +123,20 @@ static void *recv_fn(void *data)
 
 	ret = t_create_ring_params(1, &ring, &p);
 	if (ret == T_SETUP_SKIP) {
-		pthread_mutex_unlock(&rd->mutex);
+		pthread_barrier_wait(&rd->barrier);
 		ret = 0;
 		goto err;
 	} else if (ret < 0) {
-		pthread_mutex_unlock(&rd->mutex);
+		pthread_barrier_wait(&rd->barrier);
 		goto err;
 	}
 
-	ret = recv_prep(&ring, &iov, &sock, rd->use_recvmsg);
+	ret = recv_prep(&ring, &iov, &sock, rd);
 	if (ret) {
 		fprintf(stderr, "recv_prep failed: %d\n", ret);
 		goto err;
 	}
-	pthread_mutex_unlock(&rd->mutex);
+	pthread_barrier_wait(&rd->barrier);
 	ret = do_recv(&ring);
 	close(sock);
 	io_uring_queue_exit(&ring);
@@ -218,28 +220,24 @@ err:
 
 static int test(int use_recvmsg)
 {
-	pthread_mutexattr_t attr;
 	pthread_t recv_thread;
 	struct recv_data rd;
 	int ret;
 	void *retval;
 
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_setpshared(&attr, 1);
-	pthread_mutex_init(&rd.mutex, &attr);
-	pthread_mutex_lock(&rd.mutex);
+	pthread_barrier_init(&rd.barrier, NULL, 2);
 	rd.use_recvmsg = use_recvmsg;
 
 	ret = pthread_create(&recv_thread, NULL, recv_fn, &rd);
 	if (ret) {
 		fprintf(stderr, "Thread create failed: %d\n", ret);
-		pthread_mutex_unlock(&rd.mutex);
 		return 1;
 	}
 
-	pthread_mutex_lock(&rd.mutex);
+	pthread_barrier_wait(&rd.barrier);
 	do_send();
 	pthread_join(recv_thread, &retval);
+	pthread_barrier_destroy(&rd.barrier);
 	return (intptr_t)retval;
 }
 

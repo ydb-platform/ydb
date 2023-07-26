@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* too hard to reliably test, just ignore */
-	if (0 && bad > good) {
+	if ((0) && bad > good) {
 		fprintf(stderr, "Suspicious timings\n");
 		goto err;
 	}

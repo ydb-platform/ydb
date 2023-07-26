@@ -103,13 +103,18 @@ int main(int argc, char *argv[])
 		goto err;
 	}
 
+	ret = T_EXIT_PASS;
 	if (cqe->res != -EAGAIN && cqe->res != 4096) {
-		printf("cqe error: %d\n", cqe->res);
-		goto err;
+		if (cqe->res == -EOPNOTSUPP) {
+			ret = T_EXIT_SKIP;
+		} else {
+			printf("cqe error: %d\n", cqe->res);
+			goto err;
+		}
 	}
 
 	close(fd);
-	return T_EXIT_PASS;
+	return ret;
 err:
 	close(fd);
 	return T_EXIT_FAIL;

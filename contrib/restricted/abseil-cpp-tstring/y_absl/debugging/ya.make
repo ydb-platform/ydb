@@ -8,6 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

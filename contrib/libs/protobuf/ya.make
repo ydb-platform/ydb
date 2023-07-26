@@ -17,6 +17,7 @@ ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.19.0.tar.
 
 PEERDIR(
     contrib/libs/zlib
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

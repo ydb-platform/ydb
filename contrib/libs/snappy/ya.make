@@ -10,6 +10,10 @@ VERSION(1.1.9)
 
 ORIGINAL_SOURCE(https://github.com/google/snappy/archive/1.1.9.tar.gz)
 
+PEERDIR(
+    library/cpp/sanitizer/include
+)
+
 ADDINCL(
     GLOBAL contrib/libs/snappy/include
 )

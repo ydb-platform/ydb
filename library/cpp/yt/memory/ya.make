@@ -17,6 +17,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/sanitizer/include
     library/cpp/yt/assert
     library/cpp/yt/misc
     library/cpp/yt/malloc

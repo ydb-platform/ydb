@@ -99,6 +99,9 @@ void TInteractiveCLI::Run() {
     while (auto lineOptional = lineReader->ReadLine())
     {
         auto & line = *lineOptional;
+        if (line.empty()) {
+            continue;
+        }
 
         try {
             auto tokens = Tokenize(line);
@@ -108,12 +111,6 @@ void TInteractiveCLI::Run() {
                 interactiveCLIState.CollectStatsMode = tokens[3].data;
                 while (!interactiveCLIState.CollectStatsMode.empty() && interactiveCLIState.CollectStatsMode.back() == ';')
                     interactiveCLIState.CollectStatsMode.pop_back();
-                continue;
-            }
-
-            if (tokensSize == 2 && tokens[0].data == "SHOW" && tokens[1].data == "TABLES") {
-                TCommandList listCommand(".");
-                listCommand.Run(Config);
                 continue;
             }
 

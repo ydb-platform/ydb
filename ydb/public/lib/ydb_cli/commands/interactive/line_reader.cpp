@@ -124,7 +124,7 @@ std::optional<std::string> TLineReader::ReadLine() {
         }
 
         std::string line = status;
-        while (!line.empty() && line.back() == ' ')
+        while (!line.empty() && std::isspace(line.back()))
             line.pop_back();
 
         AddToHistory(line);

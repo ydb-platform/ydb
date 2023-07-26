@@ -764,6 +764,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
     RmMaxSnapshotLatency = KqpGroup->GetCounter("RM/MaxSnapshotLatency", false);
+    RmNodeNumberInSnapshot = KqpGroup->GetCounter("RM/NodeNumberInSnapshot", false);
 
     /* Spilling */
     SpillingWriteBlobs = KqpGroup->GetCounter("Spilling/WriteBlobs", true);

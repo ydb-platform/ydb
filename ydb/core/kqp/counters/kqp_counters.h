@@ -362,6 +362,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmNodeNumberInSnapshot;
 
     // Spilling counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;

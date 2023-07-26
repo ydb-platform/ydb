@@ -86,6 +86,11 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings()
     {
         FeatureFlags.SetForceColumnTablesCompositeMarks(true);
+        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
+        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
+        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+        exchangerSettings->SetStartDelayMs(10);
+        exchangerSettings->SetMaxDelayMs(10);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

@@ -99,6 +99,11 @@ NKikimrConfig::TTableServiceConfig MakeKqpResourceManagerConfig() {
     config.MutableResourceManager()->SetPublishStatisticsIntervalSec(0);
     config.MutableResourceManager()->SetEnableInstantMkqlMemoryAlloc(true);
 
+    auto* infoExchangerRetrySettings = config.MutableResourceManager()->MutableInfoExchangerSettings();
+    auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+    exchangerSettings->SetStartDelayMs(10);
+    exchangerSettings->SetMaxDelayMs(10);
+
     return config;
 }
 

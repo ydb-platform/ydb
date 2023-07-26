@@ -194,7 +194,7 @@ public:
             TString endpointAddress;
             bool useSsl = false;
             ParseGrpcEndpoint(TokenAccessorConfig.GetEndpoint(), endpointAddress, useSsl);
-            
+
             CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(endpointAddress, useSsl, caContent, TokenAccessorConfig.GetConnectionPoolSize());
         }
 
@@ -363,14 +363,22 @@ public:
         KQP_PROXY_LOG_D("Received node white board pool stats: " << pool.usage());
         NodeResources.SetCpuUsage(pool.usage());
         NodeResources.SetThreads(pool.threads());
+
+        PublishResourceUsage();
     }
 
     void DoPublishResources() {
-        SendBoardPublishPoison();
-
         SendWhiteboardRequest();
+
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
             KQP_PROXY_LOG_E("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            return;
+        }
+
+        SendBoardPublishPoison();
+
+        if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
+            Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
             return;
         }
 
@@ -389,21 +397,13 @@ public:
     }
 
     void PublishResourceUsage() {
-        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        auto now = TAppData::TimeProvider->Now();
-        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
-
-        if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
-            if (!LastPublishResourcesAt.has_value() || now - *LastPublishResourcesAt < batchingInterval) {
-                LastPublishResourcesAt = TAppData::TimeProvider->Now();
-                Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
-            }
-            return;
-        }
-
         if (ResourcesPublishScheduled) {
             return;
         }
+
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+        auto now = TAppData::TimeProvider->Now();
+        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
 
         if (LastPublishResourcesAt && now - *LastPublishResourcesAt < batchingInterval) {
             ResourcesPublishScheduled = true;
@@ -829,11 +829,14 @@ public:
         if (!TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
             LookupPeerProxyData();
         } else {
-            GetKqpResourceManager()->RequestClusterResourcesInfo(
-                [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                    TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
-                    as->Send(eh);
-                });
+            if (SelfDataCenterId && !AppData()->TenantName.empty() && !IsLookupByRmScheduled) {
+                IsLookupByRmScheduled = true;
+                GetKqpResourceManager()->RequestClusterResourcesInfo(
+                    [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                        TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                        as->Send(eh);
+                    });
+            }
         }
         if (!ShutdownRequested) {
             const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
@@ -875,32 +878,37 @@ public:
     }
 
     void Handle(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
-        if (ev->Get()->Snapshot.empty()) {
+        IsLookupByRmScheduled = false;
+
+        TVector<NKikimrKqp::TKqpProxyNodeResources> proxyResources;
+        std::vector<ui64> localDatacenterProxies;
+        proxyResources.reserve(ev->Get()->Snapshot.size());
+
+        auto getDataCenterId = [](const auto& entry) {
+            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
+        };
+
+        for(auto& nodeResources : ev->Get()->Snapshot) {
+            auto* proxyNodeResources = nodeResources.MutableKqpProxyNodeResources();
+
+            if (proxyNodeResources->HasNodeId()) {
+                proxyResources.push_back(std::move(*proxyNodeResources));
+                if (getDataCenterId(proxyResources.back()) == *SelfDataCenterId) {
+                    localDatacenterProxies.emplace_back(proxyResources.back().GetNodeId());
+                }
+            }
+        }
+
+        if (proxyResources.empty()) {
             PeerProxyNodeResources.clear();
-            KQP_PROXY_LOG_E("Can not find default state storage group for database " <<
+            KQP_PROXY_LOG_D("Received unexpected data from rm for database " <<
                 AppData()->TenantName);
             return;
         }
 
         Y_VERIFY(SelfDataCenterId);
-        PeerProxyNodeResources.resize(ev->Get()->Snapshot.size());
-        size_t idx = 0;
-        auto getDataCenterId = [](const auto& entry) {
-            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
-        };
-
-        LocalDatacenterProxies.clear();
-        for(auto& nodeResource : ev->Get()->Snapshot) {
-            auto* proxyNodeResources = nodeResource.MutableKqpProxyNodeResources();
-            proxyNodeResources->SetNodeId(nodeResource.GetNodeId());
-
-            PeerProxyNodeResources[idx] = std::move(*proxyNodeResources);
-
-            if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
-                LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
-            }
-            ++idx;
-        }
+        PeerProxyNodeResources = std::move(proxyResources);
+        LocalDatacenterProxies = std::move(localDatacenterProxies);
 
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
@@ -1461,13 +1469,13 @@ private:
         }
     }
 
-    void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {        
+    void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvListScriptExecutionOperationsResponse>(ev)) {
             Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
-        } 
+        }
     }
 
-    void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {        
+    void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvCancelScriptExecutionOperationResponse>(ev)) {
             Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
         }
@@ -1544,6 +1552,7 @@ private:
     };
     EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
     std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    bool IsLookupByRmScheduled = false;
 };
 
 } // namespace

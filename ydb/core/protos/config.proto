@@ -1113,6 +1113,15 @@ message TTableServiceConfig {
     }
 
     message TResourceManager {
+        message TRetrySettings {
+            optional uint32 StartDelayMs = 1;
+            optional uint32 MaxDelayMs = 2;
+        }
+        message TInfoExchangerSettings {
+            optional TRetrySettings PublisherSettings = 1;
+            optional TRetrySettings SubscriberSettings = 2;
+            optional TRetrySettings ExchangerSettings = 3;
+        }
         optional uint32 ComputeActorsCount = 1 [default = 1000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
@@ -1132,6 +1141,7 @@ message TTableServiceConfig {
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
         optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
         optional bool EnablePublishResourcesByExchanger = 18 [default = true];
+        optional TInfoExchangerSettings InfoExchangerSettings = 19;
     }
 
     message TSpillingServiceConfig {
@@ -1311,7 +1321,7 @@ message TTableServiceConfig {
     optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
-    optional bool EnablePublishKqpProxyByRM = 34 [default = false];
+    optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];

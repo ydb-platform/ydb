@@ -153,8 +153,18 @@ public:
         UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes());
 
         if (PublishResourcesByExchanger) {
+            CreateResourceInfoExchanger(Config.GetInfoExchangerSettings());
+            return;
+        }
+    }
+
+    void CreateResourceInfoExchanger(
+            const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
+        PublishResourcesByExchanger = true;
+        if (!ResourceInfoExchanger) {
             ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
-            auto exchanger = CreateKqpResourceInfoExchangerActor(Counters, ResourceSnapshotState);
+            auto exchanger = CreateKqpResourceInfoExchangerActor(
+                Counters, ResourceSnapshotState, settings);
             ResourceInfoExchanger = ActorSystem->Register(exchanger);
             return;
         }
@@ -550,11 +560,14 @@ public:
     void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) override {
         LOG_AS_D("Schedule Snapshot request");
         if (PublishResourcesByExchanger) {
-            std::shared_ptr<const TVector<NKikimrKqp::TKqpNodeResources>> infos;
+            std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> infos;
             with_lock (ResourceSnapshotState->Lock) {
                 infos = ResourceSnapshotState->Snapshot;
             }
-            TVector<NKikimrKqp::TKqpNodeResources> resources = *infos;
+            TVector<NKikimrKqp::TKqpNodeResources> resources;
+            if (infos != nullptr) {
+                resources = *infos;
+            }
             callback(std::move(resources));
             return;
         }
@@ -778,6 +791,11 @@ private:
     }
 
     void HandleWork(TEvKqp::TEvKqpProxyPublishRequest::TPtr&) {
+        SendWhiteboardRequest();
+        if (AppData()->TenantName.empty() || !SelfDataCenterId) {
+            LOG_E("Cannot start publishing usage for kqp_proxy, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            return;
+        }
         PublishResourceUsage("kqp_proxy");
     }
 
@@ -821,13 +839,14 @@ private:
     }
 
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev) {
-        auto selfDataCenterId = TString();
+        SelfDataCenterId = TString();
         if (const auto& node = ev->Get()->Node) {
-            selfDataCenterId = node->Location.GetDataCenterId();
+            SelfDataCenterId = node->Location.GetDataCenterId();
         }
 
-        ProxyNodeResources.SetDataCenterNumId(DataCenterFromString(selfDataCenterId));
-        ProxyNodeResources.SetDataCenterId(selfDataCenterId);
+        ProxyNodeResources.SetNodeId(SelfId().NodeId());
+        ProxyNodeResources.SetDataCenterNumId(DataCenterFromString(*SelfDataCenterId));
+        ProxyNodeResources.SetDataCenterId(*SelfDataCenterId);
         PublishResourceUsage("data_center update");
     }
 
@@ -869,6 +888,23 @@ private:
         auto& config = *event.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
         ResourceManager->UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes());
 
+        bool enablePublishResourcesByExchanger = config.GetEnablePublishResourcesByExchanger();
+        if (enablePublishResourcesByExchanger != PublishResourcesByExchanger) {
+            PublishResourcesByExchanger = enablePublishResourcesByExchanger;
+            if (enablePublishResourcesByExchanger) {
+                ResourceManager->CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
+                PublishResourceUsage("exchanger enabled");
+            } else {
+                if (ResourceManager->ResourceInfoExchanger) {
+                    Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
+                    ResourceManager->ResourceInfoExchanger = TActorId();
+                }
+                ResourceManager->PublishResourcesByExchanger = false;
+                ResourceManager->ResourceSnapshotState.reset();
+                PublishResourceUsage("exchanger disabled");
+            }
+        }
+
 #define FORCE_VALUE(name) if (!config.Has ## name ()) config.Set ## name(config.Get ## name());
         FORCE_VALUE(ComputeActorsCount)
         FORCE_VALUE(ChannelBufferSize)
@@ -887,6 +923,7 @@ private:
             ResourceManager->ExecutionUnitsResource.SetNewLimit(config.GetComputeActorsCount());
             ResourceManager->Config.Swap(&config);
         }
+
     }
 
     static void HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
@@ -1010,9 +1047,10 @@ private:
         ToBroker(new TEvResourceBroker::TEvNotifyActorDied);
         if (ResourceManager->ResourceInfoExchanger) {
             Send(ResourceManager->ResourceInfoExchanger, new TEvents::TEvPoison);
+            ResourceManager->ResourceInfoExchanger = TActorId();
         }
+        ResourceManager->ResourceSnapshotState.reset();
         if (WbState.BoardPublisherActorId) {
-
             Send(WbState.BoardPublisherActorId, new TEvents::TEvPoison);
         }
         TActor::PassAway();
@@ -1055,13 +1093,17 @@ private:
         NKikimrKqp::TKqpNodeResources payload;
         payload.SetNodeId(SelfId().NodeId());
         payload.SetTimestamp(now.Seconds());
-        auto* proxyNodeResources = payload.MutableKqpProxyNodeResources();
         if (KqpProxySharedResources) {
-            ProxyNodeResources.SetActiveWorkersCount(KqpProxySharedResources->AtomicLocalSessionCount.load());
+            if (SelfDataCenterId) {
+                auto* proxyNodeResources = payload.MutableKqpProxyNodeResources();
+                ProxyNodeResources.SetActiveWorkersCount(KqpProxySharedResources->AtomicLocalSessionCount.load());
+                if (SelfDataCenterId) {
+                    *proxyNodeResources = ProxyNodeResources;
+                }
+            }
         } else {
             LOG_D("Don't set KqpProxySharedResources");
         }
-        *proxyNodeResources = ProxyNodeResources;
         ActorIdToProto(MakeKqpResourceManagerServiceID(SelfId().NodeId()), payload.MutableResourceManagerActorId()); // legacy
         with_lock (ResourceManager->Lock) {
             payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.Available()); // legacy
@@ -1079,8 +1121,10 @@ private:
                 << "reason: " << reason
                 << ", payload: " << payload.ShortDebugString());
             WbState.LastPublishTime = now;
-            Send(ResourceManager->ResourceInfoExchanger,
-                new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
+            if (ResourceManager->ResourceInfoExchanger) {
+                Send(ResourceManager->ResourceInfoExchanger,
+                    new TEvKqpResourceInfoExchanger::TEvPublishResource(std::move(payload)));
+            }
             return;
         }
 
@@ -1129,6 +1173,7 @@ private:
     std::shared_ptr<TKqpResourceManager> ResourceManager;
 
     bool PublishResourcesByExchanger;
+    std::optional<TString> SelfDataCenterId;
 };
 
 } // namespace NRm

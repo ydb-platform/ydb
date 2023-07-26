@@ -10,6 +10,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 PEERDIR(
     contrib/libs/openssl
     contrib/libs/openssl/crypto
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

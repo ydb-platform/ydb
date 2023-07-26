@@ -51,6 +51,12 @@ NKikimrProto::EReplyStatus TIntermediate::TRead::CumulativeStatus() const {
     }
 }
 
+TRope TIntermediate::TRead::BuildRope() {
+    TRope rope = Value ? Value.GetMonolith() : TRope();
+    Y_VERIFY(!Value || rope.size() == ValueSize);
+    return rope;
+}
+
 TIntermediate::TIntermediate(TActorId respondTo, TActorId keyValueActorId, ui64 channelGeneration, ui64 channelStep,
         TRequestType::EType requestType)
     : Cookie(0)
@@ -81,7 +87,7 @@ void TIntermediate::UpdateStat() {
             Stat.ReadNodata++;
         } else if (read.Status == NKikimrProto::OK) {
             Stat.Reads++;
-            Stat.ReadBytes += read.Value.size();
+            Stat.ReadBytes += read.ValueSize;
         }
     };
     auto checkRangeRead = [&] (const auto &range) {
@@ -91,7 +97,7 @@ void TIntermediate::UpdateStat() {
                     Stat.RangeReadItemsNodata++;
                 } else if (read.Status == NKikimrProto::OK) {
                     Stat.RangeReadItems++;
-                    Stat.RangeReadBytes += read.Value.size();
+                    Stat.RangeReadBytes += read.ValueSize;
                 }
             }
         } else {

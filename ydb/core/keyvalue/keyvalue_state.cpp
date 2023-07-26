@@ -875,6 +875,9 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
         if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
             THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
             response->Record = intermediate->Response;
+            for (auto& item : intermediate->Payload) {
+                response->AddPayload(std::move(item));
+            }
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
             ctx.Send(intermediate->RespondTo, response.Release());
         }
@@ -918,16 +921,22 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
 
 void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
         NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
-        NKikimrKeyValue::StorageChannel */*response*/,
+        NKikimrKeyValue::StorageChannel* /*response*/,
         ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
-        TIntermediate* /*intermediate*/)
+        TIntermediate *intermediate)
 {
     NKikimrProto::EReplyStatus outStatus = request.CumulativeStatus();
     request.Status = outStatus;
     legacyResponse->SetStatus(outStatus);
     if (outStatus == NKikimrProto::OK) {
-        legacyResponse->SetValue(request.Value);
-        Y_VERIFY(request.Value.size() == request.ValueSize);
+        TRope value = request.BuildRope();
+        if (intermediate->UsePayloadInResponse) {
+            legacyResponse->SetPayloadId(intermediate->Payload.size());
+            intermediate->Payload.push_back(std::move(value));
+        } else {
+            const TContiguousSpan span(value.GetContiguousSpan());
+            legacyResponse->SetValue(span.data(), span.size());
+        }
     } else {
         legacyResponse->SetMessage(request.Message);
         if (outStatus == NKikimrProto::NODATA) {
@@ -960,7 +969,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
         NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
         ISimpleDb &/*db*/, const TActorContext &/*ctx*/, TRequestStat &/*stat*/, ui64 /*unixTime*/,
-        TIntermediate* /*intermediate*/)
+        TIntermediate *intermediate)
 {
     for (ui64 r = 0; r < request.Reads.size(); ++r) {
         auto &read = request.Reads[r];
@@ -1003,8 +1012,14 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
         resultKv->SetStatus(outStatus);
         resultKv->SetKey(read.Key);
         if (request.IncludeData && (outStatus == NKikimrProto::OK || outStatus == NKikimrProto::OVERRUN)) {
-            resultKv->SetValue(read.Value);
-            Y_VERIFY(read.Value.size() == read.ValueSize);
+            TRope value = read.BuildRope();
+            if (intermediate->UsePayloadInResponse) {
+                resultKv->SetPayloadId(intermediate->Payload.size());
+                intermediate->Payload.push_back(std::move(value));
+            } else {
+                const TContiguousSpan span = value.GetContiguousSpan();
+                resultKv->SetValue(span.data(), span.size());
+            }
         }
         resultKv->SetValueSize(read.ValueSize);
         resultKv->SetCreationUnixTime(read.CreationUnixTime);
@@ -1037,7 +1052,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
     record.Chain = {};
     ui32 storage_channel = 0;
     if (request.Status == NKikimrProto::SCHEDULED) {
-        TRcBuf inlineData = request.Data;
+        TRope inlineData = request.Data;
         const size_t size = inlineData.size();
         record.Chain.push_back(TIndexRecord::TChainItem(std::move(inlineData), 0));
         CountWriteRecord(0, size);
@@ -1177,7 +1192,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TConcat &request,
 
         for (TIndexRecord::TChainItem& chainItem : input.Chain) {
             if (chainItem.IsInline()) {
-                chain.push_back(TIndexRecord::TChainItem(TRcBuf(chainItem.InlineData), offset));
+                chain.push_back(TIndexRecord::TChainItem(TRope(chainItem.InlineData), offset));
             } else {
                 const TLogoBlobID& id = chainItem.LogoBlobId;
                 chain.push_back(TIndexRecord::TChainItem(id, offset));
@@ -2188,7 +2203,7 @@ void TKeyValueState::SplitIntoBlobs(TIntermediate::TWrite &cmd, bool isInline, u
 }
 
 bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TKeyValueRequest &kvRequest,
-        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
+        TEvKeyValue::TEvRequest& ev, THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     intermediate->WriteIndices.reserve(kvRequest.CmdWriteSize());
     for (ui32 i = 0; i < kvRequest.CmdWriteSize(); ++i) {
         auto& request = kvRequest.GetCmdWrite(i);
@@ -2203,10 +2218,10 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
-        if (!request.HasValue()) {
+        if (request.GetDataCase() == NKikimrClient::TKeyValueRequest::TCmdWrite::DATA_NOT_SET) {
             TStringStream str;
             str << "KeyValue# " << TabletId;
-            str << " Missing Value in CmdWrite(" << i << ") Marker# KV10";
+            str << " Missing Value/PayloadId in CmdWrite(" << i << ") Marker# KV10";
             ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
@@ -2249,7 +2264,20 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
         }
 
         interm.Key = request.GetKey();
-        interm.Data = TRcBuf(request.GetValue());
+
+        switch (request.GetDataCase()) {
+            case NKikimrClient::TKeyValueRequest::TCmdWrite::kValue:
+                interm.Data = TRope(request.GetValue());
+                break;
+
+            case NKikimrClient::TKeyValueRequest::TCmdWrite::kPayloadId:
+                interm.Data = ev.GetPayload(request.GetPayloadId());
+                break;
+
+            case NKikimrClient::TKeyValueRequest::TCmdWrite::DATA_NOT_SET:
+                Y_UNREACHABLE();
+        }
+
         interm.Tactic = TEvBlobStorage::TEvPut::TacticDefault;
         switch (request.GetTactic()) {
             case NKikimrClient::TKeyValueRequest::MIN_LATENCY:
@@ -2449,7 +2477,7 @@ TPrepareResult TKeyValueState::PrepareOneCmd(const TCommand::Write &request, THo
     intermediate->Commands.emplace_back(TIntermediate::TWrite());
     auto &cmd = std::get<TIntermediate::TWrite>(intermediate->Commands.back());
     cmd.Key = request.key();
-    cmd.Data = TRcBuf(request.value());
+    cmd.Data = TRope(request.value());
     switch (request.tactic()) {
     case TCommand::Write::TACTIC_MIN_LATENCY:
         cmd.Tactic = TEvBlobStorage::TEvPut::TacticMinLatency;
@@ -3126,6 +3154,8 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     }
     intermediate->HasIncrementGeneration = request.HasCmdIncrementGeneration();
 
+    intermediate->UsePayloadInResponse = request.GetUsePayloadInResponse();
+
     if (CheckDeadline(ctx, request, intermediate)) {
         return false;
     }
@@ -3152,7 +3182,7 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     error = error || PrepareCmdRename(ctx, request, intermediate);
     error = error || PrepareCmdConcat(ctx, request, intermediate);
     error = error || PrepareCmdDelete(ctx, request, intermediate);
-    error = error || PrepareCmdWrite(ctx, request, intermediate, info);
+    error = error || PrepareCmdWrite(ctx, request, *ev->Get(), intermediate, info);
     error = error || PrepareCmdGetStatus(ctx, request, intermediate, info);
     error = error || PrepareCmdTrimLeakedBlobs(ctx, request, intermediate, info);
     error = error || PrepareCmdSetExecutorFastLogPolicy(ctx, request, intermediate, info);

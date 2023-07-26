@@ -3,6 +3,7 @@
 
 #include <ydb/core/util/stlog.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
+#include <util/generic/overloaded.h>
 
 
 namespace NKikimr {
@@ -62,16 +63,6 @@ public:
         return std::holds_alternative<TIntermediate::TRead>(GetCommand());
     }
 
-    bool IsRangeRead() const {
-        return std::holds_alternative<TIntermediate::TRangeRead>(GetCommand());
-    }
-
-    void AddRead(TIntermediate::TRead &read) {
-        for (auto &readItem : read.ReadItems) {
-            ReadItems.push_back({&read, &readItem});
-        }
-    }
-
     NKikimrBlobStorage::EGetHandleClass GetHandleClass() const {
         auto visitor = [&] (auto &request) {
             return request.HandleClass;
@@ -99,19 +90,22 @@ public:
         }
 
         ui32 readCount = 0;
-        auto addReadItems = [&](auto &request) {
-            using Type = std::decay_t<decltype(request)>;
-            if constexpr (std::is_same_v<Type, TIntermediate::TRead>) {
-                AddRead(request);
-                readCount++;
-            } else {
-                for (auto &read : request.Reads) {
-                    AddRead(read);
-                    readCount++;
+        auto addRead = [&](TIntermediate::TRead& read) {
+            for (auto& readItem : read.ReadItems) {
+                ReadItems.push_back({&read, &readItem});
+            }
+            ++readCount;
+        };
+        std::visit(TOverloaded{
+            [&](TIntermediate::TRead& read) {
+                addRead(read);
+            },
+            [&](TIntermediate::TRangeRead& rangeRead) {
+                for (auto& read : rangeRead.Reads) {
+                    addRead(read);
                 }
             }
-        };
-        std::visit(addReadItems, GetCommand());
+        }, GetCommand());
 
         if (ReadItems.empty()) {
             auto getStatus = [&](auto &request) {
@@ -284,9 +278,6 @@ public:
             read.Status = response.Status;
 
             if (response.Status == NKikimrProto::OK) {
-                if (read.Value.size() != read.ValueSize) {
-                    read.Value.resize(read.ValueSize);
-                }
                 Y_VERIFY_S(response.Buffer.size() == readItem.BlobSize,
                         "response.Buffer.size()# " << response.Buffer.size()
                         << " readItem.BlobSize# " << readItem.BlobSize);
@@ -294,11 +285,9 @@ public:
                         "readItem.ValueOffset# " << readItem.ValueOffset
                         << " readItem.BlobSize# " << readItem.BlobSize
                         << " read.ValueSize# " << read.ValueSize);
-                Y_VERIFY(read.Value.IsDetached());
-                response.Buffer.begin().ExtractPlainDataAndAdvance(read.Value.Detach() + readItem.ValueOffset, response.Buffer.size());
                 IntermediateResult->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), batch.GroupId)] += response.Buffer.size();
-                // FIXME: count distinct blobs?" keyvalue_storage_request.cpp:279
                 IntermediateResult->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), batch.GroupId)] += 1;
+                read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
                 Y_VERIFY_DEBUG_S(response.Status != NKikimrProto::NODATA, "NODATA received for TEvGet"
                     << " TabletId# " << TabletInfo->TabletID
@@ -414,7 +403,10 @@ public:
         response->Record.set_requested_key(interRead.Key);
         response->Record.set_requested_offset(interRead.Offset);
         response->Record.set_requested_size(interRead.RequestedSize);
-        response->Record.set_value(interRead.Value);
+
+        TRope value = interRead.BuildRope();
+        const TContiguousSpan span = value.GetContiguousSpan();
+        response->Record.set_value(span.data(), span.size());
 
         if (IntermediateResult->RespondTo.NodeId() != SelfId().NodeId()) {
             response->Record.set_node_id(SelfId().NodeId());
@@ -455,7 +447,11 @@ public:
         for (auto &interRead : interRange.Reads) {
             auto *kvp = readRangeResult.add_pair();
             kvp->set_key(interRead.Key);
-            kvp->set_value(interRead.Value);
+
+            TRope value = interRead.BuildRope();
+            const TContiguousSpan span = value.GetContiguousSpan();
+            kvp->set_value(span.data(), span.size());
+
             kvp->set_value_size(interRead.ValueSize);
             kvp->set_creation_unix_time(interRead.CreationUnixTime);
             ui32 storageChannel = MainStorageChannelInPublicApi;

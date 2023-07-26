@@ -52,7 +52,10 @@ message TKeyValueRequest {
     }
     message TCmdWrite {
         optional bytes Key = 1; // mandatory
-        optional bytes Value = 2; // mandatory
+        oneof Data { // mandatory
+            bytes Value = 2;
+            uint32 PayloadId = 8;
+        }
         optional EStorageChannel StorageChannel = 3; // (default = MAIN)
         optional EPriority Priority = 4; // (default = REALTIME)
         optional bytes KeyToCache = 5; // used in PQ
@@ -86,6 +89,7 @@ message TKeyValueRequest {
     optional uint64 TabletId = 1; // mandatory
     optional uint64 Generation = 2; // optional, no generation check is done if missing
     optional uint64 Cookie = 3;
+    optional bool UsePayloadInResponse = 16; // use PayloadId instead of Value in TKeyValueResponse
     repeated TCmdDeleteRange CmdDeleteRange = 4;
     optional TCmdIncrementGeneration CmdIncrementGeneration = 5; // conflicts with any other Cmd, must be the only one
     repeated TCmdRead CmdRead = 6;
@@ -108,7 +112,10 @@ message TKeyValueResponse {
 
     message TKeyValuePair {
         optional bytes Key = 1;
-        optional bytes Value = 2;
+        oneof Data {
+            bytes Value = 2;
+            uint32 PayloadId = 7;
+        }
         optional uint32 ValueSize = 3;
         optional uint64 CreationUnixTime = 4;
         optional TKeyValueRequest.EStorageChannel StorageChannel = 5; // Returns the _actual_ storage channel
@@ -124,7 +131,10 @@ message TKeyValueResponse {
     }
     message TReadResult {
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional bytes Value = 2;
+        oneof Data {
+            bytes Value = 2;
+            uint32 PayloadId = 4;
+        }
         optional string Message = 3;
     }
     message TReadRangeResult {

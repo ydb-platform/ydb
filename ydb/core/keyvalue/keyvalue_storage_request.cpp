@@ -285,15 +285,11 @@ public:
             auto& readItem = *it->ReadItem;
 
             if (response.Status == NKikimrProto::OK) {
-                if (read.Value.size() != read.ValueSize) {
-                    read.Value.resize(read.ValueSize);
-                }
                 Y_VERIFY(response.Buffer.size() == readItem.BlobSize);
                 Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
-                Y_VERIFY(read.Value.IsDetached());
-                response.Buffer.begin().ExtractPlainDataAndAdvance(read.Value.Detach() + readItem.ValueOffset, response.Buffer.size());
                 IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
+                read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
                 TStringStream err;
                 if (read.Message.size()) {
@@ -633,15 +629,15 @@ public:
                 if (request.Status != NKikimrProto::SCHEDULED) {
                     Y_VERIFY(request.Status == NKikimrProto::UNKNOWN);
 
-                    const TRcBuf& data = request.Data;
-                    const TContiguousSpan whole = data.GetContiguousSpan();
+                    const TRope& data = request.Data;
+                    auto iter = data.begin();
 
-                    ui64 offset = 0;
                     for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
-                        const TContiguousSpan chunk = whole.SubSpan(offset, logoBlobId.BlobSize());
+                        const auto begin = iter;
+                        iter += logoBlobId.BlobSize();
                         THolder<TEvBlobStorage::TEvPut> put(
                             new TEvBlobStorage::TEvPut(
-                                logoBlobId, TRcBuf(TRcBuf::Piece, chunk.data(), chunk.size(), data),
+                                logoBlobId, TRcBuf(TRope(begin, iter)),
                                 IntermediateResults->Deadline, request.HandleClass,
                                 request.Tactic));
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
@@ -654,7 +650,6 @@ public:
                         SendPutToGroup(ctx, groupId, TabletInfo.Get(), std::move(put), i);
 
                         ++WriteRequestsSent;
-                        offset += logoBlobId.BlobSize();
                     }
                 }
             }

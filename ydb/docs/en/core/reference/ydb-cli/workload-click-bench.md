@@ -25,6 +25,7 @@ See the description of the command to init the data load:
 | Parameter name | Parameter description |
 ---|---
 | `--table <value>` | The table name. The default value is `clickbench/hits`. |
+| `--store <value>` | Type of table storage. Acceptable values: `row`, `column`. Default value: `row`. |
 
 ## Uploading data to the table {#load}
 

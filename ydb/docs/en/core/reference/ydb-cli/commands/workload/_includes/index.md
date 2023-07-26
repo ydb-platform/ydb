@@ -24,4 +24,5 @@ The following types of load tests are supported at the moment:
 * [Stock](../stock.md): An online store warehouse simulator.
 * [Key-value](../../../workload-kv.md): Key-Value load.
 * [ClickBench](../../../workload-click-bench.md): ClickBench analytical benchmark (https://github.com/ClickHouse/ClickBench).
-<!-- * [Topic](../../../workload-topic.md): Topic load. -->
+* [TPC-H](../../../workload-tpch.md): TPC-H benchmark (https://www.tpc.org/tpch/).
+* [Topic](../../../workload-topic.md): Topic load.

@@ -26,6 +26,8 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 `--save-partial-result`: Don't delete the result of partial dumping. Without this option, the dumps that terminated with an error are deleted.
 
+`--ordered`: Rows in the exported tables will be sorted by the primary key.
+
 ## Examples
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}

@@ -447,7 +447,7 @@ def onadd_ytest(unit, *args):
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
 
-    is_implicit_data_needed = flat_args[1] in ("unittest.py", "gunittest", "g_benchmark", "go.test", "boost.test")
+    is_implicit_data_needed = flat_args[1] in ("unittest.py", "gunittest", "g_benchmark", "go.test", "boost.test", "fuzz.test")
     if is_implicit_data_needed and unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
 

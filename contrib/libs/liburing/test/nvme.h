@@ -16,7 +16,7 @@ extern "C" {
  * If the uapi headers installed on the system lacks nvme uring command
  * support, use the local version to prevent compilation issues.
  */
-#if 0
+#ifndef CONFIG_HAVE_NVME_URING
 struct nvme_uring_cmd {
 	__u8	opcode;
 	__u8	flags;

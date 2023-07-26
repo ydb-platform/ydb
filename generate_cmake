@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import shutil
+import subprocess
+import multiprocessing
+import json
+import stat
+import filecmp
+import urllib.request
+from argparse import ArgumentParser
+
+
+def mkdir(path):
+    try:
+        os.mkdir(path)
+    except FileExistsError as e:
+        pass
+
+
+def remove_file(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError as e:
+        pass
+
+
+def compare_files(lhs_file_path, rhs_file_path):
+    try:
+        return filecmp.cmp(lhs_file_path, rhs_file_path)
+    except FileNotFoundError as e:
+        return False
+
+
+def rmtree(path):
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError as e:
+        pass
+
+
+def make_file_executable(file_path):
+    st = os.stat(file_path)
+    os.chmod(file_path, st.st_mode + stat.S_IEXEC)
+
+
+def get_binary_id(resource_file_path):
+    with open(resource_file_path) as file:
+        ymake_file_json = json.load(file)
+
+    linux_uri = str(ymake_file_json["by_platform"]["linux"]["uri"])
+    return linux_uri.split(":")[1]
+
+
+def download_binary(root_path, binary_name, binary_path):
+    root_binary_resource_file_path = (
+        f"{root_path}/build/external_resources/{binary_name}/resources.json"
+    )
+    tmp_binary_resource_file_path = binary_path + "_resources.json"
+
+    if compare_files(root_binary_resource_file_path, tmp_binary_resource_file_path):
+        print(f"Use {binary_name} binary from cache {binary_path}")
+    else:
+        binary_id = get_binary_id(root_binary_resource_file_path)
+        devtools_registry_s3_url = "https://devtools-registry.s3.yandex.net"
+        devtools_registry_s3_binary_url = f"{devtools_registry_s3_url}/{binary_id}"
+        print(
+            f"Download {binary_name} binary from {devtools_registry_s3_binary_url} into {binary_path}"
+        )
+        remove_file(binary_path)
+        urllib.request.urlretrieve(devtools_registry_s3_binary_url, binary_path)
+        make_file_executable(binary_path)
+
+    shutil.copy(root_binary_resource_file_path, tmp_binary_resource_file_path)
+
+
+def generate_graph_for_platform(generate_graph_for_platform):
+    platform = generate_graph_for_platform[0]
+    generate_graph_command = generate_graph_for_platform[1]
+
+    output = subprocess.check_output(
+        generate_graph_command, stderr=subprocess.STDOUT, shell=True
+    ).decode("utf-8")
+
+    allowed_error_patterns = [
+        "to directory without ya.make: [[imp]]$S/build/platform/",
+        "to directory without ya.make: [[imp]]$S/build/external_resources/",
+        "could not resolve include file: [[imp]]openssl",
+        "could not resolve include file: [[imp]]zlib",
+        "could not resolve include file: [[imp]]ares.h",
+        "in $B/contrib/libs/openssl/",
+        "in $B/contrib/libs/zlib",
+        "in $B/contrib/libs/c-ares",
+        "in $B/contrib/libs/libc_compat/ubuntu_14/liblibs-libc_compat-ubuntu_14.a",
+        "in $B/contrib/libs/linux-headers/libcontrib-libs-linux-headers.a",
+        "in $B/contrib/libs/farmhash/",
+        "in $B/contrib/libs/curl/",
+        "in $B/contrib/libs/libxml/",
+        "in $B/contrib/libs/apache/arrow/",
+        "in $B/contrib/libs/grpc/",
+        "in $S/contrib/tools/protoc/plugins/cpp_styleguide/ya.make",
+        "in $S/contrib/tools/protoc/plugins/grpc_cpp",
+        "in $B/contrib/restricted/boost/",
+        "in $B/library/cpp/charset/",
+        "in $B/library/cpp/uri/",
+        "in $B/library/cpp/unicode/punycode/",
+        "in $B/library/cpp/config/",
+        "in $S/tools/rescompiler/bin/",
+        # Fix
+        "in $B/library/cpp/actors/dnsresolver/ut/library-cpp-actors-dnsresolver-ut",
+        "in $B/ydb/library/pdisk_io/libydb-library-pdisk_io",
+    ]
+
+    if platform == "windows-x86_64":
+        # Fix
+        allowed_error_patterns.append("in $B/ydb/core/tx/tiering/core-tx-tiering")
+        allowed_error_patterns.append(
+            "in $B/ydb/library/yql/providers/s3/serializations/providers-s3-serializations"
+        )
+
+    result_errors = []
+    for line in output.split("\n"):
+        if not line.startswith("Error"):
+            continue
+
+        error_is_allowed = False
+        for allowed_error_pattern in allowed_error_patterns:
+            if allowed_error_pattern in line:
+                error_is_allowed = True
+                break
+
+        if error_is_allowed:
+            continue
+
+        result_errors.append(line)
+
+    return result_errors
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Generate CMake files from Ya make files")
+    parser.add_argument("--ymake_bin", help="Path to ymake binary")
+    parser.add_argument("--yexport_bin", help="Path to yexport binary")
+    parser.add_argument("--tmp", help="Path to tmp dir")
+    parser.add_argument(
+        "--debug", action="store_true", default=False, help="Run script in debug mode"
+    )
+
+    try:
+        args = parser.parse_args()
+    except Exception as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
+
+    tmp_folder_path = args.tmp
+    if tmp_folder_path is None:
+        tmp_folder_path = "/tmp/ydb-generate-cmake"
+
+    ymake_binary_path = args.ymake_bin
+    yexport_binary_path = args.yexport_bin
+    debug = args.debug
+
+    ydb_tmp_folder_path = tmp_folder_path + "/ydb"
+    ydb_metadata_folder_path = tmp_folder_path + "/metadata"
+    ydb_bin_folder_path = tmp_folder_path + "/bin"
+    plugins_folder_path = ydb_tmp_folder_path + "/build/plugins"
+
+    mkdir(tmp_folder_path)
+    mkdir(ydb_metadata_folder_path)
+    mkdir(ydb_bin_folder_path)
+
+    root_folder = os.getcwd()
+
+    if ymake_binary_path is None:
+        ymake_binary_path = ydb_bin_folder_path + "/ymake"
+        download_binary(root_folder, "ymake", ymake_binary_path)
+
+    if yexport_binary_path is None:
+        yexport_binary_path = ydb_bin_folder_path + "/yexport"
+        download_binary(root_folder, "yexport", yexport_binary_path)
+
+    rmtree(ydb_tmp_folder_path)
+    shutil.copytree(root_folder, ydb_tmp_folder_path)
+
+    platforms = [
+        ("linux-x86_64", "default-linux-x86_64"),
+        ("linux-aarch64", "default-linux-aarch64"),
+        ("darwin-x86_64", "default-darwin-x86_64"),
+        ("windows-x86_64", "default-win-x86_64"),
+    ]
+
+    generate_graph_for_platform_commands = []
+
+    for platform, target_platform in platforms:
+        print(f"Platform {platform} target platform {target_platform}")
+
+        dump_export_path = f"{ydb_metadata_folder_path}/{platform}.conf"
+        graph_export_path = f"{ydb_metadata_folder_path}/sem.{platform}.json"
+
+        generate_dump_command = f"{root_folder}/scripts/generate_dump.sh {platform} {target_platform} > {dump_export_path}"
+        print(f"Generate dump command {generate_dump_command}")
+
+        subprocess.check_output(generate_dump_command, shell=True)
+
+        # In original script there are targets kikimr/docs/ru/docs_oss ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin
+        generate_graph_command = f'{ymake_binary_path} --build-root "{ydb_tmp_folder_path}" --config "{dump_export_path}"\
+            --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going\
+            ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin > {graph_export_path}'
+        print(f"Generate graph command {generate_graph_command}")
+
+        generate_graph_for_platform_commands.append((platform, generate_graph_command))
+
+    errors_for_platform = []
+    with multiprocessing.Pool(len(generate_graph_for_platform_commands)) as pool:
+        errors_for_platform = pool.map(
+            generate_graph_for_platform, generate_graph_for_platform_commands
+        )
+
+    for index, (platform, target_platform) in enumerate(platforms):
+        errors_for_platform_size = len(errors_for_platform[index])
+        if errors_for_platform_size == 0:
+            continue
+
+        print(
+            f"Found {errors_for_platform_size} errors for platform {platform}",
+            file=sys.stderr,
+        )
+        for error in errors_for_platform[index]:
+            print(error, file=sys.stderr)
+
+        sys.exit(1)
+
+    yexport_command = f"{yexport_binary_path} --export-root \"{ydb_tmp_folder_path}\" --target YDB \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-x86_64.json'}\" --platforms linux-x86_64 \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.linux-aarch64.json'}\" --platforms linux-aarch64 \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.darwin-x86_64.json'}\" --platforms darwin-x86_64 \
+            --semantic-graph \"{ydb_metadata_folder_path + '/sem.windows-x86_64.json'}\" --platforms windows-x86_64"
+    print(f"yexport command {yexport_command}")
+
+    yexport_output = subprocess.check_output(
+        yexport_command, stderr=subprocess.STDOUT, shell=True
+    ).decode("utf-8")
+
+    if debug:
+        print("yexport output")
+        print(yexport_output)
+
+    rsync_command = f'rsync --recursive --delete  --perms\
+        --exclude .git --exclude contrib --exclude library/cpp/actors\
+        "{ydb_tmp_folder_path}/" "{root_folder}/"'
+
+    print(f"rsync command {rsync_command}")
+    subprocess.check_output(rsync_command, shell=True)
+
+    sys.exit(0)

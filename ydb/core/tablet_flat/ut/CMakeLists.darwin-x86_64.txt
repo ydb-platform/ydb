@@ -72,6 +72,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_screen.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_bloom.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache_memtable.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice_loader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_versions.cpp

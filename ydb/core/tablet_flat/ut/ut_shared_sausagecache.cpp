@@ -89,16 +89,20 @@ struct TTxReadRow : public ITransaction {
 };
 
 void LogCounters(TIntrusivePtr<TSharedPageCacheCounters> counters) {
-    Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() << ", Passive:" << counters->PassiveBytes->Val() << ", MemLimit:" << counters->MemLimitBytes->Val() << Endl;
+    Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() 
+        << ", Passive:" << counters->PassiveBytes->Val() 
+        << ", MemLimit:" << counters->MemLimitBytes->Val()
+        << ", MemTable:" << counters->MemTableCompactingBytes->Val() << "/" << counters->MemTableTotalBytes->Val()
+        << Endl;
 }
 
-void WaitMemEvent(TMyEnvBase& env) {
+void WaitEvent(TMyEnvBase& env, ui32 eventType, ui32 requiredCount = 1) {
     TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(eventType, requiredCount));
     env->DispatchEvents(options);
 }
 
-Y_UNIT_TEST(Limits) {
+Y_UNIT_TEST(PageCacheLimits) {
     TMyEnvBase env;
     auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
 
@@ -121,43 +125,142 @@ Y_UNIT_TEST(Limits) {
     }
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB / 2); // 2 full layers (fresh & staging)
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB/ 3); // 2 full layers (fresh & staging)
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 0);
 
     env->GetMemObserver()->NotifyStat({95*MB, 110*MB, 100*MB});
-    WaitMemEvent(env);
+    WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB / 2);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB/ 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 5*MB + counters->ActiveBytes->Val() + counters->PassiveBytes->Val());
 
 
     env->GetMemObserver()->NotifyStat({101*MB, 110*MB, 100*MB});
-    WaitMemEvent(env);
+    WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB / 2); // 1mb evicted
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2 - MB, MB / 2);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB/ 3); // 1mb evicted
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2 - MB, MB/ 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), counters->ActiveLimitBytes->Val());
 
     env->GetMemObserver()->NotifyStat({95*MB, 110*MB, 100*MB});
-    WaitMemEvent(env);
+    WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB / 2);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2 - MB, MB/ 3);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 5*MB + counters->ActiveBytes->Val() + counters->PassiveBytes->Val()); // +5mb
 
     env->GetMemObserver()->NotifyStat({200*MB, 110*MB, 100*MB});
-    WaitMemEvent(env);
+    WaitEvent(env, NSharedCache::EvMem);
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 1); // zero limit
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), 7772);
     UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 1); // zero limit
+}
+
+Y_UNIT_TEST(MemTableRegistration) {
+    TMyEnvBase env;
+
+    // start:
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendAsync(new NFake::TEvExecute{ new TTxInitSchema() });
+    env.SendAsync(new NFake::TEvExecute{ new TTxWriteRow(1, "asdf") });
+
+    WaitEvent(env, NSharedCache::EvMemTableRegistered);
+
+    // stop:
+
+    env.SendAsync(new TEvents::TEvPoison);
+    
+    WaitEvent(env, NSharedCache::EvUnregister);
+
+    // restart:
+
+    env.FireTablet(env.Edge, env.Tablet, [&](const TActorId &tablet, TTabletStorageInfo *info) {
+        return new NFake::TDummy(tablet, info, env.Edge, 0);
+    });
+
+    WaitEvent(env, NSharedCache::EvMemTableRegistered);
+}
+
+Y_UNIT_TEST(MemTableLimits) {
+    TMyEnvBase env;
+
+    env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
+
+    auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+
+    TVector<ui64> tabletIds;
+    for (size_t tablet = 0; tablet < 10; tablet++) {
+        tabletIds.push_back(env.Tablet);
+        env.Tablet++;
+    }
+
+    for (auto tabletId : tabletIds) {
+        env.Tablet = tabletId;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+        // write 10 rows, each ~100KB
+        for (i64 key = 0; key < 10; ++key) {
+            TString value(size_t(100 * 1024), char('a' + key % 26));
+            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+        }
+
+        Cerr << "...compacting" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        Cerr << "...waiting until compacted" << Endl;
+        env.WaitFor<NFake::TEvCompacted>();
+
+        for (i64 key = 0; key < 10; ++key) {
+            env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key) });
+        }
+
+        // write 10 rows, each ~50KB
+        for (i64 key = 100; key < 110; ++key) {
+            TString value(size_t(50 * 1024), char('a' + key % 26));
+            env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+        }
+    }
+
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 5*MB, MB/ 3);
+    UNIT_ASSERT_VALUES_EQUAL(counters->MemTableCompactingBytes->Val(), 0);
+
+    env->GetMemObserver()->NotifyStat({95*MB, 110*MB, 100*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), 8*MB / 3 * 2, MB/ 3);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB);
+    UNIT_ASSERT_GE(counters->MemLimitBytes->Val(), 8*MB); // bigger than config value
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 5*MB, MB/ 3);
+
+    env->GetMemObserver()->NotifyStat({100*MB + 1, 110*MB, 100*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveLimitBytes->Val(), 8*MB / 3 * 2, MB/ 3); // 1 page evicted
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemLimitBytes->Val(), 8*MB / 3 * 2, MB/ 3);
+    
+    // we want to get ~2.7MB back, it's 6 Mem Tables
+    env.WaitFor<NFake::TEvCompacted>(6);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 2*MB, MB/ 3);
+
+    env->GetMemObserver()->NotifyStat({200*MB, 110*MB, 100*MB});
+    WaitEvent(env, NSharedCache::EvMem);
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 1); // zero limit
+    UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 1); // zero limit
+    
+    // compacted all except reservation, it's all except 20% of 8MB = 1.6MB = 3 Mem Tables
+    env.WaitFor<NFake::TEvCompacted>(1); // so 1 more Mem Table compacted
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->MemTableTotalBytes->Val(), 1.5*MB, MB/ 3);
 }
 
 } // Y_UNIT_TEST_SUITE(TSharedPageCache)

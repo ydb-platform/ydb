@@ -185,7 +185,7 @@ namespace NFake {
                 config->TotalScanQueueInFlyLimit = conf.ScanQueue;
                 config->Counters = MakeIntrusive<TSharedPageCacheCounters>(Env.GetDynamicCounters());
 
-                auto *actor =  CreateSharedPageCache(std::move(config), Env.GetMemObserver());
+                auto *actor = CreateSharedPageCache(std::move(config), Env.GetMemObserver());
 
                 RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
             }

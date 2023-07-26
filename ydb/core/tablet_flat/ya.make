@@ -66,6 +66,7 @@ SRCS(
     shared_handle.cpp
     shared_sausagecache.cpp
     shared_sausagecache.h
+    shared_cache_memtable.h
     tablet_flat_executor.h
     tablet_flat_executor.cpp
     tablet_flat_executed.h

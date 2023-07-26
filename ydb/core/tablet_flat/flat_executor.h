@@ -645,6 +645,9 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
+    void Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev);
+    void Handle(NSharedCache::TEvMemTableCompact::TPtr &ev);
+
     void AllowBorrowedGarbageCompaction(ui32 tableId) override;
 
     void FollowerAttached() override;

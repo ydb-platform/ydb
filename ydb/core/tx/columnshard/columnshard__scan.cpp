@@ -917,6 +917,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     for (auto& range: record.GetRanges()) {
         if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), isIndexStats ? nullptr : &Self->TablesManager.GetIndexInfo())) {
+            ErrorDescription = "cannot fill predicates from range";
             ReadMetadataRanges.clear();
             return true;
         }
@@ -924,6 +925,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     {
         auto newRange = CreateReadMetadata(read, isIndexStats, record.GetReverse(), itemsLimit);
         if (!newRange) {
+            ErrorDescription = "cannot create new range";
             ReadMetadataRanges.clear();
             return true;
         }
@@ -974,7 +976,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     std::vector<NOlap::TReadMetadata::TConstPtr> rMetadataRanges;
 
     if (ReadMetadataRanges.empty()) {
-        LOG_S_DEBUG("TTxScan failed "
+        LOG_S_ERROR("TTxScan failed "
                 << " txId: " << txId
                 << " scanId: " << scanId
                 << " gen: " << scanGen

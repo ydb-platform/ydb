@@ -21,6 +21,7 @@ bool TPKRangesFilter::Add(std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<
     auto fromContainer = TPredicateContainer::BuildPredicateFrom(f, indexInfo);
     auto toContainer = TPredicateContainer::BuildPredicateTo(t, indexInfo);
     if (!fromContainer || !toContainer) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect from/to containers")("from", !!fromContainer)("to", !!toContainer);
         return false;
     }
     if (SortedRanges.size() && !FakeRanges) {

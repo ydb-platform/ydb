@@ -5,6 +5,8 @@
 
 namespace NKikimr {
 
+TCompatibilityInfo CompatibilityInfo = TCompatibilityInfo{};
+
 using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
 using TStored = NKikimrConfig::TStoredCompatibilityInfo;
 using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
@@ -12,22 +14,14 @@ using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
 using EComponentId = NKikimrConfig::TCompatibilityRule;
 using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 
-/////////////////////////////////////////////////////////////
-// Global definitions
-/////////////////////////////////////////////////////////////
-TCurrent TCompatibilityInfo::CompatibilityInfo = {};
-TCompatibilityInfo::TDefaultCompatibilityInfo TCompatibilityInfo::DefaultCompatibilityInfo = {};
+TCompatibilityInfo::TCompatibilityInfo() {
+    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
+    using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
+    using TYdbVersionConstructor = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
 
-// new version control
-void TCompatibilityInfo::Initialize() {
     /////////////////////////////////////////////////////////
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
-
-    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
-    using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
-    using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
-
     auto current = TCurrentConstructor{
         .Build = "trunk"
     }.ToPB();
@@ -35,34 +29,42 @@ void TCompatibilityInfo::Initialize() {
     // bool success = CompleteFromTag(current);
     // Y_VERIFY_DEBUG(success);
 
-    CompatibilityInfo.CopyFrom(current);
+    CurrentCompatibilityInfo.CopyFrom(current);
 
     /////////////////////////////////////////////////////////
     // Default CompatibilityInfo
     /////////////////////////////////////////////////////////
+    DefaultCompatibilityInfo = TDefaultCompatibilityInfo{};
+#define EMPLACE_DEFAULT_COMPATIBILITY_INFO(componentName, build, year, major, minor, hotfix)    \
+    auto& defaultInfo = DefaultCompatibilityInfo[(ui32)EComponentId::componentName];            \
+    defaultInfo.emplace();                                                                      \
+    defaultInfo->CopyFrom(                                                                      \
+        TStoredConstructor{                                                                     \
+            .Build = build,                                                                     \
+            .YdbVersion = TYdbVersionConstructor{                                               \
+                .Year = year,                                                                   \
+                .Major = major,                                                                 \
+                .Minor = minor,                                                                 \
+                .Hotfix = hotfix,                                                               \
+            },                                                                                  \
+        }.ToPB()                                                                                \
+    );
 
-#define EMPLACE_DEFAULT_INFO(componentName, build, year, major, minor, hotfix)              \
-    {                                                                                       \
-        auto& defaultInfo = DefaultCompatibilityInfo[(ui32)EComponentId::componentName];    \
-        defaultInfo.emplace();                                                              \
-        defaultInfo->CopyFrom(                                                              \
-            TStoredConstructor{                                                             \
-                .Build = build,                                                             \
-                .YdbVersion = TYdbVersion{                                                  \
-                    .Year = year,                                                           \
-                    .Major = major,                                                         \
-                    .Minor = minor,                                                         \
-                    .Hotfix = hotfix,                                                       \
-                },                                                                          \
-            }.ToPB()                                                                        \
-        );                                                                                  \
-    }
+//  EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", ?, ?, ?, ?) TODO
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(VDisk, "ydb", 23, 2, 12, 0)
+//  EMPLACE_DEFAULT_COMPATIBILITY_INFO(BlobStorageController, "ydb", ?, ?, ?, ?) TODO
 
-//  EMPLACE_DEFAULT_INFO(PDisk, "ydb", ?, ?, ?, ?) TODO
-    EMPLACE_DEFAULT_INFO(VDisk, "ydb", 23, 2, 10, 0)
-//  EMPLACE_DEFAULT_INFO(BlobStorageController, "ydb", ?, ?, ?, ?) TODO
+#undef EMPLACE_DEFAULT_COMPATIBILITY_INFO
+}
 
-#undef EMPLACE_DEFAULT_INFO
+const TCurrent* TCompatibilityInfo::GetCurrent() const {
+    return &CurrentCompatibilityInfo;
+}
+
+const TStored* TCompatibilityInfo::GetDefault(TComponentId componentId) const {
+    const auto& info = DefaultCompatibilityInfo[componentId];
+    Y_VERIFY_S(info, "Default version is not defined for component# " << NKikimrConfig::TCompatibilityRule::EComponentId_Name(componentId));
+    return &*info;
 }
 
 // obsolete version control
@@ -77,22 +79,9 @@ TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInte
     }
 };
 
-const TCurrent* TCompatibilityInfo::GetCurrent() {
-    return &CompatibilityInfo;
-}
-
 /////////////////////////////////////////////////////////////
 // Implementation
 /////////////////////////////////////////////////////////////
-// Last stable YDB release, which doesn't include version control change
-// When the compatibility information is not present in component's data,
-// we assume component's version to be this version
-const TStored* TCompatibilityInfo::GetDefault(TComponentId componentId) {
-    const auto& compatibilityInfo = DefaultCompatibilityInfo[(ui32)componentId];
-    Y_VERIFY_S(compatibilityInfo, "Default version is not defined for component# " <<
-            NKikimrConfig::TCompatibilityRule::EComponentId_Name(componentId));
-    return &*compatibilityInfo;
-}
 
 // Auxiliary output functions
 TString PrintStoredAndCurrent(const TStored* stored, const TCurrent* current) {
@@ -119,7 +108,7 @@ TString PrintStoredAndCurrent(const TOldFormat& stored, const TCurrent* current)
     return str.Str();
 }
 
-TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent* current) {
+TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent* current) const {
     Y_VERIFY(current);
 
     TStored stored;
@@ -145,7 +134,7 @@ TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent*
     return stored;
 }
 
-TStored TCompatibilityInfo::MakeStored(TComponentId componentId) {
+TStored TCompatibilityInfo::MakeStored(TComponentId componentId) const {
     return MakeStored(componentId, GetCurrent());
 }
 
@@ -210,11 +199,11 @@ bool CheckNonPresent(const TCurrent* current, TComponentId componentId, TString&
     if (!current->HasYdbVersion()) {
         return true;
     }
-    const auto* lastUnsupported = TCompatibilityInfo::GetDefault(componentId);
+    const auto* lastUnsupported = CompatibilityInfo.GetDefault(componentId);
     Y_VERIFY(lastUnsupported);
 
     TString errorReason1;
-    if (!TCompatibilityInfo::CheckCompatibility(lastUnsupported, componentId, errorReason1)) {
+    if (!CompatibilityInfo.CheckCompatibility(lastUnsupported, componentId, errorReason1)) {
         errorReason = "No stored YDB version found, default version is incompatible: " + errorReason1;
         return false;
     } else {
@@ -275,7 +264,7 @@ bool CheckRule(std::optional<TString> build, const NKikimrConfig::TYdbVersion* v
             (!rule.HasUpperLimit() || CompareVersions(*version, rule.GetUpperLimit()) < 1);
 }
 
-bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStored* stored, TComponentId componentId, TString& errorReason) {
+bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStored* stored, TComponentId componentId, TString& errorReason) const {
     Y_VERIFY(current);
     if (stored == nullptr) {
         // version record is not found
@@ -338,12 +327,12 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
     }
 }
 
-bool TCompatibilityInfo::CheckCompatibility(const TStored* stored, TComponentId componentId, TString& errorReason) {
+bool TCompatibilityInfo::CheckCompatibility(const TStored* stored, TComponentId componentId, TString& errorReason) const {
     return CheckCompatibility(GetCurrent(), stored, componentId, errorReason);
 }
 
 void TCompatibilityInfo::Reset(TCurrent* newCurrent) {
-    CompatibilityInfo.CopyFrom(*newCurrent);
+    CurrentCompatibilityInfo.CopyFrom(*newCurrent);
 }
 
 TString GetBranchName(TString url) {
@@ -556,7 +545,7 @@ void CheckVersionTag() {
     }
 }
 
-bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldFormat& stored, TComponentId componentId, TString& errorReason) {
+bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldFormat& stored, TComponentId componentId, TString& errorReason) const {
     Y_VERIFY(current);
 
     std::optional<TString> storedBuild;
@@ -653,7 +642,7 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
     return false;
 }
 
-bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& stored, TComponentId componentId, TString& errorReason) {
+bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& stored, TComponentId componentId, TString& errorReason) const {
     return CheckCompatibility(GetCurrent(), stored, componentId, errorReason);
 }
 

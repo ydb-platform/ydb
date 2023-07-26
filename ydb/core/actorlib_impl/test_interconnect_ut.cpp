@@ -715,7 +715,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                 current = node1.get();
             }
             Y_VERIFY(current);
-            Y_VERIFY(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect, current)
+            Y_VERIFY(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::Interconnect, current)
                     .SerializeToString(&*common->CompatibilityInfo));
 
             common->ValidateCompatibilityInfo =
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                         return false;
                     }
 
-                    return TCompatibilityInfo::CheckCompatibility(current, &peerPB,
+                    return CompatibilityInfo.CheckCompatibility(current, &peerPB,
                         NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                 };
         });
@@ -823,7 +823,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                                 return false;
                             }
 
-                            return TCompatibilityInfo::CheckCompatibility(node0.get(), &peerPB,
+                            return CompatibilityInfo.CheckCompatibility(node0.get(), &peerPB,
                                 NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                         };
 
@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
                             if (!peer) {
                                 return true;
                             }
-                            return TCompatibilityInfo::CheckCompatibility(node0.get(), *peer,
+                            return CompatibilityInfo.CheckCompatibility(node0.get(), *peer,
                                 NKikimrConfig::TCompatibilityRule::Interconnect, errorReason);
                         };
 

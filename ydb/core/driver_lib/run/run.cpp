@@ -31,7 +31,6 @@
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <ydb/core/cms/console/grpc_library_helper.h>
 #include <ydb/core/keyvalue/keyvalue.h>
-#include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
@@ -1837,8 +1836,6 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
-    TCompatibilityInfo::Initialize();
-
     TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
     runner->InitializeAllocator(runConfig);
     runner->InitializeRegistries(runConfig);

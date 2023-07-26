@@ -64,7 +64,6 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         auto oldInfo = oldInfoConstructor.ToPB();
         auto newInfo = newInfoConstructor.ToPB();
 
-        TCompatibilityInfo::Initialize();
         TCompatibilityInfoTest::Reset(&oldInfo);
 
         TEnvironmentSetup env{{

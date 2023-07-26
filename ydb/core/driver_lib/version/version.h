@@ -7,6 +7,8 @@ namespace NKikimr {
 
 class TCompatibilityInfo {
     friend class TCompatibilityInfoTest;
+    friend class TCompatibilityInfoInitializer;
+
     using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
     using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 
@@ -117,40 +119,44 @@ public:
     };
 
 public:
-    TCompatibilityInfo() = delete;
+    TCompatibilityInfo();
 
-    static void Initialize();
-    static const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrent();
-    static const NKikimrConfig::TStoredCompatibilityInfo* GetDefault(TComponentId componentId);
+    const NKikimrConfig::TCurrentCompatibilityInfo* GetCurrent() const;
+    const NKikimrConfig::TStoredCompatibilityInfo* GetDefault(TComponentId componentId) const;
 
     // pass nullptr if stored CompatibilityInfo is absent
-    static bool CheckCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
-            TComponentId componentId, TString& errorReason);
-    static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+    bool CheckCompatibility(const NKikimrConfig::TStoredCompatibilityInfo* stored,
+            TComponentId componentId, TString& errorReason) const;
+    bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
             const NKikimrConfig::TStoredCompatibilityInfo* stored, TComponentId componentId,
-            TString& errorReason);
+            TString& errorReason) const;
 
-    static bool CheckCompatibility(const TOldFormat& stored, TComponentId componentId, TString& errorReason);
-    static bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
-            const TOldFormat& stored, TComponentId componentId, TString& errorReason);
+    bool CheckCompatibility(const TOldFormat& stored, TComponentId componentId, TString& errorReason) const;
+    bool CheckCompatibility(const NKikimrConfig::TCurrentCompatibilityInfo* current,
+            const TOldFormat& stored, TComponentId componentId, TString& errorReason) const;
 
-    static bool CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current);
+    bool CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current);
 
-    static NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId);
-    static NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId,
-            const NKikimrConfig::TCurrentCompatibilityInfo* current);
+    NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId) const;
+    NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId,
+            const NKikimrConfig::TCurrentCompatibilityInfo* current) const;
 
 private:
-    static NKikimrConfig::TCurrentCompatibilityInfo CompatibilityInfo;
+    NKikimrConfig::TCurrentCompatibilityInfo CurrentCompatibilityInfo;
 
+    // Last stable YDB release, which doesn't include version control change
+    // When the compatibility information is not present in component's data,
+    // we assume component's version to be this version
     using TDefaultCompatibilityInfo = std::array<std::optional<NKikimrConfig::TStoredCompatibilityInfo>,
             NKikimrConfig::TCompatibilityRule::ComponentsCount>;
-    static TDefaultCompatibilityInfo DefaultCompatibilityInfo;
+    TDefaultCompatibilityInfo DefaultCompatibilityInfo;
 
     // functions that modify compatibility information are only accessible from friend classes
     // Reset() is not thread-safe!
-    static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent);
+    void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent);
 };
+
+extern TCompatibilityInfo CompatibilityInfo;
 
 // obsolete version control
 // TODO: remove in the next major release

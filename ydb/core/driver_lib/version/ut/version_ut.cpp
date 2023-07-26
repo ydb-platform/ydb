@@ -24,12 +24,11 @@ using TStoredCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TStoredC
 Y_UNIT_TEST_SUITE(YdbVersion) {
 
     void Test(TCurrentCompatibilityInfo current, TCurrentCompatibilityInfo store, bool expected) {
-        TCompatibilityInfo::Initialize();
         TString errorReason;
         auto currentPB = current.ToPB();
         auto storePB = store.ToPB();
-        auto storedPB = TCompatibilityInfo::MakeStored(EComponentId::Test1, &storePB);
-        UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, &storedPB, 
+        auto storedPB = CompatibilityInfo.MakeStored(EComponentId::Test1, &storePB);
+        UNIT_ASSERT_EQUAL_C(CompatibilityInfo.CheckCompatibility(&currentPB, &storedPB, 
             EComponentId::Test1, errorReason), expected, errorReason);
     }
 
@@ -576,24 +575,23 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
     }
 
     Y_UNIT_TEST(CompatibleWithSelf) {
-        auto stored = TCompatibilityInfo::MakeStored(EComponentId::Test1);
+        auto stored = CompatibilityInfo.MakeStored(EComponentId::Test1);
         TString errorReason;
-        UNIT_ASSERT_C(TCompatibilityInfo::CheckCompatibility(&stored, EComponentId::Test1, errorReason), errorReason);
+        UNIT_ASSERT_C(CompatibilityInfo.CheckCompatibility(&stored, EComponentId::Test1, errorReason), errorReason);
     }
 
     Y_UNIT_TEST(PrintCurrentVersion) {
         TString str;
-        google::protobuf::TextFormat::PrintToString(*TCompatibilityInfo::GetCurrent(), &str);
+        google::protobuf::TextFormat::PrintToString(*CompatibilityInfo.GetCurrent(), &str);
         Cerr << str << Endl;
     }
 }
 
 Y_UNIT_TEST_SUITE(OldFormat) {
     void TestOldFormat(TCurrentCompatibilityInfo current, TOldFormat stored, bool expected) {
-        TCompatibilityInfo::Initialize();
         TString errorReason;
         auto currentPB = current.ToPB();
-        UNIT_ASSERT_EQUAL_C(TCompatibilityInfo::CheckCompatibility(&currentPB, stored, 
+        UNIT_ASSERT_EQUAL_C(CompatibilityInfo.CheckCompatibility(&currentPB, stored, 
             EComponentId::Interconnect, errorReason), expected, errorReason);
     }
 

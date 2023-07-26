@@ -86,24 +86,13 @@ namespace NActors {
             cfg.DefaultThreadCount,
             cfg.Priority
         )
-    {}
+    {
+        SetSharedExecutorsCount(cfg.SharedExecutorsCount);
+        SoftProcessingDurationTs = cfg.SoftProcessingDurationTs;
+    }
 
     TBasicExecutorPool::~TBasicExecutorPool() {
         Threads.Destroy();
-    }
-
-    bool TBasicExecutorPool::GoToBeBlocked(TThreadCtx& threadCtx, TTimers &timers) {
-        do {
-            if (AtomicCas(&threadCtx.BlockedFlag, TThreadCtx::BS_BLOCKED, TThreadCtx::BS_BLOCKING)) {
-                timers.HPNow = GetCycleCountFast();
-                timers.Elapsed += timers.HPNow - timers.HPStart;
-                if (threadCtx.BlockedPad.Park()) // interrupted
-                    return true;
-                timers.HPStart = GetCycleCountFast();
-                timers.Blocked += timers.HPStart - timers.HPNow;
-            }
-        } while (AtomicGet(threadCtx.BlockedFlag) != TThreadCtx::BS_NONE && !RelaxedLoad(&StopFlag));
-        return false;
     }
 
     bool TBasicExecutorPool::GoToSleep(TThreadCtx& threadCtx, TTimers &timers) {
@@ -162,7 +151,8 @@ namespace NActors {
         }
 #endif
 
-        Y_VERIFY(AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE);
+        TAtomic state = AtomicLoad(&threadCtx.WaitingFlag);
+        Y_VERIFY(state == TThreadCtx::WS_NONE, "WaitingFlag# %d", int(state));
 
         if (SpinThreshold > 0 && !needToBlock) {
             // spin configured period
@@ -183,7 +173,7 @@ namespace NActors {
             }
         }
 
-        Y_VERIFY_DEBUG(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_RUNNING);
+        Y_VERIFY_DEBUG(AtomicLoad(&StopFlag) || AtomicLoad(&threadCtx.WaitingFlag) == TThreadCtx::WS_NONE);
 
 #if defined ACTORSLIB_COLLECT_EXEC_STATS
         if (AtomicDecrement(ThreadUtilization) == 0) {
@@ -207,8 +197,41 @@ namespace NActors {
         return false;
     }
 
+    void TBasicExecutorPool::AskToGoToSleep(bool *needToWait, bool *needToBlock) {
+        TAtomic x = AtomicGet(Semaphore);
+        do {
+            i64 oldX = x;
+            TSemaphore semaphore = TSemaphore::GetSemaphore(x);;
+            if (semaphore.CurrentSleepThreadCount < 0) {
+                semaphore.CurrentSleepThreadCount++;
+                x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
+                if (x == oldX) {
+                    *needToWait = true;
+                    *needToBlock = true;
+                    return;
+                }
+                continue;
+            }
+
+            if (semaphore.OldSemaphore == 0) {
+                semaphore.CurrentSleepThreadCount++;
+                x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
+                if (x == oldX) {
+                    *needToWait = true;
+                    *needToBlock = false;
+                    return;
+                }
+                continue;
+            }
+
+            *needToWait = false;
+            *needToBlock = false;
+            return;
+        } while (true);
+    }
+
     ui32 TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
-        ui32 workerId = wctx.WorkerId;
+        TWorkerId workerId = wctx.WorkerId;
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
         TTimers timers;
@@ -218,62 +241,53 @@ namespace NActors {
             Harmonizer->Harmonize(timers.HPStart);
         }
 
-        TThreadCtx& threadCtx = Threads[workerId];
-        AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_NONE);
-
-        bool needToWait = false;
-        bool needToBlock = false;
+        if (workerId >= 0) {
+            AtomicSet(Threads[workerId].WaitingFlag, TThreadCtx::WS_NONE);
+        }
 
         TAtomic x = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         do {
-            i64 oldX = x;
-            TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-            needToBlock = semaphore.CurrentSleepThreadCount < 0;
-            needToWait = needToBlock || semaphore.OldSemaphore <= -semaphore.CurrentSleepThreadCount;
+            if (!semaphore.OldSemaphore || semaphore.CurrentSleepThreadCount < 0) {
+                if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
+                    timers.HPNow = GetCycleCountFast();
+                    wctx.AddElapsedCycles(ActorSystemIndex, timers.HPNow - timers.HPStart);
+                    return 0;
+                }
 
-            if (needToWait && wctx.HasCapturedMessageBox) {
-                timers.HPNow = GetCycleCountFast();
-                wctx.AddElapsedCycles(ActorSystemIndex, timers.HPNow - timers.HPStart);
-                return 0;
-            }
-
-            semaphore.OldSemaphore--;
-            if (needToWait) {
+                bool needToWait = false;
+                bool needToBlock = false;
+                AskToGoToSleep(&needToWait, &needToBlock);
+                if (needToWait) {
+                    if (GoToWaiting(Threads[workerId], timers, needToBlock)) { // interrupted
+                        return 0;
+                    }
+                }
+            } else {
+                if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+                    if (workerId >= 0) {
+                        AtomicSet(Threads[workerId].WaitingFlag, TThreadCtx::WS_RUNNING);
+                    }
+                    AtomicDecrement(Semaphore);
+                    timers.HPNow = GetCycleCountFast();
+                    timers.Elapsed += timers.HPNow - timers.HPStart;
+                    wctx.AddElapsedCycles(ActorSystemIndex, timers.Elapsed);
+                    if (timers.Parked > 0) {
+                        wctx.AddParkedCycles(timers.Parked);
+                    }
+                    if (timers.Blocked > 0) {
+                        wctx.AddBlockedCycles(timers.Blocked);
+                    }
+                    return activation;
+                }
                 semaphore.CurrentSleepThreadCount++;
             }
 
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConverToI64(), x);
-            if (x == oldX) {
-                break;
-            }
+            SpinLockPause();
+            x = AtomicGet(Semaphore);
+            semaphore = TSemaphore::GetSemaphore(x);
         } while (!RelaxedLoad(&StopFlag));
 
-        if (needToWait) {
-            if (GoToWaiting(threadCtx, timers, needToBlock)) { // interrupted
-                return 0;
-            }
-        } else {
-            AtomicSet(threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING);
-        }
-
-        // ok, has work suggested, must dequeue
-        while (!RelaxedLoad(&StopFlag)) {
-            if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
-                timers.HPNow = GetCycleCountFast();
-                timers.Elapsed += timers.HPNow - timers.HPStart;
-                wctx.AddElapsedCycles(ActorSystemIndex, timers.Elapsed);
-                if (timers.Parked > 0) {
-                    wctx.AddParkedCycles(timers.Parked);
-                }
-                if (timers.Blocked > 0) {
-                    wctx.AddBlockedCycles(timers.Blocked);
-                }
-                return activation;
-            }
-            SpinLockPause();
-        }
-
-        // stopping, die!
         return 0;
     }
 
@@ -284,13 +298,13 @@ namespace NActors {
             switch (state) {
                 case TThreadCtx::WS_NONE:
                 case TThreadCtx::WS_RUNNING:
-                    if (++i >= MaxThreadCount) {
+                    if (++i >= MaxThreadCount - SharedExecutorsCount) {
                         i = 0;
                     }
                     break;
                 case TThreadCtx::WS_ACTIVE:
                 case TThreadCtx::WS_BLOCKED:
-                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_RUNNING, state)) {
+                    if (AtomicCas(&threadCtx.WaitingFlag, TThreadCtx::WS_NONE, state)) {
                         if (state  == TThreadCtx::WS_BLOCKED) {
                             threadCtx.Pad.Unpark();
                         }
@@ -313,7 +327,7 @@ namespace NActors {
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
         do {
-            needToWakeUp = semaphore.CurrentSleepThreadCount > 0;
+            needToWakeUp = semaphore.CurrentSleepThreadCount > SharedExecutorsCount;
             i64 oldX = semaphore.ConverToI64();
             semaphore.OldSemaphore++;
             if (needToWakeUp) {
@@ -362,7 +376,7 @@ namespace NActors {
         RecalculateStuckActors(statsCopy[0]);
 #endif
         // Per-thread stats
-        for (size_t i = 0; i < PoolThreads; ++i) {
+        for (i16 i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
         }
     }
@@ -375,17 +389,29 @@ namespace NActors {
         ScheduleReaders.Reset(new NSchedulerQueue::TReader[PoolThreads]);
         ScheduleWriters.Reset(new NSchedulerQueue::TWriter[PoolThreads]);
 
-        for (ui32 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.Reset(
-                new TExecutorThread(
-                    i,
-                    0, // CpuId is not used in BASIC pool
-                    actorSystem,
-                    this,
-                    MailboxTable.Get(),
-                    PoolName,
-                    TimePerMailbox,
-                    EventsPerMailbox));
+        for (i16 i = 0; i != PoolThreads; ++i) {
+            if (i < MaxThreadCount - SharedExecutorsCount) {
+                Threads[i].Thread.Reset(
+                    new TExecutorThread(
+                        i,
+                        0, // CpuId is not used in BASIC pool
+                        actorSystem,
+                        this,
+                        MailboxTable.Get(),
+                        PoolName,
+                        TimePerMailbox,
+                        EventsPerMailbox));
+            } else {
+                Threads[i].Thread.Reset(
+                    new TExecutorThread(
+                        i,
+                        actorSystem,
+                        actorSystem->GetBasicExecutorPools(),
+                        PoolName,
+                        SoftProcessingDurationTs,
+                        TimePerMailbox,
+                        EventsPerMailbox));
+            }
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
@@ -399,21 +425,22 @@ namespace NActors {
         ThreadUtilization = 0;
         AtomicAdd(MaxUtilizationCounter, -(i64)GetCycleCountFast());
 
-        for (ui32 i = 0; i != PoolThreads; ++i) {
+        for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->Start();
         }
     }
 
     void TBasicExecutorPool::PrepareStop() {
         AtomicStore(&StopFlag, true);
-        for (ui32 i = 0; i != PoolThreads; ++i) {
+        for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Pad.Interrupt();
             Threads[i].BlockedPad.Interrupt();
+            AtomicStore(&Threads[i].Thread->StopFlag, TAtomic(true));
         }
     }
 
     void TBasicExecutorPool::Shutdown() {
-        for (ui32 i = 0; i != PoolThreads; ++i)
+        for (i16 i = 0; i != PoolThreads; ++i)
             Threads[i].Thread->Join();
     }
 
@@ -456,24 +483,22 @@ namespace NActors {
 #endif
     }
 
-    ui32 TBasicExecutorPool::GetThreadCount() const {
+    i16 TBasicExecutorPool::GetThreadCount() const {
         return AtomicGet(ThreadCount);
     }
 
-    void TBasicExecutorPool::SetThreadCount(ui32 threads) {
-        threads = Max(1u, Min(PoolThreads, threads));
+    void TBasicExecutorPool::SetThreadCount(i16 threads) {
+        threads = Max(i16(1), Min(PoolThreads, threads));
         with_lock (ChangeThreadsLock) {
-            size_t prevCount = GetThreadCount();
+            i16 prevCount = GetThreadCount();
             AtomicSet(ThreadCount, threads);
             TSemaphore semaphore = TSemaphore::GetSemaphore(AtomicGet(Semaphore));
             i64 oldX = semaphore.ConverToI64();
             semaphore.CurrentThreadCount = threads;
             if (threads > prevCount) {
                 semaphore.CurrentSleepThreadCount += (i64)threads - prevCount;
-                semaphore.OldSemaphore -= (i64)threads - prevCount;
             } else {
                 semaphore.CurrentSleepThreadCount -= (i64)prevCount - threads;
-                semaphore.OldSemaphore += prevCount - threads;
             }
             AtomicAdd(Semaphore, semaphore.ConverToI64() - oldX);
             LWPROBE(ThreadCount, PoolId, PoolName, threads, MinThreadCount, MaxThreadCount, DefaultThreadCount);
@@ -492,19 +517,8 @@ namespace NActors {
         return MaxThreadCount;
     }
 
-    bool TBasicExecutorPool::IsThreadBeingStopped(i16 threadIdx) const {
-        if ((ui32)threadIdx >= PoolThreads) {
-            return false;
-        }
-        auto blockedFlag = AtomicGet(Threads[threadIdx].BlockedFlag);
-        if (blockedFlag == TThreadCtx::BS_BLOCKING) {
-            return true;
-        }
-        return false;
-    }
-
     TCpuConsumption TBasicExecutorPool::GetThreadCpuConsumption(i16 threadIdx) {
-        if ((ui32)threadIdx >= PoolThreads) {
+        if (threadIdx >= PoolThreads) {
             return {0.0, 0.0};
         }
         TThreadCtx& threadCtx = Threads[threadIdx];
@@ -521,5 +535,9 @@ namespace NActors {
 
     i16 TBasicExecutorPool::GetPriority() const {
         return Priority;
+    }
+
+    void TBasicExecutorPool::SetSharedExecutorsCount(i16 count) {
+        SharedExecutorsCount = count;
     }
 }

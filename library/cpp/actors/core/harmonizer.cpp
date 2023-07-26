@@ -190,7 +190,6 @@ struct TPoolInfo {
     TAtomic MaxBookedCpu = 0;
     TAtomic MinBookedCpu = 0;
 
-    bool IsBeingStopped(i16 threadIdx);
     double GetBooked(i16 threadIdx);
     double GetlastSecondPoolBooked(i16 threadIdx);
     double GetConsumed(i16 threadIdx);
@@ -200,10 +199,6 @@ struct TPoolInfo {
     void SetThreadCount(i16 threadCount);
     bool IsAvgPingGood();
 };
-
-bool TPoolInfo::IsBeingStopped(i16 threadIdx) {
-    return Pool->IsThreadBeingStopped(threadIdx);
-}
 
 double TPoolInfo::GetBooked(i16 threadIdx) {
     if ((size_t)threadIdx < ThreadInfo.size()) {

@@ -304,5 +304,9 @@ namespace NActors {
             DeferredPreStop.push_back(std::move(fn));
         }
 
+        TVector<IExecutorPool*> GetBasicExecutorPools() const {
+            return CpuManager->GetBasicExecutorPools();
+        }
+
     };
 }

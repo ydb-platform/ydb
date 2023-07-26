@@ -41,7 +41,7 @@ namespace NActors {
 
     class TExecutorPoolBase: public TExecutorPoolBaseMailboxed {
     protected:
-        const ui32 PoolThreads;
+        const i16 PoolThreads;
         TIntrusivePtr<TAffinity> ThreadsAffinity;
         TAtomic Semaphore = 0;
         TUnorderedCache<ui32, 512, 4> Activations;

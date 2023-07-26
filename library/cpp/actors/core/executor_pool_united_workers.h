@@ -18,7 +18,7 @@ namespace NActors {
         struct TPool;
         struct TCpu;
 
-        size_t WorkerCount;
+        i16 WorkerCount;
         TArrayHolder<TWorker> Workers; // indexed by WorkerId
         size_t PoolCount;
         TArrayHolder<TPool> Pools;  // indexed by PoolId, so may include not used (not united) pools

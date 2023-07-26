@@ -23,7 +23,7 @@ namespace NActors {
 
             // different threads must spin/block on different cache-lines.
             // we add some padding bytes to enforce this rule
-            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + 2 * sizeof(TThreadParkPad) + 2 * sizeof(TAtomic);
+            static const size_t SizeWithoutPadding = sizeof(TAutoPtr<TExecutorThread>) + 2 * sizeof(TThreadParkPad) + sizeof(TAtomic);
             ui8 Padding[64 - SizeWithoutPadding];
             static_assert(64 >= SizeWithoutPadding);
 
@@ -34,15 +34,8 @@ namespace NActors {
                 WS_RUNNING
             };
 
-            enum EBlockedState {
-                BS_NONE,
-                BS_BLOCKING,
-                BS_BLOCKED
-            };
-
             TThreadCtx()
                 : WaitingFlag(WS_NONE)
-                , BlockedFlag(BS_NONE)
             {
             }
         };
@@ -81,6 +74,8 @@ namespace NActors {
         i16 MaxThreadCount;
         i16 DefaultThreadCount;
         IHarmonizer *Harmonizer;
+        i16 SharedExecutorsCount = 0;
+        ui64 SoftProcessingDurationTs = 0;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -128,6 +123,8 @@ namespace NActors {
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
         ~TBasicExecutorPool();
 
+        void SetSharedExecutorsCount(i16 count);
+
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -148,17 +145,18 @@ namespace NActors {
 
         void SetRealTimeMode() const override;
 
-        ui32 GetThreadCount() const override;
-        void SetThreadCount(ui32 threads) override;
+        i16 GetThreadCount() const override;
+        void SetThreadCount(i16 threads) override;
         i16 GetDefaultThreadCount() const override;
         i16 GetMinThreadCount() const override;
         i16 GetMaxThreadCount() const override;
-        bool IsThreadBeingStopped(i16 threadIdx) const override;
         TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) override;
         i16 GetBlockingThreadCount() const override;
         i16 GetPriority() const override;
 
     private:
+        void AskToGoToSleep(bool *needToWait, bool *needToBlock);
+
         void WakeUpLoop(i16 currentThreadCount);
         bool GoToWaiting(TThreadCtx& threadCtx, TTimers &timers, bool needToBlock);
         void GoToSpin(TThreadCtx& threadCtx);

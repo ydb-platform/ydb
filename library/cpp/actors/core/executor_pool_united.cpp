@@ -1168,7 +1168,7 @@ namespace NActors {
 
             // Setup cpu-local workers
             if (cpu.LocalManager) {
-                for (size_t i = 0; i < cpu.LocalManager->WorkerCount(); i++) {
+                for (i16 i = 0; i < cpu.LocalManager->WorkerCount(); i++) {
                     TWorkerId workerId = workers++;
                     cpu.LocalManager->AddWorker(workerId);
 

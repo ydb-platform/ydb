@@ -113,11 +113,11 @@ namespace NActors {
 
         virtual void SetRealTimeMode() const {}
 
-        virtual ui32 GetThreadCount() const {
+        virtual i16 GetThreadCount() const {
             return 1;
         }
 
-        virtual void SetThreadCount(ui32 threads) {
+        virtual void SetThreadCount(i16 threads) {
             Y_UNUSED(threads);
         }
 
@@ -136,11 +136,6 @@ namespace NActors {
         virtual i16 GetMaxThreadCount() const {
             return 1;
 
-        }
-
-        virtual bool IsThreadBeingStopped(i16 threadIdx) const {
-            Y_UNUSED(threadIdx);
-            return false;
         }
 
         virtual TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) {

@@ -135,13 +135,15 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         ui32 MailboxNeighboursCount;
     };
 
-    void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent) {
+    void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, i16 sharedExecutorsCount) {
         TBasicExecutorPoolConfig basic;
         basic.PoolId = setup->GetExecutorsCount();
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
         basic.Threads = threads;
         basic.SpinThreshold = DefaultSpinThreshold;
         basic.TimePerMailbox = TDuration::Hours(1);
+        basic.SharedExecutorsCount = sharedExecutorsCount;
+        basic.SoftProcessingDurationTs = Us2Ts(100);
         if (activateEveryEvent) {
             basic.EventsPerMailbox = 1;
         } else {
@@ -192,7 +194,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         if (poolType == EPoolType::Basic) {
             THolder<TActorSystemSetup> setup = GetActorSystemSetup(0, false);
             for (ui32 i = 0; i < poolsCount; ++i) {
-                AddBasicPool(setup, threads, activateEveryEvent);
+                AddBasicPool(setup, threads, activateEveryEvent, 0);
             }
             return setup;
         } else if (poolType == EPoolType::United) {
@@ -338,6 +340,88 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TMailboxType::ReadAsFilled,
         TMailboxType::TinyReadAsFilled
     };
+
+    Y_UNIT_TEST(WithSharedExecutors) {
+        THolder<TActorSystemSetup> setup = GetActorSystemSetup(0, false);
+        AddBasicPool(setup, 2, 1, 0);
+        AddBasicPool(setup, 2, 1, 1);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TThreadParkPad pad;
+        TAtomic actorsAlive = 0;
+        THPTimer Timer;
+
+        Timer.Reset();
+        for (ui32 i = 0; i < 50; ++i) {
+            ui32 followerPoolId = 0;
+            ui32 leaderPoolId = 0;
+            TActorId followerId = actorSystem.Register(
+                new TSendReceiveActor(nullptr, {}, true, ERole::Follower, ESendingType::Common), TMailboxType::HTSwap, followerPoolId);
+            THolder<IActor> leader{
+                new TTestEndDecorator(THolder(
+                    new TSendReceiveActor(nullptr, followerId, true, ERole::Leader, ESendingType::Common)), &pad, &actorsAlive)};
+            actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+        }
+        for (ui32 i = 0; i < 10; ++i) {
+            ui32 followerPoolId = 1;
+            ui32 leaderPoolId = 1;
+            TActorId followerId = actorSystem.Register(
+                new TSendReceiveActor(nullptr, {}, true, ERole::Follower, ESendingType::Common), TMailboxType::HTSwap, followerPoolId);
+            THolder<IActor> leader{
+                new TTestEndDecorator(THolder(
+                    new TSendReceiveActor(nullptr, followerId, true, ERole::Leader, ESendingType::Common)), &pad, &actorsAlive)};
+            actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+        }
+
+        pad.Park();
+        auto elapsedTime = Timer.Passed() / TotalEventsAmount;
+        actorSystem.Stop();
+
+        Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+    }
+
+    Y_UNIT_TEST(WithoutSharedExecutors) {
+        THolder<TActorSystemSetup> setup = GetActorSystemSetup(0, false);
+        AddBasicPool(setup, 2, 1, 0);
+        AddBasicPool(setup, 2, 1, 0);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TThreadParkPad pad;
+        TAtomic actorsAlive = 0;
+        THPTimer Timer;
+
+        Timer.Reset();
+        for (ui32 i = 0; i < 50; ++i) {
+            ui32 followerPoolId = 0;
+            ui32 leaderPoolId = 0;
+            TActorId followerId = actorSystem.Register(
+                new TSendReceiveActor(nullptr, {}, true, ERole::Follower, ESendingType::Common), TMailboxType::HTSwap, followerPoolId);
+            THolder<IActor> leader{
+                new TTestEndDecorator(THolder(
+                    new TSendReceiveActor(nullptr, followerId, true, ERole::Leader, ESendingType::Common)), &pad, &actorsAlive)};
+            actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+        }
+        for (ui32 i = 0; i < 10; ++i) {
+            ui32 followerPoolId = 1;
+            ui32 leaderPoolId = 1;
+            TActorId followerId = actorSystem.Register(
+                new TSendReceiveActor(nullptr, {}, true, ERole::Follower, ESendingType::Common), TMailboxType::HTSwap, followerPoolId);
+            THolder<IActor> leader{
+                new TTestEndDecorator(THolder(
+                    new TSendReceiveActor(nullptr, followerId, true, ERole::Leader, ESendingType::Common)), &pad, &actorsAlive)};
+            actorSystem.Register(leader.Release(), TMailboxType::HTSwap, leaderPoolId);
+        }
+
+        pad.Park();
+        auto elapsedTime = Timer.Passed() / TotalEventsAmount;
+        actorSystem.Stop();
+
+        Cerr << "Completed " << 1e9 * elapsedTime << Endl;
+    }
 
     Y_UNIT_TEST(SendReceive1Pool1ThreadAlloc) {
         for (const auto& mType : MailboxTypes) {

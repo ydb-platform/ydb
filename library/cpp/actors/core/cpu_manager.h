@@ -26,6 +26,8 @@ namespace NActors {
         void Shutdown();
         void Cleanup();
 
+        TVector<IExecutorPool*> GetBasicExecutorPools() const;
+
         ui32 GetExecutorsCount() const {
             return ExecutorPoolCount;
         }

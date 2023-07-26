@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
@@ -18,14 +19,10 @@
 #include "data_query.h"
 #include "request_migrator.h"
 #include "readers.h"
-#include "session_pool.h"
 
 
 namespace NYdb {
 namespace NTable {
-
-using namespace NThreading;
-
 
 //How often run session pool keep alive check
 constexpr TDuration PERIODIC_ACTION_INTERVAL = TDuration::Seconds(5);
@@ -34,7 +31,6 @@ constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
 constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
-
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
@@ -45,7 +41,6 @@ TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
 TStatus GetStatus(const TOperation& operation);
 TStatus GetStatus(const TStatus& status);
-
 
 template<typename TResponse>
 NThreading::TFuture<TResponse> InjectSessionStatusInterception(
@@ -357,7 +352,7 @@ public:
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> RequestMigrated;
 
 private:
-    TSessionPool SessionPool_;
+    NSessionPool::TSessionPool SessionPool_;
     TRequestMigrator RequestMigrator_;
     static const TKeepAliveSettings KeepAliveSettings;
 };

@@ -5,7 +5,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 namespace NYdb {
-namespace NTable {
+namespace NSessionPool {
 
 using namespace NThreading;
 

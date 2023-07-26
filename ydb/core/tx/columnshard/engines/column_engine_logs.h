@@ -35,6 +35,7 @@ class TColumnEngineForLogs : public IColumnEngine {
 private:
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
+    THashMap<ui64, TMonotonic> NextCheckInstantForTTL;
 public:
     class TChangesConstructor : public TColumnEngineChanges {
     public:
@@ -67,6 +68,8 @@ public:
     };
 
     TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits = {});
+
+    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager) override;
 
     const TIndexInfo& GetIndexInfo() const override {
         return VersionedIndex.GetLastSchema()->GetIndexInfo();
@@ -113,7 +116,7 @@ public:
     std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo, const TCompactionLimits& limits) override;
     std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
                                                        ui32 maxRecords) override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
+    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,

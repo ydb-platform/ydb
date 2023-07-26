@@ -697,7 +697,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
         // Read crossed with eviction (start)
         if (!misconfig) {
-            auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep-1, Max<ui64>(), tableId);
+            auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep - 1, Max<ui64>(), tableId);
             Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
 
             counter.CaptureReadEvents = 1; // TODO: we need affected by tiering blob here

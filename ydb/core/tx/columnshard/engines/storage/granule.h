@@ -276,7 +276,7 @@ public:
 
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
-    THashMap<ui64, TPortionInfo> Portions; // portion -> portionInfo
+    THashMap<ui64, TPortionInfo> Portions;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
     mutable std::optional<TGranuleHardSummary> HardSummaryCache;
 

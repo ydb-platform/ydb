@@ -7,6 +7,10 @@
 #include "changes/compaction_info.h"
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 
+namespace NKikimr::NColumnShard {
+class TTiersManager;
+}
+
 namespace NKikimr::NOlap {
 class TInsertColumnEngineChanges;
 class TCompactColumnEngineChanges;
@@ -360,7 +364,7 @@ public:
                                                                   const TCompactionLimits& limits) = 0;
     virtual std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
                                                                ui32 maxRecords) = 0;
-    virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
+    virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                            ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
@@ -369,6 +373,7 @@ public:
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
     virtual TSnapshot LastUpdate() const { return TSnapshot::Zero(); }
+    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager) = 0;
 };
 
 }

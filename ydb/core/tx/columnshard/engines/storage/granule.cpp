@@ -41,9 +41,11 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", Record.PathId);
         return false;
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second)("pathId", Record.PathId);
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second)("pathId", Record.PathId);
     OnBeforeChangePortion(&it->second, nullptr);
     Portions.erase(it);
     OnAfterChangePortion();

@@ -20,8 +20,6 @@ private:
 
     ui32 TtlUnitsInSecond;
     std::optional<NArrow::TCompression> Compression;
-    mutable std::shared_ptr<arrow::Scalar> Scalar;
-
 public:
     TTierInfo(const TString& tierName, TInstant evictBorder, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
@@ -70,34 +68,7 @@ public:
         return schema->GetFieldByName(EvictColumnName);
     }
 
-    std::shared_ptr<arrow::Scalar> EvictScalar(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (Scalar) {
-            return Scalar;
-        }
-        auto evictColumn = GetEvictColumn(schema);
-        Y_VERIFY(evictColumn);
-
-        ui32 multiplier = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
-        switch (evictColumn->type()->id()) {
-            case arrow::Type::TIMESTAMP:
-                Scalar = std::make_shared<arrow::TimestampScalar>(
-                EvictBorder.MicroSeconds(), arrow::timestamp(arrow::TimeUnit::MICRO));
-                break;
-            case arrow::Type::UINT16: // YQL Date
-                Scalar = std::make_shared<arrow::UInt16Scalar>(EvictBorder.Days());
-                break;
-            case arrow::Type::UINT32: // YQL Datetime or Uint32
-                Scalar = std::make_shared<arrow::UInt32Scalar>(EvictBorder.Seconds() * multiplier);
-                break;
-            case arrow::Type::UINT64:
-                Scalar = std::make_shared<arrow::UInt64Scalar>(EvictBorder.Seconds() * multiplier);
-                break;
-            default:
-                break;
-        }
-
-        return Scalar;
-    }
+    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(TInstant ttlBorder, const TString& ttlColumn, ui32 unitsInSecond = 0) {
         return std::make_shared<TTierInfo>("TTL", ttlBorder, ttlColumn, unitsInSecond);
@@ -141,6 +112,10 @@ public:
         return *Info;
     }
 
+    std::shared_ptr<TTierInfo> GetPtr() const {
+        return Info;
+    }
+
 private:
     std::shared_ptr<TTierInfo> Info;
 };
@@ -150,6 +125,27 @@ class TTiering {
     TTiersMap TierByName;
     TSet<TTierRef> OrderedTiers;
 public:
+
+    std::shared_ptr<TTierInfo> GetMainTierInfo() const {
+        auto ttl = Ttl;
+        auto tier = OrderedTiers.size() ? OrderedTiers.begin()->GetPtr() : nullptr;
+        if (!ttl && !tier) {
+            return nullptr;
+        } else if (!tier) {
+            return ttl;
+        } else if (!ttl) {
+            return tier;
+        } else {
+            const TInstant ttlInstant = ttl->GetEvictBorder();
+            const TInstant tierInstant = tier->GetEvictBorder();
+            if (ttlInstant < tierInstant) {
+                return tier;
+            } else {
+                return ttl;
+            }
+        }
+    }
+
     std::shared_ptr<TTierInfo> Ttl;
 
     const TTiersMap& GetTierByName() const {
@@ -181,15 +177,22 @@ public:
         return {};
     }
 
-    std::shared_ptr<arrow::Scalar> EvictScalar(const std::shared_ptr<arrow::Schema>& schema) const {
-        auto ttlTs = Ttl ? Ttl->EvictScalar(schema) : nullptr;
-        auto tierTs = OrderedTiers.empty() ? nullptr : OrderedTiers.begin()->Get().EvictScalar(schema);
-        if (!ttlTs) {
-            return tierTs;
-        } else if (!tierTs) {
-            return ttlTs;
+    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const {
+        auto mainTier = GetMainTierInfo();
+        if (!mainTier) {
+            return {};
+        } else {
+            return mainTier->ScalarToInstant(scalar);
         }
-        return NArrow::ScalarLess(ttlTs, tierTs) ? tierTs : ttlTs; // either TTL or tier border appear
+    }
+
+    std::optional<TInstant> GetEvictBorder() const {
+        auto mainTier = GetMainTierInfo();
+        if (!mainTier) {
+            return {};
+        } else {
+            return mainTier->GetEvictBorder();
+        }
     }
 
     std::optional<NArrow::TCompression> GetCompression(const TString& name) const {

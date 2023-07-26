@@ -400,32 +400,38 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
     return changes;
 }
 
-std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
-                                                                     ui64 maxEvictBytes) {
+std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, ui64 maxEvictBytes) {
     if (pathEviction.empty()) {
         return {};
     }
-
     auto changes = TChangesConstructor::BuildTtlChanges();
-    ui64 evicttionSize = 0;
+    ui64 evictionSize = 0;
     bool allowEviction = true;
     ui64 dropBlobs = 0;
     bool allowDrop = true;
 
     auto& indexInfo = GetIndexInfo();
+    const TMonotonic nowMonotonic = TlsActivationContext ? AppData()->MonotonicTimeProvider->Now() : TMonotonic::Now();
     for (const auto& [pathId, ttl] : pathEviction) {
-        if (!PathGranules.contains(pathId)) {
+        auto it = NextCheckInstantForTTL.find(pathId);
+        if (it != NextCheckInstantForTTL.end() && nowMonotonic < it->second) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_path_id_ttl")("path_id", pathId)("now", nowMonotonic)("expected", it->second);
+            continue;
+        }
+        auto itGranules = PathGranules.find(pathId);
+        if (itGranules == PathGranules.end()) {
             continue; // It's not an error: allow TTL over multiple shards with different pathIds presented
         }
 
-        auto expireTimestamp = ttl.EvictScalar(schema);
-        Y_VERIFY(expireTimestamp);
+        auto expireTimestampOpt = ttl.GetEvictBorder();
+        Y_VERIFY(expireTimestampOpt);
+        auto expireTimestamp = *expireTimestampOpt;
 
         auto ttlColumnNames = ttl.GetTtlColumns();
         Y_VERIFY(ttlColumnNames.size() == 1); // TODO: support different ttl columns
         ui32 ttlColumnId = indexInfo.GetColumnId(*ttlColumnNames.begin());
-
-        for (const auto& [ts, granule] : PathGranules[pathId]) {
+        std::optional<TDuration> dWaiting;
+        for (const auto& [ts, granule] : itGranules->second) {
             auto spg = Granules[granule];
             Y_VERIFY(spg);
 
@@ -434,33 +440,52 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
                     continue;
                 }
 
-                allowEviction = (evicttionSize <= maxEvictBytes);
+                allowEviction = (evictionSize <= maxEvictBytes);
                 allowDrop = (dropBlobs <= TCompactionLimits::MAX_BLOBS_TO_DELETE);
-                bool tryEvictPortion = allowEviction && ttl.HasTiers()
-                    && info.EvictReady(TCompactionLimits::EVICT_HOT_PORTION_BYTES);
+                const bool tryEvictPortion = allowEviction && ttl.HasTiers() && info.EvictReady(TCompactionLimits::EVICT_HOT_PORTION_BYTES);
 
                 if (auto max = info.MaxValue(ttlColumnId)) {
-                    bool keep = NArrow::ScalarLess(expireTimestamp, max);
+                    bool keep = false;
+                    {
+                        auto mpiOpt = ttl.ScalarToInstant(max);
+                        Y_VERIFY(mpiOpt);
+                        const TInstant maxTtlPortionInstant = *mpiOpt;
+                        const TDuration d = maxTtlPortionInstant - expireTimestamp;
+                        keep = !!d;
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestamp.Seconds());
+                        if (d && (!dWaiting || *dWaiting > d)) {
+                            dWaiting = d;
+                        }
+                    }
+
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", allowDrop);
                     if (keep && tryEvictPortion) {
                         TString tierName;
-                        for (auto& tierRef : ttl.GetOrderedTiers()) { // TODO: lower/upper_bound + move into TEviction
+                        for (auto& tierRef : ttl.GetOrderedTiers()) {
                             auto& tierInfo = tierRef.Get();
                             if (!indexInfo.AllowTtlOverColumn(tierInfo.GetEvictColumnName())) {
                                 SignalCounters.OnPortionNoTtlColumn(info.BlobsBytes());
-                                continue; // Ignore tiers with bad ttl column
+                                continue;
                             }
-                            if (NArrow::ScalarLess(tierInfo.EvictScalar(schema), max)) {
+                            auto mpiOpt = tierInfo.ScalarToInstant(max);
+                            Y_VERIFY(mpiOpt);
+                            const TInstant maxTieringPortionInstant = *mpiOpt;
+
+                            const TDuration d = maxTieringPortionInstant - tierInfo.GetEvictBorder();
+                            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering")("max", maxTieringPortionInstant.Seconds())("evict", tierInfo.GetEvictBorder().Seconds());
+                            if (d) {
+                                if (!dWaiting || *dWaiting > d) {
+                                    dWaiting = d;
+                                }
                                 tierName = tierInfo.GetName();
                             } else {
                                 break;
                             }
                         }
                         if (info.TierName != tierName) {
-                            evicttionSize += info.BlobsSizes().first;
-                            bool needExport = ttl.NeedExport(tierName);
-                            changes->PortionsToEvict.emplace_back(
-                                info, TPortionEvictionFeatures(tierName, pathId, needExport));
+                            evictionSize += info.BlobsSizes().first;
+                            const bool needExport = ttl.NeedExport(tierName);
+                            changes->PortionsToEvict.emplace_back(info, TPortionEvictionFeatures(tierName, pathId, needExport));
                             SignalCounters.OnPortionToEvict(info.BlobsBytes());
                         }
                     }
@@ -474,6 +499,11 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
                     SignalCounters.OnPortionNoBorder(info.BlobsBytes());
                 }
             }
+        }
+        if (dWaiting) {
+            NextCheckInstantForTTL[pathId] = nowMonotonic + std::min<TDuration>(*dWaiting, TDuration::Minutes(5));
+        } else {
+            NextCheckInstantForTTL.erase(pathId);
         }
     }
 
@@ -778,6 +808,11 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompaction
             return std::make_unique<TCompactionInfo>(compactGranule, true);
         }
     }
+}
+
+void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> /*manager*/) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified");
+    NextCheckInstantForTTL.clear();
 }
 
 } // namespace NKikimr::NOlap

@@ -493,13 +493,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
 
         auto& runtime = *server->GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+//        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
@@ -534,9 +534,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
         const TInstant pkStart = Now() - TDuration::Days(15);
-        ui32 idx = 0;
 
-        auto batch = lHelper.TestArrowBatch(0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 6000);
+        auto batch = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
         auto batchSize = NArrow::GetBatchDataSize(batch);
         Cerr << "Inserting " << batchSize << " bytes..." << Endl;
         UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
@@ -563,6 +562,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #else
                 check = true;
 #endif
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             UNIT_ASSERT(check);
@@ -586,6 +586,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #else
                 check = true;
 #endif
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             UNIT_ASSERT(check);

@@ -794,11 +794,13 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_DEBUG("Do not start TTL while eviction is in progress at tablet " << TabletID());
         return {};
     }
-
+    if (force) {
+        TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers);
+    }
     THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
     if (eviction.empty()) {
         if (Tiers) {
-            eviction = Tiers->GetTiering(); // TODO: pathIds
+            eviction = Tiers->GetTiering();
         }
         TablesManager.AddTtls(eviction, AppData()->TimeProvider->Now(), force);
     }
@@ -816,8 +818,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges =
-        TablesManager.MutablePrimaryIndex().StartTtl(eviction, actualIndexInfo.GetLastSchema()->GetIndexInfo().ArrowSchema());
+    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction);
 
     if (!indexChanges) {
         LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());
@@ -1080,6 +1081,7 @@ void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering)
     if (!Tiers) {
         Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
             [this](const TActorContext& ctx){
+                TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers);
                 CleanForgottenBlobs(ctx);
                 Reexport(ctx);
             });

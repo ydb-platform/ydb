@@ -7,33 +7,40 @@
 
 
 
-add_executable(ydb-core-cms-console-yaml_config-ut)
-target_include_directories(ydb-core-cms-console-yaml_config-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config
+add_executable(ydb-library-yaml_config-ut)
+target_include_directories(ydb-library-yaml_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config
 )
-target_link_libraries(ydb-core-cms-console-yaml_config-ut PUBLIC
+target_link_libraries(ydb-library-yaml_config-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  cms-console-yaml_config
+  ydb-library-yaml_config
 )
-target_sources(ydb-core-cms-console-yaml_config-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/console_dumper_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/yaml_config/yaml_config_ut.cpp
+target_link_options(ydb-library-yaml_config-ut PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
+target_sources(ydb-library-yaml_config-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/console_dumper_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_ut.cpp
 )
 set_property(
   TARGET
-  ydb-core-cms-console-yaml_config-ut
+  ydb-library-yaml_config-ut
   PROPERTY
   SPLIT_FACTOR
   1
 )
 add_yunittest(
   NAME
-  ydb-core-cms-console-yaml_config-ut
+  ydb-library-yaml_config-ut
   TEST_TARGET
-  ydb-core-cms-console-yaml_config-ut
+  ydb-library-yaml_config-ut
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -43,19 +50,19 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-core-cms-console-yaml_config-ut
+  ydb-library-yaml_config-ut
   PROPERTY
   LABELS
   SMALL
 )
 set_yunittest_property(
   TEST
-  ydb-core-cms-console-yaml_config-ut
+  ydb-library-yaml_config-ut
   PROPERTY
   PROCESSORS
   1
 )
-target_allocator(ydb-core-cms-console-yaml_config-ut
+target_allocator(ydb-library-yaml_config-ut
   system_allocator
 )
-vcs_info(ydb-core-cms-console-yaml_config-ut)
+vcs_info(ydb-library-yaml_config-ut)

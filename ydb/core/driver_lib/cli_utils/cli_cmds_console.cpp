@@ -1,7 +1,7 @@
 #include "cli.h"
 #include "cli_cmds.h"
 
-#include <ydb/core/cms/console/yaml_config/console_dumper.h>
+#include <ydb/library/yaml_config/console_dumper.h>
 
 #include <util/string/type.h>
 #include <util/string/split.h>

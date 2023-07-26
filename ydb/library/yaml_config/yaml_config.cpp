@@ -1,8 +1,8 @@
 #include "yaml_config.h"
 #include "yaml_config_impl.h"
+#include "yaml_config_parser.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yaml_config/yaml_config_parser.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
 

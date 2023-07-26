@@ -1,8 +1,8 @@
 #include "console_dumper.h"
 
 #include "util.h"
+#include "yaml_config.h"
 
-#include <ydb/core/cms/console/yaml_config/yaml_config.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
 

@@ -23,7 +23,6 @@ target_link_libraries(cli_utils PUBLIC
   core-blobstorage-pdisk
   core-client-minikql_compile
   core-client-scheme_cache_lib
-  cms-console-yaml_config
   cli_base
   ydb-core-engine
   ydb-core-erasure

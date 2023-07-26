@@ -44,7 +44,6 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
-    ydb/core/cms/console/yaml_config
     ydb/core/driver_lib/cli_base
     ydb/core/engine
     ydb/core/erasure

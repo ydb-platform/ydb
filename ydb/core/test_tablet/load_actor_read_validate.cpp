@@ -626,10 +626,16 @@ namespace NKikimr::NTestShard {
         Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::WRITE));
         ValidationActorId = {};
         BytesProcessed = 0;
+        ClearKeys();
         Keys = std::move(ev->Get()->Keys);
         BytesOfData = 0;
-        for (const auto& [key, info] : Keys) {
+        for (auto& [key, info] : Keys) {
             BytesOfData += info.Len;
+            Y_VERIFY(info.ConfirmedKeyIndex == Max<size_t>());
+            if (info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
+                info.ConfirmedKeyIndex = ConfirmedKeys.size();
+                ConfirmedKeys.push_back(key);
+            }
         }
         Action();
 
@@ -640,23 +646,21 @@ namespace NKikimr::NTestShard {
     }
 
     bool TLoadActor::IssueRead() {
-        std::vector<TString> options;
-        for (const auto& [key, info] : Keys) {
-            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
-                options.push_back(key);
-            }
-        }
-        if (options.empty()) {
+        if (ConfirmedKeys.empty()) {
             return false;
         }
-        const size_t index = RandomNumber(options.size());
-        const TString& key = options[index];
+
+        const size_t index = RandomNumber(ConfirmedKeys.size());
+        const TString& key = ConfirmedKeys[index];
         ui64 len, seed, id;
         StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
-        const ui32 offset = RandomNumber(len);
-        const ui32 size = 1 + RandomNumber(len - offset);
+        const ui32 offset = len ? RandomNumber(len) : 0;
+        const ui32 size = len ? 1 + RandomNumber(len - offset) : 0;
 
         auto request = CreateRequest();
+        if (RandomNumber(2u)) {
+            request->Record.SetUsePayloadInResponse(true);
+        }
         auto *cmdRead = request->Record.AddCmdRead();
         cmdRead->SetKey(key);
         cmdRead->SetOffset(offset);
@@ -664,18 +668,20 @@ namespace NKikimr::NTestShard {
 
         STLOG(PRI_INFO, TEST_SHARD, TS16, "reading key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size));
 
-        ReadsInFlight.try_emplace(request->Record.GetCookie(), key, offset, size, TActivationContext::Monotonic());
+        ReadsInFlight.try_emplace(request->Record.GetCookie(), key, offset, size, TActivationContext::Monotonic(),
+            request->Record.GetUsePayloadInResponse());
         ++KeysBeingRead[key];
         Send(TabletActorId, request.release());
 
         return true;
     }
 
-    void TLoadActor::ProcessReadResult(ui64 cookie, const NProtoBuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TReadResult>& results) {
+    void TLoadActor::ProcessReadResult(ui64 cookie, const NProtoBuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TReadResult>& results,
+            TEvKeyValue::TEvResponse& event) {
         for (const auto& result : results) {
             auto node = ReadsInFlight.extract(cookie);
             Y_VERIFY(node);
-            auto& [key, offset, size, timestamp] = node.mapped();
+            auto& [key, offset, size, timestamp, payloadInResponse] = node.mapped();
             const TMonotonic now = TActivationContext::Monotonic();
 
             auto it = KeysBeingRead.find(key);
@@ -694,9 +700,17 @@ namespace NKikimr::NTestShard {
             Y_VERIFY(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR);
 
             if (result.GetStatus() == NKikimrProto::OK) {
-                const TString value = result.GetValue();
+                TRope value;
+                if (payloadInResponse) {
+                    Y_VERIFY(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kPayloadId);
+                    value = event.GetPayload(result.GetPayloadId());
+                } else {
+                    Y_VERIFY(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kValue);
+                    value = TRope(result.GetValue());
+                }
 
-                Y_VERIFY_S(offset < len && size <= len - offset && value.size() == size && data.substr(offset, size) == value,
+                Y_VERIFY_S((offset < len || !len) && size <= len - offset && value.size() == size &&
+                        data.substr(offset, size) == value.ConvertToString(),
                     "TabletId# " << TabletId << " Key# " << key << " value mismatch"
                     << " value.size# " << value.size() << " offset# " << offset << " size# " << size);
 

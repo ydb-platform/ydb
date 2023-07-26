@@ -4,10 +4,9 @@ namespace NKikimr::NTestShard {
 
     void TLoadActor::IssueDelete() {
         std::vector<TString> options;
-        options.reserve(Keys.size());
-        for (const auto& [key, info] : Keys) {
-            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED &&
-                    !KeysBeingRead.contains(key)) {
+        options.reserve(ConfirmedKeys.size());
+        for (const TString& key : ConfirmedKeys) {
+            if (!KeysBeingRead.contains(key)) {
                 options.emplace_back(key);
             }
         }
@@ -30,13 +29,13 @@ namespace NKikimr::NTestShard {
 
             STLOG(PRI_INFO, TEST_SHARD, TS09, "deleting data", (TabletId, TabletId), (Key, key));
 
-            const auto [difIt, difInserted] = DeletesInFlight.try_emplace(record.GetCookie(), key);
-            Y_VERIFY(difInserted);
-            Y_VERIFY(difIt->second.KeysInQuery.size() == 1);
-
             const auto it = Keys.find(key);
             Y_VERIFY(it != Keys.end());
             RegisterTransition(*it, ::NTestShard::TStateServer::CONFIRMED, ::NTestShard::TStateServer::DELETE_PENDING, std::move(ev));
+
+            const auto [difIt, difInserted] = DeletesInFlight.try_emplace(record.GetCookie(), std::move(key));
+            Y_VERIFY(difInserted);
+            Y_VERIFY(difIt->second.KeysInQuery.size() == 1);
 
             BytesOfData -= it->second.Len;
             BytesProcessed += it->second.Len;

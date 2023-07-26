@@ -22,7 +22,11 @@ namespace NKikimr::NTestShard {
         auto& r = ev->Record;
         auto *write = r.AddCmdWrite();
         write->SetKey(key);
-        write->SetValue(value);
+        if (RandomNumber(2u)) {
+            write->SetPayloadId(ev->AddPayload(TRope(value)));
+        } else {
+            write->SetValue(value);
+        }
         if (isInline) {
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }

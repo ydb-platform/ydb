@@ -10,6 +10,21 @@ namespace NKikimr::NTestShard {
         , Settings(settings)
     {}
 
+    TLoadActor::~TLoadActor() {
+        ClearKeys();
+    }
+
+    void TLoadActor::ClearKeys() {
+        for (auto& [key, info] : Keys) {
+            Y_VERIFY((info.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && info.ConfirmedKeyIndex == Max<size_t>()) ||
+                (info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && info.ConfirmedKeyIndex != Max<size_t>() &&
+                 ConfirmedKeys[info.ConfirmedKeyIndex] == key));
+            info.ConfirmedKeyIndex = Max<size_t>();
+        }
+        Keys.clear();
+        ConfirmedKeys.clear();
+    }
+
     void TLoadActor::Bootstrap(const TActorId& parentId) {
         STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
         TabletActorId = parentId;
@@ -173,7 +188,7 @@ namespace NKikimr::NTestShard {
                 DeletesInFlight.erase(it);
             }
             if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
-                const auto& [key, offset, size, timestamp] = it->second;
+                const auto& [key, offset, size, timestamp, payloadInResponse] = it->second;
                 const auto jt = KeysBeingRead.find(key);
                 Y_VERIFY(jt != KeysBeingRead.end() && jt->second);
                 if (!--jt->second) {
@@ -195,7 +210,7 @@ namespace NKikimr::NTestShard {
             STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());
-            ProcessReadResult(record.GetCookie(), record.GetReadResult());
+            ProcessReadResult(record.GetCookie(), record.GetReadResult(), *ev->Get());
         }
         if (WritesInFlight.size() != Settings.GetMaxInFlight() && NextWriteTimestamp == TMonotonic::Max()) {
             NextWriteTimestamp = TMonotonic::Now() + GenerateRandomInterval(Settings.GetWritePeriods());

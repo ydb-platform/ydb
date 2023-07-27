@@ -55,9 +55,11 @@ namespace NKikimr::NTestShard {
             Y_VERIFY(self.WritesInFlight.empty());
             Y_VERIFY(self.DeletesInFlight.empty());
             Y_VERIFY(self.TransitionInFlight.empty());
-            for (const auto& [key, info] : KeysBefore) {
+            for (auto& [key, info] : KeysBefore) {
                 Y_VERIFY(info.ConfirmedState == info.PendingState);
+                info.ConfirmedKeyIndex = Max<size_t>();
             }
+            self.ConfirmedKeys.clear();
         }
 
         void Bootstrap(const TActorId& parentId) {

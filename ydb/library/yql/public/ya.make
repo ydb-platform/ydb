@@ -1,5 +1,6 @@
 RECURSE(
     decimal
+    fastcheck
     issue
     types
     udf

@@ -528,8 +528,19 @@ public:
 
     void ReplyUnauthenticated(const TString&) override;
     void ReplyUnavaliable() override;
-    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode) override {
-        Y_FAIL("Unimplemented");
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
+        switch (status) {
+            case Ydb::StatusIds::UNAVAILABLE:
+                return ReplyUnavaliable();
+            case Ydb::StatusIds::UNAUTHORIZED:
+                RaiseIssue(NYql::TIssue{"got UNAUTHORIZED ydb status"});
+                return ReplyUnauthenticated(TString());
+            default: {
+                auto ss = TStringBuilder() << "got unexpected: " << status << "ydb status";
+                RaiseIssue(NYql::TIssue{ss});
+                return ReplyUnavaliable();
+            }
+        }
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {

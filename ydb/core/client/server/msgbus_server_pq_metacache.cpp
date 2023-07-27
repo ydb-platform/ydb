@@ -245,7 +245,7 @@ private:
     }
 
     void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleQueryResponse TEvQueryResponse");
+        LOG_TRACE_S(ctx, NKikimrServices::PQ_METACACHE, "HandleQueryResponse TEvQueryResponse");
 
         if (ev->Cookie != (ui64)Generation->Val()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "stale response with generation " << ev->Cookie << ", actual is " << Generation->Val());

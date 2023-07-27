@@ -8,6 +8,8 @@ SRCS(
 PEERDIR(
 )
 
+PROVIDES(YqlUdfTz)
+
 END()
 
 RECURSE_FOR_TESTS(

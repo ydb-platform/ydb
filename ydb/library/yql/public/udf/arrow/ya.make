@@ -15,6 +15,8 @@ PEERDIR(
     contrib/libs/apache/arrow
 )
 
+PROVIDES(YqlUdfSdkArrow)
+
 YQL_LAST_ABI_VERSION()
 
 END()

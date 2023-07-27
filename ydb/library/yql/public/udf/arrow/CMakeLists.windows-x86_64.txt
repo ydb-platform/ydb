@@ -24,5 +24,7 @@ target_sources(public-udf-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_reader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_item.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_item_hasher.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_item_comparator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/arrow/block_type_helper.cpp
 )

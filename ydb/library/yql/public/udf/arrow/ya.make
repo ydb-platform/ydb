@@ -7,7 +7,9 @@ SRCS(
     util.cpp
     block_reader.cpp
     block_item.cpp
+    block_item_hasher.cpp
     block_item_comparator.cpp
+    block_type_helper.cpp
 )
 
 PEERDIR(

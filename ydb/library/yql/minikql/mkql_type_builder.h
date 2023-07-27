@@ -16,6 +16,7 @@ namespace NMiniKQL {
 class TBlockTypeHelper : public NUdf::IBlockTypeHelper {
 public:
     NUdf::IBlockItemComparator::TPtr MakeComparator(NUdf::TType* type) const final;
+    NUdf::IBlockItemHasher::TPtr MakeHasher(NUdf::TType* type) const final;
 };
 
 constexpr size_t MaxBlockSizeInBytes = 1_MB;

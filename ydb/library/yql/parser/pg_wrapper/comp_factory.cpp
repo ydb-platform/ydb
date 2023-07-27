@@ -2863,7 +2863,7 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
 }
 
 template <bool PassByValue, bool IsArray>
-class TPgHash : public NUdf::IHash {
+class TPgHash : public NUdf::IHash, public NUdf::TBlockItemHasherBase<TPgHash<PassByValue, IsArray>, true> {
 public:
     TPgHash(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
@@ -2904,6 +2904,21 @@ public:
         return DatumGetUInt32(x);
     }
 
+    ui64 DoHash(NUdf::TBlockItem value) const {
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash); // don't copy becase of IHash isn't threadsafe
+        callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { PassByValue ?
+            ScalarDatumFromItem(value) :
+            PointerDatumFromItem(value), false };
+
+        auto x = FInfoHash.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetUInt32(x);
+    }
 private:
     const NYql::NPg::TTypeDesc TypeDesc;
 
@@ -2912,6 +2927,17 @@ private:
 
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
     const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+    if (typeDesc.PassByValue) {
+        return new TPgHash<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgHash<false, true>(typeDesc);
+    } else {
+        return new TPgHash<false, false>(typeDesc);
+    }
+}
+
+NUdf::IBlockItemHasher::TPtr MakePgItemHasher(ui32 typeId) {
+    const auto& typeDesc = NYql::NPg::LookupType(typeId);
     if (typeDesc.PassByValue) {
         return new TPgHash<true, false>(typeDesc);
     } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {

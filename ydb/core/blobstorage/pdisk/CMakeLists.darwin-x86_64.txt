@@ -36,6 +36,7 @@ target_link_libraries(core-blobstorage-pdisk PUBLIC
   core-blobstorage-groupinfo
   core-blobstorage-lwtrace_probes
   ydb-core-control
+  version
   ydb-core-protos
   ydb-core-util
   ydb-library-pdisk_io

@@ -170,29 +170,35 @@ void TPDisk::ReadSysLog(const TActorId &pDiskActor) {
     return;
 }
 
-void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
+bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TString& errorReason) {
     TGuard<TMutex> guard(StateMutex);
     ui64 writePosition = 0;
     ui64 lastLsn = 0;
     TRcBuf lastSysLogRecord = ProcessReadSysLogResult(writePosition, lastLsn, readLogResult);
     if (lastSysLogRecord.size() == 0) {
-        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+        errorReason = TStringBuilder() << "Error while parsing sys log at booting state: lastSysLogRecord is empty,"
             << " lastSysLogRecord.Size()# 0 writePosition# " << writePosition
             << " lastLsn# " << lastLsn
-            << " readLogResult# " << readLogResult.ToString()
+            << " readLogResult# " << readLogResult.ToString();
+
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+            << " ErrorReason# " << errorReason
             << " Marker# BPD47");
-        return;
+        
+        return false;
     }
     ui64 remainingSize = lastSysLogRecord.size();
     if (remainingSize < sizeof(TSysLogRecord)) {
-        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
-            << " remainingSize# " << remainingSize
+        errorReason = TStringBuilder() << "Error while parsing sys log at booting state: remainingSize# " << remainingSize
             << " < sizeof(TSysLogRecord)# " << sizeof(TSysLogRecord)
             << " writePosition# " << writePosition
             << " lastLsn# " << lastLsn
-            << " readLogResult# " << readLogResult.ToString()
+            << " readLogResult# " << readLogResult.ToString();
+
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+            << " ErrorReason# " << errorReason
             << " Marker# BPD48");
-        return;
+        return false;
     }
     TSysLogRecord *sysLogRecord = (TSysLogRecord*)(lastSysLogRecord.data());
 
@@ -201,10 +207,13 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
                 << sysLogRecord->ToString().c_str()
                 << " Marker# BPD49");
     } else {
+        errorReason = TStringBuilder() << "Error while parsing sys log at booting state: Incompatible SysLogRecord Version# "
+                << sysLogRecord->Version;
+
         LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
-            << " Incompatible SysLogRecord Version# " << sysLogRecord->Version
+            << " ErrorReason# " << errorReason
             << " Marker# BPD50");
-        return;
+        return false;
     }
 
     SysLogLsn = lastLsn + 1;
@@ -224,7 +233,7 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
         }
     }
     SysLogRecord = *sysLogRecord;
-    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_6;
+    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_7;
 
     LOG_NOTICE(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " Read SysLogRecord# %s",
         (ui32)PDiskId, SysLogRecord.ToString().data());
@@ -248,14 +257,16 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
     remainingSize -= sizeof(TSysLogRecord);
     ui64 expectedSize = chunkCount * sizeof(TChunkInfo);
     if (remainingSize < expectedSize) {
-        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
-            << " remainingSize# " << remainingSize
+        errorReason = TStringBuilder() << " remainingSize# " << remainingSize
             << " < expectedSize# " << expectedSize
             << " writePosition# " << writePosition
             << " lastLsn# " << lastLsn
-            << " readLogResult# " << readLogResult.ToString()
+            << " readLogResult# " << readLogResult.ToString();
+
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+            << " ErrorReason# " << errorReason
             << " Marker# BPD51");
-        return;
+        return false;
     }
 
     // Checks are passed, so initialize position
@@ -349,16 +360,68 @@ void TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult) {
     // Fill with default value to parse log form the start on old versions
     FirstLogChunkToParseCommits = SysLogRecord.LogHeadChunkIdx;
 
+    ui32 *firstChunkEnd = nullptr;
     if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_6) {
         Y_VERIFY(trimStateEnd);
         ui32 *firstChunk = reinterpret_cast<ui32*>(trimStateEnd);
-        ui64 minSize = (ui64)((char*)(firstChunk + 1) - (char*)sysLogRecord);
+        firstChunkEnd = firstChunk + 1;
+        ui64 minSize = (ui64)((char*)firstChunkEnd - (char*)sysLogRecord);
         Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
                 "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
         FirstLogChunkToParseCommits = ReadUnaligned<ui32>(firstChunk);
     }
 
+    char *compatibilityInfoEnd = nullptr;
+    if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_7) {
+        Y_VERIFY(firstChunkEnd);
+        ui32 *protoSizePtr = reinterpret_cast<ui32*>(firstChunkEnd);
+        ui32 *protoSizePtrEnd = protoSizePtr + 1;
+
+        ui64 minSize = (ui64)((char*)protoSizePtrEnd - (char*)sysLogRecord);
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
+                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+
+        ui32 protoSize = ReadUnaligned<ui32>(protoSizePtr);
+        Y_VERIFY(protoSize > 0);
+
+        char *compatibilityInfo = reinterpret_cast<char*>(protoSizePtrEnd);
+        compatibilityInfoEnd = compatibilityInfo + protoSize;
+        auto storedCompatibilityInfo = NKikimrConfig::TStoredCompatibilityInfo();
+
+        minSize += protoSize;
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
+                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+    
+        bool success = storedCompatibilityInfo.ParseFromArray(compatibilityInfo, protoSize);
+        Y_VERIFY(success);
+
+        bool isCompatible = CompatibilityInfo.CheckCompatibility(&storedCompatibilityInfo,
+                NKikimrConfig::TCompatibilityRule::PDisk, errorReason);
+
+        if (!isCompatible) {
+            LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+                << " Incompatible version, ErrorReason# " << errorReason);
+            return false;
+        }
+    } else if (sysLogRecord->Version != 0) {
+        // Sys log is not empty, but it doesn't contain compatibility info record
+        TString error;
+        bool isCompatible = CompatibilityInfo.CheckCompatibility(nullptr,
+                NKikimrConfig::TCompatibilityRule::PDisk, errorReason);
+
+        if (!isCompatible) {
+            LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+                << " Stored compatibility info is absent, current version is incompatible with the default stored version of PDisk," 
+                << " ErrorReason# " << errorReason);
+            return false;
+        }
+    }
+
+    // needed for further parsing
+    Y_UNUSED(compatibilityInfoEnd);
+
     PrintChunksDebugInfo();
+    return true;
 }
 
 void TPDisk::PrintChunksDebugInfo() {
@@ -546,8 +609,16 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         FirstLogChunkToParseCommits = firstChunk.value_or(SysLogRecord.LogHeadChunkIdx);
     }
 
+    if (!SerializedCompatibilityInfo) {
+        SerializedCompatibilityInfo.emplace(TString());
+        auto stored = CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::PDisk);
+        bool success = stored.SerializeToString(&*SerializedCompatibilityInfo);
+        Y_VERIFY(success);
+    }
+    ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
+
     ui32 recordSize = sizeof(TSysLogRecord) + chunkOwnersSize + sizeof(TSysLogFirstNoncesToKeep)
-        + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32);
+        + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize;
     ui64 beginSectorIdx = SysLogger->SectorIdx;
     *Mon.BandwidthPSysLogPayload += recordSize;
     *Mon.BandwidthPSysLogRecordHeader += sizeof(TFirstLogPageHeader);
@@ -559,6 +630,8 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&chunkIsTrimmedSize, sizeof(chunkIsTrimmedSize), reqId, traceId);
     SysLogger->LogDataPart(&chunkIsTrimmed[0], chunkIsTrimmedSize, reqId, traceId);
     SysLogger->LogDataPart(&FirstLogChunkToParseCommits, sizeof(FirstLogChunkToParseCommits), reqId, traceId);
+    SysLogger->LogDataPart(&compatibilityInfoSize, sizeof(compatibilityInfoSize), reqId, traceId);
+    SysLogger->LogDataPart(SerializedCompatibilityInfo->data(), compatibilityInfoSize, reqId, traceId);
     SysLogger->TerminateLog(reqId, traceId);
     SysLogger->Flush(reqId, traceId, action);
 
@@ -1221,14 +1294,16 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
     switch (InitPhase) {
         case EInitPhase::ReadingSysLog:
         {
-            ProcessChunk0(evReadLogResult);
+            TString errorReason;
+            bool success = ProcessChunk0(evReadLogResult, errorReason);
 
-            if (InitialSysLogWritePosition == 0) {
+            if (InitialSysLogWritePosition == 0 || !success) {
+                ErrorStr = errorReason;
                 *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogParseError;
                 *Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
                 *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialSysLogParse;
                 ActorSystem->Send(pDiskActor, new TEvLogInitResult(false,
-                    "Error while parsing sys log at booting state"));
+                    errorReason));
                 return;
             }
             // Parse the main log to obtain busy/free chunk lists

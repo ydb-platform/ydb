@@ -36,22 +36,24 @@ TCompatibilityInfo::TCompatibilityInfo() {
     /////////////////////////////////////////////////////////
     DefaultCompatibilityInfo = TDefaultCompatibilityInfo{};
 #define EMPLACE_DEFAULT_COMPATIBILITY_INFO(componentName, build, year, major, minor, hotfix)    \
-    auto& defaultInfo = DefaultCompatibilityInfo[(ui32)EComponentId::componentName];            \
-    defaultInfo.emplace();                                                                      \
-    defaultInfo->CopyFrom(                                                                      \
-        TStoredConstructor{                                                                     \
-            .Build = build,                                                                     \
-            .YdbVersion = TYdbVersionConstructor{                                               \
-                .Year = year,                                                                   \
-                .Major = major,                                                                 \
-                .Minor = minor,                                                                 \
-                .Hotfix = hotfix,                                                               \
-            },                                                                                  \
-        }.ToPB()                                                                                \
-    );
+    do {                                                                                        \
+        auto& defaultInfo = DefaultCompatibilityInfo[(ui32)EComponentId::componentName];        \
+        defaultInfo.emplace();                                                                  \
+        defaultInfo->CopyFrom(                                                                  \
+            TStoredConstructor{                                                                 \
+                .Build = build,                                                                 \
+                .YdbVersion = TYdbVersionConstructor{                                           \
+                    .Year = year,                                                               \
+                    .Major = major,                                                             \
+                    .Minor = minor,                                                             \
+                    .Hotfix = hotfix,                                                           \
+                },                                                                              \
+            }.ToPB()                                                                            \
+        );                                                                                      \
+    } while (false)
 
-//  EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", ?, ?, ?, ?) TODO
-    EMPLACE_DEFAULT_COMPATIBILITY_INFO(VDisk, "ydb", 23, 2, 12, 0)
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(PDisk, "ydb", 23, 2, 12, 0);
+    EMPLACE_DEFAULT_COMPATIBILITY_INFO(VDisk, "ydb", 23, 2, 12, 0);
 //  EMPLACE_DEFAULT_COMPATIBILITY_INFO(BlobStorageController, "ydb", ?, ?, ?, ?) TODO
 
 #undef EMPLACE_DEFAULT_COMPATIBILITY_INFO

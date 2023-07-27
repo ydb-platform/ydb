@@ -11,8 +11,19 @@ struct TColumnInfo {
     TString Name;
     ui32 Index;
     NKikimr::NMiniKQL::TType* Type;
+    TMaybe<bool> IsScalar; // defined only on block types
 
-    TColumnInfo(TString name, ui32 index, NKikimr::NMiniKQL::TType* type) : Name(name), Index(index), Type(type) {};
+    TColumnInfo(TString name, ui32 index, NKikimr::NMiniKQL::TType* type, TMaybe<bool> isScalar)
+        : Name(name)
+        , Index(index)
+        , Type(type)
+        , IsScalar(isScalar)
+    {
+    }
+
+    bool IsBlockOrScalar() const {
+        return IsScalar.Defined();
+    }
 
     NUdf::TDataTypeId GetTypeId() const {
         YQL_ENSURE(Type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data);

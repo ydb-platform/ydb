@@ -482,3 +482,16 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "yaddayadda");
     }
 }
+
+
+Y_UNIT_TEST_SUITE(YtNodeIoTest) {
+    Y_UNIT_TEST(FromJson) {
+        NYT::TNode node;
+        node = NYT::NodeFromJsonString("1");
+        UNIT_ASSERT_VALUES_EQUAL(node.ConvertTo<int>(), 1);
+        UNIT_ASSERT(!NYT::TryNodeFromJsonString("", node));
+        UNIT_ASSERT_VALUES_EQUAL(node.ConvertTo<int>(), 1);
+        UNIT_ASSERT_EXCEPTION(NYT::NodeFromJsonString(""), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(node.ConvertTo<int>(), 1);
+    }
+}

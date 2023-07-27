@@ -31,6 +31,7 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, ::NYson
 
 // Parse TNode from string in JSON format
 TNode NodeFromJsonString(const TStringBuf input);
+bool TryNodeFromJsonString(const TStringBuf input, TNode& dst);
 
 // Convert TJsonValue to TNode
 TNode NodeFromJsonValue(const ::NJson::TJsonValue& input);

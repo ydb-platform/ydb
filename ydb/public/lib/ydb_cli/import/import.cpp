@@ -407,7 +407,7 @@ void TImportFileClient::SetupUpsertSettingsCsv(const TImportFileSettings& settin
 
 TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
                                      std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
-    TString buffer;
+    TString localHeader;
 
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
 
@@ -427,7 +427,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
             headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
         }
         headerRow += '\n';
-        buffer = headerRow;
+        localHeader = headerRow;
     }
 
     // Do not use csvSettings.skip_rows.
@@ -444,7 +444,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     TString line;
     std::vector<TAsyncStatus> inFlightRequests;
-
+    TString buffer = localHeader;
     while (TString line = splitter.ConsumeLine()) {
         ++row;
         readBytes += line.Size();
@@ -480,7 +480,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         };
 
         batchBytes = 0;
-        buffer = {};
+        buffer.clear();
+        buffer += localHeader;
 
         inFlightRequests.push_back(NThreading::Async(asyncUpsertCSV, *pool));
 

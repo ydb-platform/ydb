@@ -98,6 +98,7 @@ struct TDqSettings {
     NCommon::TConfSetting<ui32, false> HashShuffleMaxTasks;
 
     NCommon::TConfSetting<bool, false> UseWideChannels;
+    NCommon::TConfSetting<bool, false> UseWideBlockChannels;
     NCommon::TConfSetting<bool, false> UseFastPickleTransport;
     NCommon::TConfSetting<bool, false> UseOOBTransport;
 
@@ -151,6 +152,7 @@ struct TDqSettings {
         SAVE_SETTING(HashShuffleTasksRatio);
         SAVE_SETTING(HashShuffleMaxTasks);
         SAVE_SETTING(UseWideChannels);
+        SAVE_SETTING(UseWideBlockChannels);
         SAVE_SETTING(UseFastPickleTransport);
         SAVE_SETTING(UseOOBTransport);
         SAVE_SETTING(AggregateStatsByStage);

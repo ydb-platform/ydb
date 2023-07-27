@@ -234,7 +234,16 @@ private:
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
         bool useWideChannels = State_->Settings->UseWideChannels.Get().GetOrElse(false);
-        pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false, useWideChannels), "BuildPhy");
+        bool useChannelBlocks = State_->Settings->UseWideBlockChannels.Get().GetOrElse(false);
+        NDq::EChannelMode mode;
+        if (!useWideChannels) {
+            mode = NDq::EChannelMode::CHANNEL_SCALAR;
+        } else if (!useChannelBlocks) {
+            mode = NDq::EChannelMode::CHANNEL_WIDE;
+        } else {
+            mode = NDq::EChannelMode::CHANNEL_WIDE_BLOCK;
+        }
+        pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false, *pipeline->GetTypeAnnotationContext(), mode), "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(*pipeline->GetTypeAnnotationContext()), "RewritePhyCallables");
     }
 

@@ -60,6 +60,13 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, HashShuffleMaxTasks).Lower(1).Upper(1000);
 
     REGISTER_SETTING(*this, UseWideChannels);
+    REGISTER_SETTING(*this, UseWideBlockChannels)
+        .ValueSetter([this](const TString&, bool value) {
+            UseWideBlockChannels = value;
+            if (value) {
+                UseWideChannels = true;
+            }
+        });
     REGISTER_SETTING(*this, UseFastPickleTransport);
     REGISTER_SETTING(*this, UseOOBTransport);
 

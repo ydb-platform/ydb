@@ -99,11 +99,10 @@ namespace NKikimr {
                 pdiskInfo->ReadCentric = disk.ReadCentric;
                 pdiskInfo->BoxId = disk.BoxId;
                 if (pdiskInfo->PDiskConfig != disk.PDiskConfig) {
-                    // update PDiskConfig only for nonstatic PDisks
-                    if (!NKikimr::NBsController::FindStaticPDisk(disk, state)) {
-                        pdiskInfo->PDiskConfig = disk.PDiskConfig;
+                    if (const auto id = FindStaticPDisk(disk, state); id && state.StaticPDisks.at(*id).PDiskConfig != disk.PDiskConfig) {
+                        throw TExError() << "PDiskConfig mismatch for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
                     } else {
-                        throw TExError() << "Skipping PDiskConfig update for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
+                        pdiskInfo->PDiskConfig = disk.PDiskConfig;
                     }
                 }
                 // run ExtractConfig as the very last step

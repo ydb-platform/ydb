@@ -89,32 +89,6 @@ namespace NPage {
             return ReadUnaligned<NPage::TLabel>(Raw.data());
         }
 
-        TIter Rewind(TRowId to, TIter on, int dir) const
-        {
-            Y_VERIFY(dir == +1, "Only forward lookups supported");
-
-            if (to >= EndRowId || !on) {
-                return Page.End();
-            } else {
-                /* This branch have to never return End() since the real
-                    upper RowId value isn't known. Only Max<TRowId>() and
-                    invalid on iterator may be safetly mapped to End().
-                 */
-
-                for (size_t it = 0; ++it < 4 && ++on;) {
-                    if (on->GetRowId() > to) return --on;
-                }
-
-                auto less = [](TRowId rowId, const TRecord &rec) {
-                    return rowId < rec.GetRowId();
-                };
-
-                auto it = std::upper_bound(on, Page.End(), to, less);
-
-                return (it && it == on) ? on : --it;
-            }
-        }
-
         /**
          * Lookup a page that contains rowId
          */

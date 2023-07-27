@@ -452,7 +452,7 @@ def onadd_ytest(unit, *args):
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
     if flat_args[1] == "fuzz.test":
-        unit.ondata("arcadia/fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
+        unit.ondata_files("fuzzing/{}/corpus.json".format(_common.get_norm_unit_path(unit)))
 
     if not flat_args[1] in ("unittest.py", "gunittest", "g_benchmark"):
         unit.ondata_files(get_unit_list_variable(unit, 'TEST_YT_SPEC_VALUE'))

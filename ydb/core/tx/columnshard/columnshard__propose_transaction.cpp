@@ -241,7 +241,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                     break;
                 }
 
-                auto schema = Self->TablesManager.GetIndexInfo().ArrowSchema();
+                auto schema = Self->TablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetLastSchema()->GetSchema();
                 auto ttlColumn = schema->GetFieldByName(columnName);
                 if (!ttlColumn) {
                     statusMessage = "TTL tx wrong TTL column '" + columnName + "'";

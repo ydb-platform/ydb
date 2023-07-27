@@ -71,10 +71,6 @@ public:
 
     virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager) override;
 
-    const TIndexInfo& GetIndexInfo() const override {
-        return VersionedIndex.GetLastSchema()->GetIndexInfo();
-    }
-
     const TVersionedIndex& GetVersionedIndex() const override {
         return VersionedIndex;
     }
@@ -201,7 +197,7 @@ private:
     }
 
     bool UseCompositeMarks() const noexcept {
-        return GetIndexInfo().IsCompositeIndexKey();
+        return VersionedIndex.GetLastSchema()->GetIndexInfo().IsCompositeIndexKey();
     }
 
     void ClearIndex() {

@@ -273,13 +273,14 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
     } else {
-        Y_VERIFY(PrimaryIndex->GetIndexInfo().GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
-        Y_VERIFY(PrimaryIndex->GetIndexInfo().GetIndexKey()->Equals(indexInfo.GetIndexKey()));
+        const NOlap::TIndexInfo& lastIndexInfo = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
+        Y_VERIFY(lastIndexInfo.GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
+        Y_VERIFY(lastIndexInfo.GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
     PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
 
     for (auto& columnName : Ttl.TtlColumns()) {
-        PrimaryIndex->GetIndexInfo().CheckTtlColumn(columnName);
+        PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);
     }
 }
 

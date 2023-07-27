@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         planStep = 3;
 
-        const TIndexInfo& indexInfo = engine.GetIndexInfo();
+        const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(key[0].first) };
 
         { // full scan
@@ -676,7 +676,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // read
         planStep = 3;
 
-        const TIndexInfo& indexInfo = engine.GetIndexInfo();
+        const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(testColumns[0].first) };
 
         { // full scan

@@ -340,11 +340,10 @@ class IColumnEngine {
 public:
     virtual ~IColumnEngine() = default;
 
-    virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
-    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetIndexInfo().GetReplaceKey(); }
-    virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetIndexInfo().GetSortingKey(); }
-    virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetIndexInfo().GetIndexKey(); }
+    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey(); }
+    virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetSortingKey(); }
+    virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetIndexKey(); }
     virtual const THashSet<ui64>* GetOverloadedGranules(const ui64 pathId) const = 0;
     bool HasOverloadedGranules(const ui64 pathId) const {
         return GetOverloadedGranules(pathId) != nullptr;

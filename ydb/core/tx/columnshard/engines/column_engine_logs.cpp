@@ -235,7 +235,7 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
     return ColumnsTable->Load(db, [&](const TColumnRecord& rec) {
-        auto& indexInfo = GetIndexInfo();
+        auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         Y_VERIFY(rec.Valid());
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(rec.BlobRange.BlobId);
@@ -410,7 +410,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
     ui64 dropBlobs = 0;
     bool allowDrop = true;
 
-    auto& indexInfo = GetIndexInfo();
+    auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
     const TMonotonic nowMonotonic = TlsActivationContext ? AppData()->MonotonicTimeProvider->Now() : TMonotonic::Now();
     for (const auto& [pathId, ttl] : pathEviction) {
         auto it = NextCheckInstantForTTL.find(pathId);
@@ -747,7 +747,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
                         }
                     }
                     Y_VERIFY(outPortion.Produced());
-                    if (!pkRangesFilter.IsPortionInUsage(outPortion, GetIndexInfo())) {
+                    if (!pkRangesFilter.IsPortionInUsage(outPortion, VersionedIndex.GetLastSchema()->GetIndexInfo())) {
                         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
                             ("granule", granule)("portion", portionInfo->Portion());
                         continue;

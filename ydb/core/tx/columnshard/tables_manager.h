@@ -175,10 +175,9 @@ public:
         return *PrimaryIndex;
     }
 
-    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version = NOlap::TSnapshot::Zero()) const {
-        Y_UNUSED(version);
+    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
         Y_VERIFY(!!PrimaryIndex);
-        return PrimaryIndex->GetIndexInfo();
+        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
     }
 
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {

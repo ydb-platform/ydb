@@ -521,7 +521,7 @@ struct Schema : NIceDb::Schema {
     static void IndexGranules_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
                                     const TGranuleRecord& row) {
         TString metaStr;
-        const auto& indexInfo = engine.GetIndexInfo();
+        const auto& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         if (indexInfo.IsCompositeIndexKey()) {
             NKikimrTxColumnShard::TIndexGranuleMeta meta;
             Y_VERIFY(indexInfo.GetIndexKey());

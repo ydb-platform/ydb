@@ -7,6 +7,7 @@
 
 
 find_package(OpenSSL REQUIRED)
+add_subdirectory(public)
 add_subdirectory(ut)
 
 add_library(ydb-library-yaml_config)
@@ -23,6 +24,7 @@ target_link_libraries(ydb-library-yaml_config PUBLIC
   cms-console-util
   ydb-core-erasure
   ydb-core-protos
+  library-yaml_config-public
 )
 target_sources(ydb-library-yaml_config PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/console_dumper.cpp

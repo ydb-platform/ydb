@@ -66,4 +66,5 @@
   - cuda/std/cassert
   - cuda/std/cmath
   - cuda/std/cstdint
+  - cuda/std/utility
   - mma.h

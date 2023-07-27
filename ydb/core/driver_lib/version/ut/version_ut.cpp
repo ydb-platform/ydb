@@ -485,6 +485,26 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 false
         );
     }
+    Y_UNIT_TEST(DefaultRulesWithExtraForbidden) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 1, .Major = 2, .Minor = 2, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .LowerLimit = TYdbVersion{ .Year = 1, .Major = 1, .Minor = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 1, .Major = 1, .Minor = 3 },
+                            .Forbidden = true
+                        }
+                    }
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 1, .Major = 1, .Minor = 4 },
+                }, 
+                true
+        );
+    }
     Y_UNIT_TEST(ExtraAndForbidden) {
         Test(
                 TCurrentCompatibilityInfo{
@@ -569,6 +589,103 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 TCurrentCompatibilityInfo{
                     .Build = "ydb",
                     .YdbVersion = TYdbVersion{ .Year = 1, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                }, 
+                false
+        );
+    }
+
+
+    Y_UNIT_TEST(YDBAndNbs) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Build = "nbs",
+                    .YdbVersion = TYdbVersion{ .Year = 23, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 24, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .Build = "nbs",
+                            .LowerLimit = TYdbVersion{ .Year = 23, .Major = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 2 },
+                        },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .Build = "nbs",
+                            .LowerLimit = TYdbVersion{ .Year = 23, .Major = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 2 },
+                        },
+                    }
+                }, 
+                true
+        );
+    }
+
+    Y_UNIT_TEST(DifferentYdbVersionsWithNBSRules) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .Build = "nbs",
+                            .LowerLimit = TYdbVersion{ .Year = 23, .Major = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 3 },
+                        },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .Build = "nbs",
+                            .LowerLimit = TYdbVersion{ .Year = 23, .Major = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 3 },
+                        },
+                    }
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 24, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .Build = "nbs",
+                            .LowerLimit = TYdbVersion{ .Year = 23, .Major = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 2 },
+                        },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .Build = "nbs",
+                            .LowerLimit = TYdbVersion{ .Year = 23, .Major = 3 },
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 2 },
+                        },
+                    }
+                }, 
+                true
+        );
+    }
+
+    Y_UNIT_TEST(RestrictedCompatibilitySameBuild) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .LowerLimit = TYdbVersion{ .Year = 24, .Major = 2, .Minor = 4},
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 3 },
+                        },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .LowerLimit = TYdbVersion{ .Year = 24, .Major = 2, .Minor = 4},
+                            .UpperLimit = TYdbVersion{ .Year = 24, .Major = 3 },
+                        },
+                    }
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Build = "ydb",
+                    .YdbVersion = TYdbVersion{ .Year = 24, .Major = 2, .Minor = 1, .Hotfix = 0 },
                 }, 
                 false
         );

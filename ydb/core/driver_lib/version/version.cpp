@@ -271,8 +271,8 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
         return CheckNonPresent(current, componentId, errorReason);
     }
 
-    const auto currentBuild = current->GetBuild();
-    const auto storedBuild = stored->GetBuild();
+    const auto& currentBuild = current->GetBuild();
+    const auto& storedBuild = stored->GetBuild();
     const auto* currentYdbVersion = current->HasYdbVersion() ? &current->GetYdbVersion() : nullptr;
     const auto* storedYdbVersion = stored->HasYdbVersion() ? &stored->GetYdbVersion() : nullptr;
 
@@ -283,9 +283,12 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
         const auto rule = current->GetCanLoadFrom(i);
         const auto ruleComponentId = TComponentId(rule.GetComponentId());
         if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            useDefault = false;
+            bool isForbidding = rule.HasForbidden() && rule.GetForbidden();
+            if ((!rule.HasBuild() || rule.GetBuild() == storedBuild) && !isForbidding) {
+                useDefault = false;
+            }
             if (CheckRule(storedBuild, storedYdbVersion, rule)) {
-                if (rule.HasForbidden() && rule.GetForbidden()) {
+                if (isForbidding) {
                     errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {
@@ -566,11 +569,12 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
         const auto rule = current->GetCanLoadFrom(i);
         const auto ruleComponentId = TComponentId(rule.GetComponentId());
         if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            if (!rule.HasBuild()) {
+            bool isForbidding = rule.HasForbidden() && rule.GetForbidden();
+            if (!rule.HasBuild() && !isForbidding) {
                 useDefault = false;
             }
             if (CheckRule(storedBuild, &*storedVersion, rule)) {
-                if (rule.HasForbidden() && rule.GetForbidden()) {
+                if (isForbidding) {
                     errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {

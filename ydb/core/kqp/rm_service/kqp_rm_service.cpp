@@ -736,13 +736,13 @@ public:
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.SystemStateInfoSize() != 1)  {
-            LOG_C("Unexpected whiteboard info");
+            LOG_D("Unexpected whiteboard info");
             return;
         }
 
         const auto& info = record.GetSystemStateInfo(0);
         if (AppData()->UserPoolId >= info.PoolStatsSize()) {
-            LOG_C("Unexpected whiteboard info: pool size is smaller than user pool id"
+            LOG_D("Unexpected whiteboard info: pool size is smaller than user pool id"
                 << ", pool size: " << info.PoolStatsSize()
                 << ", user pool id: " << AppData()->UserPoolId);
             return;
@@ -750,7 +750,7 @@ public:
 
         const auto& pool = info.GetPoolStats(AppData()->UserPoolId);
 
-        LOG_C("Received node white board pool stats: " << pool.usage());
+        LOG_D("Received node white board pool stats: " << pool.usage());
         ProxyNodeResources.SetCpuUsage(pool.usage());
         ProxyNodeResources.SetThreads(pool.threads());
     }

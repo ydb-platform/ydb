@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/kqp/query_data
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/gateway/behaviour/tablestore
+    ydb/core/kqp/gateway/behaviour/external_data_source
     ydb/library/yql/providers/result/expr_nodes
 )
 

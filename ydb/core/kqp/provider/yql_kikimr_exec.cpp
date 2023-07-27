@@ -179,35 +179,6 @@ namespace {
         return dropGroupSettings;
     }
 
-    TString GetOrDefault(const TCreateObjectSettings& container, const TString& key, const TString& defaultValue = TString{}) {
-        auto fValue = container.GetFeaturesExtractor().Extract(key);
-        return fValue ? *fValue : defaultValue;
-    }
-
-    TCreateExternalDataSourceSettings ParseCreateExternalDataSourceSettings(const TCreateObjectSettings& settings) {
-        TCreateExternalDataSourceSettings out;
-        out.ExternalDataSource = settings.GetObjectId();
-        out.SourceType = GetOrDefault(settings, "source_type");
-        out.AuthMethod = GetOrDefault(settings, "auth_method");
-        out.ServiceAccount.Id = GetOrDefault(settings, "service_account_id");
-        out.ServiceAccount.SecretName = GetOrDefault(settings, "service_account_secret_name");
-        out.Installation = GetOrDefault(settings, "installation");
-        out.Location = GetOrDefault(settings, "location");
-        return out;
-    }
-
-    TAlterExternalDataSourceSettings ParseAlterExternalDataSourceSettings(const TAlterObjectSettings& settings) {
-        TAlterExternalDataSourceSettings out;
-        out.ExternalDataSource = settings.GetObjectId();
-        return out;
-    }
-
-    TDropExternalDataSourceSettings ParseDropExternalDataSourceSettings(const TDropObjectSettings& settings) {
-        TDropExternalDataSourceSettings out;
-        out.ExternalDataSource = settings.GetObjectId();
-        return out;
-    }
-
     TCreateTableStoreSettings ParseCreateTableStoreSettings(TKiCreateTable create, const TTableSettings& settings) {
         TCreateTableStoreSettings out;
         out.TableStore = TString(create.Table());
@@ -564,7 +535,7 @@ private:
                 *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
                 ctx, fakeReads);
 
-        NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv, 
+        NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
             *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry());
 
         TStringStream errorStream;
@@ -584,7 +555,7 @@ private:
         NYson::TYsonWriter writer2((IOutputStream*)&out);
         writer2.OnBeginMap();
         writer2.OnKeyedItem("Data");
-        writer2.OnRaw(ysonStream.Str()); 
+        writer2.OnRaw(ysonStream.Str());
         writer2.OnEndMap();
 
         return out.Str();
@@ -862,48 +833,6 @@ private:
 protected:
     virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
         return GetGateway()->DropObject(cluster, settings);
-    }
-public:
-    using TBase::TBase;
-};
-
-class TCreateExternalDataSourceTransformer: public TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings> {
-private:
-    using TBase = TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings>;
-protected:
-    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TCreateObjectSettings& settings) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(std::make_exception_ptr(yexception() << "External data sources are disabled. Please contact your system administrator to enable it"));
-        }
-        return GetGateway()->CreateExternalDataSource(cluster, ParseCreateExternalDataSourceSettings(settings), true);
-    }
-public:
-    using TBase::TBase;
-};
-
-class TAlterExternalDataSourceTransformer: public TObjectModifierTransformer<TKiAlterObject, TAlterObjectSettings> {
-private:
-    using TBase = TObjectModifierTransformer<TKiAlterObject, TAlterObjectSettings>;
-protected:
-    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TAlterObjectSettings& settings) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(std::make_exception_ptr(yexception() << "External data sources are disabled. Please contact your system administrator to enable it"));
-        }
-        return GetGateway()->AlterExternalDataSource(cluster, ParseAlterExternalDataSourceSettings(settings));
-    }
-public:
-    using TBase::TBase;
-};
-
-class TDropExternalDataSourceTransformer: public TObjectModifierTransformer<TKiDropObject, TDropObjectSettings> {
-private:
-    using TBase = TObjectModifierTransformer<TKiDropObject, TDropObjectSettings>;
-protected:
-    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(std::make_exception_ptr(yexception() << "External data sources are disabled. Please contact your system administrator to enable it"));
-        }
-        return GetGateway()->DropExternalDataSource(cluster, ParseDropExternalDataSourceSettings(settings));
     }
 public:
     using TBase::TBase;
@@ -1774,21 +1703,15 @@ public:
         }
 
         if (auto kiObject = TMaybeNode<TKiCreateObject>(input)) {
-            return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                ? TCreateExternalDataSourceTransformer("CREATE EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                : TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+            return TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto kiObject = TMaybeNode<TKiAlterObject>(input)) {
-            return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                    ? TAlterExternalDataSourceTransformer("ALTER EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                    : TAlterObjectTransformer("ALTER OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+            return TAlterObjectTransformer("ALTER OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto kiObject = TMaybeNode<TKiDropObject>(input)) {
-            return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                    ? TDropExternalDataSourceTransformer("DROP EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                    : TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+            return TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {

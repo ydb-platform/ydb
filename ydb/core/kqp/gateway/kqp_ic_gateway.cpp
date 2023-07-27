@@ -1297,84 +1297,6 @@ public:
         }
     }
 
-    TFuture<TGenericResult> CreateExternalDataSource(const TString& cluster,
-                                                     const NYql::TCreateExternalDataSourceSettings& settings,
-                                                     bool createDir) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.ExternalDataSource, pathPair, error, createDir)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
-
-            NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *schemeTx.MutableCreateExternalDataSource();
-            FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
-            return SendSchemeRequest(ev.Release(), true);
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
-    }
-
-    TFuture<TGenericResult> AlterExternalDataSource(const TString& cluster,
-                                                    const NYql::TAlterExternalDataSourceSettings& settings) override {
-        Y_UNUSED(cluster, settings);
-        return MakeErrorFuture<TGenericResult>(std::make_exception_ptr(yexception() << "The alter is not supported for the external data source"));
-    }
-
-    TFuture<TGenericResult> DropExternalDataSource(const TString& cluster,
-                                                   const NYql::TDropExternalDataSourceSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.ExternalDataSource, pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalDataSource);
-
-            NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
-            drop.SetName(pathPair.second);
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
-    }
-
     TFuture<TGenericResult> AlterUser(const TString& cluster, const NYql::TAlterUserSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -1508,6 +1430,7 @@ public:
                     context.SetUserToken(*GetUserToken());
                 }
                 context.SetDatabase(Owner.Database);
+                context.SetActorSystem(Owner.ActorSystem);
                 return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TYqlConclusionStatus>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
                         TGenericResult result;
@@ -1801,7 +1724,7 @@ public:
         *taskResult.MutableItemType() = resultType;
         auto& taskConnection = *taskResult.MutableConnection();
         taskConnection.SetStageIndex(0);
-        
+
         NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
 
         NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
@@ -2268,24 +2191,6 @@ private:
             attributes.insert({key, value});
         }
         externalTableDesc.SetContent(general.SerializeAsString());
-    }
-
-    static void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,
-                                                 const TString& name,
-                                                 const NYql::TCreateExternalDataSourceSettings& settings)
-    {
-        externaDataSourceDesc.SetName(name);
-        externaDataSourceDesc.SetSourceType(settings.SourceType);
-        externaDataSourceDesc.SetLocation(settings.Location);
-        externaDataSourceDesc.SetInstallation(settings.Installation);
-
-        if (settings.AuthMethod == "NONE") {
-            externaDataSourceDesc.MutableAuth()->MutableNone();
-        } else if (settings.AuthMethod == "SERVICE_ACCOUNT") {
-            auto& sa = *externaDataSourceDesc.MutableAuth()->MutableServiceAccount();
-            sa.SetId(settings.ServiceAccount.Id);
-            sa.SetSecretName(settings.ServiceAccount.SecretName);
-        }
     }
 
     static void FillParameters(TQueryData::TPtr params, ::google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>* output) {

@@ -134,13 +134,12 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
 }
 
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
-    NYql::TCreateExternalDataSourceSettings settings;
-    settings.ExternalDataSource = path;
-    settings.SourceType = "ObjectStorage";
-    settings.AuthMethod = "NONE";
-    settings.Installation = "cloud";
-
-    auto responseFuture = gateway->CreateExternalDataSource(TestCluster, settings, true);
+    TCreateObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {
+        {"source_type", "ObjectStorage"},
+        {"auth_method", "NONE"},
+        {"installation", "cloud"}
+    });
+    auto responseFuture = gateway->CreateObject(TestCluster, settings);
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);
@@ -160,7 +159,6 @@ void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKik
 
 void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path, bool fail = false) {
     NYql::TCreateExternalTableSettings settings;
-
     settings.ExternalTable = path;
     settings.DataSourcePath = "/Root/f1/f2/external_data_source";
     settings.Location = "/";
@@ -191,7 +189,6 @@ void TestCreateExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGa
 }
 
 void TestDropExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
-
     auto responseFuture = gateway->DropExternalTable(TestCluster, TDropExternalTableSettings{.ExternalTable=path});
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
@@ -205,7 +202,8 @@ void TestDropExternalTable(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGate
 }
 
 void TestDropExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
-    auto responseFuture = gateway->DropExternalDataSource(TestCluster, TDropExternalDataSourceSettings{.ExternalDataSource=path});
+    TDropObjectSettings settings("EXTERNAL_DATA_SOURCE", path, {});
+    auto responseFuture = gateway->DropObject(TestCluster, settings);
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);
@@ -241,12 +239,14 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
     Y_UNIT_TEST(TestCreateExternalTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
     }
 
     Y_UNIT_TEST(TestCreateSameExternalTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table", true);
@@ -254,6 +254,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
     Y_UNIT_TEST(TestDropExternalTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestCreateExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
         TestDropExternalTable(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_table");
@@ -261,6 +262,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
     Y_UNIT_TEST(TestDropExternalDataSource) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         TestCreateExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
         TestDropExternalDataSource(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/f1/f2/external_data_source");
     }

@@ -6,4 +6,5 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(external_data_source)
 add_subdirectory(tablestore)

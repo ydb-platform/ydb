@@ -14,6 +14,7 @@
 #include <ydb/services/metadata/abstract/parsing.h>
 
 #include <library/cpp/threading/future/core/future.h>
+#include <library/cpp/actors/core/actorsystem.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
@@ -62,6 +63,8 @@ public:
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR_DEF(TString, Database);
+        using TActorSystemPtr = TActorSystem*;
+        YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
     };
 
     class TInternalModificationContext {

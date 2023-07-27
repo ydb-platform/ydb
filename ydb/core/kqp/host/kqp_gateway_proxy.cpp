@@ -640,34 +640,15 @@ public:
         FORWARD_ENSURE_NO_PREPARE(DropExternalTable, cluster, settings);
     }
 
-    TFuture<TGenericResult> CreateExternalDataSource(const TString& cluster,
-        const TCreateExternalDataSourceSettings& settings, bool createDir) override
-    {
-        FORWARD_ENSURE_NO_PREPARE(CreateExternalDataSource, cluster, settings, createDir);
-    }
-
-    TFuture<TGenericResult> AlterExternalDataSource(const TString& cluster,
-        const TAlterExternalDataSourceSettings& settings) override
-    {
-        FORWARD_ENSURE_NO_PREPARE(AlterExternalDataSource, cluster, settings);
-    }
-
-    TFuture<TGenericResult> DropExternalDataSource(const TString& cluster,
-        const TDropExternalDataSourceSettings& settings) override
-    {
-        FORWARD_ENSURE_NO_PREPARE(DropExternalDataSource, cluster, settings);
-    }
-
     TVector<TString> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }
 
-    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, 
-        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override 
+    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program,
+        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
     {
         return Gateway->ExecuteLiteral(program, resultType, txAlloc);
     }
-
 
 private:
     bool IsPrepare() const {

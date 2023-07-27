@@ -18,6 +18,14 @@ private:
     TFeatures Features;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
 public:
+    TObjectSettingsImpl() = default;
+
+    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const TFeatures& features)
+        : TypeId(typeId)
+        , ObjectId(objectId)
+        , Features(features)
+        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features))
+        {}
 
     TFeaturesExtractor& GetFeaturesExtractor() const {
         Y_VERIFY(!!FeaturesExtractor);

@@ -63,11 +63,14 @@
 /* Define to 1 if you have `libbpf` library. */
 /* #undef HAVE_LIBBPF */
 
+/* Define to 1 if you have `libev` library. */
+#define HAVE_LIBEV 1
+
 /* Define to 1 if you have `libngtcp2_crypto_boringssl` library. */
 /* #undef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL */
 
-/* Define to 1 if you have `libngtcp2_crypto_openssl` library. */
-/* #undef HAVE_LIBNGTCP2_CRYPTO_OPENSSL */
+/* Define to 1 if you have `libngtcp2_crypto_quictls` library. */
+/* #undef HAVE_LIBNGTCP2_CRYPTO_QUICTLS */
 
 /* Define to 1 if you have `libsystemd` library. */
 /* #undef HAVE_LIBSYSTEMD */
@@ -244,7 +247,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.54.0"
+#define PACKAGE_STRING "nghttp2 1.55.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -253,7 +256,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.54.0"
+#define PACKAGE_VERSION "1.55.0"
 
 /* The size of `int *', as computed by sizeof. */
 #define SIZEOF_INT_P 8
@@ -358,7 +361,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.54.0"
+#define VERSION "1.55.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

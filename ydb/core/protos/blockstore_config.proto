@@ -127,6 +127,9 @@ message TVolumeConfig {
 
     // Is partitions PoolKind set manually or by config.
     optional bool IsPartitionsPoolKindSetManually = 48;
+
+    // Is disk filling finished.
+    optional bool IsFillFinished = 49;
 }
 
 message TUpdateVolumeConfig {

@@ -294,16 +294,25 @@ TWriteId TColumnShard::GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService:
         it = LongTxWritesByUniqueId.emplace(longTxId.UniqueId, TPartsForLTXShard()).first;
     }
 
-    TWriteId writeId = ++LastWriteId;
+    TWriteId writeId = BuildNextWriteId(db);
     auto& lw = LongTxWrites[writeId];
     lw.WriteId = (ui64)writeId;
     lw.WritePartId = partId;
     lw.LongTxId = longTxId;
     it->second[partId] = &lw;
 
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastWriteId, (ui64)writeId);
     Schema::SaveLongTxWrite(db, writeId, partId, longTxId);
+    return writeId;
+}
 
+TWriteId TColumnShard::BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    return BuildNextWriteId(db);
+}
+
+TWriteId TColumnShard::BuildNextWriteId(NIceDb::TNiceDb& db) {
+    TWriteId writeId = ++LastWriteId;
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastWriteId, (ui64)writeId);
     return writeId;
 }
 
@@ -359,6 +368,12 @@ bool TColumnShard::AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransac
                 InsertTable->Abort(dbTable, meta->MetaShard, meta->WriteIds);
 
                 CommitsInFlight.erase(txId);
+            }
+            break;
+        }
+        case NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE: {
+            if (!OperationsManager.AbortTransaction(*this, txId, txc)) {
+                return false;
             }
             break;
         }

@@ -126,6 +126,7 @@ enum ETransactionKind {
     TX_KIND_COMMIT = 2;
     TX_KIND_TTL = 3; // Immediate (not planned)
     TX_KIND_DATA = 4;
+    TX_KIND_COMMIT_WRITE = 5;
 }
 
 enum ETransactionFlag {

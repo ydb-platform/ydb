@@ -22,6 +22,7 @@ public:
     const std::shared_ptr<arrow::Schema>& GetSchema() const override;
     const TIndexInfo& GetIndexInfo() const override;
     const TSnapshot& GetSnapshot() const override;
+    ui32 GetColumnsCount() const override;
 };
 
 }

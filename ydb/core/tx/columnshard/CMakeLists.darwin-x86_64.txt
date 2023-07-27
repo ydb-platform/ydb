@@ -10,6 +10,7 @@ add_subdirectory(common)
 add_subdirectory(counters)
 add_subdirectory(engines)
 add_subdirectory(hooks)
+add_subdirectory(operations)
 add_subdirectory(resources)
 add_subdirectory(splitter)
 add_subdirectory(ut_rw)
@@ -50,6 +51,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   tx-columnshard-counters
   tx-columnshard-common
   tx-columnshard-splitter
+  tx-columnshard-operations
   core-tx-tiering
   tx-conveyor-usage
   tx-long_tx_service-public

@@ -55,6 +55,7 @@ SRCS(
     database_basic_sausage_metainfo.proto
     datashard_load.proto
     drivemodel.proto
+    ev_write.proto
     export.proto
     external_sources.proto
     flat_tx_scheme.proto

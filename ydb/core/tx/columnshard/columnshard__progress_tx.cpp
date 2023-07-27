@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+
+#include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NColumnShard {
@@ -27,11 +29,16 @@ private:
             , Status(status)
         {}
 
-        THolder<IEventBase> MakeEvent(ui64 tabletId) const {
-            auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(
+        std::unique_ptr<IEventBase> MakeEvent(ui64 tabletId) const {
+            if (TxInfo.TxKind ==  NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE) {
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildCommited(TxInfo.TxId);
+                return result;
+            } else {
+                auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
                 tabletId, TxInfo.TxKind, TxInfo.TxId, Status);
-            result->Record.SetStep(TxInfo.PlanStep);
-            return result;
+                result->Record.SetStep(TxInfo.PlanStep);
+                return result;
+            }
         }
     };
 
@@ -121,6 +128,12 @@ public:
                     Trigger = ETriggerActivities::POST_INSERT;
                     break;
                 }
+                case NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE: {
+                    NOlap::TSnapshot snapshot(step, txId);
+                    Y_VERIFY(Self->OperationsManager.CommitTransaction(*Self, txId, txc, snapshot));
+                    Trigger = ETriggerActivities::POST_INSERT;
+                    break;
+                }
                 default: {
                     Y_FAIL("Unexpected TxKind");
                 }
@@ -151,7 +164,7 @@ public:
             Self->ProgressTxController.CompleteRunningTx(TTxController::TPlanQueueItem(res.TxInfo.PlanStep, res.TxInfo.TxId));
 
             auto event = res.MakeEvent(Self->TabletID());
-            ctx.Send(res.TxInfo.Source, event.Release(), 0, res.TxInfo.Cookie);
+            ctx.Send(res.TxInfo.Source, event.release(), 0, res.TxInfo.Cookie);
         }
 
         Self->ScheduleNextGC(ctx);

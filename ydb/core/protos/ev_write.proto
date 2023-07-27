@@ -1,0 +1,50 @@
+import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/core/protos/tx_datashard.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+
+package NKikimrDataEvents;
+option java_package = "ru.yandex.kikimr.proto";
+
+
+message TOperationData {
+    message TArrowData {
+        optional uint64 PayloadIndex = 1;
+    }
+
+    repeated uint32 ColumnIds = 1 [packed = true];
+    oneof Data {
+        TArrowData ArrowData = 900;
+    }
+}
+
+message TEvWrite {
+    optional NKikimrTxDataShard.TTableId TableId = 1;
+    optional uint64 TxId = 2;
+
+    oneof Operation {
+        TOperationData Replace = 900;
+    }
+}
+
+message TEvWriteResult {
+    enum EOperationStatus {
+        UNSPECIFIED = 0;
+        PREPARED = 1;
+        COMPLETED = 2;
+        ABORTED = 3;
+        ERROR = 4;
+        OVERLOADED = 6;
+        BAD_REQUEST = 7;
+    }
+
+    optional EOperationStatus Status = 1;
+    optional Ydb.Issue.IssueMessage IssueMessage = 2;
+
+    optional uint64 Origin = 4;
+    optional uint64 TxId = 5;
+
+    // For Tx planner
+    optional uint64 MinStep = 6;
+    optional uint64 MaxStep = 7;
+    repeated fixed64 DomainCoordinators = 8;
+}

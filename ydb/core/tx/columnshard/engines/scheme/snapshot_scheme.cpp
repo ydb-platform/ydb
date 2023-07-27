@@ -42,4 +42,8 @@ const TSnapshot& TSnapshotSchema::GetSnapshot() const {
     return Snapshot;
 }
 
+ui32 TSnapshotSchema::GetColumnsCount() const {
+    return Schema->num_fields();
+}
+
 }

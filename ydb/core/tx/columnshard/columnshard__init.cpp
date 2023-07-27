@@ -5,6 +5,7 @@
 #include "blob_manager_db.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tx/columnshard/operations/write.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -83,6 +84,10 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         return false;
 
     if (!Self->ProgressTxController.Load(txc)) {
+        return false;
+    }
+
+    if (!Self->OperationsManager.Init(txc)) {
         return false;
     }
 

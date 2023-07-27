@@ -1,7 +1,9 @@
 #pragma once
 
 #include "columnshard_schema.h"
+
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/ev_write/events.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -68,6 +70,7 @@ public:
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;
     const TBasicTxInfo* GetTxInfo(const ui64 txId) const;
+    NEvents::TDataEvents::TCoordinatorInfo GetCoordinatorInfo(const ui64 txId) const;
 
     size_t CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc);
 

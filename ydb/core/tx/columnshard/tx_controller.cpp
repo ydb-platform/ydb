@@ -176,6 +176,15 @@ const TTxController::TBasicTxInfo* TTxController::GetTxInfo(const ui64 txId) con
     return BasicTxInfo.FindPtr(txId);
 }
 
+NEvents::TDataEvents::TCoordinatorInfo TTxController::GetCoordinatorInfo(const ui64 txId) const {
+    auto txInfo = BasicTxInfo.FindPtr(txId);
+    Y_VERIFY(txInfo);
+    if (Owner.ProcessingParams) {
+        return NEvents::TDataEvents::TCoordinatorInfo(Owner.TabletID(), txInfo->MinStep, txInfo->MaxStep, Owner.ProcessingParams->GetCoordinators());
+    }
+    return NEvents::TDataEvents::TCoordinatorInfo(Owner.TabletID(), txInfo->MinStep, txInfo->MaxStep, {});
+}
+
 size_t TTxController::CleanExpiredTxs(NTabletFlatExecutor::TTransactionContext& txc) {
     size_t removedCount = 0;
     if (HaveOutdatedTxs()) {

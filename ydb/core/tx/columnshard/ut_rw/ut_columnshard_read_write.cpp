@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <library/cpp/actors/protos/unittests.pb.h>
 
 namespace NKikimr {
 
@@ -1835,6 +1837,68 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
     }
 }
 
+}
+
+Y_UNIT_TEST_SUITE(EvWrite) {
+    class TArrowData : public NKikimr::NEvWrite::IDataContainer {
+        std::vector<std::pair<TString, TTypeInfo>> YdbSchema;
+        ui64 Index;
+
+    public:
+        TArrowData(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, const ui64 idx)
+            : YdbSchema(ydbSchema)
+            , Index(idx)
+        {
+        }
+
+        void Serialize(NKikimrDataEvents::TOperationData& proto) const override {
+            for (ui32 i = 0; i < YdbSchema.size(); ++i) {
+                proto.AddColumnIds(i + 1);
+            }
+            proto.MutableArrowData()->SetPayloadIndex(Index);
+        }
+
+        std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override {
+            return nullptr;
+        }
+
+        const TString& GetData() const override {
+            return Default<TString>();
+        }
+    };
+
+    Y_UNIT_TEST(WriteInTransaction) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        const ui64 tableId = 1;
+        const TestTableDescription table;
+        SetupSchema(runtime, sender, tableId, table);
+
+        const ui64 txId = 111;
+
+        const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
+        TString blobData = MakeTestBlob({0, 100}, ydbSchema);
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
+        auto dataPtr = std::make_shared<TArrowData>(ydbSchema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        evWrite->AddReplaceOp(tableId, dataPtr);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_EQUAL(event->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::PREPARED);
+        PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+    }
 }
 
 Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {

@@ -15,6 +15,7 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/ev_write/events.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -32,6 +33,8 @@ class TInsertColumnEngineChanges;
 }
 
 namespace NKikimr::NColumnShard {
+
+class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
@@ -146,6 +149,9 @@ class TColumnShard
 
     friend class TTxController;
 
+    friend class TOperationsManager;
+    friend class TWriteOperation;
+
     class TTxProgressTx;
     class TTxProposeCancel;
 
@@ -174,6 +180,7 @@ class TColumnShard
     void Handle(TEvPrivate::TEvForget::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
+    void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
@@ -235,7 +242,7 @@ public:
     };
 
 private:
-    void OverloadWriteFail(const EOverloadStatus& overloadReason, const NEvWrite::TWriteData& writeData, const TActorContext& ctx);
+    void OverloadWriteFail(const EOverloadStatus& overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:
@@ -285,6 +292,7 @@ protected:
             HFunc(TEvPrivate::TEvScanStats, Handle);
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
+            HFunc(NEvents::TDataEvents::TEvWrite, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()
@@ -297,6 +305,7 @@ protected:
 
 private:
     TTxController ProgressTxController;
+    TOperationsManager OperationsManager;
 
     struct TAlterMeta {
         NKikimrTxColumnShard::TSchemaTxBody Body;
@@ -542,6 +551,9 @@ private:
     bool AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, NTabletFlatExecutor::TTransactionContext& txc);
     bool LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransactionKind& txKind, const TString& txBody);
     void TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTable, THashSet<TWriteId>&& writesToAbort);
+
+    TWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
+    TWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 
     void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(bool periodic = false, TBackgroundActivity activity = TBackgroundActivity::All());

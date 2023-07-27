@@ -25,14 +25,13 @@ IBlobConstructor::EStatus TIndexedWriteController::TBlobConstructor::BuildNext()
     const ui64 writeId = writeMeta.GetWriteId();
 
     // Heavy operations inside. We cannot run them in tablet event handler.
-    TString strError;
     {
         NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
-        Batch = SnapshotSchema->PrepareForInsert(Owner.WriteData.GetData().GetData(), Owner.WriteData.GetData().GetArrowSchema(), strError);
+        Batch = Owner.WriteData.GetData().GetArrowBatch();
     }
 
     if (!Batch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId)("error", strError);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId);
         return EStatus::Error;
     }
 

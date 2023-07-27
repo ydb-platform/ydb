@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/protos/ev_write.pb.h>
 
 
 namespace NKikimr::NEvWrite {
@@ -12,28 +13,9 @@ class IDataContainer {
 public:
     using TPtr = std::shared_ptr<IDataContainer>;
     virtual ~IDataContainer() {}
-
-    virtual std::shared_ptr<arrow::Schema> GetArrowSchema() const = 0;
+    virtual void Serialize(NKikimrDataEvents::TOperationData& proto) const = 0;
+    virtual std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const = 0;
     virtual const TString& GetData() const = 0;
-};
-
-class TArrowData : public IDataContainer {
-public:
-    std::shared_ptr<arrow::Schema> GetArrowSchema() const override {
-        return ArrowSchema;
-    }
-
-    const TString& GetData() const override {
-        return IncomingData;
-    }
-
-    bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);
-
-    std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const;
-
-private:
-    TString IncomingData;
-    std::shared_ptr<arrow::Schema> ArrowSchema;
 };
 
 class TWriteMeta {

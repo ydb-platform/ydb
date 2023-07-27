@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/granules_table.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
+#include <ydb/core/tx/columnshard/operations/write.h>
 
 #include <type_traits>
 
@@ -34,6 +35,7 @@ struct Schema : NIceDb::Schema {
         GranulesTableId,
         ColumnsTableId,
         CountersTableId,
+        OperationsTableId,
     };
 
     enum class EValueIds : ui32 {
@@ -246,6 +248,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Index, Counter, ValueUI64>;
     };
 
+    struct Operations : NIceDb::Schema::Table<OperationsTableId> {
+        struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct CreatedAt : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct GlobalWriteId : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<WriteId>;
+        using TColumns = TableColumns<TxId, WriteId, Status, CreatedAt, GlobalWriteId>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -263,7 +276,8 @@ struct Schema : NIceDb::Schema {
         IndexColumns,
         IndexCounters,
         SmallBlobs,
-        OneToOneEvictedBlobs
+        OneToOneEvictedBlobs,
+        Operations
         >;
 
     //
@@ -648,6 +662,21 @@ struct Schema : NIceDb::Schema {
         }
         return true;
     }
+
+    // Operations
+    static void Operations_Write(NIceDb::TNiceDb& db, const TWriteOperation& operation) {
+        db.Table<Operations>().Key((ui64)operation.GetWriteId()).Update(
+            NIceDb::TUpdate<Operations::Status>((ui32)operation.GetStatus()),
+            NIceDb::TUpdate<Operations::CreatedAt>(operation.GetCreatedAt().Seconds()),
+            NIceDb::TUpdate<Operations::GlobalWriteId>(operation.GetGlobalWriteId()),
+            NIceDb::TUpdate<Operations::TxId>(operation.GetTxId())
+        );
+    }
+
+    static void Operations_Erase(NIceDb::TNiceDb& db, const TWriteId writeId) {
+        db.Table<Operations>().Key((ui64)writeId).Delete();
+    }
+
 };
 
 }

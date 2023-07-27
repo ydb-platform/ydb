@@ -195,7 +195,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
             }
 
-            const auto& txInfo =  Self->ProgressTxController.RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
+            const auto& txInfo = Self->ProgressTxController.RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
             minStep = txInfo.MinStep;
             maxStep = txInfo.MaxStep;
 

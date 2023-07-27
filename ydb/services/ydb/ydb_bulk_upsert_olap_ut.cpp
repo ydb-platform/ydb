@@ -356,6 +356,61 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rows[0],
                 "123123bs,testd,subscr,2020-01-17T22:58:50.000000Z,1973-11-27T01:52:03.000000Z,(empty maybe),http,ru,AsiaNovo,hello,{}");
+
+            result = session.DropTable(tablePath).GetValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        // KIKIMR-18859
+        {
+            // CREATE TABLE import1(a Text NOT NULL, b Text, c Text, PRIMARY KEY(a))
+            std::vector<std::pair<TString, NYdb::EPrimitiveType>> schema = {
+                { "a", NYdb::EPrimitiveType::Utf8 },
+                { "b", NYdb::EPrimitiveType::Utf8 },
+                { "c", NYdb::EPrimitiveType::Utf8 }
+            };
+
+            auto tableBuilder = client.GetTableBuilder();
+            for (auto& [name, type] : schema) {
+                if (name == "a") {
+                    tableBuilder.AddNonNullableColumn(name, type);
+                } else {
+                    tableBuilder.AddNullableColumn(name, type);
+                }
+            }
+            tableBuilder.SetPrimaryKeyColumns({"a"});
+            auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            // for i in `seq 1 9999`; do echo 'aaa'"$i"',bbb,ccc'; done | ydb import file csv -p import1 --columns "a,b,b"
+            TString csv;
+            csv += "a,b,b\n"; // wrong header
+            for (size_t i = 0; i < 10000; ++i) {
+                csv += TString("aaa") + ToString(i) + ",bbb,ccc\n";
+            }
+
+            Ydb::Formats::CsvSettings csvSettings;
+            csvSettings.set_header(true);
+            csvSettings.set_delimiter(",");
+
+            TString formatSettings;
+            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+
+            NYdb::NTable::TBulkUpsertSettings upsertSettings;
+            upsertSettings.FormatSettings(formatSettings);
+
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::CSV, csv, {}, upsertSettings).GetValueSync();
+
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::BAD_REQUEST, res.GetIssues().ToString());
+
+            result = session.DropTable(tablePath).GetValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
 

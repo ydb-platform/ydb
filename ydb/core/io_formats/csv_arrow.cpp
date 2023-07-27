@@ -86,23 +86,16 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
     if (!parsedBatch) {
         return parsedBatch;
     }
-    std::shared_ptr<arrow::Schema> schema;
-    {
-        arrow::SchemaBuilder sBuilder;
-        for (auto&& f : parsedBatch->schema()->fields()) {
-            Y_VERIFY(sBuilder.AddField(std::make_shared<arrow::Field>(f->name(), f->type())).ok());
 
-        }
-        auto resultSchema = sBuilder.Finish();
-        Y_VERIFY(resultSchema.ok());
-        schema = *resultSchema;
-    }
+    const auto& schema = parsedBatch->schema();
 
     std::vector<std::shared_ptr<arrow::Array>> resultColumns;
     std::set<std::string> columnsFilter(ResultColumns.begin(), ResultColumns.end());
     arrow::SchemaBuilder sBuilderFixed;
-    for (auto&& f : schema->fields()) {
+
+    for (const auto& f : schema->fields()) {
         auto fArr = parsedBatch->GetColumnByName(f->name());
+        Y_VERIFY(fArr);
         std::shared_ptr<arrow::DataType> originalType;
         if (columnsFilter.contains(f->name()) || columnsFilter.empty()) {
             auto it = OriginalColumnTypes.find(f->name());
@@ -180,9 +173,33 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
     }
 
     std::shared_ptr<arrow::RecordBatch> batchParsed;
-    Reader->ReadNext(&batchParsed).ok();
+    auto res = Reader->ReadNext(&batchParsed);
+    if (!res.ok()) {
+        errString = ErrorPrefix() + res.ToString();
+        return {};
+    }
+
+    if (batchParsed) {
+        if (!batchParsed->Validate().ok()) {
+            errString = ErrorPrefix() + batchParsed->Validate().ToString();
+            return {};
+        }
+        if (!batchParsed->schema()->HasDistinctFieldNames()) {
+            errString = ErrorPrefix() + "duplicate column names:";
+            for (auto& field : batchParsed->schema()->fields()) {
+                if (batchParsed->schema()->GetFieldIndex(field->name()) == -1) {
+                    errString += " '" + field->name() + "'";
+                }
+            }
+            return {};
+        }
+    }
 
     std::shared_ptr<arrow::RecordBatch> batch = ConvertColumnTypes(batchParsed);
+    if (batch && !batch->Validate().ok()) {
+        errString = ErrorPrefix() + batch->Validate().ToString();
+        return {};
+    }
 
     if (batch && !ResultColumns.empty()) {
         batch = NArrow::ExtractColumns(batch, ResultColumns);

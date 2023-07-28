@@ -4,6 +4,8 @@
 #include "column_engine.h"
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/columnshard_ttl.h>
+#include "scheme/tier_info.h"
 #include "storage/granule.h"
 #include "storage/storage.h"
 #include "changes/indexation.h"
@@ -21,6 +23,51 @@ class TGranulesTable;
 class TColumnsTable;
 class TCountersTable;
 
+class TEvictionsController {
+public:
+    class TTieringWithPathId {
+    private:
+        const ui64 PathId;
+        TTiering TieringInfo;
+    public:
+        TTieringWithPathId(const ui64 pathId, TTiering&& tieringInfo)
+            : PathId(pathId)
+            , TieringInfo(std::move(tieringInfo))
+        {
+
+        }
+
+        ui64 GetPathId() const {
+            return PathId;
+        }
+
+        const TTiering& GetTieringInfo() const {
+            return TieringInfo;
+        }
+    };
+private:
+    THashMap<ui64, TTiering> OriginalTierings;
+    std::map<TMonotonic, std::vector<TTieringWithPathId>> NextCheckInstantForTTL;
+    std::map<TMonotonic, std::vector<TTieringWithPathId>> NextCheckInstantForTierings;
+
+    std::map<TMonotonic, std::vector<TTieringWithPathId>> BuildNextInstantCheckers(THashMap<ui64, TTiering>&& info) {
+        std::map<TMonotonic, std::vector<TTieringWithPathId>> result;
+        std::vector<TTieringWithPathId> newTasks;
+        for (auto&& i : info) {
+            newTasks.emplace_back(i.first, std::move(i.second));
+        }
+        result.emplace(TMonotonic::Zero(), std::move(newTasks));
+        return result;
+    }
+public:
+    std::map<TMonotonic, std::vector<TTieringWithPathId>>& MutableNextCheckInstantForTierings() {
+        return NextCheckInstantForTierings;
+    }
+
+    void RefreshTierings(std::optional<THashMap<ui64, TTiering>>&& tierings, const NColumnShard::TTtl& ttl);
+};
+
+
 /// Engine with 2 tables:
 /// - Granules: PK -> granules (use part of PK)
 /// - Columns: granule -> blobs
@@ -35,7 +82,20 @@ class TColumnEngineForLogs : public IColumnEngine {
 private:
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
-    THashMap<ui64, TMonotonic> NextCheckInstantForTTL;
+    TEvictionsController EvictionsController;
+    class TTieringProcessContext {
+    public:
+        bool AllowEviction = true;
+        bool AllowDrop = true;
+        const TInstant Now;
+        const ui64 MaxEvictBytes;
+        std::shared_ptr<TTTLColumnEngineChanges> Changes;
+        std::map<ui64, TDuration> DurationsForced;
+        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes);
+    };
+
+    TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
+    bool DrainEvictionQueue(std::map<TMonotonic, std::vector<TEvictionsController::TTieringWithPathId>>& evictionsQueue, TTieringProcessContext& context) const;
 public:
     class TChangesConstructor : public TColumnEngineChanges {
     public:
@@ -69,7 +129,7 @@ public:
 
     TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits = {});
 
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager) override;
+    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) override;
 
     const TVersionedIndex& GetVersionedIndex() const override {
         return VersionedIndex;
@@ -108,12 +168,11 @@ public:
 public:
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
 
-    std::shared_ptr<TInsertColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) override;
-    std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo, const TCompactionLimits& limits) override;
-    std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
-                                                       ui32 maxRecords) override;
+    std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
+    std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo, const TCompactionLimits& limits) noexcept override;
+    std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
     std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-                                                   ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) override;
+                                                   ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
                       const TSnapshot& snapshot) noexcept override;

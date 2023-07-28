@@ -5,6 +5,8 @@
 namespace NKikimr::NOlap {
 
 class TChangesWithAppend: public TColumnEngineChanges {
+private:
+    THashMap<ui64, NOlap::TTiering> TieringInfo;
 protected:
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
@@ -13,9 +15,7 @@ protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& /*context*/) override {
 
     }
-    virtual void DoStart(NColumnShard::TColumnShard& /*self*/) override {
-
-    }
+    virtual void DoStart(NColumnShard::TColumnShard& self) override;
     std::vector<TPortionInfo> MakeAppendedPortions(const ui64 pathId,
         const std::shared_ptr<arrow::RecordBatch> batch,
         const ui64 granule,

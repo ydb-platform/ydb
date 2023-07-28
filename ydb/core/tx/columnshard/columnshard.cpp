@@ -129,16 +129,15 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Manual) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
         EnqueueBackgroundActivities();
-        return;
-    }
-
-    if (LastPeriodicBackActivation < TInstant::Now() - ActivationPeriod) {
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
         SendWaitPlanStep(GetOutdatedStep());
-    }
 
-    SendPeriodicStats();
-    ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+        SendPeriodicStats();
+        ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+    }
 }
 
 void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {

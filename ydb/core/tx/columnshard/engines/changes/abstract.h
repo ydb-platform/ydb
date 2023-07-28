@@ -137,32 +137,13 @@ public:
 
 class TConstructionContext: TNonCopyable {
 public:
-    using TTieringsHash = THashMap<ui64, NKikimr::NOlap::TTiering>;
-private:
-    const TTieringsHash* TieringMap = nullptr;
-public:
     const TVersionedIndex& SchemaVersions;
     const NColumnShard::TIndexationCounters Counters;
-
-    TConstructionContext(const TVersionedIndex& schemaVersions, const TTieringsHash& tieringMap, const NColumnShard::TIndexationCounters counters)
-        : TieringMap(&tieringMap)
-        , SchemaVersions(schemaVersions)
-        , Counters(counters)
-    {
-
-    }
 
     TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters counters)
         : SchemaVersions(schemaVersions)
         , Counters(counters) {
 
-    }
-
-    const THashMap<ui64, NKikimr::NOlap::TTiering>& GetTieringMap() const {
-        if (TieringMap) {
-            return *TieringMap;
-        }
-        return Default<THashMap<ui64, NKikimr::NOlap::TTiering>>();
     }
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "cleanup.h"
+#include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
 
 namespace NKikimr::NOlap {
 
@@ -9,6 +10,7 @@ private:
     using TBase = TCleanupColumnEngineChanges;
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
     ui64 ExportNo = 0;
+
     bool UpdateEvictedPortion(TPortionInfo& portionInfo,
         TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
         std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs, TConstructionContext& context) const;
@@ -27,6 +29,7 @@ protected:
     }
 public:
     std::vector<TColumnRecord> EvictedRecords;
+    THashMap<ui64, NOlap::TTiering> Tiering;
     std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;
 

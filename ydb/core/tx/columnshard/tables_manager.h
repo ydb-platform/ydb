@@ -142,8 +142,8 @@ public:
         return Ttl;
     }
 
-    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction, TInstant now, bool force) {
-        Ttl.AddTtls(eviction, now, force);
+    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) {
+        Ttl.AddTtls(eviction);
     }
 
     const THashSet<ui64>& GetPathsToDrop() const {
@@ -209,8 +209,6 @@ public:
 
     void AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db);
     void AddTableVersion(const ui64 pathId, const TRowVersion& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db);
-
-    void OnTtlUpdate();
 private:
     void IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema);
     static NOlap::TIndexInfo DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);

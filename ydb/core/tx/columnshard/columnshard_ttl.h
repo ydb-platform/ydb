@@ -5,9 +5,6 @@ namespace NKikimr::NColumnShard {
 
 class TTtl {
 public:
-    static constexpr const ui64 DEFAULT_TTL_TIMEOUT_SEC = 60 * 60;
-    static constexpr const ui64 DEFAULT_REPEAT_TTL_TIMEOUT_SEC = 10;
-
     struct TEviction {
         TDuration EvictAfter;
         TString ColumnName;
@@ -68,21 +65,10 @@ public:
         PathTtls.erase(pathId);
     }
 
-    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction, TInstant now, bool force = false) {
-        if ((now < LastRegularTtl + TtlTimeout) && !force) {
-            return;
-        }
-
+    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) const {
         for (auto& [pathId, descr] : PathTtls) {
-            eviction[pathId].Ttl = Convert(descr, now);
+            eviction[pathId].Ttl = Convert(descr);
         }
-
-        LastRegularTtl = now;
-    }
-
-    void Repeat() {
-        LastRegularTtl -= TtlTimeout;
-        LastRegularTtl += RepeatTtlTimeout;
     }
 
     const THashSet<TString>& TtlColumns() const { return Columns; }
@@ -90,16 +76,12 @@ public:
 private:
     THashMap<ui64, TDescription> PathTtls; // pathId -> ttl
     THashSet<TString> Columns;
-    TDuration TtlTimeout{TDuration::Seconds(DEFAULT_TTL_TIMEOUT_SEC)};
-    TDuration RepeatTtlTimeout{TDuration::Seconds(DEFAULT_REPEAT_TTL_TIMEOUT_SEC)};
-    TInstant LastRegularTtl;
 
-    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr, TInstant timePoint) const
+    std::shared_ptr<NOlap::TTierInfo> Convert(const TDescription& descr) const
     {
         if (descr.Eviction) {
             auto& evict = descr.Eviction;
-            TInstant border = timePoint - evict->EvictAfter;
-            return NOlap::TTierInfo::MakeTtl(border, evict->ColumnName, evict->UnitsInSecond);
+            return NOlap::TTierInfo::MakeTtl(evict->EvictAfter, evict->ColumnName, evict->UnitsInSecond);
         }
         return {};
     }

@@ -657,14 +657,12 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             }
         }
         if (i) {
-            ui32 version = i + 1;
-            {
-                const bool ok = ProposeSchemaTx(runtime, sender,
-                    TTestSchema::AlterTableTxBody(tableId, version, specs[i]),
-                    NOlap::TSnapshot(++planStep, ++txId));
-                UNIT_ASSERT(ok);
-                PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
-            }
+            const ui32 version = i + 1;
+            const bool ok = ProposeSchemaTx(runtime, sender,
+                TTestSchema::AlterTableTxBody(tableId, version, specs[i]),
+                NOlap::TSnapshot(++planStep, ++txId));
+            UNIT_ASSERT(ok);
+            PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
         }
         if (specs[i].HasTiers() || reboots) {
             ProvideTieringSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
@@ -700,7 +698,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             auto read = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep - 1, Max<ui64>(), tableId);
             Proto(read.get()).AddColumnNames(specs[i].TtlColumn);
 
-            counter.CaptureReadEvents = 1; // TODO: we need affected by tiering blob here
+            counter.CaptureReadEvents = specs[i].WaitEmptyAfter ? 0 : 1; // TODO: we need affected by tiering blob here
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
             counter.WaitReadsCaptured(runtime);
         }
@@ -907,6 +905,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     THashSet<ui32> forgets;
     if (testTtl) {
         changes.AddTtlAlters(spec, {allowBoth, allowOne, allowNone}, alters);
+        alters.back().WaitEmptyAfter = true;
     } else {
         changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
 

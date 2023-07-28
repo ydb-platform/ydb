@@ -106,6 +106,7 @@ struct TTestSchema {
     struct TTableSpecials : public TStorageTier {
         std::vector<TStorageTier> Tiers;
         bool CompositeMarks = false;
+        bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
 

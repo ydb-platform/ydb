@@ -134,7 +134,7 @@ private:
         virtual bool DoExecute() override {
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
-            NOlap::TConstructionContext context(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
             TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
             return true;
         }

@@ -174,7 +174,7 @@ bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TP
     TConstructionContext& context) const {
     Y_VERIFY(portionInfo.TierName != evictFeatures.TargetTierName);
 
-    auto* tiering = context.GetTieringMap().FindPtr(evictFeatures.PathId);
+    auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
     Y_VERIFY(tiering);
     auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
     if (!compression) {

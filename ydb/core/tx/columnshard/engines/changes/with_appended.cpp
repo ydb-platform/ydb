@@ -113,7 +113,7 @@ std::vector<NKikimr::NOlap::TPortionInfo> TChangesWithAppend::MakeAppendedPortio
     TString tierName;
     std::optional<NArrow::TCompression> compression;
     if (pathId) {
-        if (auto* tiering = context.GetTieringMap().FindPtr(pathId)) {
+        if (auto* tiering = TieringInfo.FindPtr(pathId)) {
             tierName = tiering->GetHottestTierName();
             if (const auto& tierCompression = tiering->GetCompression(tierName)) {
                 compression = *tierCompression;
@@ -143,6 +143,12 @@ std::vector<NKikimr::NOlap::TPortionInfo> TChangesWithAppend::MakeAppendedPortio
     }
 
     return out;
+}
+
+void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& self) {
+    if (self.Tiers) {
+        TieringInfo = self.Tiers->GetTiering();
+    }
 }
 
 }

@@ -250,9 +250,10 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 }
 
                 if (statusMessage.empty()) {
+                    const TInstant now = TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now();
                     for (ui64 pathId : ttlBody.GetPathIds()) {
                         NOlap::TTiering tiering;
-                        tiering.Ttl = NOlap::TTierInfo::MakeTtl(unixTime, columnName);
+                        tiering.Ttl = NOlap::TTierInfo::MakeTtl(now - unixTime, columnName);
                         pathTtls.emplace(pathId, std::move(tiering));
                     }
                 }

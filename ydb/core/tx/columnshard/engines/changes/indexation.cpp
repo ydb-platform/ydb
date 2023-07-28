@@ -56,6 +56,7 @@ bool TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
 }
 
 void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    TBase::DoStart(self);
     self.BackgroundController.StartIndexing();
 }
 

@@ -260,7 +260,7 @@ TCompactionLimits TestLimits() {
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
             std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    std::shared_ptr<TInsertColumnEngineChanges> changes = engine.StartInsert(TestLimits(), std::move(dataToIndex));
+    std::shared_ptr<TInsertColumnEngineChanges> changes = engine.StartInsert(std::move(dataToIndex));
     if (!changes) {
         return false;
     }
@@ -312,7 +312,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, TestLimits(), pathsToDrop, 1000);
+    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
         THashMap<ui64, NOlap::TTiering> pathTtls;
         NOlap::TTiering tiering;
-        tiering.Ttl = NOlap::TTierInfo::MakeTtl(TInstant::MicroSeconds(10000), "timestamp");
+        tiering.Ttl = NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp");
         pathTtls.emplace(pathId, std::move(tiering));
         Ttl(engine, db, pathTtls, 2);
 

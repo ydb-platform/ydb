@@ -106,6 +106,16 @@ public:
     bool HasTtl() const { return Activity & TTL; }
     bool HasAll() const { return Activity == ALL; }
 
+    TString DebugString() const {
+        return TStringBuilder()
+            << "indexation:" << HasIndexation() << ";"
+            << "compaction:" << HasCompaction() << ";"
+            << "cleanup:" << HasCleanup() << ";"
+            << "ttl:" << HasTtl() << ";"
+            ;
+
+    }
+
 private:
     EBackActivity Activity = NONE;
 
@@ -494,7 +504,6 @@ private:
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TDuration StatsReportInterval = TDuration::Seconds(10);
     TInstant LastAccessTime;
-    TInstant LastPeriodicBackActivation;
     TInstant LastStatsReport;
 
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.

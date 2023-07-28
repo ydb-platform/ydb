@@ -533,7 +533,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
-        const TInstant pkStart = Now() - TDuration::Days(15);
+        const TInstant now = Now() - TDuration::Days(100);
+        runtime.UpdateCurrentTime(now);
+        const TInstant pkStart = now - TDuration::Days(15);
 
         auto batch = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
         auto batchSize = NArrow::GetBatchDataSize(batch);
@@ -867,11 +869,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         const ui32 reduceStepsCount = 1;
         for (ui32 i = 0; i < reduceStepsCount; ++i) {
             runtime.AdvanceCurrentTime(TDuration::Seconds(numRecords * (i + 1) / reduceStepsCount + 500000));
-            const TInstant start = TInstant::Now();
             const ui64 purposeSize = 800000000.0 * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeRecords = numRecords * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeMinTimestamp = numRecords * 1.0 * (i + 1) / reduceStepsCount * 1000000;
+            const TInstant start = TInstant::Now();
             while (bsCollector.GetChannelSize(2) > purposeSize && TInstant::Now() - start < TDuration::Seconds(60)) {
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             Cerr << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;

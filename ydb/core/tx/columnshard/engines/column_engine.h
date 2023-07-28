@@ -9,6 +9,7 @@
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
+class TTtl;
 }
 
 namespace NKikimr::NOlap {
@@ -358,13 +359,13 @@ public:
                                                 const THashSet<ui32>& columnIds,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
     virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) = 0;
-    virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) = 0;
+    virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept = 0;
     virtual std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                                  const TCompactionLimits& limits) = 0;
-    virtual std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
-                                                               ui32 maxRecords) = 0;
+                                                                  const TCompactionLimits& limits) noexcept = 0;
+    virtual std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                               ui32 maxRecords) noexcept = 0;
     virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
-                                                           ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) = 0;
+                                                           ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     //virtual void UpdateTableSchema(ui64 pathId, const TSnapshot& snapshot, TIndexInfo&& info) = 0; // TODO
@@ -372,7 +373,7 @@ public:
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
     virtual TSnapshot LastUpdate() const { return TSnapshot::Zero(); }
-    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager) = 0;
+    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) = 0;
 };
 
 }

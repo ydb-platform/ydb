@@ -183,15 +183,14 @@ ui64 TTablesManager::GetMemoryUsage() const {
     return memory;
 }
 
-void TTablesManager::OnTtlUpdate() {
-    Ttl.Repeat();
-}
-
 void TTablesManager::DropTable(const ui64 pathId, const TRowVersion& version, NIceDb::TNiceDb& db) {
     auto& table = Tables.at(pathId);
     table.SetDropVersion(version);
     PathsToDrop.insert(pathId);
     Ttl.DropPathTtl(pathId);
+    if (PrimaryIndex) {
+        PrimaryIndex->OnTieringModified(nullptr, Ttl);
+    }
     Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);
 }
 
@@ -261,6 +260,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
         } else {
             Ttl.DropPathTtl(pathId);
         }
+        if (PrimaryIndex) {
+            PrimaryIndex->OnTieringModified(nullptr, Ttl);
+        }
+
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
     table.AddVersion(version, versionInfo);
@@ -278,6 +281,7 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
         Y_VERIFY(lastIndexInfo.GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
     PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
+    PrimaryIndex->OnTieringModified(nullptr, Ttl);
 
     for (auto& columnName : Ttl.TtlColumns()) {
         PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);

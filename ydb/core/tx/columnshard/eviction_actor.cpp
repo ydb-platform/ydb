@@ -132,7 +132,7 @@ private:
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-            NOlap::TConstructionContext context(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
             TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
             if (TxEvent->Blobs.empty()) {
                 TxEvent->SetPutStatus(NKikimrProto::OK);

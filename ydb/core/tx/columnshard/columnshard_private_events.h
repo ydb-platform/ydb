@@ -30,7 +30,6 @@ struct TEvPrivate {
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NOlap::TVersionedIndex IndexInfo;
-        THashMap<ui64, NKikimr::NOlap::TTiering> Tiering;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
         std::vector<TString> Blobs;
@@ -51,11 +50,6 @@ struct TEvPrivate {
             , CacheData(cacheData)
         {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
-        }
-
-        TEvWriteIndex& SetTiering(const THashMap<ui64, NKikimr::NOlap::TTiering>& tiering) {
-            Tiering = tiering;
-            return *this;
         }
 
         const TBlobPutResult& GetPutResult() const {

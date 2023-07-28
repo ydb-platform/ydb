@@ -15,20 +15,20 @@ class TTierInfo {
 private:
     TString Name;
     TString EvictColumnName;
-    TInstant EvictBorder;
+    TDuration EvictDuration;
     bool NeedExport = false;
 
     ui32 TtlUnitsInSecond;
     std::optional<NArrow::TCompression> Compression;
 public:
-    TTierInfo(const TString& tierName, TInstant evictBorder, const TString& column, ui32 unitsInSecond = 0)
+    TTierInfo(const TString& tierName, TDuration evictDuration, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
         , EvictColumnName(column)
-        , EvictBorder(evictBorder)
+        , EvictDuration(evictDuration)
         , TtlUnitsInSecond(unitsInSecond)
     {
-        Y_VERIFY(!Name.empty());
-        Y_VERIFY(!EvictColumnName.empty());
+        Y_VERIFY(!!Name);
+        Y_VERIFY(!!EvictColumnName);
     }
 
     const TString& GetName() const {
@@ -39,8 +39,12 @@ public:
         return EvictColumnName;
     }
 
-    const TInstant GetEvictBorder() const {
-        return EvictBorder;
+    TInstant GetEvictInstant(const TInstant now) const {
+        return now - EvictDuration;
+    }
+
+    TDuration GetEvictDuration() const {
+        return EvictDuration;
     }
 
     bool GetNeedExport() const {
@@ -70,18 +74,19 @@ public:
 
     std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
 
-    static std::shared_ptr<TTierInfo> MakeTtl(TInstant ttlBorder, const TString& ttlColumn, ui32 unitsInSecond = 0) {
-        return std::make_shared<TTierInfo>("TTL", ttlBorder, ttlColumn, unitsInSecond);
+    static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
+        return std::make_shared<TTierInfo>("TTL", evictDuration, ttlColumn, unitsInSecond);
     }
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "tier name '" << Name << "' border '" << EvictBorder << "' column '" << EvictColumnName << "' ";
+        sb << "name=" << Name << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";compression=";
         if (Compression) {
             sb << Compression->DebugString();
         } else {
             sb << "NOT_SPECIFIED(Default)";
         }
+        sb << ";";
         return sb;
     }
 };
@@ -95,16 +100,16 @@ public:
     }
 
     bool operator < (const TTierRef& b) const {
-        if (Info->GetEvictBorder() < b.Info->GetEvictBorder()) {
+        if (Info->GetEvictDuration() > b.Info->GetEvictDuration()) {
             return true;
-        } else if (Info->GetEvictBorder() == b.Info->GetEvictBorder()) {
+        } else if (Info->GetEvictDuration() == b.Info->GetEvictDuration()) {
             return Info->GetName() > b.Info->GetName(); // add stability: smaller name is hotter
         }
         return false;
     }
 
     bool operator == (const TTierRef& b) const {
-        return Info->GetEvictBorder() == b.Info->GetEvictBorder()
+        return Info->GetEvictDuration() == b.Info->GetEvictDuration()
             && Info->GetName() == b.Info->GetName();
     }
 
@@ -126,25 +131,7 @@ class TTiering {
     TSet<TTierRef> OrderedTiers;
 public:
 
-    std::shared_ptr<TTierInfo> GetMainTierInfo() const {
-        auto ttl = Ttl;
-        auto tier = OrderedTiers.size() ? OrderedTiers.begin()->GetPtr() : nullptr;
-        if (!ttl && !tier) {
-            return nullptr;
-        } else if (!tier) {
-            return ttl;
-        } else if (!ttl) {
-            return tier;
-        } else {
-            const TInstant ttlInstant = ttl->GetEvictBorder();
-            const TInstant tierInstant = tier->GetEvictBorder();
-            if (ttlInstant < tierInstant) {
-                return tier;
-            } else {
-                return ttl;
-            }
-        }
-    }
+    std::shared_ptr<TTierInfo> GetMainTierInfo() const;
 
     std::shared_ptr<TTierInfo> Ttl;
 
@@ -186,12 +173,12 @@ public:
         }
     }
 
-    std::optional<TInstant> GetEvictBorder() const {
+    std::optional<TInstant> GetEvictInstant(const TInstant now) const {
         auto mainTier = GetMainTierInfo();
         if (!mainTier) {
             return {};
         } else {
-            return mainTier->GetEvictBorder();
+            return mainTier->GetEvictInstant(now);
         }
     }
 

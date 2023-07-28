@@ -24,8 +24,6 @@ class TMonQueryProcessor : public TActorBootstrapped<TMonQueryProcessor> {
     const ui32 GroupId;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     NMon::TEvHttpInfo::TPtr Ev;
-    std::vector<TString> Urls;
-    ui32 PendingReplyCount = 0;
 
 public:
     TMonQueryProcessor(TIntrusivePtr<TBlobStorageGroupProxyMon> mon, TIntrusivePtr<TGroupQueues> groupQueues,
@@ -38,34 +36,15 @@ public:
     {}
 
     void Bootstrap() {
+        std::vector<TString> urls;
         if (Info) {
-            const TInstant deadline = TActivationContext::Now() + TDuration::Seconds(5);
-            const TString pagePath(Ev->Get()->Request.GetPath());
-
-            Urls.resize(Info->GetTotalVDisksNum());
-            for (ui32 i = 0; i < Urls.size(); ++i) {
+            for (ui32 i = 0; i < Info->GetTotalVDisksNum(); ++i) {
                 const TActorId& serviceId = Info->GetActorId(i);
                 ui32 nodeId, pdiskId, vslotId;
                 std::tie(nodeId, pdiskId, vslotId) = DecomposeVDiskServiceId(serviceId);
-                const TString path = Sprintf("actors/vdisks/vdisk%09" PRIu32 "_%09" PRIu32, pdiskId, vslotId);
-                Send(NCrossRef::MakeCrossRefActorId(), new NCrossRef::TEvGenerateCrossRef(pagePath, nodeId, path, deadline), 0, i);
-                ++PendingReplyCount;
+                urls.push_back(Sprintf("node/%u/actors/vdisks/vdisk%09" PRIu32 "_%09" PRIu32, nodeId, pdiskId, vslotId));
             }
         }
-        Become(&TThis::StateFunc);
-        if (!PendingReplyCount) {
-            GenerateResponse();
-        }
-    }
-
-    void Handle(NCrossRef::TEvCrossRef::TPtr ev) {
-        Urls[ev->Cookie] = ev->Get()->Url;
-        if (!--PendingReplyCount) {
-            GenerateResponse();
-        }
-    }
-
-    void GenerateResponse() {
         const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
         if (cgi.Has("submit_timestats")) {
             Mon->TimeStats.Submit(cgi);
@@ -127,7 +106,7 @@ public:
                                                     }
 
                                                     const TVDiskID vdiskId = Info->GetVDiskId(vdisk.VDiskIdShort);
-                                                    if (const auto& url = Urls[vdisk.OrderNumber]) {
+                                                    if (const auto& url = urls[vdisk.OrderNumber]) {
                                                         str << "<a href=\"" << url << "\">" << vdiskId << "</a>";
                                                     } else {
                                                         str << vdiskId;
@@ -318,10 +297,6 @@ public:
         Send(Ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
         PassAway();
     }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(NCrossRef::TEvCrossRef, Handle);
-    )
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

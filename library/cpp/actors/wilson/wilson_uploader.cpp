@@ -2,8 +2,8 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/wilson/protos/service.pb.h>
-#include <library/cpp/actors/wilson/protos/service.grpc.pb.h>
+#include <opentelemetry/proto/collector/trace/v1/trace_service.pb.h>
+#include <opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
 #include <grpc++/grpc++.h>

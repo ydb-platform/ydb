@@ -1,12 +1,7 @@
 PROTO_LIBRARY()
 
-    GRPC()
-
-    SRCS(
-        common.proto
-        resource.proto
-        service.proto
-        trace.proto
+    PEERDIR(
+        contrib/libs/opentelemetry-proto
     )
 
     EXCLUDE_TAGS(

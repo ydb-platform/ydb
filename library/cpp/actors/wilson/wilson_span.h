@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/wilson/protos/trace.pb.h>
+#include <opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/hash.h>
 #include <util/datetime/cputimer.h>
 

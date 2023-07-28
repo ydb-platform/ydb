@@ -1,0 +1,30 @@
+package NYT.NYTree.NProto;
+
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+
+option java_package = "tech.ytsaurus.ytree";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/ytree";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TAttribute
+{
+    required string key = 1;
+    required bytes value = 2;
+}
+
+message TAttributeDictionary
+{
+    option (NYT.NYson.NProto.attribute_dictionary) = true;
+    repeated TAttribute attributes = 1;
+}
+
+message TAttributeFilter
+{
+    repeated string keys = 1;
+    repeated string paths = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

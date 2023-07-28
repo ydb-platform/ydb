@@ -1,0 +1,15 @@
+#include "batch_request.h"
+#include "client.h"
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+IBatchRequestBase& IBatchRequest::WithTransaction(const ITransactionPtr& transaction)
+{
+    return WithTransaction(transaction->GetId());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

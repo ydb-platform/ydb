@@ -20,6 +20,7 @@ add_subdirectory(peephole_opt)
 add_subdirectory(services)
 add_subdirectory(sql_types)
 add_subdirectory(type_ann)
+add_subdirectory(url_preprocessing)
 add_subdirectory(user_data)
 add_subdirectory(ut)
 get_built_tool_path(

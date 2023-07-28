@@ -1,0 +1,142 @@
+import "yt/yt_proto/yt/formats/extension.proto";
+
+package NYT.NTestingFileOptions;
+
+option (NYT.file_default_field_flags) = SERIALIZATION_YT;
+option (NYT.file_default_field_flags) = MAP_AS_LIST_OF_STRUCTS;
+option (NYT.file_default_message_flags) = DEPRECATED_SORT_FIELDS_AS_IN_PROTO_FILE;
+option (NYT.file_default_oneof_flags) = SEPARATE_FIELDS;
+
+message TUrlRow
+{
+    optional string Host = 1     [(NYT.column_name) = "Host"];
+    optional string Path = 2     [(NYT.column_name) = "Path"];
+    optional sint32 HttpCode = 3 [(NYT.column_name) = "HttpCode"];
+}
+
+message TRowFieldSerializationOption
+{
+    optional TUrlRow UrlRow_1 = 1 [(NYT.flags) = SERIALIZATION_PROTOBUF];
+    optional TUrlRow UrlRow_2 = 2;
+}
+
+message TRowMixedSerializationOptions
+{
+    option (NYT.default_field_flags) = SERIALIZATION_PROTOBUF;
+    optional TUrlRow UrlRow_1 = 1;
+    optional TUrlRow UrlRow_2 = 2 [(NYT.flags) = SERIALIZATION_YT];
+}
+
+message TRowSerializedRepeatedFields
+{
+    repeated int64 Ints = 1;
+    repeated TUrlRow UrlRows = 2;
+}
+
+message TFieldSortOrder
+{
+    message TEmbeddedDefault {
+        optional int64 x = 2;
+        optional string y = 12;
+        optional bool z = 1;
+    }
+    message TEmbeddedAsInProtoFile {
+        option (NYT.message_flags) = DEPRECATED_SORT_FIELDS_AS_IN_PROTO_FILE;
+        optional int64 x = 2;
+        optional string y = 12;
+        optional bool z = 1;
+    }
+    message TEmbeddedByFieldNumber {
+        option (NYT.message_flags) = SORT_FIELDS_BY_FIELD_NUMBER;
+        optional int64 x = 2;
+        optional string y = 12;
+        optional bool z = 1;
+    }
+    option (NYT.default_field_flags) = SERIALIZATION_YT;
+
+    optional TEmbeddedDefault EmbeddedDefault = 1;
+    optional TEmbeddedAsInProtoFile EmbeddedAsInProtoFile = 2;
+    optional TEmbeddedByFieldNumber EmbeddedByFieldNumber = 3;
+}
+
+message TWithMap
+{
+    message TEmbedded {
+        optional int64 x = 1;
+        optional string y = 2;
+    }
+
+    map<int64, TEmbedded> MapDefault = 1;
+    map<int64, TEmbedded> MapDict = 5 [(NYT.flags) = MAP_AS_DICT];
+}
+
+message TWithOneof
+{
+    message TEmbedded
+    {
+        oneof Oneof {
+            int64 x = 1;
+            string y = 2;
+        }
+    }
+
+    message TDefaultVariant
+    {
+        option (NYT.default_oneof_flags) = VARIANT;
+        optional string field = 1;
+
+        oneof Oneof2
+        {
+            string y2 = 4;
+            TEmbedded z2 = 6;
+            int64 x2 = 2;
+        }
+
+        oneof Oneof1
+        {
+            option (NYT.oneof_flags) = SEPARATE_FIELDS;
+            int64 x1 = 10;
+            string y1 = 3;
+            TEmbedded z1 = 5;
+        }
+    }
+
+    message TNoDefault
+    {
+        optional string field = 1;
+
+        oneof Oneof2
+        {
+            string y2 = 4;
+            TEmbedded z2 = 6;
+            int64 x2 = 2;
+        }
+
+        oneof Oneof1
+        {
+            int64 x1 = 10;
+            string y1 = 3;
+            TEmbedded z1 = 5;
+        }
+    }
+
+    message TSerializationProtobuf
+    {
+        option (NYT.default_field_flags) = SERIALIZATION_PROTOBUF;
+        oneof Oneof
+        {
+            int64 x1 = 2;
+            string y1 = 1;
+            TEmbedded z1 = 3;
+        }
+    }
+
+    optional TDefaultVariant DefaultVariant = 1;
+    optional TNoDefault NoDefault = 2;
+    optional TSerializationProtobuf SerializationProtobuf = 3;
+
+    oneof TopLevelOneof
+    {
+        int64 MemberOfTopLevelOneof = 4;
+    }
+}

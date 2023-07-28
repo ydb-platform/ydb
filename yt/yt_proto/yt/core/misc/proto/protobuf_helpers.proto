@@ -1,0 +1,28 @@
+package NYT.NProto;
+
+option java_package = "tech.ytsaurus";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/misc";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TSerializedMessageEnvelope
+{
+    optional int32 codec = 1 [default = 0];
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TExtension
+{
+    required int32 tag = 1;
+    required bytes data = 2;
+}
+
+message TExtensionSet
+{
+    repeated TExtension extensions = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

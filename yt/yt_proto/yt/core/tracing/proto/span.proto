@@ -1,0 +1,38 @@
+package NYT.NTracing.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+
+option java_package = "tech.ytsaurus.tracing";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/tracing";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TTag
+{
+    required string key = 1;
+    required string value = 2;
+}
+
+message TSpan
+{
+    required NYT.NProto.TGuid trace_id = 1;
+    required fixed64 span_id = 2;
+    optional fixed64 parent_span_id = 3;
+    optional fixed64 follows_from_span_id = 4;
+    required string name = 5;
+
+    required fixed64 start_time = 6;
+    required fixed64 duration = 7;
+
+    repeated TTag tags = 8;
+}
+
+message TSpanBatch
+{
+    repeated TSpan spans = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+

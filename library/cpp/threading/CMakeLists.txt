@@ -7,7 +7,9 @@
 
 
 add_subdirectory(atomic)
+add_subdirectory(blocking_queue)
 add_subdirectory(chunk_queue)
+add_subdirectory(cron)
 add_subdirectory(equeue)
 add_subdirectory(future)
 add_subdirectory(hot_swap)
@@ -17,3 +19,4 @@ add_subdirectory(poor_man_openmp)
 add_subdirectory(queue)
 add_subdirectory(skip_list)
 add_subdirectory(task_scheduler)
+add_subdirectory(thread_local)

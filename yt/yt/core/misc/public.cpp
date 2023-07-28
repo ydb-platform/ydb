@@ -1,0 +1,20 @@
+#include "public.h"
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TString YTCoreNoteName = "YT";
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ProcessErrorCodeFormatter(int code)
+{
+    return TEnumTraits<EProcessErrorCode>::ToString(static_cast<EProcessErrorCode>(code));
+}
+
+YT_DEFINE_ERROR_CODE_RANGE(10000, 10255, "NYT::EProcessErrorCode", ProcessErrorCodeFormatter);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

@@ -1,0 +1,16 @@
+import "yt/yt_proto/yt/formats/extension.proto";
+
+package NYT;
+
+option go_package = "a.yandex-team.ru/yt/yt_proto/yt/formats";
+
+message TYamr {
+    optional string Key = 1    [(NYT.key_column_name) = "key"];
+    optional string Subkey = 2 [(NYT.key_column_name) = "subkey"];
+    optional string Value = 3  [(NYT.column_name) = "value"];
+}
+
+message TYamrNoSubkey {
+    optional string Key = 1   [(NYT.key_column_name) = "key"];
+    optional string Value = 2 [(NYT.column_name) = "value"];
+}

@@ -1,0 +1,216 @@
+package NYT.NRpc.NProto;
+
+option java_package = "tech.ytsaurus.rpc";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/rpc";
+
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/core/misc/proto/error.proto";
+import "yt_proto/yt/core/tracing/proto/tracing_ext.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TStreamingParameters
+{
+    optional int64 window_size = 1;
+    optional int64 read_timeout = 2;
+    optional int64 write_timeout = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TRequestHeader
+{
+    optional NYT.NProto.TGuid request_id = 1;
+    required string service = 2;
+    required string method = 3;
+    optional NYT.NProto.TGuid realm_id = 8;
+
+    optional int32 protocol_version_major = 9;
+    optional int32 protocol_version_minor = 19;
+
+    optional int64 start_time = 7;
+    optional bool retry = 11;
+    optional NYT.NProto.TGuid mutation_id = 13;
+
+    optional int64 timeout = 10;
+
+    optional string user = 12;
+    optional string user_tag = 25;
+
+    optional int32 tos_level = 14;
+
+    optional int32 request_format = 15;  // EMessageFormat
+    optional int32 response_format = 16; // EMessageFormat
+
+    optional bool uncancelable = 17;
+
+    optional string user_agent = 18;
+
+    optional int64 logging_suppression_timeout = 20;
+    optional bool disable_logging_suppression_if_request_failed = 21;
+
+    // COMPAT(kiseloyvp): these are missing when legacy mode is used
+    optional int32 request_codec = 23;  // ECodec
+    optional int32 response_codec = 24; // ECodec
+
+    optional TStreamingParameters server_attachments_streaming_parameters = 33;
+
+    optional bytes request_format_options = 34; // TYsonString
+    optional bytes response_format_options = 35; // TYsonString
+
+    repeated int32 declared_client_feature_ids = 36;
+    repeated int32 required_server_feature_ids = 37;
+
+    optional int64 logical_request_weight = 38;
+
+    reserved 32;
+
+    /*
+     * Extensions:
+     * transaction_id                       100
+     * suppress_access_tracking             103
+     * ypath_header_ext                     104
+     * caching_header_ext                   105
+     * tracing_ext                          106
+     * suppress_modification_tracking       108
+     * prerequisites_ext                    109
+     * credentials_ext                      110
+     * balancing_ext                        111
+     * multicell_sync_ext                   112
+     * suppress_expiration_timeout_renewal  113
+     * workload_descriptor                  114
+     * ssl_credentials_ext                  120
+     * req_execute_ext                      200
+     * req_multiread_ext                    201
+     */
+
+    extensions 100 to max;
+
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional NYT.NTracing.NProto.TTracingExt tracing_ext = 106;
+    }
+}
+
+message TBalancingExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TBalancingExt balancing_ext = 111;
+    }
+
+    optional bool enable_stickiness = 1;
+    optional int32 sticky_group_size = 2 [default = 1];
+    optional bool enable_client_stickiness = 3;
+}
+
+message TCredentialsExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TCredentialsExt credentials_ext = 110;
+    }
+
+    reserved 1;
+    optional string token = 2;
+    optional string session_id = 4;
+    optional string ssl_session_id = 5;
+    optional string user_ticket = 6;
+    optional string service_ticket = 7;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TResponseHeader
+{
+    optional NYT.NProto.TGuid request_id = 1;
+
+    // If omitted then OK is assumed.
+    optional NYT.NProto.TError error = 2;
+
+    optional int32 format = 3; // EMessageFormat
+
+    // COMPAT(kiseloyvp): this is missing when legacy mode is used
+    optional int32 codec = 6; // ECodec
+
+    reserved 5;
+    extensions 100 to max;
+}
+
+message THedgingExt
+{
+    extend NRpc.NProto.TResponseHeader
+    {
+        optional THedgingExt hedging_ext = 100;
+    }
+
+    optional bool backup_responded = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TRequestCancelationHeader
+{
+    required NYT.NProto.TGuid request_id = 1;
+    required string service = 2;
+    required string method = 3;
+    optional NYT.NProto.TGuid realm_id = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TStreamingPayloadHeader
+{
+    required NYT.NProto.TGuid request_id = 1;
+    required string service = 2;
+    required string method = 3;
+    optional NYT.NProto.TGuid realm_id = 4;
+    required int32 sequence_number = 5;
+    optional int32 codec = 6; // ECodec
+
+    reserved 7;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TStreamingFeedbackHeader
+{
+    required NYT.NProto.TGuid request_id = 1;
+    required string service = 2;
+    required string method = 3;
+    optional NYT.NProto.TGuid realm_id = 4;
+    required int64 read_position = 5;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqDiscover
+{
+    optional int64 reply_delay = 1;
+
+    extensions 100 to max;
+}
+
+message TRspDiscover
+{
+    required bool up = 1;
+    repeated string suggested_addresses = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum EWriterFeedback
+{
+    WF_HANDSHAKE = 0;
+    WF_SUCCESS = 1;
+}
+
+message TWriterFeedback
+{
+    required EWriterFeedback feedback = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,10 @@
+package NYT.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/misc";
+
+message TBloomFilter
+{
+    required int32 version = 1;
+    required bytes bitmap = 2;
+    required int32 hash_count = 3;
+}

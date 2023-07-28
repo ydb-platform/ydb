@@ -1,0 +1,14 @@
+#pragma once
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr int GrpcDispatcherThreadShutdownPriority = 0;
+constexpr int GrpcServerShutdownPriority = 100;
+
+static_assert(GrpcServerShutdownPriority > GrpcDispatcherThreadShutdownPriority);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

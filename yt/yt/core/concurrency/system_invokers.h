@@ -1,0 +1,17 @@
+#pragma once
+
+#include "public.h"
+
+#include <yt/yt/core/actions/public.h>
+
+namespace NYT::NConcurrency {
+
+////////////////////////////////////////////////////////////////////////////////
+
+IInvokerPtr GetFinalizerInvoker();
+IInvokerPtr GetShutdownInvoker();
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NConcurrency
+

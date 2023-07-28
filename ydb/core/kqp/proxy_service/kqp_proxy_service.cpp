@@ -378,6 +378,7 @@ public:
         SendBoardPublishPoison();
 
         if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
+            LastPublishResourcesAt = TAppData::TimeProvider->Now();
             Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
             return;
         }

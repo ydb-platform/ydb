@@ -18,8 +18,6 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-NO_SANITIZE_HEADERS()
-
 SRCS(
     double-conversion/bignum-dtoa.cc
     double-conversion/bignum.cc

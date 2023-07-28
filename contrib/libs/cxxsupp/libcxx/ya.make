@@ -19,8 +19,6 @@ ADDINCL(
     contrib/libs/cxxsupp/libcxx/src
 )
 
-NO_SANITIZE_HEADERS()
-
 CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)

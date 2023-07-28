@@ -9,8 +9,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-NO_SANITIZE_HEADERS()
-
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

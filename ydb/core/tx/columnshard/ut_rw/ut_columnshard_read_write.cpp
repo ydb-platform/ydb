@@ -1840,7 +1840,7 @@ void TestReadAggregate(const std::vector<std::pair<TString, TTypeInfo>>& ydbSche
 }
 
 Y_UNIT_TEST_SUITE(EvWrite) {
-    class TArrowData : public NKikimr::NEvWrite::IDataContainer {
+    class TArrowData : public NKikimr::NEvents::IDataConstructor {
         std::vector<std::pair<TString, TTypeInfo>> YdbSchema;
         ui64 Index;
 
@@ -1856,14 +1856,6 @@ Y_UNIT_TEST_SUITE(EvWrite) {
                 proto.AddColumnIds(i + 1);
             }
             proto.MutableArrowData()->SetPayloadIndex(Index);
-        }
-
-        std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override {
-            return nullptr;
-        }
-
-        const TString& GetData() const override {
-            return Default<TString>();
         }
     };
 

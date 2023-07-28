@@ -469,7 +469,7 @@ namespace NKikimr::NColumnShard {
                 Y_VERIFY(Index < Owner.Builders.size());
                 auto& builder = Owner.Builders[Index];
                 auto type = builder->type();
-                
+
                 NArrow::SwitchType(type->id(), [&](const auto& t) {
                     using TWrap = std::decay_t<decltype(t)>;
                     using T = typename TWrap::T;

@@ -11,6 +11,14 @@
 
 namespace NKikimr::NEvents {
 
+
+class IDataConstructor {
+public:
+    using TPtr = std::shared_ptr<IDataConstructor>;
+    virtual ~IDataConstructor() {}
+    virtual void Serialize(NKikimrDataEvents::TOperationData& proto) const = 0;
+};
+
 struct TDataEvents {
 
     class TCoordinatorInfo {
@@ -42,7 +50,7 @@ struct TDataEvents {
             Record.SetTxId(txId);
         }
 
-        void AddReplaceOp(const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data) {
+        void AddReplaceOp(const ui64 tableId, const IDataConstructor::TPtr& data) {
             Record.MutableTableId()->SetTableId(tableId);
             Y_VERIFY(data);
             data->Serialize(*Record.MutableReplace());

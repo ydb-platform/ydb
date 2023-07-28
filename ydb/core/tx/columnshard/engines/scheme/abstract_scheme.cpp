@@ -42,15 +42,15 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
     return arrow::RecordBatch::Make(resultArrowSchema, batch->num_rows(), newColumns);
 }
 
-std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema, TString& strError) const {
+std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema) const {
     std::shared_ptr<arrow::Schema> dstSchema = GetIndexInfo().ArrowSchema();
     auto batch = NArrow::DeserializeBatch(data, (dataSchema ? dataSchema : dstSchema));
     if (!batch) {
-        strError = "DeserializeBatch() failed";
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
         return nullptr;
     }
     if (batch->num_rows() == 0) {
-        strError = "empty batch";
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "empty batch");
         return nullptr;
     }
 
@@ -58,13 +58,13 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
     if (dataSchema) {
         batch = NArrow::ExtractColumns(batch, dstSchema, true);
         if (!batch) {
-            strError = "cannot correct schema";
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "cannot correct schema");
             return nullptr;
         }
     }
 
     if (!batch->schema()->Equals(dstSchema)) {
-        strError = "unexpected schema for insert batch: '" + batch->schema()->ToString() + "'";
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "unexpected schema for insert batch: '" << batch->schema()->ToString() << "'");
         return nullptr;
     }
 
@@ -75,18 +75,18 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
     for (auto& field : sortingKey->fields()) {
         auto column = batch->GetColumnByName(field->name());
         if (!column) {
-            strError = "missing PK column '" + field->name() + "'";
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "missing PK column '" << field->name() << "'");
             return nullptr;
         }
         if (NArrow::HasNulls(column)) {
-            strError = "PK column '" + field->name() + "' contains NULLs";
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "PK column '" << field->name() << "' contains NULLs");
             return nullptr;
         }
     }
 
     auto status = batch->ValidateFull();
     if (!status.ok()) {
-        strError = status.ToString();
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", status.ToString());
         return nullptr;
     }
     batch = NArrow::SortBatch(batch, sortingKey);

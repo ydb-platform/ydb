@@ -48,7 +48,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     NIceDb::TNiceDb db(txc.DB);
 
     auto writeId = writeMeta.GetWriteId();
-    const TString& data = blobData.GetBlobData();
+    const TString data = blobData.GetBlobData();
 
     NKikimrTxColumnShard::TLogicalMetadata meta;
     Y_VERIFY(meta.ParseFromString(blobData.GetLogicalMeta()));

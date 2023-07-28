@@ -3,8 +3,6 @@
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
-#include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/core/protos/ev_write.pb.h>
 
 
 namespace NKikimr::NEvWrite {
@@ -13,7 +11,6 @@ class IDataContainer {
 public:
     using TPtr = std::shared_ptr<IDataContainer>;
     virtual ~IDataContainer() {}
-    virtual void Serialize(NKikimrDataEvents::TOperationData& proto) const = 0;
     virtual std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const = 0;
     virtual const TString& GetData() const = 0;
 };

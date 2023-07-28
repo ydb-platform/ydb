@@ -5,11 +5,6 @@
 
 namespace NKikimr::NColumnShard {
 
-void TArrowData::Serialize(NKikimrDataEvents::TOperationData& proto) const {
-    Y_FAIL("Not implemented");
-    Y_UNUSED(proto);
-}
-
 bool TArrowData::Parse(const NKikimrDataEvents::TOperationData& proto, const IPayloadData& payload) {
     IncomingData = payload.GetDataFromPayload(proto.GetArrowData().GetPayloadIndex());
 
@@ -22,13 +17,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TOperationData& proto, const IPa
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowData::GetArrowBatch() const {
-    TString err;
-    return IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema(), err);
-}
-
-void TProtoArrowData::Serialize(NKikimrDataEvents::TOperationData& proto) const {
-    Y_FAIL("Not implemented");
-    Y_UNUSED(proto);
+    return IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema());
 }
 
 bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto) {
@@ -48,8 +37,7 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
 }
 
 std::shared_ptr<arrow::RecordBatch> TProtoArrowData::GetArrowBatch() const {
-    TString err;
-    return IndexSchema->PrepareForInsert(IncomingData, ArrowSchema, err);
+    return IndexSchema->PrepareForInsert(IncomingData, ArrowSchema);
 }
 
 }

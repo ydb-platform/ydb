@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/protos/ev_write.pb.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -49,7 +50,6 @@ public:
 
     bool Parse(const NKikimrDataEvents::TOperationData& proto, const IPayloadData& payload);
     std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override;
-    void Serialize(NKikimrDataEvents::TOperationData& proto) const override;
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
@@ -69,7 +69,6 @@ public:
 
     bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);
     std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override;
-    void Serialize(NKikimrDataEvents::TOperationData& proto) const override;
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;

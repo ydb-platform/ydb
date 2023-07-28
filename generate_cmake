@@ -85,7 +85,9 @@ def generate_graph_for_platform(generate_graph_for_platform):
 
     allowed_error_patterns = [
         "to directory without ya.make: [[imp]]$S/build/platform/",
+        "to missing directory: [[imp]]$S/build/platform/",
         "to directory without ya.make: [[imp]]$S/build/external_resources/",
+        "to missing directory: [[imp]]$S/build/external_resources/",
         "could not resolve include file: [[imp]]openssl",
         "could not resolve include file: [[imp]]zlib",
         "could not resolve include file: [[imp]]ares.h",

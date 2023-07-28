@@ -1,0 +1,47 @@
+[root]
+
+copy=[
+	"cmake/global_flags.compiler.gnu.cmake",
+    "cmake/global_flags.compiler.msvc.cmake",
+    "cmake/global_flags.linker.gnu.cmake",
+    "cmake/global_flags.linker.msvc.cmake"
+]
+
+
+[attrs.target]
+vcs_info = {type="list", copy=[
+    "cmake/common.cmake",
+    "scripts/export_script_gen.py",
+    "scripts/split_unittest.py",
+    "scripts/generate_vcs_info.py"
+]}
+target_joined_source = {type="list", copy=[
+    "cmake/common.cmake",
+    "scripts/export_script_gen.py",
+    "scripts/split_unittest.py",
+    "scripts/generate_vcs_info.py"
+]}
+target_sources_custom = {type="list", copy=[
+    "cmake/common.cmake",
+    "scripts/export_script_gen.py",
+    "scripts/split_unittest.py",
+    "scripts/generate_vcs_info.py"
+]}
+target_ragel_lexers = {type="list", copy=[
+    "cmake/common.cmake",
+    "scripts/export_script_gen.py",
+    "scripts/split_unittest.py",
+    "scripts/generate_vcs_info.py"
+]}
+target_yasm_source = {type="list", copy=[
+    "cmake/common.cmake",
+    "scripts/export_script_gen.py",
+    "scripts/split_unittest.py",
+    "scripts/generate_vcs_info.py"
+]}
+add_global_library_for = {type="list", copy=[
+    "cmake/common.cmake",
+    "scripts/export_script_gen.py",
+    "scripts/split_unittest.py",
+    "scripts/generate_vcs_info.py"
+]}

@@ -10,6 +10,7 @@
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 #include <util/memory/pool.h>
+#include <util/generic/array_ref.h>
 
 namespace NYql {
 
@@ -126,6 +127,11 @@ struct TAstNode {
         } else {
             return Data.L.Children[index];
         }
+    }
+    
+    inline TArrayRef<TAstNode*> GetChildren() {
+        Y_VERIFY(IsList());
+        return {ListCount <= SmallListCount ? Data.S.Children : Data.L.Children, ListCount};
     }
 
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {

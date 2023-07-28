@@ -405,4 +405,28 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         const auto expectedAst = NYql::ParseAst(program);
         UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
     }
+
+    Y_UNIT_TEST(UpdateStmt) {
+        auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
+        TString updateStmtProg = R"(
+            (
+                (let world (Configure! world (DataSource 'config) 'OrderedColumns))
+                (let read0 (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"input"))) (Void) '()))
+                (let world (Left! read0))
+                (let world (block '(
+                  (let update_select (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'text)))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('())) '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'text)))))))))) '('set_ops '('push)))))
+                  (let sink (DataSink '"yt" '"plato"))
+                  (let key (Key '('table (String '"input"))))
+                  (return (Write! world sink key (Void) '('('pg_update update_select) '('mode 'update))))
+                )))
+                (let world (CommitAll! world))
+                (return world)
+            )
+        )";
+        const auto expectedAst = NYql::ParseAst(updateStmtProg);
+
+        UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
+        UNIT_ASSERT_C(res.Root, "Failed to parse statement, root is nullptr");
+        UNIT_ASSERT_STRINGS_EQUAL(res.Root->ToString(), expectedAst.Root->ToString());
+    }
 }

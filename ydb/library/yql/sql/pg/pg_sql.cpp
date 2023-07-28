@@ -128,6 +128,10 @@ int StrCompare(const char* s1, const char* s2) {
     return strcmp(s1 ? s1 : "", s2 ? s2 : "");
 }
 
+std::shared_ptr<List> ListMake1(void* cell) {
+    return std::shared_ptr<List>(list_make1(cell), list_free);
+}
+
 #define CAST_NODE(nodeType, nodeptr) CastNode<nodeType>(nodeptr, T_##nodeType)
 #define CAST_NODE_EXT(nodeType, tag, nodeptr) CastNode<nodeType>(nodeptr, tag)
 #define LIST_CAST_NTH(nodeType, list, index) CAST_NODE(nodeType, list_nth(list, i))
@@ -282,6 +286,8 @@ public:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
         case T_InsertStmt:
             return ParseInsertStmt(CAST_NODE(InsertStmt, node)) != nullptr;
+        case T_UpdateStmt:
+            return ParseUpdateStmt(CAST_NODE(UpdateStmt, node)) != nullptr;
         case T_ViewStmt:
             return ParseViewStmt(CAST_NODE(ViewStmt, node)) != nullptr;
         case T_CreateStmt:
@@ -306,7 +312,7 @@ public:
     using TTraverseNodeStack = TStack<std::pair<const Node*, bool>>;
 
     [[nodiscard]]
-    TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner, TVector <TAstNode*> targetColumns = {}) {
+    TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner, TVector <TAstNode*> targetColumns = {}, bool allowEmptyResSet = false) {
         CTE.emplace_back();
         Y_DEFER {
             CTE.pop_back();
@@ -600,8 +606,8 @@ public:
                 return nullptr;
             }
 
-            if (!ListLength(x->valuesLists) == !ListLength(x->targetList)) {
-                AddError("SelectStmt: only one of values_lists and target_list should be specified");
+            if (!allowEmptyResSet && (ListLength(x->valuesLists) == 0) && (ListLength(x->targetList) == 0)) {
+                AddError("SelectStmt: both values_list and target_list are not allowed to be empty");
                 return nullptr;
             }
 
@@ -1009,6 +1015,63 @@ public:
                 select,
                 writeOptions
             )
+        ));
+
+        return Statements.back();
+    }
+    
+    [[nodiscard]]
+    TAstNode* ParseUpdateStmt(const UpdateStmt* value) {
+        const auto fromClause = value->fromClause ? value->fromClause : ListMake1(value->relation).get();
+        SelectStmt selectStmt {
+            .type = T_SelectStmt,
+            .targetList = value->targetList,
+            .fromClause = fromClause,
+            .whereClause = value->whereClause,
+            .withClause = value->withClause,
+        };
+        const auto select = ParseSelectStmt(&selectStmt, /* inner */ true, {}, /* allowEmptyResSet */ true);
+        if (!select) {
+            return nullptr;
+        }
+
+        const auto [sink, key] = ParseWriteRangeVar(value->relation);
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        TVector<TAstNode*> returningList;
+        if (value->returningList) {
+            auto list = ParseReturningList(value->returningList);
+            if (list.has_value()) {
+                returningList = list.value();
+            } else {
+                return nullptr;
+            }
+        }
+
+        TVector<TAstNode*> options;
+        options.push_back(QL(QA("pg_update"), A("update_select")));
+        options.push_back(QL(QA("mode"), QA("update")));
+        if (!returningList.empty()) {
+            options.push_back(QL(QA("returning"), QVL(returningList.data(), returningList.size())));
+        }
+        const auto writeUpdate = L(A("block"), QL(
+            L(A("let"), A("update_select"), select),
+            L(A("let"), A("sink"), sink),
+            L(A("let"), A("key"), key),
+            L(A("return"), L(
+                A("Write!"),
+                A("world"),
+                A("sink"),
+                A("key"),
+                L(A("Void")),
+                QVL(options.data(), options.size()))) 
+            ));
+        Statements.push_back(L(
+            A("let"),
+            A("world"),
+            writeUpdate
         ));
 
         return Statements.back();
@@ -3351,6 +3414,20 @@ public:
     template <typename... TNodes>
     TAstNode* QL(TNodes... nodes) {
         return Q(L(nodes...));
+    }
+    
+    template <typename... TNodes>
+    TAstNode* E(TAstNode* list, TNodes... nodes)  {
+        Y_VERIFY(list->IsList());
+        TVector<TAstNode*> nodes_vec;
+        nodes_vec.reserve(list->GetChildrenCount() + sizeof...(nodes));
+
+        auto children = list->GetChildren(); 
+        if (children) {
+            nodes_vec.assign(children.begin(), children.end());
+        }
+        nodes_vec.assign({nodes...});
+        return VL(nodes_vec.data(), nodes_vec.size());
     }
 
 private:

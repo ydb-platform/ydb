@@ -7,16 +7,7 @@
 #include <memory>
 
 namespace NKikimr::NOlap {
-
-class ICompactionObjectCallback {
-public:
-    virtual ~ICompactionObjectCallback() = default;
-    virtual void OnCompactionStarted(const bool inGranule) = 0;
-    virtual void OnCompactionFinished() = 0;
-    virtual void OnCompactionFailed(const TString& reason) = 0;
-    virtual void OnCompactionCanceled(const TString& reason) = 0;
-    virtual TString DebugString() const = 0;
-};
+class TGranuleMeta;
 
 class TPlanCompactionInfo {
 private:
@@ -45,69 +36,32 @@ public:
 
 struct TCompactionInfo {
 private:
-    std::shared_ptr<ICompactionObjectCallback> CompactionObject;
-    mutable bool StatusProvided = false;
+    std::shared_ptr<TGranuleMeta> GranuleMeta;
     const bool InGranuleFlag = false;
 public:
-    TCompactionInfo(std::shared_ptr<ICompactionObjectCallback> compactionObject, const bool inGranule)
-        : CompactionObject(compactionObject)
+    TCompactionInfo(std::shared_ptr<TGranuleMeta> granule, const bool inGranule)
+        : GranuleMeta(granule)
         , InGranuleFlag(inGranule)
     {
-        Y_VERIFY(compactionObject);
-        CompactionObject->OnCompactionStarted(InGranuleFlag);
+        Y_VERIFY(granule);
     }
-
-    TPlanCompactionInfo GetPlanCompaction() const;
 
     bool InGranule() const {
         return InGranuleFlag;
     }
 
-    template <class T>
-    const T& GetObject() const {
-        auto result = dynamic_cast<const T*>(CompactionObject.get());
-        Y_VERIFY(result);
-        return *result;
+    std::shared_ptr<TGranuleMeta> GetGranule() const {
+        return GranuleMeta;
     }
 
-    void CompactionFinished() const {
-        Y_VERIFY(!StatusProvided);
-        StatusProvided = true;
-        CompactionObject->OnCompactionFinished();
-    }
-
-    void CompactionCanceled(const TString& reason) const {
-        Y_VERIFY(!StatusProvided);
-        StatusProvided = true;
-        CompactionObject->OnCompactionCanceled(reason);
-    }
-
-    void CompactionFailed(const TString& reason) const {
-        Y_VERIFY(!StatusProvided);
-        StatusProvided = true;
-        CompactionObject->OnCompactionFailed(reason);
-    }
-
-    ~TCompactionInfo() {
-        Y_VERIFY_DEBUG(StatusProvided);
-        if (!StatusProvided) {
-            CompactionObject->OnCompactionFailed("compaction unexpectedly finished");
-        }
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TCompactionInfo& info) {
-        out << (info.InGranuleFlag ? "in granule" : "split granule") << " compaction of granule: " << info.CompactionObject->DebugString();
-        return out;
-    }
 };
 
 struct TCompactionSrcGranule {
-    ui64 PathId = 0;
-    ui64 Granule = 0;
     TMark Mark;
 
-    TCompactionSrcGranule(ui64 pathId, ui64 granule, const TMark& mark)
-        : PathId(pathId), Granule(granule), Mark(mark) {
+    TCompactionSrcGranule(const TMark& mark)
+        : Mark(mark)
+    {
     }
 };
 

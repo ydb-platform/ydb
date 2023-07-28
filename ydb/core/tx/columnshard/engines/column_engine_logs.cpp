@@ -22,9 +22,9 @@ std::shared_ptr<NKikimr::NOlap::TCompactColumnEngineChanges> TColumnEngineForLog
     const TCompactionLimits& limits, const TSnapshot& initSnapshot, const TCompactionSrcGranule& srcGranule) {
     std::shared_ptr<TCompactColumnEngineChanges> result;
     if (info->InGranule()) {
-        result = std::make_shared<TInGranuleCompactColumnEngineChanges>(limits, std::move(info), srcGranule);
+        result = std::make_shared<TInGranuleCompactColumnEngineChanges>(limits, info->GetGranule(), srcGranule);
     } else {
-        result = std::make_shared<TSplitCompactColumnEngineChanges>(limits, std::move(info), srcGranule);
+        result = std::make_shared<TSplitCompactColumnEngineChanges>(limits, info->GetGranule(), srcGranule);
     }
     result->InitSnapshot = initSnapshot;
     return result;
@@ -309,13 +309,13 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 
 std::shared_ptr<TCompactColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std::unique_ptr<TCompactionInfo>&& info,
                                                                             const TCompactionLimits& limits) noexcept {
-    const ui64 pathId = info->GetPlanCompaction().GetPathId();
+    const ui64 pathId = info->GetGranule()->GetPathId();
     Y_VERIFY(PathGranules.contains(pathId));
 
-    auto& g = info->GetObject<TGranuleMeta>();
+    auto g = info->GetGranule();
     for (const auto& [mark, pathGranule] : PathGranules[pathId]) {
-        if (pathGranule == g.GetGranuleId()) {
-            TCompactionSrcGranule srcGranule = TCompactionSrcGranule(pathId, g.GetGranuleId(), mark);
+        if (pathGranule == g->GetGranuleId()) {
+            TCompactionSrcGranule srcGranule = TCompactionSrcGranule(mark);
             auto changes = TChangesConstructor::BuildCompactionChanges(std::move(info), limits, LastSnapshot, srcGranule);
             NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
             return changes;

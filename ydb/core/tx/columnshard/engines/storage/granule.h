@@ -267,7 +267,7 @@ public:
 
 };
 
-class TGranuleMeta: public ICompactionObjectCallback, TNonCopyable {
+class TGranuleMeta: TNonCopyable {
 public:
     enum class EActivity {
         SplitCompaction,
@@ -331,15 +331,14 @@ public:
         return Activity.empty();
     }
 
-    virtual void OnCompactionStarted(const bool inGranule) override;
+    void OnCompactionStarted(const bool inGranule);
 
-    virtual void OnCompactionCanceled(const TString& reason) override;
-    virtual void OnCompactionFailed(const TString& reason) override;
-    virtual void OnCompactionFinished() override;
+    void OnCompactionFailed(const TString& reason);
+    void OnCompactionFinished();
 
     void UpsertPortion(const TPortionInfo& info);
 
-    virtual TString DebugString() const override {
+    TString DebugString() const {
         return TStringBuilder() << "granule:" << GetGranuleId() << ";"
             << "path_id:" << Record.PathId << ";"
             << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"

@@ -34,20 +34,12 @@ NKikimr::TConclusion<std::vector<TString>> TColumnEngineChanges::ConstructBlobs(
 }
 
 bool TColumnEngineChanges::ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
-    Y_VERIFY(Stage != EStage::Aborted);
-    if ((ui32)Stage >= (ui32)EStage::Applied) {
-        return true;
-    }
     Y_VERIFY(Stage == EStage::Compiled);
 
     if (!DoApplyChanges(self, context, dryRun)) {
-        if (dryRun) {
-            OnChangesApplyFailed("problems on apply");
-        }
         Y_VERIFY(dryRun);
         return false;
     } else if (!dryRun) {
-        OnChangesApplyFinished();
         Stage = EStage::Applied;
     }
     return true;
@@ -65,17 +57,11 @@ void TColumnEngineChanges::WriteIndex(NColumnShard::TColumnShard& self, TWriteIn
 }
 
 void TColumnEngineChanges::WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    Y_VERIFY(Stage == EStage::Aborted || Stage == EStage::Written);
-    if (Stage == EStage::Aborted) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("stage", Stage);
-        return;
-    }
-    if (Stage == EStage::Written) {
-        Stage = EStage::Finished;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
-        DoWriteIndexComplete(self, context);
-        DoOnFinish(self, context);
-    }
+    Y_VERIFY(Stage == EStage::Written);
+    Stage = EStage::Finished;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
+    DoWriteIndexComplete(self, context);
+    DoOnFinish(self, context);
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
@@ -91,13 +77,12 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    Y_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
+    Y_VERIFY(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
     Y_VERIFY(Stage != EStage::Finished && Stage != EStage::Created && Stage != EStage::Aborted);
     Stage = EStage::Aborted;
-    DoAbort();
     DoOnFinish(self, context);
 }
 
@@ -121,6 +106,7 @@ void TColumnEngineChanges::StartEmergency() {
 void TColumnEngineChanges::AbortEmergency() {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "AbortEmergency");
     Stage = EStage::Aborted;
+    OnAbortEmergency();
 }
 
 TWriteIndexContext::TWriteIndexContext(NTabletFlatExecutor::TTransactionContext& txc, IDbWrapper& dbWrapper)

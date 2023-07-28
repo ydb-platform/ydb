@@ -100,23 +100,32 @@ public:
 };
 
 class TChangesFinishContext {
+public:
+    const bool FinishedSuccessfully = true;
+    const TString ErrorMessage;
+    TChangesFinishContext(const TString& errorMessage)
+        : FinishedSuccessfully(false)
+        , ErrorMessage(errorMessage) {
 
+    }
+
+    TChangesFinishContext() = default;
 };
 
 class TWriteIndexCompleteContext: TNonCopyable, public TChangesFinishContext {
+private:
+    using TBase = TChangesFinishContext;
 public:
     const TActorContext& ActorContext;
     const ui32 BlobsWritten;
     const ui64 BytesWritten;
-    const bool FinishedSuccessfully;
     const TDuration Duration;
     NColumnShard::TBackgroundActivity& TriggerActivity;
-    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const bool finishedSuccessfully, const TDuration d,
-        NColumnShard::TBackgroundActivity& triggerActivity)
+    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten
+        , const TDuration d, NColumnShard::TBackgroundActivity& triggerActivity)
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
-        , FinishedSuccessfully(finishedSuccessfully)
         , Duration(d)
         , TriggerActivity(triggerActivity)
     {
@@ -170,22 +179,21 @@ protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) = 0;
-    virtual void OnChangesApplyFailed(const TString& /*errorMessage*/) {
-    }
-    virtual void OnChangesApplyFinished() {
-    }
-    virtual void DoAbort() {
-
-    }
     virtual bool NeedConstruction() const {
         return true;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
     virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept = 0;
+    virtual void OnAbortEmergency() {
 
+    }
 public:
     TConclusion<std::vector<TString>> ConstructBlobs(TConstructionContext& context);
     virtual ~TColumnEngineChanges();
+
+    bool IsAborted() const {
+        return Stage == EStage::Aborted;
+    }
 
     void StartEmergency();
     void AbortEmergency();
@@ -215,10 +223,6 @@ public:
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const = 0;
     virtual TString TypeString() const = 0;
     TString DebugString() const;
-
-    virtual const TGranuleMeta* GetGranuleMeta() const {
-        return nullptr;
-    }
 
     ui64 TotalBlobsSize() const {
         ui64 size = 0;

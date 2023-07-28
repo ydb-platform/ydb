@@ -119,7 +119,6 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TInGranuleCompactColum
     const THashMap<TBlobRange, TString>& blobs, TConstructionContext& context) const {
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     batches.reserve(portions.size());
-
     auto resultSchema = context.SchemaVersions.GetLastSchema();
 
     TSnapshot maxSnapshot = resultSchema->GetSnapshot();
@@ -141,7 +140,7 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TInGranuleCompactColum
 }
 
 TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    const ui64 pathId = SrcGranule.PathId;
+    const ui64 pathId = GranuleMeta->GetPathId();
     std::vector<TString> blobs;
     auto& switchedPortions = SwitchedPortions;
     Y_VERIFY(switchedPortions.size());
@@ -160,13 +159,13 @@ TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstr
             if (!slice || slice->num_rows() == 0) {
                 continue;
             }
-            auto tmp = MakeAppendedPortions(pathId, slice, granule, maxSnapshot, blobs, GetGranuleMeta(), context);
+            auto tmp = MakeAppendedPortions(pathId, slice, granule, maxSnapshot, blobs, GranuleMeta.get(), context);
             for (auto&& portionInfo : tmp) {
                 portions.emplace_back(std::move(portionInfo));
             }
         }
     } else {
-        portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, GetGranuleMeta(), context);
+        portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, GranuleMeta.get(), context);
     }
 
     Y_VERIFY(portions.size() > 0);
@@ -186,7 +185,7 @@ void TInGranuleCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TC
 
 void TInGranuleCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
-    auto& g = CompactionInfo->GetObject<NOlap::TGranuleMeta>();
+    auto& g = *GranuleMeta;
     self.CSCounters.OnInternalCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
     Y_VERIFY(InitInGranuleMerge(SrcGranule.Mark, SwitchedPortions, Limits, MergeBorders).Ok());
 }

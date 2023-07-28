@@ -5,7 +5,7 @@
 namespace NKikimr::NOlap {
 
 TConclusion<std::vector<TString>> TSplitCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    const ui64 pathId = SrcGranule.PathId;
+    const ui64 pathId = GranuleMeta->GetPathId();
     const TMark ts0 = SrcGranule.Mark;
     std::vector<TPortionInfo>& portions = SwitchedPortions;
 
@@ -102,7 +102,7 @@ TConclusion<std::vector<TString>> TSplitCompactColumnEngineChanges::DoConstructB
             ui64 tmpGranule = SetTmpGranule(pathId, mark);
             for (const auto& batch : idBatches[id]) {
                 // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-                auto newPortions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs, GetGranuleMeta(), context);
+                auto newPortions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs, GranuleMeta.get(), context);
                 Y_VERIFY(newPortions.size() > 0);
                 for (auto& portion : newPortions) {
                     AppendedPortions.emplace_back(std::move(portion));
@@ -118,7 +118,7 @@ TConclusion<std::vector<TString>> TSplitCompactColumnEngineChanges::DoConstructB
             ui64 tmpGranule = SetTmpGranule(pathId, ts);
 
             // Cannot set snapshot here. It would be set in committing transaction in ApplyChanges().
-            auto portions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs, GetGranuleMeta(), context);
+            auto portions = MakeAppendedPortions(pathId, batch, tmpGranule, maxSnapshot, blobs, GranuleMeta.get(), context);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));
@@ -399,7 +399,7 @@ void TSplitCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColum
 
 void TSplitCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
-    auto& g = CompactionInfo->GetObject<TGranuleMeta>();
+    auto& g = *GranuleMeta;
     self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
 }
 

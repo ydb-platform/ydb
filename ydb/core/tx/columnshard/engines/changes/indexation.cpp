@@ -131,7 +131,7 @@ NKikimr::TConclusion<std::vector<TString>> TInsertColumnEngineChanges::DoConstru
 
         auto granuleBatches = TMarksGranules::SliceIntoGranules(merged, PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {
-            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, GetGranuleMeta(), context);
+            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, nullptr, context);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));

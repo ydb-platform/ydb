@@ -95,14 +95,6 @@ void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     Owner->UpdateGranuleInfo(*this);
 }
 
-void TGranuleMeta::OnCompactionCanceled(const TString& reason) {
-    AllowInsertionFlag = false;
-    Y_VERIFY(Activity.erase(EActivity::InternalCompaction) || Activity.erase(EActivity::SplitCompaction));
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionCanceled")("reason", reason)("info", DebugString());
-    CompactionPriorityInfo.OnCompactionCanceled();
-    Owner->UpdateGranuleInfo(*this);
-}
-
 void TGranuleMeta::OnCompactionStarted(const bool inGranule) {
     AllowInsertionFlag = false;
     Y_VERIFY(Activity.empty());

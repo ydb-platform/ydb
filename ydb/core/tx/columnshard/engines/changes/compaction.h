@@ -11,9 +11,10 @@ class TCompactColumnEngineChanges: public TChangesWithAppend {
 private:
     using TBase = TChangesWithAppend;
     THashMap<TMark, ui32> TmpGranuleIds; // mark -> tmp granule id
+    bool NeedGranuleStatusProvide = false;
 protected:
     const TCompactionLimits Limits;
-    std::unique_ptr<TCompactionInfo> CompactionInfo;
+    std::shared_ptr<TGranuleMeta> GranuleMeta;
     TCompactionSrcGranule SrcGranule;
 
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
@@ -24,6 +25,9 @@ protected:
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const = 0;
+    virtual void OnAbortEmergency() override {
+        NeedGranuleStatusProvide = false;
+    }
 public:
     virtual bool IsSplit() const = 0;
 
@@ -36,20 +40,12 @@ public:
     std::vector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
     std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
 
-    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::unique_ptr<TCompactionInfo>&& info, const TCompactionSrcGranule& srcGranule);
+    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule);
+    ~TCompactColumnEngineChanges();
 
     ui64 SetTmpGranule(ui64 pathId, const TMark& mark);
 
     THashMap<ui64, ui64> TmpToNewGranules(TFinalizationContext& context, THashMap<ui64, std::pair<ui64, TMark>>& newGranules) const;
-
-    virtual const TGranuleMeta* GetGranuleMeta() const override;
-
-    virtual void OnChangesApplyFailed(const TString& errorMessage) override {
-        CompactionInfo->CompactionFailed(errorMessage);
-    }
-    virtual void OnChangesApplyFinished() override {
-        CompactionInfo->CompactionFinished();
-    }
 
     ui32 NumSplitInto(const ui32 srcRows) const;
 

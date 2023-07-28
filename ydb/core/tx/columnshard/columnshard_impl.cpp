@@ -764,7 +764,7 @@ void TColumnShard::SetupCompaction() {
             break;
         }
 
-        LOG_S_DEBUG("Prepare " << *compactionInfo << " at tablet " << TabletID());
+        LOG_S_DEBUG("Prepare " << compactionInfo->GetGranule()->DebugString() << "/" << compactionInfo->InGranule() << " at tablet " << TabletID());
 
         auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), limits);
         if (!indexChanges) {

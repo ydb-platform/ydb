@@ -69,7 +69,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
-        ApplySuccess = Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot); // update changes + apply
+        ApplySuccess = Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot);
         if (ApplySuccess) {
             LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
             NOlap::TWriteIndexContext context(txc, dbWrap);
@@ -81,13 +81,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
             Self->UpdateIndexCounters();
         } else {
-            NOlap::TChangesFinishContext context;
+            NOlap::TChangesFinishContext context("cannot apply changes");
             changes->Abort(*Self, context);
             LOG_S_NOTICE(TxPrefix() << "(" << changes->TypeString() << ") cannot apply changes: "
                 << *changes << TxSuffix());
         }
     } else {
-        NOlap::TChangesFinishContext context;
+        NOlap::TChangesFinishContext context("cannot write index blobs");
         changes->Abort(*Self, context);
         LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
     }
@@ -103,8 +103,8 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     const ui64 blobsWritten = Ev->Get()->PutResult->GetBlobBatch().GetBlobCount();
     const ui64 bytesWritten = Ev->Get()->PutResult->GetBlobBatch().GetTotalSize();
 
-    {
-        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, ApplySuccess, Ev->Get()->Duration, TriggerActivity);
+    if (!Ev->Get()->IndexChanges->IsAborted()) {
+        NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, TriggerActivity);
         Ev->Get()->IndexChanges->WriteIndexComplete(*Self, context);
     }
 
@@ -126,7 +126,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
 
             IncCounter(COUNTER_OUT_OF_SPACE);
             ev->Get()->SetPutStatus(NKikimrProto::TRYLATER);
-            NOlap::TChangesFinishContext context;
+            NOlap::TChangesFinishContext context("out of disk space");
             ev->Get()->IndexChanges->Abort(*this, context);
             ctx.Schedule(FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
         } else {

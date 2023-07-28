@@ -27,7 +27,7 @@ TCompatibilityInfo::TCompatibilityInfo() {
     }.ToPB();
 
     // bool success = CompleteFromTag(current);
-    // Y_VERIFY_DEBUG(success);
+    // Y_VERIFY(success);
 
     CurrentCompatibilityInfo.CopyFrom(current);
 
@@ -398,18 +398,15 @@ std::optional<NKikimrConfig::TYdbVersion> ParseYdbVersionFromTag(TString tag, TS
     version.SetMajor(major);
 
     if (parts.empty()) {
-        // example: stable-22-1 == 22.1.1.0
-        version.SetMinor(1);
-        version.SetHotfix(0);
+        // example: stable-22-1 == 22.1
+        // major version, from which minor tags are formed
         return version;
     }
 
     // parse Minor version
     ui32 minor;
     if (!TryIntFromString<10, ui32>(parts.front(), minor)) {
-        // example: stable-22-1-testing == 22.1.1.0
-        version.SetMinor(1);
-        version.SetHotfix(0);
+        // example: stable-22-1-testing == 22.1
         return version;
     }
     parts.pop_front();
@@ -494,6 +491,10 @@ TString GetTagString() {
 }
 
 bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInfo& current) {
+    if (current.GetBuild() == "trunk") {
+        Y_FAIL("Cannot complete trunk version");
+    }
+
     TString tag = GetTagString();
     for (TString delim : {"-", "."}) {
         auto tryParse = ParseYdbVersionFromTag(tag, delim);
@@ -501,20 +502,20 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
             auto versionFromTag = *tryParse;
             auto version = current.MutableYdbVersion();
             if (version->HasYear()) {
-                Y_VERIFY_DEBUG(version->GetYear() == versionFromTag.GetYear());
+                Y_VERIFY(version->GetYear() == versionFromTag.GetYear());
             } else {
                 version->SetYear(versionFromTag.GetYear());
             }
             
             if (version->HasMajor()) {
-                Y_VERIFY_DEBUG(version->GetMajor() == versionFromTag.GetMajor());
+                Y_VERIFY(version->GetMajor() == versionFromTag.GetMajor());
             } else {
                 version->SetMajor(versionFromTag.GetMajor());
             }
 
             if (versionFromTag.HasMinor()) {
                 if (version->HasMinor()) {
-                    Y_VERIFY_DEBUG(version->GetMinor() == versionFromTag.GetMinor());
+                    Y_VERIFY(version->GetMinor() == versionFromTag.GetMinor());
                 } else {
                     version->SetMinor(versionFromTag.GetMinor());
                 }
@@ -522,7 +523,7 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
 
             if (versionFromTag.HasHotfix()) {
                 if (version->HasHotfix()) {
-                    Y_VERIFY_DEBUG(version->GetHotfix() == versionFromTag.GetHotfix());
+                    Y_VERIFY(version->GetHotfix() == versionFromTag.GetHotfix());
                 } else {
                     version->SetHotfix(versionFromTag.GetHotfix());
                 }

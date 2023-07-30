@@ -63,6 +63,16 @@ struct TPlainStatus {
         auto status = static_cast<size_t>(Status);
         return TRANSPORT_STATUSES_FIRST <= status && status <= TRANSPORT_STATUSES_LAST;
     }
+
+    TStringBuilder ToDebugString() const {
+        TStringBuilder ret;
+        ret << "Status: " << Status;
+        if(!Ok())
+            ret << ", Description: " << SubstGlobalCopy(Issues.ToString(), '\n', ' ');
+        return ret;
+    }
+
+
 };
 
 } // namespace NYdb

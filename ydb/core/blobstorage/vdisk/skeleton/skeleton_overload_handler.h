@@ -49,7 +49,7 @@ namespace NKikimr {
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
     // TOverloadHandler is used to postpone events if message put rate is too high.
-    // Message put rate can very high, so that we don't have enough time to compact Hull database.
+    // Message put rate can be very high, so that we don't have enough time to compact Hull database.
     // We provide two mechanisms to handle this problem:
     // 1. Dynamic PDisk Scheduler weights -- compaction weights are changed by the system based on
     //    compaction satisfaction rank

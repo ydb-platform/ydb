@@ -77,7 +77,6 @@
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/client/server/msgbus_server_tracer.h>
 #include <ydb/core/client/server/http_ping.h>
 
 #include <library/cpp/grpc/server/actors/logger.h>
@@ -113,7 +112,6 @@
 #include <ydb/core/fq/libs/init/init.h>
 
 #include <library/cpp/logger/global/global.h>
-#include <library/cpp/monlib/messagebus/mon_messagebus.h>
 #include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -470,67 +468,6 @@ void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
 {
     if (Monitoring) {
         Monitoring->RegisterActorPage(ActorsMonPage, "icb", "Immediate Control Board", false, ActorSystem.Get(), MakeIcbId(runConfig.NodeId));
-    }
-}
-
-void TKikimrRunner::InitializeMessageBus(const TKikimrRunConfig& runConfig) {
-    if (runConfig.AppConfig.HasMessageBusConfig() && runConfig.AppConfig.GetMessageBusConfig().GetStartBusProxy()) {
-        const auto& msgbusConfig = runConfig.AppConfig.GetMessageBusConfig();
-
-        // deserialize queue and session configs
-
-        const auto& queueConfig = msgbusConfig.GetProxyBusQueueConfig();
-        ProxyBusQueueConfig.Name = queueConfig.GetName();
-        ProxyBusQueueConfig.NumWorkers = queueConfig.GetNumWorkers();
-
-        const auto& sessionConfig = msgbusConfig.GetProxyBusSessionConfig();
-
-        ProxyBusSessionConfig.Name = sessionConfig.GetName();
-        ProxyBusSessionConfig.NumRetries = sessionConfig.GetNumRetries();
-        ProxyBusSessionConfig.RetryInterval = sessionConfig.GetRetryInterval();
-        ProxyBusSessionConfig.ReconnectWhenIdle = sessionConfig.GetReconnectWhenIdle();
-        ProxyBusSessionConfig.MaxInFlight = sessionConfig.GetMaxInFlight();
-        ProxyBusSessionConfig.PerConnectionMaxInFlight = sessionConfig.GetPerConnectionMaxInFlight();
-        ProxyBusSessionConfig.PerConnectionMaxInFlightBySize = sessionConfig.GetPerConnectionMaxInFlightBySize();
-        ProxyBusSessionConfig.MaxInFlightBySize = sessionConfig.GetMaxInFlightBySize();
-        ProxyBusSessionConfig.TotalTimeout = sessionConfig.GetTotalTimeout();
-        ProxyBusSessionConfig.SendTimeout = sessionConfig.GetSendTimeout();
-        ProxyBusSessionConfig.ConnectTimeout = sessionConfig.GetConnectTimeout();
-        ProxyBusSessionConfig.DefaultBufferSize = sessionConfig.GetDefaultBufferSize();
-        ProxyBusSessionConfig.MaxBufferSize = sessionConfig.GetMaxBufferSize();
-        ProxyBusSessionConfig.SocketRecvBufferSize = sessionConfig.GetSocketRecvBufferSize();
-        ProxyBusSessionConfig.SocketSendBufferSize = sessionConfig.GetSocketSendBufferSize();
-        ProxyBusSessionConfig.SocketToS = sessionConfig.GetSocketToS();
-        ProxyBusSessionConfig.SendThreshold = sessionConfig.GetSendThreshold();
-        ProxyBusSessionConfig.Cork = TDuration::MilliSeconds(sessionConfig.GetCork());
-        ProxyBusSessionConfig.MaxMessageSize = sessionConfig.GetMaxMessageSize();
-        ProxyBusSessionConfig.TcpNoDelay = sessionConfig.GetTcpNoDelay();
-        ProxyBusSessionConfig.TcpCork = sessionConfig.GetTcpCork();
-        ProxyBusSessionConfig.ExecuteOnMessageInWorkerPool = sessionConfig.GetExecuteOnMessageInWorkerPool();
-        ProxyBusSessionConfig.ExecuteOnReplyInWorkerPool = sessionConfig.GetExecuteOnReplyInWorkerPool();
-        ProxyBusSessionConfig.ListenPort = sessionConfig.GetListenPort();
-
-        Bus.Reset(NBus::CreateMessageQueue(ProxyBusQueueConfig, "server proxy"));
-        if (msgbusConfig.GetStartTracingBusProxy()) {
-            BusServer.Reset(NMsgBusProxy::CreateMsgBusTracingServer(
-                Bus.Get(),
-                ProxyBusSessionConfig,
-                msgbusConfig.GetTracePath(),
-                msgbusConfig.GetBusProxyPort())
-            );
-        }
-        else {
-            BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
-                Bus.Get(),
-                ProxyBusSessionConfig,
-                msgbusConfig.GetBusProxyPort()
-            ));
-        }
-
-        if (Monitoring) {
-            BusMonPage.Reset(new NMonitoring::TBusNgMonPage());
-            Monitoring->Register(BusMonPage.Get());
-        }
     }
 }
 
@@ -1046,7 +983,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                FunctionRegistry.Get(),
                                FormatFactory.Get(),
                                &KikimrShouldContinue));
-    
+
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
@@ -1067,7 +1004,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.Get();
-    AppData->BusMonPage = BusMonPage.Get();
     AppData->PollerThreads = PollerThreads;
     AppData->LocalScopeId = runConfig.ScopeId;
 
@@ -1465,13 +1401,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnablePersQueueClusterTracker) {
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
-    
+
     if (serviceMask.EnableIcNodeCacheService) {
         sil->AddServiceInitializer(new TIcNodeCacheServiceInitializer(runConfig));
-    }
-
-    if (BusServer && serviceMask.EnableMessageBusServices) {
-        sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer));
     }
 
     if (serviceMask.EnableMiniKQLCompileService) {
@@ -1722,10 +1654,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         Monitoring->Stop();
     }
 
-    if (BusMonPage) {
-        BusMonPage.Drop();
-    }
-
     if (PollerThreads) {
         PollerThreads->Stop();
     }
@@ -1747,11 +1675,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     for (auto& server : GRpcServers) {
         server.second.Destroy();
-    }
-
-    if (Bus) {
-        Bus->Stop();
-        Bus.Drop();
     }
 
     if (YqSharedResources) {
@@ -1841,7 +1764,6 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeRegistries(runConfig);
     runner->InitializeMonitoring(runConfig);
     runner->InitializeControlBoard(runConfig);
-    runner->InitializeMessageBus(runConfig);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, runConfig.ServicesMask));

@@ -53,13 +53,6 @@ protected:
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
-    NBus::TBusQueueConfig ProxyBusQueueConfig;
-    NBus::TBusSessionConfig ProxyBusSessionConfig;
-    NBus::TBusMessageQueuePtr Bus;
-
-    TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
-    TIntrusivePtr<NMonitoring::TBusNgMonPage> BusMonPage;
-
     TVector<std::pair<TString, TAutoPtr<NGrpc::TGRpcServer>>> GRpcServers;
 
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
@@ -85,8 +78,6 @@ protected:
     void InitializeControlBoard(const TKikimrRunConfig& runConfig);
 
     void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
-
-    void InitializeMessageBus(const TKikimrRunConfig& runConfig);
 
     void InitializeGRpc(const TKikimrRunConfig& runConfig);
 

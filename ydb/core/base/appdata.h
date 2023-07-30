@@ -120,7 +120,6 @@ struct TAppData {
 
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TBusNgMonPage* BusMonPage;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 

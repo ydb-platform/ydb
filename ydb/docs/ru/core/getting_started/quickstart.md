@@ -25,7 +25,7 @@
    2. Загрузите и запустите скрипт установки:
 
       ```bash
-      curl https://binaries.ydb.tech/local_scripts/install.sh | bash
+      curl {{ ydb-binaries-url }}/local_scripts/install.sh | bash
       ```
 
       Это действие загрузит и распакует архив с исполняемым файлом `ydbd`, библиотеками, файлами конфигурации и скриптами, необходимыми для запуска и остановки локального кластера.

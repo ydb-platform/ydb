@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(glob)
 add_subdirectory(hyperscan)
 add_subdirectory(pcre)
 add_subdirectory(pire)

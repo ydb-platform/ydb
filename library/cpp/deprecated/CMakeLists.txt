@@ -8,10 +8,6 @@
 
 add_subdirectory(accessors)
 add_subdirectory(atomic)
-add_subdirectory(autoarray)
-add_subdirectory(datafile)
 add_subdirectory(enum_codegen)
-add_subdirectory(fgood)
 add_subdirectory(kmp)
-add_subdirectory(mapped_file)
 add_subdirectory(split)

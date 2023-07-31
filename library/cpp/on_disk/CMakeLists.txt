@@ -7,4 +7,3 @@
 
 
 add_subdirectory(chunks)
-add_subdirectory(st_hash)

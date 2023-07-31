@@ -1,6 +1,7 @@
 #include "abstract.h"
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr::NOlap {
@@ -62,6 +63,8 @@ void TColumnEngineChanges::WriteIndexComplete(NColumnShard::TColumnShard& self, 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "WriteIndexComplete")("type", TypeString())("success", context.FinishedSuccessfully);
     DoWriteIndexComplete(self, context);
     DoOnFinish(self, context);
+    self.IncCounter(GetCounterIndex(context.FinishedSuccessfully));
+
 }
 
 void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
@@ -77,7 +80,7 @@ void TColumnEngineChanges::Compile(TFinalizationContext& context) noexcept {
 }
 
 TColumnEngineChanges::~TColumnEngineChanges() {
-    Y_VERIFY(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
+    Y_VERIFY_DEBUG(!NActors::TlsActivationContext || Stage == EStage::Created || Stage == EStage::Finished || Stage == EStage::Aborted);
 }
 
 void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {

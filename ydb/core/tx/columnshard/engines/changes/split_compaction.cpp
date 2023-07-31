@@ -403,4 +403,8 @@ void TSplitCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self)
     self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
 }
 
+NColumnShard::ECumulativeCounters TSplitCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
+    return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
+}
+
 }

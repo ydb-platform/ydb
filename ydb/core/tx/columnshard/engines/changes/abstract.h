@@ -2,6 +2,7 @@
 #include "mark.h"
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
@@ -187,6 +188,8 @@ protected:
     virtual void OnAbortEmergency() {
 
     }
+
+    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 public:
     TConclusion<std::vector<TString>> ConstructBlobs(TConstructionContext& context);
     virtual ~TColumnEngineChanges();

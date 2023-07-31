@@ -27,7 +27,7 @@ public:
             context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvNewTask(task));
             return true;
         } else {
-            task->Execute();
+            task->Execute(nullptr);
             context.Send(selfId, new NConveyor::TEvExecution::TEvTaskProcessedResult(task));
             return false;
         }

@@ -21,6 +21,7 @@ protected:
     virtual bool NeedConstruction() const override {
         return false;
     }
+    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     std::vector<TPortionInfo> PortionsToDrop;
     bool NeedRepeat = false;
@@ -43,7 +44,7 @@ public:
     }
 
     virtual TString TypeString() const override {
-        return "cleanup";
+        return "CLEANUP";
     }
 };
 

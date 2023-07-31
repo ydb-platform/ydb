@@ -27,6 +27,7 @@ protected:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }
+    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     std::vector<TColumnRecord> EvictedRecords;
     THashMap<ui64, NOlap::TTiering> Tiering;
@@ -49,7 +50,7 @@ public:
     }
 
     virtual TString TypeString() const override {
-        return "ttl";
+        return "TTL";
     }
 };
 

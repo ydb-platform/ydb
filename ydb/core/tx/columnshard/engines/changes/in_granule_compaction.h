@@ -21,6 +21,7 @@ protected:
         return TPortionMeta::COMPACTED;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
+    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     virtual bool IsSplit() const override {
         return false;

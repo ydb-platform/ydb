@@ -132,6 +132,10 @@ private:
             return true;
         }
     public:
+        virtual TString GetTaskClassIdentifier() const override {
+            return "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
+        }
+
         std::unique_ptr<TEvPrivate::TEvWriteIndex> ExtractEvent() {
             Y_VERIFY(TxEvent);
             return std::move(TxEvent);

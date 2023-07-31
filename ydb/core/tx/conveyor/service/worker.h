@@ -16,6 +16,7 @@ private:
     YDB_READONLY_DEF(ITask::TPtr, Task);
     YDB_READONLY_DEF(NActors::TActorId, OwnerId);
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
+    YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
 public:
     void OnBeforeStart() {
@@ -27,9 +28,11 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId)
+    TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId, std::shared_ptr<TTaskSignals> taskSignals)
         : Task(task)
-        , OwnerId(ownerId) {
+        , OwnerId(ownerId)
+        , TaskSignals(taskSignals)
+    {
         Y_VERIFY(task);
     }
 

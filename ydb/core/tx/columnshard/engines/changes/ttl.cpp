@@ -136,7 +136,8 @@ void TTTLColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWr
     }
 }
 
-void TTTLColumnEngineChanges::DoCompile(TFinalizationContext& /*context*/) {
+void TTTLColumnEngineChanges::DoCompile(TFinalizationContext& context) {
+    TBase::DoCompile(context);
     for (auto& [portionInfo, _] : PortionsToEvict) {
         portionInfo.UpdateRecordsMeta(TPortionMeta::EVICTED);
     }
@@ -146,7 +147,12 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartTtl(*this);
 }
 
+void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
+    self.BackgroundController.FinishTtl();
+}
+
 void TTTLColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexComplete(self, context);
     for (auto& [tierName, pathBlobs] : ExportTierBlobs) {
         for (auto& [pathId, blobs] : pathBlobs) {
             ++ExportNo;
@@ -160,13 +166,8 @@ void TTTLColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& s
         Y_VERIFY(!self.ActiveEvictions, "Unexpected active evictions count at tablet %lu", self.TabletID());
     }
 
-    self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_TTL_SUCCESS : NColumnShard::COUNTER_TTL_FAIL);
     self.IncCounter(NColumnShard::COUNTER_EVICTION_BLOBS_WRITTEN, context.BlobsWritten);
     self.IncCounter(NColumnShard::COUNTER_EVICTION_BYTES_WRITTEN, context.BytesWritten);
-}
-
-void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
-    self.BackgroundController.FinishTtl();
 }
 
 bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TPortionEvictionFeatures& evictFeatures,
@@ -224,6 +225,9 @@ NKikimr::TConclusion<std::vector<TString>> TTTLColumnEngineChanges::DoConstructB
     Y_VERIFY(!PortionsToEvict.empty()); // src meta
     Y_VERIFY(EvictedRecords.empty());   // dst meta
 
+    auto baseResult = TBase::DoConstructBlobs(context);
+    Y_VERIFY(baseResult.IsSuccess() && baseResult.GetResult().empty());
+
     std::vector<TString> newBlobs;
     std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> evicted;
     evicted.reserve(PortionsToEvict.size());
@@ -241,6 +245,10 @@ NKikimr::TConclusion<std::vector<TString>> TTTLColumnEngineChanges::DoConstructB
 
     PortionsToEvict.swap(evicted);
     return newBlobs;
+}
+
+NColumnShard::ECumulativeCounters TTTLColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
+    return isSuccess ? NColumnShard::COUNTER_TTL_SUCCESS : NColumnShard::COUNTER_TTL_FAIL;
 }
 
 }

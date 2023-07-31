@@ -29,8 +29,8 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
     Counters.ExecuteHistogram->Collect((TMonotonic::Now() - ev->Get()->GetStartInstant()).MilliSeconds());
     if (Waiting.size()) {
         auto task = Waiting.pop();
-        task.OnBeforeStart();
         Counters.WaitingHistogram->Collect((TMonotonic::Now() - task.GetCreateInstant()).MilliSeconds());
+        task.OnBeforeStart();
         Send(ev->Sender, new TEvInternal::TEvNewTask(task));
     } else {
         Workers.emplace_back(ev->Sender);
@@ -49,15 +49,24 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev) {
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     ALS_DEBUG(NKikimrServices::TX_CONVEYOR) << "action=add_task;owner=" << ev->Sender << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();
     Counters.IncomingRate->Inc();
+
+    const TString taskClass = ev->Get()->GetTask()->GetTaskClassIdentifier();
+    auto itSignal = Signals.find(taskClass);
+    if (itSignal == Signals.end()) {
+        itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
+    }
+
+    TWorkerTask wTask(ev->Get()->GetTask(), ev->Sender, itSignal->second);
+
     if (Workers.size()) {
         Counters.WaitingHistogram->Collect(0);
-        TWorkerTask wTask(ev->Get()->GetTask(), ev->Sender);
+
         wTask.OnBeforeStart();
         Send(Workers.back(), new TEvInternal::TEvNewTask(wTask));
         Workers.pop_back();
         Counters.UseWorkerRate->Inc();
     } else if (Waiting.size() < Config.GetQueueSizeLimit()) {
-        Waiting.push(TWorkerTask(ev->Get()->GetTask(), ev->Sender));
+        Waiting.push(wTask);
         Counters.WaitWorkerRate->Inc();
     } else {
         ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "action=overlimit;sender=" << ev->Sender << ";workers=" << Workers.size() << ";waiting=" << Waiting.size();

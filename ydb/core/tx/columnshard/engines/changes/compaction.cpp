@@ -250,7 +250,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
-    Y_VERIFY(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+    Y_VERIFY_DEBUG(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
 }
 
 }

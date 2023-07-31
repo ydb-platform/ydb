@@ -61,7 +61,6 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
 }
 
 void TInsertColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_INDEXING_SUCCESS : NColumnShard::COUNTER_INDEXING_FAIL);
     self.IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, context.BlobsWritten);
     self.IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, context.BytesWritten);
     self.IncCounter(NColumnShard::COUNTER_INDEXING_TIME, context.Duration.MilliSeconds());
@@ -150,6 +149,10 @@ std::shared_ptr<arrow::RecordBatch> TInsertColumnEngineChanges::AddSpecials(cons
     Y_VERIFY(batch);
 
     return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
+}
+
+NColumnShard::ECumulativeCounters TInsertColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
+    return isSuccess ? NColumnShard::COUNTER_INDEXING_SUCCESS : NColumnShard::COUNTER_INDEXING_FAIL;
 }
 
 }

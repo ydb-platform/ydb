@@ -71,12 +71,15 @@ void TCleanupColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
 
 void TCleanupColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
     self.ForgetBlobs(context.ActorContext, BlobsToForget);
-    self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL);
     context.TriggerActivity = NeedRepeat ? NColumnShard::TBackgroundActivity::Cleanup() : NColumnShard::TBackgroundActivity::None();
 }
 
 void TCleanupColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
     self.BackgroundController.FinishCleanup();
+}
+
+NColumnShard::ECumulativeCounters TCleanupColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
+    return isSuccess ? NColumnShard::COUNTER_CLEANUP_SUCCESS : NColumnShard::COUNTER_CLEANUP_FAIL;
 }
 
 }

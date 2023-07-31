@@ -178,7 +178,6 @@ TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstr
 
 void TInGranuleCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
     TBase::DoWriteIndexComplete(self, context);
-    self.IncCounter(context.FinishedSuccessfully ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL);
     self.IncCounter(NColumnShard::COUNTER_COMPACTION_BLOBS_WRITTEN, context.BlobsWritten);
     self.IncCounter(NColumnShard::COUNTER_COMPACTION_BYTES_WRITTEN, context.BytesWritten);
 }
@@ -188,6 +187,10 @@ void TInGranuleCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& s
     auto& g = *GranuleMeta;
     self.CSCounters.OnInternalCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
     Y_VERIFY(InitInGranuleMerge(SrcGranule.Mark, SwitchedPortions, Limits, MergeBorders).Ok());
+}
+
+NColumnShard::ECumulativeCounters TInGranuleCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
+    return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }
 
 }

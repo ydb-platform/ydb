@@ -19,6 +19,7 @@ protected:
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
+    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     const TMark DefaultMark;
     THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
@@ -33,7 +34,7 @@ public:
     }
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;
     virtual TString TypeString() const override {
-        return "insert";
+        return "INSERT";
     }
     bool AddPathIfNotExists(ui64 pathId);
 

@@ -77,6 +77,7 @@ private:
     TDequePriorityFIFO Waiting;
     std::vector<TActorId> Workers;
     TCounters Counters;
+    THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);

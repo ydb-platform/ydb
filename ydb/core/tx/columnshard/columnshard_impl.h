@@ -156,6 +156,7 @@ class TColumnShard
     friend class NOlap::TInGranuleCompactColumnEngineChanges;
     friend class NOlap::TSplitCompactColumnEngineChanges;
     friend class NOlap::TInsertColumnEngineChanges;
+    friend class NOlap::TColumnEngineChanges;
 
     friend class TTxController;
 

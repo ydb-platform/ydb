@@ -102,12 +102,13 @@ struct Schema : NIceDb::Schema {
         struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
         struct AllowMultipleRealmsOccupation : Column<20, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
+        struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
-              GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation>;
+              GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo>;
     };
 
     struct VSlot : Table<5> {

@@ -157,6 +157,18 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
         }
     };
 
+    class TTxUpdateCompatibilityInfo : public TTxBase {
+    public:
+        bool Execute(TTransactionContext& txc) override {
+            TString currentCompatibilityInfo;
+            auto componentId = NKikimrConfig::TCompatibilityRule::BlobStorageController;
+            bool success = CompatibilityInfo.MakeStored(componentId).SerializeToString(&currentCompatibilityInfo);
+            Y_VERIFY(success);
+            NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::CompatibilityInfo>(currentCompatibilityInfo);
+            return true;
+        }
+    };
+
     TDeque<THolder<TTxBase>> Queue;
 
 public:
@@ -170,12 +182,27 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        auto state = db.Table<Schema::State>().Select<Schema::State::SchemaVersion, Schema::State::InstanceId>();
+        auto state = db.Table<Schema::State>().Select<Schema::State::SchemaVersion, Schema::State::InstanceId,
+                Schema::State::CompatibilityInfo>();
+
         if (!state.IsReady()) {
             return false;
         }
         bool hasInstanceId = false;
         if (state.IsValid()) {
+            std::optional<NKikimrConfig::TStoredCompatibilityInfo> stored;
+            if (state.HaveValue<Schema::State::CompatibilityInfo>()) {
+                stored.emplace();
+                bool success = stored->ParseFromString(state.GetValue<Schema::State::CompatibilityInfo>());
+                Y_VERIFY(success);
+            }
+            if (!CompatibilityInfo.CheckCompatibility(stored ? &*stored : nullptr, 
+                    NKikimrConfig::TCompatibilityRule::BlobStorageController,
+                    CompatibilityError)) {
+                IncompatibleData = true;
+                return true;
+            }
+
             const ui32 version = state.GetValue<Schema::State::SchemaVersion>();
             if (Schema::CurrentSchemaVersion >= Schema::BoxHostMigrationSchemaVersion && version < Schema::BoxHostMigrationSchemaVersion) {
                 Y_FAIL("unsupported schema");
@@ -199,14 +226,25 @@ public:
         Queue.emplace_back(new TTxFillInNonNullConfigForPDisk);
 
         Queue.emplace_back(new TTxDropDriveStatus);
+    
+        Queue.emplace_back(new TTxUpdateCompatibilityInfo);
 
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM02, "Complete tx");
-        Self->Execute(new TTxQueue(Self, std::move(Queue)));
+    void Complete(const TActorContext& ctx) override {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM02, "Complete tx", (IncompatibleData, IncompatibleData));
+        if (IncompatibleData) {
+            STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM03, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));
+            ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, nullptr, 0));
+        } else {
+            Self->Execute(new TTxQueue(Self, std::move(Queue)));
+        }
     }
+
+private:
+    bool IncompatibleData = false;
+    TString CompatibilityError;
 };
 
 ITransaction* TBlobStorageController::CreateTxMigrate() {

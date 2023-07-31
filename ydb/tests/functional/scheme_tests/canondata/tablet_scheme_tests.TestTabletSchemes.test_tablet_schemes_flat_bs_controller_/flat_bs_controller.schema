@@ -100,6 +100,11 @@
                 "ColumnId": 20,
                 "ColumnName": "AllowMultipleRealmsOccupation",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "CompatibilityInfo",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -124,7 +129,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,

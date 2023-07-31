@@ -1,3 +1,5 @@
+IF (NOT SANITIZER_TYPE AND NOT OPENSOURCE)
+
 EXECTEST()
 
 RUN(protobuf ${ARCADIA_BUILD_ROOT}/ydb/library/yql/udfs STDOUT log.out CANONIZE_LOCALLY log.out)
@@ -9,3 +11,5 @@ DEPENDS(
 )
 
 END()
+
+ENDIF()

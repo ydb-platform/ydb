@@ -136,6 +136,16 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_with_selector_aliases.sql-result_sets_/index_topsort_index_with_selector_aliases.sql.results"
         }
     },
+    "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_with_selector_aliases_2.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_with_selector_aliases_2.sql-plan_/index_topsort_index_with_selector_aliases_2.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_with_selector_aliases_2.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_with_selector_aliases_2.sql-result_sets_/index_topsort_index_with_selector_aliases_2.sql.results"
+        }
+    },
     "test_sql.TestCanonicalFolder1.test_case[index_predicate_point.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_predicate_point.sql-plan_/index_predicate_point.sql.plan"

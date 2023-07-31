@@ -9,3 +9,14 @@ CREATE TABLE NewTableWithIndex (
     INDEX NewIndex1 GLOBAL ON (Index1A, Index1B),
     INDEX NewIndex2 GLOBAL ON (Index2)
 );
+
+CREATE TABLE personal_storefront
+(
+    hashOrderDate Uint64,
+    orderDate String,
+    orderId Uint64,
+    buyerFullNamePdId String,
+    recipientFullNamePdId String,
+    courierAddressPdId String,
+    PRIMARY KEY (hashOrderDate, orderDate, orderId)
+);

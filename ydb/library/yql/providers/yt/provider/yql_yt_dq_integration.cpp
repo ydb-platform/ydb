@@ -278,7 +278,7 @@ public:
                 AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues);
                 return false;
             }
-
+            ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
                 if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings)) {
                     TStringBuilder info;
@@ -320,8 +320,13 @@ public:
                             AddInfo(ctx, "table with QB2 premapper", skipIssues);
                             return false;
                         }
+                        chunksCount += tableInfo->Stat->ChunkCount;
                     }
                 }
+            }
+            if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
+                AddInfo(ctx, "table with too many chunks", skipIssues);
+                return false;
             }
             return true;
         }
@@ -334,7 +339,6 @@ public:
 
             ui64 dataSize = 0;
             bool hasErasure = false;
-            ui64 chunksCount = 0;
             auto cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
 
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
@@ -362,7 +366,6 @@ public:
                         if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
                             hasErasure = true;
                         }
-                        chunksCount += tableInfo->Stat->ChunkCount;
                     }
                     groupIdPathInfos.back().emplace_back(pathInfo);
                 }
@@ -379,11 +382,6 @@ public:
                         return Nothing();
                     }
                 }
-            }
-
-            if (auto maxChunks = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ); chunksCount > maxChunks) {
-                AddErrorWrap(ctx, node.Pos(), "table with too many chunks");
-                return Nothing();
             }
 
             return dataSize;

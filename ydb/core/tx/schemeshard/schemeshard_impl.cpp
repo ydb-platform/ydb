@@ -6230,6 +6230,10 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tableDescr->MutableReplicationConfig()->CopyFrom(tinfo->ReplicationConfig());
     }
 
+    if (AppData()->DisableRichTableDescriptionForTest) {
+        return;
+    }
+
     // Fill indexes & cdc streams (if any)
     for (const auto& child : pinfo->GetChildren()) {
         const auto& childName = child.first;

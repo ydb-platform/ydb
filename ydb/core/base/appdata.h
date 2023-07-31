@@ -176,6 +176,9 @@ struct TAppData {
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;
 
+    // Used to exclude indexes, cdc streams & sequences from table description on DataShards
+    bool DisableRichTableDescriptionForTest = false;
+
     TMaybe<ui32> ZstdBlockSizeForTest;
 
     // Used to disable checking nodes with sys tablets only in cms

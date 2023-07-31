@@ -41,9 +41,11 @@ namespace NKikimr::NTestShard {
                 NJson::TJsonValue root(NJson::JSON_MAP);
 
                 std::vector<TDuration> intervals;
-                intervals.reserve(30);
-                for (ui32 i = 0; i < 29; ++i) {
-                    const double seconds = 1e-5 * round(100 * pow(10, i / 7.0));
+                constexpr size_t orders = 4;
+                constexpr size_t stepsPerOrder = 20;
+                intervals.reserve(orders * stepsPerOrder + 2);
+                for (ui32 i = 0; i < orders * stepsPerOrder + 1; ++i) {
+                    const double seconds = 1e-5 * round(100 * pow(10, (double)i / stepsPerOrder));
                     intervals.push_back(TDuration::Seconds(seconds));
                 }
                 intervals.push_back(TDuration::Max());

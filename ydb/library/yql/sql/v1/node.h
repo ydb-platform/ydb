@@ -174,7 +174,6 @@ namespace NSQLTranslationV1 {
         void UseAsInner();
         virtual bool UsedSubquery() const;
         virtual bool IsSelect() const;
-        virtual bool HasSelectResult() const;
         virtual const TString* FuncName() const;
         virtual const TString* ModuleName() const;
         virtual bool HasSkip() const;

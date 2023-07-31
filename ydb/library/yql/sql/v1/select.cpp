@@ -1160,10 +1160,6 @@ public:
         return Settings;
     }
 
-    bool HasSelectResult() const final {
-        return !Settings.Discard;
-    }
-
     TPtr DoClone() const final {
         return new TReduceSource(Pos, Mode, Source->CloneSource(), CloneContainer(OrderBy),
             CloneContainer(Keys), CloneContainer(Args), SafeClone(Udf), SafeClone(Having), Settings,
@@ -1378,10 +1374,6 @@ public:
 
     TWriteSettings GetWriteSettings() const override {
         return Settings;
-    }
-
-    bool HasSelectResult() const override {
-        return !Settings.Discard;
     }
 
     TNodePtr DoClone() const final {
@@ -1754,10 +1746,6 @@ public:
 
     bool IsSelect() const override {
         return true;
-    }
-
-    bool HasSelectResult() const override {
-        return !Settings.Discard;
     }
 
     bool IsStream() const override {
@@ -2370,10 +2358,6 @@ public:
         return false;
     }
 
-    bool HasSelectResult() const override {
-        return !Settings.Discard;
-    }
-
     bool IsStream() const override {
         return Source->IsStream();
     }
@@ -2678,10 +2662,6 @@ public:
         return true;
     }
 
-    bool HasSelectResult() const override {
-        return !Settings.Discard;
-    }
-
     TWriteSettings GetWriteSettings() const override {
         return Settings;
     }
@@ -2876,10 +2856,6 @@ public:
         return Source->IsSelect();
     }
 
-    bool HasSelectResult() const override {
-        return Source->HasSelectResult();
-    }
-
     TPtr DoClone() const final {
         return MakeIntrusive<TSelect>(Pos, Source->CloneSource(), SafeClone(SkipTake));
     }
@@ -2913,10 +2889,6 @@ public:
 
     bool IsSelect() const override {
         return true;
-    }
-
-    bool HasSelectResult() const override {
-        return Source->HasSelectResult();
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -2991,7 +2963,7 @@ public:
             return false;
         }
         node = L(node, Y("let", "output", output));
-        if (WriteResult || writeSettings.Discard) {
+        if (WriteResult) {
             if (EOrderKind::None == Source->GetOrderKind() && ctx.UseUnordered(*Source)) {
                 node = L(node, Y("let", "output", Y("Unordered", "output")));
             }

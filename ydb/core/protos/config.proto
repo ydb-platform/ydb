@@ -811,7 +811,7 @@ message TFeatureFlags {
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
-    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
+    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];

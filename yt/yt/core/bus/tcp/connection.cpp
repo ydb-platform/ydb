@@ -2016,7 +2016,7 @@ void TTcpConnection::TryEstablishSslSession()
 
 bool TTcpConnection::OnSslAckPacketReceived()
 {
-    YT_LOG_DEBUG("SslAck received");
+    YT_LOG_DEBUG("TLS/SSL acknowledgement received");
 
     SslAckReceived_ = true;
 
@@ -2032,7 +2032,7 @@ bool TTcpConnection::OnSslAckPacketReceived()
 
 void TTcpConnection::OnSslAckPacketSent()
 {
-    YT_LOG_DEBUG("SslAck sent");
+    YT_LOG_DEBUG("TLS/SSL acknowledgement sent");
 
     SslAckSent_ = true;
 

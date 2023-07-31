@@ -7,7 +7,6 @@ copy=[
     "cmake/global_flags.linker.msvc.cmake"
 ]
 
-
 [attrs.target]
 vcs_info = {type="list", copy=[
     "cmake/common.cmake",

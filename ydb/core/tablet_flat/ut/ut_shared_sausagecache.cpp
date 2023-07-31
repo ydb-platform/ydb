@@ -171,9 +171,9 @@ Y_UNIT_TEST(MemTableRegistration) {
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendAsync(new NFake::TEvExecute{ new TTxInitSchema() });
-    env.SendAsync(new NFake::TEvExecute{ new TTxWriteRow(1, "asdf") });
 
     WaitEvent(env, NSharedCache::EvMemTableRegistered);
+    env.WaitForWakeUp(1);
 
     // stop:
 

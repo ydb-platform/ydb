@@ -54,5 +54,22 @@ NActors::IActor* MakeDiscoverYDBBindingName(
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
+
+/// ModifyConnection
+
+NActors::IActor* MakeListBindingIds(
+    const TActorId sender,
+    const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
+NActors::IActor* MakeDescribeListedBinding(
+    const TActorId sender,
+    const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
 } // namespace NPrivate
 } // namespace NFq

@@ -546,6 +546,7 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryModifyConnectionReques
         TVector<NPerms::TPermission> basePermissions{
             NPerms::Required("yq.connections.update"),
             NPerms::Required("yq.connections.get"),
+            NPerms::Required("yq.bindings.get"),
             NPerms::Optional("yq.resources.managePrivate"),
             NPerms::Optional("yq.resources.viewPublic"),
             NPerms::Optional("yq.resources.viewPrivate")

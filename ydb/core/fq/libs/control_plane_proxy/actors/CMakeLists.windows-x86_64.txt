@@ -16,6 +16,7 @@ target_link_libraries(libs-control_plane_proxy-actors PUBLIC
   yutil
   contrib-libs-fmt
   library-cpp-iterator
+  fq-libs-common
   libs-control_plane_proxy-events
   libs-control_plane_storage-events
   fq-libs-result_formatter

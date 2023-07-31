@@ -18,7 +18,7 @@
 
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_proxy/actors/control_plane_storage_requester_actor.h>
-#include <ydb/core/fq/libs/control_plane_proxy/actors/ydb_create_compute_session_actor.h>
+#include <ydb/core/fq/libs/control_plane_proxy/actors/utils.h>
 #include <ydb/core/fq/libs/control_plane_proxy/actors/ydb_schema_query_actor.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 
@@ -43,6 +43,7 @@
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/events.h>
+#include <memory>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
@@ -831,6 +832,8 @@ private:
 
         return issues;
     }
+
+
 
     void Handle(TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr& ev) {
         TInstant startTime = TInstant::Now();
@@ -1687,18 +1690,11 @@ private:
         };
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && !ydbOperationWasPerformed) {
-            if (!ev->Get()->YDBSession) {
-                Register(MakeComputeYDBSessionActor<
-                         TEvControlPlaneProxy::TEvCreateConnectionRequest,
-                         TEvControlPlaneProxy::TEvCreateConnectionResponse>(
-                    sender,
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters.GetCommonCounters(RTC_CREATE_YDB_SESSION),
-                    Config.ComputeConfig,
-                    YqSharedResources,
-                    CredentialsProviderFactory));
-                return;
+            if (!ev->Get()->YDBClient) {
+                ev->Get()->YDBClient = CreateNewTableClient(ev,
+                                                            Config.ComputeConfig,
+                                                            YqSharedResources,
+                                                            CredentialsProviderFactory);
             }
 
             Register(NPrivate::MakeCreateConnectionActor(
@@ -1706,7 +1702,7 @@ private:
                 std::move(ev),
                 Config.RequestTimeout,
                 Counters,
-                Config.CommonConfig.GetObjectStorageEndpoint(),
+                Config.CommonConfig,
                 Signer));
             return;
         }
@@ -1963,7 +1959,18 @@ private:
                 sender, ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
-
+        if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && !ev->Get()->OldBindingNamesDiscoveryFinished) {
+            auto permissions = ExtractPermissions(ev, availablePermissions);
+            Register(MakeListBindingIds(
+                sender, ev, Counters, Config.RequestTimeout, permissions));
+            return;
+        }
+        if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && ev->Get()->OldBindingIds.size() != ev->Get()->OldBindingContents.size()) {
+            auto permissions = ExtractPermissions(ev, availablePermissions);
+            Register(MakeDescribeListedBinding(
+                sender, ev, Counters, Config.RequestTimeout, permissions));
+            return;
+        }
         const bool controlPlaneYDBOperationWasPerformed = ev->Get()->ControlPlaneYDBOperationWasPerformed;
         if (!controlPlaneYDBOperationWasPerformed) {
             auto sender          = ev->Sender;
@@ -1992,18 +1999,11 @@ private:
         }
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled()) {
-            if (!ev->Get()->YDBSession) {
-                Register(MakeComputeYDBSessionActor<
-                         TEvControlPlaneProxy::TEvModifyConnectionRequest,
-                         TEvControlPlaneProxy::TEvModifyConnectionResponse>(
-                    sender,
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters.GetCommonCounters(RTC_CREATE_YDB_SESSION),
-                    Config.ComputeConfig,
-                    YqSharedResources,
-                    CredentialsProviderFactory));
-                return;
+            if (!ev->Get()->YDBClient) {
+                ev->Get()->YDBClient = CreateNewTableClient(ev,
+                                                            Config.ComputeConfig,
+                                                            YqSharedResources,
+                                                            CredentialsProviderFactory);
             }
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
@@ -2012,7 +2012,7 @@ private:
                     ev,
                     Config.RequestTimeout,
                     Counters,
-                    Config.CommonConfig.GetObjectStorageEndpoint(),
+                    Config.CommonConfig,
                     Signer));
                 return;
             }
@@ -2116,16 +2116,11 @@ private:
         }
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled()) {
-            if (!ev->Get()->YDBSession) {
-                Register(MakeComputeYDBSessionActor<
-                         TEvControlPlaneProxy::TEvDeleteConnectionRequest,
-                         TEvControlPlaneProxy::TEvDeleteConnectionResponse>(
-                    sender,
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters.GetCommonCounters(RTC_CREATE_YDB_SESSION),
-                    Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
-                return;
+            if (!ev->Get()->YDBClient) {
+                ev->Get()->YDBClient = CreateNewTableClient(ev,
+                                                            Config.ComputeConfig,
+                                                            YqSharedResources,
+                                                            CredentialsProviderFactory);
             }
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
@@ -2283,16 +2278,11 @@ private:
                 return;
             }
 
-            if (!ev->Get()->YDBSession) {
-                Register(MakeComputeYDBSessionActor<
-                         TEvControlPlaneProxy::TEvCreateBindingRequest,
-                         TEvControlPlaneProxy::TEvCreateBindingResponse>(
-                    sender,
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters.GetCommonCounters(RTC_CREATE_YDB_SESSION),
-                    Config.ComputeConfig, YqSharedResources, CredentialsProviderFactory));
-                return;
+            if (!ev->Get()->YDBClient) {
+                ev->Get()->YDBClient = CreateNewTableClient(ev,
+                                                            Config.ComputeConfig,
+                                                            YqSharedResources,
+                                                            CredentialsProviderFactory);
             }
 
             Register(MakeCreateBindingActor(
@@ -2528,7 +2518,7 @@ private:
         };
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled()) {
-            if (!ev->Get()->OldBindingName) {
+            if (!ev->Get()->OldBindingContent) {
                 auto permissions = ExtractPermissions(ev, availablePermissions);
                 Register(MakeDiscoverYDBBindingName(
                     sender, ev, Counters, Config.RequestTimeout, permissions));
@@ -2564,18 +2554,11 @@ private:
         }
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled()) {
-            if (!ev->Get()->YDBSession) {
-                Register(MakeComputeYDBSessionActor<
-                         TEvControlPlaneProxy::TEvModifyBindingRequest,
-                         TEvControlPlaneProxy::TEvModifyBindingResponse>(
-                    sender,
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters.GetCommonCounters(RTC_CREATE_YDB_SESSION),
-                    Config.ComputeConfig,
-                    YqSharedResources,
-                    CredentialsProviderFactory));
-                return;
+            if (!ev->Get()->YDBClient) {
+                ev->Get()->YDBClient = CreateNewTableClient(ev,
+                                                            Config.ComputeConfig,
+                                                            YqSharedResources,
+                                                            CredentialsProviderFactory);
             }
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
@@ -2686,18 +2669,11 @@ private:
         }
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled()) {
-            if (!ev->Get()->YDBSession) {
-                Register(MakeComputeYDBSessionActor<
-                         TEvControlPlaneProxy::TEvDeleteBindingRequest,
-                         TEvControlPlaneProxy::TEvDeleteBindingResponse>(
-                    sender,
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters.GetCommonCounters(RTC_CREATE_YDB_SESSION),
-                    Config.ComputeConfig,
-                    YqSharedResources,
-                    CredentialsProviderFactory));
-                return;
+            if (!ev->Get()->YDBClient) {
+                ev->Get()->YDBClient = CreateNewTableClient(ev,
+                                                            Config.ComputeConfig,
+                                                            YqSharedResources,
+                                                            CredentialsProviderFactory);
             }
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {

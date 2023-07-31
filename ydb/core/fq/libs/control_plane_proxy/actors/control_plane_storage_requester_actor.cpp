@@ -1,5 +1,6 @@
 #include "control_plane_storage_requester_actor.h"
 #include "base_actor.h"
+#include "util/generic/maybe.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/actors/core/event.h>
@@ -227,7 +228,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
     auto cpsRequestFactory =
         [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& event) {
             FederatedQuery::DescribeConnectionRequest result;
-            auto connectionId = *event->Get()->ConnectionId;
+            auto connectionId = event->Get()->OldBindingContent->connection_id();
             result.set_connection_id(connectionId);
             return result;
         };
@@ -273,8 +274,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
     auto entityNameExtractorFactoryMethod =
         [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& event,
            const FederatedQuery::DescribeBindingResult& result) {
-            event->Get()->OldBindingName  = result.binding().content().name();
-            event->Get()->ConnectionId = result.binding().content().connection_id();
+            event->Get()->OldBindingContent = result.binding().content();
         };
 
     return new TControlPlaneStorageRequesterActor<TEvControlPlaneProxy::TEvModifyBindingRequest,
@@ -327,5 +327,99 @@ NActors::IActor* MakeDiscoverYDBBindingName(
         errorMessageFactoryMethod,
         entityNameExtractorFactoryMethod);
 }
+
+NActors::IActor* MakeListBindingIds(
+    const TActorId sender,
+    const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    auto cpsRequestFactory =
+        [](const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& event) {
+            FederatedQuery::ListBindingsRequest result;
+            auto connectionId = event->Get()->Request.connection_id();
+            result.mutable_filter()->set_connection_id(connectionId);
+            result.set_limit(100);
+            if (event->Get()->NextListingBindingsToken) {
+                result.set_page_token(*event->Get()->NextListingBindingsToken);
+            }
+            return result;
+        };
+
+    auto errorMessageFactoryMethod = [](const NYql::TIssues& issues) -> TString {
+        Y_UNUSED(issues);
+        return "Couldn't resolve binding id(s)";
+    };
+    auto entityNameExtractorFactoryMethod =
+        [](const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& event,
+           const FederatedQuery::ListBindingsResult& result) {
+            for (auto& binding: result.binding()) {
+                event->Get()->OldBindingIds.emplace_back(binding.meta().id());
+            }
+
+            TString nextPageToken = result.next_page_token();
+            if (nextPageToken == "") {
+                event->Get()->NextListingBindingsToken = Nothing();
+                event->Get()->OldBindingNamesDiscoveryFinished = true;
+            } else {
+                event->Get()->NextListingBindingsToken = nextPageToken;
+            }
+        };
+
+    return new TControlPlaneStorageRequesterActor<
+        TEvControlPlaneProxy::TEvModifyConnectionRequest,
+        TEvControlPlaneProxy::TEvModifyConnectionResponse,
+        TEvControlPlaneStorage::TEvListBindingsRequest,
+        TEvControlPlaneStorage::TEvListBindingsResponse>(sender,
+                                                         request,
+                                                         requestTimeout,
+                                                         counters.GetCommonCounters(
+                                                             RTC_DESCRIBE_CPS_ENTITY),
+                                                         permissions,
+                                                         cpsRequestFactory,
+                                                         errorMessageFactoryMethod,
+                                                         entityNameExtractorFactoryMethod);
+}
+
+NActors::IActor* MakeDescribeListedBinding(
+    const TActorId sender,
+    const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    auto cpsRequestFactory =
+        [](const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& event) {
+            auto bindingId = event->Get()->OldBindingIds[event->Get()->OldBindingContents.size()];
+
+            FederatedQuery::DescribeBindingRequest result;
+            result.set_binding_id(bindingId);
+            return result;
+        };
+
+    auto errorMessageFactoryMethod = [](const NYql::TIssues& issues) -> TString {
+        Y_UNUSED(issues);
+        return "Couldn't resolve binding content";
+    };
+    auto entityNameExtractorFactoryMethod =
+        [](const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& event,
+           const FederatedQuery::DescribeBindingResult& result) {
+            event->Get()->OldBindingContents.push_back(result.binding().content());
+        };
+
+    return new TControlPlaneStorageRequesterActor<
+        TEvControlPlaneProxy::TEvModifyConnectionRequest,
+        TEvControlPlaneProxy::TEvModifyConnectionResponse,
+        TEvControlPlaneStorage::TEvDescribeBindingRequest,
+        TEvControlPlaneStorage::TEvDescribeBindingResponse>(
+        sender,
+        request,
+        requestTimeout,
+        counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
+        permissions,
+        cpsRequestFactory,
+        errorMessageFactoryMethod,
+        entityNameExtractorFactoryMethod);
+}
+
 } // namespace NPrivate
 } // namespace NFq

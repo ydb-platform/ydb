@@ -1,46 +1,15 @@
 #include "query_utils.h"
-#include "ydb/public/api/protos/draft/fq.pb.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
-#include <library/cpp/iterator/mapped.h>
 #include <util/generic/maybe.h>
-#include <util/string/join.h>
 
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 namespace NFq {
 namespace NPrivate {
-
-TString EscapeString(const TString& value,
-                     const TString& enclosingSeq,
-                     const TString& replaceWith) {
-    auto escapedValue = value;
-    SubstGlobal(escapedValue, enclosingSeq, replaceWith);
-    return escapedValue;
-}
-TString EscapeString(const TString& value, char enclosingChar) {
-    auto escapedValue = value;
-    SubstGlobal(escapedValue,
-                TString{enclosingChar},
-                TStringBuilder{} << '\\' << enclosingChar);
-    return escapedValue;
-}
-
-TString EncloseAndEscapeString(const TString& value, char enclosingChar) {
-    return TStringBuilder{} << enclosingChar
-                            << EscapeString(value,
-                                            enclosingChar)
-                            << enclosingChar;
-}
-
-TString EncloseAndEscapeString(const TString& value,
-                               const TString& enclosingSeq,
-                               const TString& replaceWith) {
-    return TStringBuilder{} << enclosingSeq
-                            << EscapeString(value, enclosingSeq, replaceWith)
-                            << enclosingSeq;
-}
 
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
                                          const TString& connectionName) {
@@ -52,7 +21,7 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
 
     // Schema
     NYql::TExprContext context;
-    auto columnsTransformFunction = [&](const Ydb::Column& column) -> TString {
+    auto columnsTransformFunction = [&context](const Ydb::Column& column) -> TString {
         NYdb::TTypeParser typeParser(column.type());
         auto node     = MakeType(typeParser, context);
         auto typeName = NYql::FormatType(node);
@@ -63,10 +32,6 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
                            "columnType"_a = typeName,
                            "notNull"_a    = notNull);
     };
-    auto columnsBegin =
-        MakeMappedIterator(subset.schema().column().begin(), columnsTransformFunction);
-    auto columnsEnd =
-        MakeMappedIterator(subset.schema().column().end(), columnsTransformFunction);
 
     // WithOptions
     auto withOptions = std::unordered_map<TString, TString>{};
@@ -85,17 +50,14 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
     }
 
     if (!subset.partitioned_by().empty()) {
-        auto stringEscapeMapper = [](const TString& value) {
-            return EscapeString(value, '"');
-        };
-
         auto partitionBy = TStringBuilder{}
                            << "\"["
-                           << JoinRange(", ",
-                                        MakeMappedIterator(subset.partitioned_by().begin(),
-                                                           stringEscapeMapper),
-                                        MakeMappedIterator(subset.partitioned_by().end(),
-                                                           stringEscapeMapper))
+                           << JoinMapRange(", ",
+                                           subset.partitioned_by().begin(),
+                                           subset.partitioned_by().end(),
+                                           [](const TString& value) {
+                                               return EscapeString(value, '"');
+                                           })
                            << "]\"";
         withOptions.insert({"PARTITIONED_BY", partitionBy});
     }
@@ -105,15 +67,6 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
                             EncloseAndEscapeString(kv.second, '"')});
     }
 
-    auto concatEscapedKeyValueMapper = [](const std::pair<TString, TString>& kv) -> TString {
-        return TStringBuilder{} << "   " << kv.first << " = " << kv.second;
-    };
-
-    auto withOptionsBegin =
-        MakeMappedIterator(withOptions.begin(), concatEscapedKeyValueMapper);
-    auto withOptionsEnd =
-        MakeMappedIterator(withOptions.end(), concatEscapedKeyValueMapper);
-
     return fmt::format(
         R"(
                 CREATE EXTERNAL TABLE {externalTableName} (
@@ -122,8 +75,17 @@ TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& c
                     {withOptions}
                 );)",
         "externalTableName"_a = EncloseAndEscapeString(bindingName, '`'),
-        "columns"_a           = JoinRange(",\n", columnsBegin, columnsEnd),
-        "withOptions"_a       = JoinRange(",\n", withOptionsBegin, withOptionsEnd));
+        "columns"_a           = JoinMapRange(",\n",
+                                   subset.schema().column().begin(),
+                                   subset.schema().column().end(),
+                                   columnsTransformFunction),
+        "withOptions"_a       = JoinMapRange(",\n",
+                                       withOptions.begin(),
+                                       withOptions.end(),
+                                       [](const std::pair<TString, TString>& kv) -> TString {
+                                           return TStringBuilder{} << "   " << kv.first
+                                                                   << " = " << kv.second;
+                                       }));
 }
 
 TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {

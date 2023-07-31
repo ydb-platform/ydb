@@ -2,7 +2,11 @@
 #include "query_utils.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
+#include <util/string/join.h>
+#include <ydb/core/fq/libs/common/util.h>
+#include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 namespace NFq {
@@ -24,6 +28,11 @@ struct TBaseActorTypeTag<TSchemaQueryYDBActor<TEventRequest, TEventResponse>> {
     using TResponse = TEventResponse;
 };
 
+struct TSchemaQueryTask {
+    TString SQL;
+    TMaybe<TString> RollbackSQL;
+};
+
 template<class TEventRequest, class TEventResponse>
 class TSchemaQueryYDBActor :
     public TBaseActor<TSchemaQueryYDBActor<TEventRequest, TEventResponse>> {
@@ -40,9 +49,18 @@ private:
         struct TEvQueryExecutionResponse :
             NActors::TEventLocal<TEvQueryExecutionResponse, EvQueryExecutionResponse> {
             TStatus Result;
+            size_t TaskIndex = 0u;
+            bool Rollback    = false;
+            TMaybe<TStatus> MaybeInitialStatus;
 
-            TEvQueryExecutionResponse(TStatus result)
-                : Result(std::move(result)) { }
+            TEvQueryExecutionResponse(TStatus result,
+                                      size_t taskIndex,
+                                      bool rollback,
+                                      TMaybe<TStatus> MaybeInitialStatus)
+                : Result(std::move(result))
+                , TaskIndex(taskIndex)
+                , Rollback(rollback)
+                , MaybeInitialStatus(std::move(MaybeInitialStatus)) { }
         };
     };
 
@@ -53,7 +71,9 @@ private:
     using TEventRequestPtr = typename TEventRequest::TPtr;
 
 public:
-    using TQueryFactoryMethod = std::function<TString(const TEventRequestPtr& request)>;
+    using TTasks                     = std::vector<TSchemaQueryTask>;
+    using TTasksFactoryMethod        = std::function<TTasks(const TEventRequestPtr& request)>;
+    using TQueryFactoryMethod        = std::function<TString(const TEventRequestPtr& request)>;
     using TErrorMessageFactoryMethod = std::function<TString(const TStatus& status)>;
 
     TSchemaQueryYDBActor(const TActorId& sender,
@@ -64,56 +84,152 @@ public:
                          TErrorMessageFactoryMethod errorMessageFactoryMethod)
         : TBaseActor<TSchemaQueryYDBActor<TEventRequest, TEventResponse>>(
               sender, std::move(request), requestTimeout, counters)
-        , QueryFactoryMethod(queryFactoryMethod)
+        , Tasks{TSchemaQueryTask{.SQL = queryFactoryMethod(Request)}}
         , ErrorMessageFactoryMethod(errorMessageFactoryMethod) { }
 
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_DELETE_CONNECTION_IN_YDB";
+    TSchemaQueryYDBActor(const TActorId& sender,
+                         const TEventRequestPtr request,
+                         TDuration requestTimeout,
+                         const NPrivate::TRequestCommonCountersPtr& counters,
+                         TTasksFactoryMethod tasksFactoryMethod,
+                         TErrorMessageFactoryMethod errorMessageFactoryMethod)
+        : TBaseActor<TSchemaQueryYDBActor<TEventRequest, TEventResponse>>(
+              sender, std::move(request), requestTimeout, counters)
+        , Tasks(tasksFactoryMethod(Request))
+        , ErrorMessageFactoryMethod(errorMessageFactoryMethod) { }
+
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_YDB_SCHEMA_QUERY_ACTOR";
 
     void BootstrapImpl() override {
         CPP_LOG_I("TSchemaQueryYDBActor BootstrapImpl. Actor id: " << TBase::SelfId());
-        InitiateSchemaQueryExecution();
+        InitiateSchemaQueryExecution(0, false, Nothing());
     }
 
-    void InitiateSchemaQueryExecution() {
-        CPP_LOG_I("TSchemaQueryYDBActor Executing schema query. Actor id: " << TBase::SelfId());
+    TMaybe<TString> SelectTask(size_t taskIndex, bool rollback) {
+        if (!rollback) {
+            if (taskIndex < Tasks.size()) {
+                return Tasks[taskIndex].SQL;
+            }
+            return Nothing();
+        }
 
-        const auto& request = Request;
-        TString schemeQuery = QueryFactoryMethod(request);
-        request->Get()
-            ->YDBSession->ExecuteSchemeQuery(schemeQuery)
-            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(),
-                        self        = SelfId()](const TAsyncStatus& future) {
-                actorSystem->Send(self,
-                                  new typename TEvPrivate::TEvQueryExecutionResponse(
-                                      std::move(future.GetValueSync())));
-            });
+        while (true) {
+            const auto& maybeRollback = Tasks[taskIndex].RollbackSQL;
+            if (maybeRollback) {
+                return maybeRollback;
+            }
+            if (taskIndex == 0u) {
+                return Nothing();
+            }
+            taskIndex--;
+        }
+    }
+
+    bool InitiateSchemaQueryExecution(size_t taskIndex,
+                                      bool rollback,
+                                      const TMaybe<TStatus>& maybeInitialStatus) {
+        CPP_LOG_I(
+            "TSchemaQueryYDBActor Executing schema query. Actor id: " << TBase::SelfId());
+        auto schemeQuery = SelectTask(taskIndex, rollback);
+        if (schemeQuery) {
+            CPP_LOG_I("TSchemaQueryYDBActor Executing schema query. schemeQuery: "
+                      << schemeQuery);
+            Request->Get()
+                ->YDBClient
+                ->RetryOperation([query = *schemeQuery](TSession session) {
+                    return session.ExecuteSchemeQuery(query);
+                })
+                .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(),
+                            self        = SelfId(),
+                            taskIndex,
+                            rollback,
+                            maybeInitialStatus](const TAsyncStatus& future) {
+                    actorSystem->Send(self,
+                                      new typename TEvPrivate::TEvQueryExecutionResponse{
+                                          std::move(future.GetValueSync()),
+                                          taskIndex,
+                                          rollback,
+                                          std::move(maybeInitialStatus)});
+                });
+        }
+        return schemeQuery.Defined();
     }
 
     STRICT_STFUNC(StateFunc,
-        cFunc(NActors::TEvents::TSystem::Wakeup, TBase::HandleTimeout);
-        hFunc(TEvPrivate::TEvQueryExecutionResponse, Handle);
+                  cFunc(NActors::TEvents::TSystem::Wakeup, TBase::HandleTimeout);
+                  hFunc(TEvPrivate::TEvQueryExecutionResponse, Handle);
     )
 
-    void Handle(typename TEvPrivate::TEvQueryExecutionResponse::TPtr& event) {
-        CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Actor id: " << TBase::SelfId());
-        const auto& executeSchemeQueryStatus = event->Get()->Result;
-        if (!executeSchemeQueryStatus.IsSuccess()) {
-            CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished with issues. Actor id: " << TBase::SelfId());
-            TString errorMessage = ErrorMessageFactoryMethod(executeSchemeQueryStatus);
-
-            TBase::HandleError(errorMessage,
-                               executeSchemeQueryStatus.GetStatus(),
-                               executeSchemeQueryStatus.GetIssues());
-            return;
-        }
-
-        CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished successfully. Actor id: " << TBase::SelfId());
+    void FinishSuccessfully() {
+        CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished successfully. Actor id: "
+                  << TBase::SelfId());
         Request->Get()->ComputeYDBOperationWasPerformed = true;
         TBase::SendRequestToSender();
     }
+    void SendError(const TStatus& executeSchemeQueryStatus) {
+        CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished with issues. Actor id: "
+                  << TBase::SelfId());
+        TString errorMessage = ErrorMessageFactoryMethod(executeSchemeQueryStatus);
+
+        TBase::HandleError(errorMessage,
+                           executeSchemeQueryStatus.GetStatus(),
+                           executeSchemeQueryStatus.GetIssues());
+    }
+
+    void Handle(typename TEvPrivate::TEvQueryExecutionResponse::TPtr& event) {
+        const auto& executeSchemeQueryStatus = event->Get()->Result;
+        auto isRollback                      = event->Get()->Rollback;
+
+        auto successExecutionRunMode = executeSchemeQueryStatus.IsSuccess() && !isRollback;
+        auto successExecutionRollbackMode =
+            executeSchemeQueryStatus.IsSuccess() && isRollback;
+        auto failedExecutionRunMode = !executeSchemeQueryStatus.IsSuccess() && !isRollback;
+
+        if (successExecutionRunMode) {
+            if (!InitiateSchemaQueryExecution(event->Get()->TaskIndex + 1, false, Nothing())) {
+                FinishSuccessfully();
+                return;
+            }
+        } else if (successExecutionRollbackMode) {
+            if (event->Get()->TaskIndex == 0 ||
+                !InitiateSchemaQueryExecution(event->Get()->TaskIndex - 1,
+                                              true,
+                                              std::move(event->Get()->MaybeInitialStatus))) {
+                SendError(*event->Get()->MaybeInitialStatus);
+                return;
+            }
+        } else if (failedExecutionRunMode) {
+            if (event->Get()->TaskIndex == 0 ||
+                !InitiateSchemaQueryExecution(event->Get()->TaskIndex - 1,
+                                              true,
+                                              std::move(event->Get()->Result))) {
+                SendError(event->Get()->Result);
+                return;
+            }
+        } else {
+            // Failed during rollback
+            const auto& initialIssues = *(event->Get()->MaybeInitialStatus);
+
+            auto originalIssue =
+                MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Couldn't execute SQL script");
+            for (const auto& subIssue : initialIssues.GetIssues()) {
+                originalIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+            }
+            auto rollbackIssue =
+                MakeErrorIssue(TIssuesIds::INTERNAL_ERROR,
+                               "Couldn't execute rollback SQL script");
+            for (const auto& subIssue : event->Get()->Result.GetIssues()) {
+                originalIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+            }
+            SendError(TStatus{initialIssues.GetStatus(),
+                              NYql::TIssues{std::move(originalIssue),
+                                            std::move(rollbackIssue)}});
+            return;
+        }
+    }
 
 private:
-    TQueryFactoryMethod QueryFactoryMethod;
+    TTasks Tasks;
     TErrorMessageFactoryMethod ErrorMessageFactoryMethod;
 };
 
@@ -123,13 +239,12 @@ NActors::IActor* MakeCreateConnectionActor(
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
-    const TString& objectStorageEndpoint,
+    const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
-        [objectStorageEndpoint, signer = std::move(signer)](
+        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
+         signer                = std::move(signer)](
             const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request) -> TString {
-        using namespace fmt::literals;
-
         return MakeCreateExternalDataSourceQuery(request->Get()->Request.content(),
                                                  objectStorageEndpoint,
                                                  signer);
@@ -158,24 +273,68 @@ NActors::IActor* MakeModifyConnectionActor(
     TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
-    const TString& objectStorageEndpoint,
+    const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
-        [objectStorageEndpoint, signer = std::move(signer)](
-            const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request) -> TString {
+        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
+         signer                = std::move(signer)](
+            const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request)
+        -> std::vector<TSchemaQueryTask> {
         using namespace fmt::literals;
 
         auto& oldConnectionContent = (*request->Get()->OldConnectionContent);
-        auto& newConnectionContent  = request->Get()->Request.content();
-        return fmt::format(
+        auto& newConnectionContent = request->Get()->Request.content();
+
+        auto deleteOldEntities = fmt::format(
             R"(
+                {delete_external_data_tables};
                 {delete_external_data_source};
-                {create_external_data_source};
             )",
+            "delete_external_data_tables"_a =
+                JoinMapRange("\n",
+                             request->Get()->OldBindingContents.begin(),
+                             request->Get()->OldBindingContents.end(),
+                             [](const FederatedQuery::BindingContent& binding) {
+                                 return MakeDeleteExternalDataTableQuery(binding.name());
+                             }),
             "delete_external_data_source"_a =
-                MakeDeleteExternalDataSourceQuery(oldConnectionContent, signer),
+                MakeDeleteExternalDataSourceQuery(oldConnectionContent, signer));
+
+        auto createOldEntities = fmt::format(
+            R"(
+                {create_external_data_source};
+                {create_external_data_tables};
+            )",
             "create_external_data_source"_a = MakeCreateExternalDataSourceQuery(
-                newConnectionContent, objectStorageEndpoint, signer));
+                oldConnectionContent, objectStorageEndpoint, signer),
+            "create_external_data_tables"_a = JoinMapRange(
+                "\n",
+                request->Get()->OldBindingContents.begin(),
+                request->Get()->OldBindingContents.end(),
+                [&oldConnectionContent](const FederatedQuery::BindingContent& binding) {
+                    return MakeCreateExternalDataTableQuery(binding,
+                                                            oldConnectionContent.name());
+                }));
+
+        auto createNewEntities = fmt::format(
+            R"(
+                {create_external_data_source};
+                {create_external_data_tables};
+            )",
+            "create_external_data_source"_a = MakeCreateExternalDataSourceQuery(
+                newConnectionContent, objectStorageEndpoint, signer),
+            "create_external_data_tables"_a = JoinMapRange(
+                "\n",
+                request->Get()->OldBindingContents.begin(),
+                request->Get()->OldBindingContents.end(),
+                [&newConnectionContent](const FederatedQuery::BindingContent& binding) {
+                    return MakeCreateExternalDataTableQuery(binding,
+                                                            newConnectionContent.name());
+                }));
+
+        return {TSchemaQueryTask{.SQL         = TString{deleteOldEntities},
+                                 .RollbackSQL = TString{createOldEntities}},
+                TSchemaQueryTask{.SQL = TString{createNewEntities}}};
     };
 
     auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
@@ -202,7 +361,6 @@ NActors::IActor* MakeDeleteConnectionActor(
     auto queryFactoryMethod =
         [signer = std::move(signer)](
             const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request) -> TString {
-        using namespace fmt::literals;
         return MakeDeleteExternalDataSourceQuery(*request->Get()->ConnectionContent,
                                                  signer);
     };
@@ -233,8 +391,6 @@ NActors::IActor* MakeCreateBindingActor(
     TCounters& counters) {
     auto queryFactoryMethod =
         [](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request) -> TString {
-        using namespace fmt::literals;
-
         auto externalSourceName = *request->Get()->ConnectionName;
         return MakeCreateExternalDataTableQuery(request->Get()->Request.content(),
                                                 externalSourceName);
@@ -264,20 +420,18 @@ NActors::IActor* MakeModifyBindingActor(
     TDuration requestTimeout,
     TCounters& counters) {
     auto queryFactoryMethod =
-        [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request) -> TString {
-        using namespace fmt::literals;
-
+        [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request) -> std::vector<TSchemaQueryTask> {
         auto sourceName   = *request->Get()->ConnectionName;
-        auto oldTableName = *request->Get()->OldBindingName;
-        return fmt::format(
-            R"(
-                {delete_external_data_table};
-                {create_external_data_table};
-            )",
-            "delete_external_data_table"_a = MakeDeleteExternalDataTableQuery(oldTableName),
-            "create_external_data_table"_a =
-                MakeCreateExternalDataTableQuery(request->Get()->Request.content(),
-                                                 sourceName));
+        auto oldTableName = request->Get()->OldBindingContent->name();
+
+        auto deleteOldEntities = MakeDeleteExternalDataTableQuery(oldTableName);
+        auto createOldEntities =
+            MakeCreateExternalDataTableQuery(*request->Get()->OldBindingContent, sourceName);
+        auto createNewEntities =
+            MakeCreateExternalDataTableQuery(request->Get()->Request.content(), sourceName);
+
+        return {TSchemaQueryTask{.SQL = deleteOldEntities, .RollbackSQL = createOldEntities},
+                TSchemaQueryTask{.SQL = createNewEntities}};
     };
 
     auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
@@ -302,7 +456,6 @@ NActors::IActor* MakeDeleteBindingActor(
     TCounters& counters) {
     auto queryFactoryMethod =
         [](const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request) -> TString {
-        using namespace fmt::literals;
         return MakeDeleteExternalDataTableQuery(*request->Get()->OldBindingName);
     };
 

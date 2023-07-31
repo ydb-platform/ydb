@@ -17,7 +17,7 @@ NActors::IActor* MakeCreateConnectionActor(
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
-    const TString& objectStorageEndpoint,
+    const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer);
 
 NActors::IActor* MakeModifyConnectionActor(
@@ -25,7 +25,7 @@ NActors::IActor* MakeModifyConnectionActor(
     TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
-    const TString& objectStorageEndpoint,
+    const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer);
 
 NActors::IActor* MakeDeleteConnectionActor(

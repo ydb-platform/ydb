@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     library/cpp/iterator
+    ydb/core/fq/libs/common
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/result_formatter

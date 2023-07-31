@@ -104,7 +104,7 @@ struct TEvControlPlaneProxy {
         bool ComputeYDBOperationWasPerformed;
         bool ControlPlaneYDBOperationWasPerformed;
         std::unique_ptr<TProxyResponse> Response;
-        TMaybe<NYdb::NTable::TSession> YDBSession;
+        std::shared_ptr<NYdb::NTable::TTableClient> YDBClient;
         TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
     };
 
@@ -310,6 +310,12 @@ struct TEvControlPlaneProxy {
             EvModifyConnectionRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::ConnectionContent> OldConnectionContent;
+        // ListBindings
+        bool OldBindingNamesDiscoveryFinished = false;
+        TMaybe<TString> NextListingBindingsToken;
+        std::vector<TString> OldBindingIds;
+        // DescribeEachBinding
+        std::vector<FederatedQuery::BindingContent> OldBindingContents;
     };
 
     template<>
@@ -348,8 +354,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::ModifyBindingRequest,
             EvModifyBindingRequest>::TBaseControlPlaneRequest;
 
-        TMaybe<TString> OldBindingName;
-        TMaybe<TString> ConnectionId;
+        TMaybe<FederatedQuery::BindingContent> OldBindingContent;
         TMaybe<TString> ConnectionName;
     };
 

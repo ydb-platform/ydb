@@ -7,10 +7,6 @@
 namespace NFq {
 namespace NPrivate {
 
-TString EscapeString(const TString& value, char enclosingChar);
-
-TString EncloseAndEscapeString(const TString& value, char enclosingChar);
-
 TString MakeCreateExternalDataTableQuery(const FederatedQuery::BindingContent& content,
                                          const TString& connectionName);
 

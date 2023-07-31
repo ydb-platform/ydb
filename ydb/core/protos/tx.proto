@@ -8,6 +8,21 @@ option java_package = "ru.yandex.kikimr.proto";
 
 // smth to coordinator
 message TProxyTransaction {
+    enum EFlags {
+        // Set for volatile transactions.
+        // Volatile transactions are not guaranteed to reach participants,
+        // and may be discarded at any time during execution, which will
+        // cause transaction to abort.
+        FLAG_VOLATILE = 1;
+    }
+
+    enum EAffectedFlags {
+        // Transaction performs reads at the given participant
+        FLAG_AFFECTED_READ = 1;
+        // Transaction performs writes at the given participant
+        FLAG_AFFECTED_WRITE = 2;
+    }
+
     message TAffectedEntry {
         optional fixed64 TabletId = 1;
         optional uint32 Flags = 2; // 8 bit int, 1 - read-set, 2 - write-set
@@ -23,6 +38,8 @@ message TProxyTransaction {
     optional uint64 MaxStep = 7; // not plan after
 
     optional bool IgnoreLowDiskSpace = 8; // plan even disk space is low
+
+    optional uint32 Flags = 9;
 }
 
 message TEvProposeTransaction {

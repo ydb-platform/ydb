@@ -31,10 +31,10 @@ struct TEvTxProxy {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY)");
 
     struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> {
-        enum {
-            AffectedRead = 1 << 0,
-            AffectedWrite = 1 << 1,
-        };
+        static constexpr ui32 FlagVolatile = NKikimrTx::TProxyTransaction::FLAG_VOLATILE;
+
+        static constexpr ui32 AffectedRead = NKikimrTx::TProxyTransaction::FLAG_AFFECTED_READ;
+        static constexpr ui32 AffectedWrite = NKikimrTx::TProxyTransaction::FLAG_AFFECTED_WRITE;
 
         TEvProposeTransaction() = default;
 

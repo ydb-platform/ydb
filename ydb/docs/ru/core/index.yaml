@@ -12,7 +12,7 @@ meta:
 links:
   - title: Начало работы
     description: Разверните кластер и выполните простейшие операции с данными
-    href: administration/quickstart
+    href: getting_started/quickstart
   - title: Концепции
     description: Как устроена YDB, возможности и доступные режимы использования
     href: concepts/

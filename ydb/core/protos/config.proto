@@ -1497,6 +1497,11 @@ message TImmediateControlsConfig {
             MinValue: 1000,
             MaxValue: 5000000,
             DefaultValue: 250000 }];
+        optional uint64 VolatilePlanLeaseMs = 3 [(ControlOptions) = {
+            Description: "Lease in milliseconds for faster volatile transaction planning",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 250 }];
     }
 
     message TSchemeShardControls {

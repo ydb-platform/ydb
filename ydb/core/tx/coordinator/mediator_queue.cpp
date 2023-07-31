@@ -10,6 +10,16 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
+void TMediatorStep::SerializeTo(TEvTxCoordinator::TEvCoordinatorStep *msg) const {
+    for (const TTx &tx : Transactions) {
+        NKikimrTx::TCoordinatorTransaction *x = msg->Record.AddTransactions();
+        if (tx.TxId)
+            x->SetTxId(tx.TxId);
+        for (ui64 affected : tx.PushToAffected)
+            x->AddAffectedSet(affected);
+    }
+}
+
 class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMediatorQueue> {
     const TActorId Owner;
 
@@ -58,8 +68,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep");
-        NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorStep(
-            step, PrevStep, Mediator, Coordinator, CoordinatorGeneration));
+        auto msg = std::make_unique<TEvTxCoordinator::TEvCoordinatorStep>(
+            step.Step, PrevStep, Mediator, Coordinator, CoordinatorGeneration);
+        step.SerializeTo(msg.get());
+        NTabletPipe::SendData(ctx, PipeClient, msg.release());
         PrevStep = step.Step;
     }
 

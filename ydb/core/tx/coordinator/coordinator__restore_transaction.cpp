@@ -20,6 +20,9 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
     THashMap<TTabletId, TMediatorState> Mediators;
 
+    bool StartedStateActor = false;
+    ui64 LastBlockedUpdate = 0;
+
     TMediatorStep& GetMediatorStep(TTabletId mediatorId, TStepId step) {
         auto& state = Mediators[mediatorId];
 
@@ -137,6 +140,33 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         *Self->MonCounters.TxInFly += txCounter;
         Self->MonCounters.CurrentTxInFly = txCounter;
 
+        if (Self->PrevStateActorId) {
+            NIceDb::TNiceDb db(txc.DB);
+
+            ui64 volatileLeaseMs = Self->VolatilePlanLeaseMs;
+            if (volatileLeaseMs > 0) {
+                // Make sure we start and persist new state actor before allowing clients to acquire new read steps
+                StartedStateActor = Self->StartStateActor();
+                if (StartedStateActor) {
+                    Schema::SaveState(db, Schema::State::LastBlockedActorX1, Self->CoordinatorStateActorId.RawX1());
+                    Schema::SaveState(db, Schema::State::LastBlockedActorX2, Self->CoordinatorStateActorId.RawX2());
+                }
+
+                LastBlockedUpdate = Max(
+                    Self->VolatileState.LastBlockedPending,
+                    Self->VolatileState.LastBlockedCommitted,
+                    Self->VolatileState.LastPlanned);
+                Self->VolatileState.LastBlockedPending = LastBlockedUpdate;
+                Schema::SaveState(db, Schema::State::LastBlockedStep, LastBlockedUpdate);
+            } else {
+                // Make sure the next generation will not use outdated state
+                Schema::SaveState(db, Schema::State::LastBlockedActorX1, 0);
+                Schema::SaveState(db, Schema::State::LastBlockedActorX2, 0);
+            }
+
+            Self->PrevStateActorId = {};
+        }
+
         // Prepare mediator queues
         for (ui64 mediatorId : Self->Config.Mediators->List()) {
             auto& state = Mediators[mediatorId];
@@ -157,6 +187,14 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
     }
 
     void Complete(const TActorContext &ctx) override {
+        if (StartedStateActor) {
+            Self->ConfirmStateActorPersistent();
+        }
+
+        if (LastBlockedUpdate) {
+            Self->VolatileState.LastBlockedCommitted = LastBlockedUpdate;
+        }
+
         // Send steps to connected queues
         for (ui64 mediatorId: Self->Config.Mediators->List()) {
             TMediator &mediator = Self->Mediator(mediatorId, ctx);

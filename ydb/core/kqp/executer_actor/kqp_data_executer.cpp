@@ -17,7 +17,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/core/tx/coordinator/coordinator_impl.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -859,7 +858,7 @@ private:
 
             ui32 affectedFlags = 0;
             if (state.DatashardState->ShardReadLocks) {
-                affectedFlags |= NFlatTxCoordinator::TTransactionProposal::TAffectedEntry::AffectedRead;
+                affectedFlags |= TEvTxProxy::TEvProposeTransaction::AffectedRead;
             }
 
             for (auto taskId : state.TaskIds) {
@@ -867,10 +866,10 @@ private:
                 auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
 
                 if (stageInfo.Meta.HasReads()) {
-                    affectedFlags |= NFlatTxCoordinator::TTransactionProposal::TAffectedEntry::AffectedRead;
+                    affectedFlags |= TEvTxProxy::TEvProposeTransaction::AffectedRead;
                 }
                 if (stageInfo.Meta.HasWrites()) {
-                    affectedFlags |= NFlatTxCoordinator::TTransactionProposal::TAffectedEntry::AffectedWrite;
+                    affectedFlags |= TEvTxProxy::TEvProposeTransaction::AffectedWrite;
                 }
             }
 

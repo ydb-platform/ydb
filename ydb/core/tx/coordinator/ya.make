@@ -4,6 +4,7 @@ SRCS(
     coordinator.cpp
     coordinator_hooks.cpp
     coordinator_impl.cpp
+    coordinator_state.cpp
     coordinator__acquire_read_step.cpp
     coordinator__configure.cpp
     coordinator__check.cpp
@@ -35,6 +36,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx
+    ydb/core/tx/coordinator/public
     ydb/core/util
 )
 

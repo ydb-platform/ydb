@@ -31,6 +31,11 @@ struct TEvTxProxy {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY)");
 
     struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> {
+        enum {
+            AffectedRead = 1 << 0,
+            AffectedWrite = 1 << 1,
+        };
+
         TEvProposeTransaction() = default;
 
         TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep);

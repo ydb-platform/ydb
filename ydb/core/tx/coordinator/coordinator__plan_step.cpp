@@ -28,6 +28,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     ui64 PlannedCounter;
     ui64 DeclinedCounter;
     TInFlyAccountant InFlyAccountant;
+    bool StartedStateActor = false;
+    ui64 LastBlockedUpdate = 0;
 
     TTxPlanStep(ui64 toPlan, std::deque<TQueueType::TSlot> &&slots, TSelf *coordinator)
         : TBase(coordinator)
@@ -56,6 +58,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             mediatorSteps.emplace_back(mediatorId, PlanOnStep);
         }
 
+        // true when step is volatile, i.e. will be acknowledged before we commit
+        bool volatileStep = Self->CoordinatorStateActor && PlanOnStep <= Self->VolatileState.LastBlockedCommitted;
+
         // create mediator steps
         for (auto &slot : Slots) {
             for (auto &proposal : slot) {
@@ -65,6 +70,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
                 const TTxId txId = proposal.TxId;
                 Y_VERIFY(txId);
+
+                // currently all transactions are non-volatile
+                volatileStep = false;
 
                 Self->MonCounters.StepConsideredTx->Inc();
                 auto durationMs = (ExecStartMoment - proposal.AcceptMoment).MilliSeconds();
@@ -167,8 +175,15 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         for (TMediatorStep& m : mediatorSteps) {
             const ui64 mediatorId = m.MediatorId;
 
+            // true when mediator step is volatile, i.e. we don't need to wait for persistence
+            // this will often be true for mediators that don't have transactions
+            bool volatileMediatorStep = Self->CoordinatorStateActor && PlanOnStep <= Self->VolatileState.LastBlockedCommitted;
+
             // write mediator entry
             for (const auto &tx : m.Transactions) {
+                // all transactions are currently non-volatile
+                volatileMediatorStep = false;
+
                 for (TTabletId tablet : tx.PushToAffected) {
                     db.Table<Schema::AffectedSet>().Key(mediatorId, tx.TxId, tablet).Update();
                     FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Planned transaction " << tx.TxId << " for mediator " << mediatorId << " tablet " << tablet);
@@ -181,9 +196,47 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             }
             mediator.Queue.emplace_back(std::move(m));
             auto it = --mediator.Queue.end();
+
+            if (volatileMediatorStep) {
+                // Mark as confirmed and send before we persist everything
+                // The step is protected by LastBlockedStep persisted previously
+                // Note this will wait for previous uncommitted steps which may be non-volatile
+                it->Confirmed = true;
+                Self->SendMediatorStep(mediator, ctx);
+                continue;
+            }
+
             StepsToConfirm[mediatorId] = it;
         }
-        db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Update(NIceDb::TUpdate<Schema::State::StateValue>(PlanOnStep));
+
+        if (volatileStep) {
+            // Volatile transactions may be confirmed before we commit the transaction
+            Self->SendStepConfirmations(ProxyPlanConfirmations, ctx);
+        }
+
+        Schema::SaveState(db, Schema::State::KeyLastPlanned, PlanOnStep);
+
+        ui64 volatileLeaseMs = Self->VolatilePlanLeaseMs;
+        if (volatileLeaseMs > 0) {
+            StartedStateActor = Self->StartStateActor();
+            if (StartedStateActor) {
+                Schema::SaveState(db, Schema::State::LastBlockedActorX1, Self->CoordinatorStateActorId.RawX1());
+                Schema::SaveState(db, Schema::State::LastBlockedActorX2, Self->CoordinatorStateActorId.RawX2());
+            }
+        }
+
+        // Note: if lease time drops to 0 at runtime we will stop blocking new
+        // steps, but we need to keep state actor active to correctly transfer
+        // state to newer generation. It is likely blocked step will be outdated
+        // by that time.
+        if (Self->CoordinatorStateActorId && volatileLeaseMs > 0) {
+            LastBlockedUpdate = Max(
+                Self->VolatileState.LastBlockedPending,
+                Self->VolatileState.LastBlockedCommitted,
+                PlanOnStep + volatileLeaseMs);
+            Self->VolatileState.LastBlockedPending = LastBlockedUpdate;
+            Schema::SaveState(db, Schema::State::LastBlockedStep, LastBlockedUpdate);
+        }
     }
 
     TTxType GetTxType() const override { return TXTYPE_STEP; }
@@ -205,6 +258,14 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     void Complete(const TActorContext &ctx) override {
         auto durationMs = (ctx.Now() - ExecStartMoment).MilliSeconds();
         Self->MonCounters.TxPlanLatency->Collect(durationMs);
+
+        if (StartedStateActor) {
+            Self->ConfirmStateActorPersistent();
+        }
+
+        if (LastBlockedUpdate) {
+            Self->VolatileState.LastBlockedCommitted = LastBlockedUpdate;
+        }
 
         for (auto &pr : StepsToConfirm) {
             const ui64 mediatorId = pr.first;

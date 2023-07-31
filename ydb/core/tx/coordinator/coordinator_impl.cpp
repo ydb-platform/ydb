@@ -1,4 +1,5 @@
 #include "coordinator_impl.h"
+#include "coordinator_state.h"
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -56,6 +57,7 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
+    , VolatilePlanLeaseMs(250, 0, 10000)
 #ifdef COORDINATOR_LOG_TO_FILE
     , DebugName(Sprintf("/tmp/coordinator_db_log_%" PRIu64 ".%" PRIi32 ".%" PRIu64 ".gz", TabletID(), getpid(), tablet.LocalId()))
     , DebugLogFile(DebugName)
@@ -75,6 +77,46 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
         ETxTypes_descriptor
     >());
     TabletCounters = TabletCountersPtr.Get();
+}
+
+TTxCoordinator::~TTxCoordinator() {
+    if (auto* state = std::exchange(CoordinatorStateActor, nullptr)) {
+        state->OnTabletDestroyed();
+    }
+}
+
+void TTxCoordinator::Die(const TActorContext &ctx) {
+    UnsubscribeFromSiblings();
+
+    if (ReadStepSubscriptionManager) {
+        ctx.Send(ReadStepSubscriptionManager, new TEvents::TEvPoison);
+        ReadStepSubscriptionManager = { };
+    }
+
+    if (RestoreProcessingParamsActor) {
+        ctx.Send(RestoreProcessingParamsActor, new TEvents::TEvPoison);
+        RestoreProcessingParamsActor = { };
+    }
+
+    if (RestoreStateActorId) {
+        ctx.Send(RestoreStateActorId, new TEvents::TEvPoison);
+        RestoreStateActorId = { };
+    }
+
+    for (TMediatorsIndex::iterator it = Mediators.begin(), end = Mediators.end(); it != end; ++it) {
+        TMediator &x = it->second;
+        ctx.Send(x.QueueActor, new TEvents::TEvPoisonPill());
+    }
+    Mediators.clear();
+
+    if (MonCounters.CurrentTxInFly && MonCounters.TxInFly)
+        *MonCounters.TxInFly -= MonCounters.CurrentTxInFly;
+
+    if (auto* state = std::exchange(CoordinatorStateActor, nullptr)) {
+        state->OnTabletDead();
+    }
+
+    return TActor::Die(ctx);
 }
 
 void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext &ctx) {
@@ -369,6 +411,9 @@ void TTxCoordinator::SendStepConfirmations(TCoordinatorStepConfirmations &confir
             << " stepId# " << x.Step << " Status# " << x.Status
             << " SEND EvProposeTransactionStatus to# " << x.ProxyId.ToString() << " Proxy");
         ctx.Send(x.ProxyId, new TEvTxProxy::TEvProposeTransactionStatus(x.Status, x.TxId, x.Step));
+        if (VolatileState.LastConfirmedStep < x.Step) {
+            VolatileState.LastConfirmedStep = x.Step;
+        }
         confirmations.Queue.pop_front();
     }
 }
@@ -442,6 +487,7 @@ void TTxCoordinator::IcbRegister() {
     if (!IcbRegistered) {
         AppData()->Icb->RegisterSharedControl(EnableLeaderLeases, "CoordinatorControls.EnableLeaderLeases");
         AppData()->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "CoordinatorControls.MinLeaderLeaseDurationUs");
+        AppData()->Icb->RegisterSharedControl(VolatilePlanLeaseMs, "CoordinatorControls.VolatilePlanLeaseMs");
         IcbRegistered = true;
     }
 }
@@ -599,10 +645,5 @@ void TTxCoordinator::OnStopGuardComplete(const TActorContext &ctx) {
     ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
 }
 
-}
-
-IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info) {
-    return new NFlatTxCoordinator::TTxCoordinator(info, tablet);
-}
-
-}
+} // namespace NFlatTxCoordinator
+} // namespace NKikimr

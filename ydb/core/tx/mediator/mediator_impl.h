@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/scheme_types/scheme_types.h>
-#include <ydb/core/tx/coordinator/coordinator.h>
+#include <ydb/core/tx/coordinator/public/events.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>

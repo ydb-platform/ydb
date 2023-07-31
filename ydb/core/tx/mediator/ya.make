@@ -20,7 +20,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx
-    ydb/core/tx/coordinator
+    ydb/core/tx/coordinator/public
     ydb/core/tx/time_cast
     ydb/core/util
 )

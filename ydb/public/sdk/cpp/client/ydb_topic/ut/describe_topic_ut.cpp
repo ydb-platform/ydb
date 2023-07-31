@@ -290,17 +290,35 @@ namespace NYdb::NTopic::NTests {
                                         .AppendTopics(setup.GetTestTopicPath());
                 auto readSession = client.CreateReadSession(readSettings);
 
-                auto event = readSession->GetEvent(true);
-                UNIT_ASSERT(event.Defined());
+                // Event 1: start partition session
+                {
+                    TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+                    UNIT_ASSERT(event);
+                    auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(event.Get());
+                    UNIT_ASSERT_C(startPartitionSession, DebugString(*event));
 
-                auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
-                startPartitionSession.Confirm();
+                    startPartitionSession->Confirm();
+                }
 
-                event = readSession->GetEvent(true);
-                UNIT_ASSERT(event.Defined());
+                // Event 2: data received
+                {
+                    TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+                    UNIT_ASSERT(event);
+                    auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(event.Get());
+                    UNIT_ASSERT_C(dataReceived, DebugString(*event));
 
-                auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-                dataReceived.Commit();
+                    dataReceived->Commit();
+                }
+
+                // Event 3: commit acknowledgement
+                {
+                    TMaybe<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
+                    UNIT_ASSERT(event);
+                    auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(event.Get());
+                    UNIT_ASSERT_C(commitOffsetAck, DebugString(*event));
+
+                    UNIT_ASSERT_VALUES_EQUAL(commitOffsetAck->GetCommittedOffset(), 1);
+                }
             }
 
             // Get non-empty description

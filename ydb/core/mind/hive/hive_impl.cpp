@@ -1569,6 +1569,11 @@ void THive::UpdateCounterEventQueueSize(i64 eventQueueSizeDiff) {
     }
 }
 
+void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
+    TabletMoveHistory.PushBack(moveInfo);
+    TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+}
+
 bool THive::DomainHasNodes(const TSubDomainKey &domainKey) const {
     return !DomainsView.IsEmpty(domainKey);
 }
@@ -2109,7 +2114,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
         BLOG_D("Balancer has been postponed because of sub activity");
-        ProcessTabletBalancerPostponed = false;
+        ProcessTabletBalancerPostponed = true;
         return;
     }
 
@@ -2439,6 +2444,8 @@ TDuration THive::GetBalancerCooldown() const {
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
+        case EBalancerType::Manual:
+            return TDuration::Seconds(1);
     }
 }
 

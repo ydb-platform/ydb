@@ -26,6 +26,15 @@ TString EFollowerStrategyName(EFollowerStrategy value) {
     }
 }
 
+TString EBalancerTypeName(EBalancerType value) {
+    switch (value) {
+        case EBalancerType::None: return "???";
+        case EBalancerType::Scatter: return "Scatter";
+        case EBalancerType::Emergency: return "Emergency";
+        case EBalancerType::Manual: return "Manual";
+    }
+}
+
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum) {
     TResourceNormalizedValues normValues = {};
     if (std::get<NMetrics::EResource::Counter>(maximum) != 0) {

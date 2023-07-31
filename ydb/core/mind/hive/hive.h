@@ -71,13 +71,16 @@ enum class EFollowerStrategy : ui32 {
     Read,
 };
 
+TString EFollowerStrategyName(EFollowerStrategy value);
+
 enum class EBalancerType {
     None,
     Scatter,
     Emergency,
+    Manual,
 };
 
-TString EFollowerStrategyName(EFollowerStrategy value);
+TString EBalancerTypeName(EBalancerType value);
 
 struct ISubActor {
     virtual void Cleanup() = 0;

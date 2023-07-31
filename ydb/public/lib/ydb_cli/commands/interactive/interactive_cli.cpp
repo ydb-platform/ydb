@@ -91,7 +91,7 @@ void TInteractiveCLI::Run() {
     }
 
     TFsPath homeDirPath(GetHomeDir());
-    TString historyFilePath(homeDirPath / ".ydb-client-history");
+    TString historyFilePath(homeDirPath / ".ydb_history");
     std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, Suggest{std::move(Words)});
 
     InteractiveCLIState interactiveCLIState;

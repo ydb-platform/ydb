@@ -596,7 +596,9 @@ public:
                 ValueBuilder.Get(),
                 CompOpts,
                 PatternNodes->GetMutables(),
-                *ArrowMemoryPool));
+                //*ArrowMemoryPool
+                *arrow::default_memory_pool()
+                ));
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
                 node->InitNode(*Ctx);

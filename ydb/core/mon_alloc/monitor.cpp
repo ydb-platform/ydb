@@ -496,7 +496,7 @@ namespace NKikimr {
             void LogMemoryStatsIfNeeded(const TActorContext& ctx, TMemoryUsage memoryUsage) noexcept {
                 auto usage = memoryUsage.Usage();
                 LOG_DEBUG_S(ctx, NKikimrServices::MEMORY_PROFILER, memoryUsage.ToString());
-                if (IsDangerous &&  usage < TDumpLogConfig::RssUsageSoft) {
+                if (IsDangerous && usage < TDumpLogConfig::RssUsageSoft) {
                     IsDangerous = false;
                 } else if (!IsDangerous && usage > TDumpLogConfig::RssUsageHard) {
                     if (TInstant::Now() - LogMemoryStatsTime > TDumpLogConfig::DumpInterval) {
@@ -509,21 +509,24 @@ namespace NKikimr {
 
             void HandleWakeup(const TActorContext& ctx) noexcept {
                 AllocMonitor->Update(Interval);
-                auto memoryUsage = TAllocState::GetMemoryUsage();
-                LogMemoryStatsIfNeeded(ctx, memoryUsage);
 
-                TMemObserver::TMemStat stat{
-                    memoryUsage.AnonRss, 
-                    memoryUsage.CGroupLimit, 
-                    static_cast<ui64>(memoryUsage.CGroupLimit * TDumpLogConfig::RssUsageSoftLimit)};
+                std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
+                if (memoryUsage) {
+                    LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
 
-                if (memoryUsage.AnonRss > TDumpLogConfig::RssUsageNotifySlowLimit ||
-                        TInstant::Now() - NotifyMemoryStatsTime > TDumpLogConfig::NotifySlowInterval) {
-                    NotifyMemoryStatsTime = TInstant::Now();
-                    MemObserver->NotifyStat(stat);
-                } else {
-                    // fast path: don't call callback, but update current stat
-                    MemObserver->SetStat(stat);
+                    TMemObserver::TMemStat stat{
+                        memoryUsage->AnonRss, 
+                        memoryUsage->CGroupLimit, 
+                        static_cast<ui64>(memoryUsage->CGroupLimit * TDumpLogConfig::RssUsageSoftLimit)};
+
+                    if (memoryUsage->AnonRss > TDumpLogConfig::RssUsageNotifySlowLimit ||
+                            TInstant::Now() - NotifyMemoryStatsTime > TDumpLogConfig::NotifySlowInterval) {
+                        NotifyMemoryStatsTime = TInstant::Now();
+                        MemObserver->NotifyStat(stat);
+                    } else {
+                        // fast path: don't call callback, but update current stat
+                        MemObserver->SetStat(stat);
+                    }
                 }
                 
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
@@ -531,8 +534,11 @@ namespace NKikimr {
 
             void HandleDump(TEvDumpLogStats::TPtr&, const TActorContext& ctx) noexcept {
                 if (IsDangerous) {
-                    LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, TAllocState::GetMemoryUsage().ToString());
-                    LogMemoryStats(ctx, 256);
+                    std::optional<TMemoryUsage> memoryUsage = TAllocState::TryGetMemoryUsage();
+                    if (memoryUsage) {
+                        LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, memoryUsage->ToString());
+                        LogMemoryStats(ctx, 256);
+                    }
                 }
             }
 

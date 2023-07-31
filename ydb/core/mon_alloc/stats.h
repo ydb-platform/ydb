@@ -43,6 +43,6 @@ namespace NKikimr {
         static std::unique_ptr<IAllocState> AllocState;
 
         static ui64 GetAllocatedMemoryEstimate();
-        static TMemoryUsage GetMemoryUsage();
+        static std::optional<TMemoryUsage> TryGetMemoryUsage();
     };
 }

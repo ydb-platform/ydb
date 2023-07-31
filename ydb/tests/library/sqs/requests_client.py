@@ -45,6 +45,7 @@ def auth_headers(user, security_token=None, iam_token=None):
 
     return headers
 
+
 SQS_ATTRIBUTE_TYPES = {'String': 'StringValue', 'Number': 'StringValue', 'Binary': 'BinaryValue'}
 
 
@@ -97,7 +98,7 @@ class SqsHttpApi(object):
         self.__user = user
         self.__timeout = timeout
         self.__security_token = security_token
-        assert(isinstance(force_private, bool))
+        assert isinstance(force_private, bool)
         self.__force_private = force_private
         self.__folder_id = folder_id
 
@@ -560,21 +561,3 @@ class SqsHttpApi(object):
                     assert i < len(result) and i >= 0
                     result[i]['BatchResultErrorEntry'] = err
         return result
-
-
-class SqsHttpMinigunApi(SqsHttpApi):
-    def _process_response(self, response, extract_method, default=None):
-        if response is None:
-            return -1, default
-        try:
-            parsed = xmltodict.parse(response.text)
-        except xmltodict.expat.ExpatError:
-            return response.status_code, default
-
-        if response.status_code != 200:
-            extract_method = lambda x: x['ErrorResponse']['Error']['Message']
-        try:
-            result = extract_method(parsed)
-        except (KeyError, TypeError):
-            result = default
-        return response.status_code, result

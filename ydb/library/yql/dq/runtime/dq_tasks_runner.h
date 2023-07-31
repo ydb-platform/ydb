@@ -241,7 +241,9 @@ public:
 
     virtual IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) const = 0;
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        TVector<IDqOutput::TPtr>&& outputs) const = 0;
 
     virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const = 0;
 };
@@ -250,7 +252,9 @@ class TDqTaskRunnerExecutionContext : public IDqTaskRunnerExecutionContext {
 public:
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) const override;
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        TVector<IDqOutput::TPtr>&& outputs) const override;
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override;
 };
@@ -275,7 +279,8 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
     TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& channels);
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& channels);
 
 using TDqTaskRunnerParameterProvider = std::function<
     bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

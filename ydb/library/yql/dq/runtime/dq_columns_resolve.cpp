@@ -16,7 +16,7 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
         YQL_ENSURE(idx < multiType.GetElementsCount(), "Invalid column index");
         memberType = multiType.GetElementType(idx);
         if (memberType->IsBlock()) {
-            auto blockType = static_cast<const TBlockType*>(type);
+            auto blockType = static_cast<const TBlockType*>(memberType);
             isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
             memberType = blockType->GetItemType();
         }

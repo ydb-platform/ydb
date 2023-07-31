@@ -45,28 +45,21 @@ TColumnInfo GetColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf colum
 
 template<typename TList>
 void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& columns,
-    TVector<NKikimr::NMiniKQL::TType*>& columnTypes, TVector<ui32>& columnIndices)
+    TVector<TColumnInfo>& result)
 {
-    columnTypes.clear();
-    columnIndices.clear();
-
-    columnTypes.reserve(columns.size());
-    columnIndices.reserve(columns.size());
-
+    result.clear();
+    result.reserve(columns.size());
     for (auto& column : columns) {
-        auto columnInfo = GetColumnInfo(type, column);
-        columnTypes.push_back(columnInfo.Type);
-        columnIndices.push_back(columnInfo.Index);
+        result.emplace_back(GetColumnInfo(type, column));
     }
 }
 
 template<typename TList>
-void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& protoSortCols,
+void GetSortColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& protoSortCols,
     TVector<TSortColumnInfo>& sortCols)
 {
     sortCols.clear();
     sortCols.reserve(protoSortCols.size());
-
     for (const auto& protoSortCol : protoSortCols) {
         TSortColumnInfo colInfo = static_cast<TSortColumnInfo>(GetColumnInfo(type, protoSortCol.GetColumn()));
         colInfo.Ascending = protoSortCol.GetAscending();

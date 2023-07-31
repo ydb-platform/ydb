@@ -343,17 +343,6 @@ TVector<NKikimr::NMiniKQL::TType*> ExtractBlockItemTypes(const NKikimr::NMiniKQL
     return result;
 }
 
-ui64 CalcMaxBlockSize(const TVector<NKikimr::NMiniKQL::TType*> itemTypes) {
-    TTypeInfoHelper helper;
-    ui64 maxBlockLen = Max<ui64>();
-    for (auto& itemType : itemTypes) {
-        if (itemType) {
-            maxBlockLen = std::min(maxBlockLen, helper.GetMaxBlockLength(itemType));
-        }
-    }
-    return maxBlockLen;
-}
-
 TVector<std::unique_ptr<IBlockReader>> MakeReaders(const TVector<NKikimr::NMiniKQL::TType*> itemTypes) {
     TVector<std::unique_ptr<IBlockReader>> result;
     for (auto& itemType : itemTypes) {
@@ -405,13 +394,14 @@ public:
         : TBase(memInfo)
         , SortCols_(std::move(sortCols))
         , ItemTypes_(ExtractBlockItemTypes(inputs.front()->GetInputType()))
-        , MaxOutputBlockLen_(CalcMaxBlockSize(ItemTypes_))
+        , MaxOutputBlockLen_(CalcMaxBlockLength(ItemTypes_.begin(), ItemTypes_.end(), TTypeInfoHelper()))
         , Comparators_(MakeComparators(SortCols_, ItemTypes_))
         , Builders_(MakeBuilders(MaxOutputBlockLen_, ItemTypes_))
         , Factory_(factory)
         , Stats_(stats)
     {
         YQL_ENSURE(!inputs.empty());
+        YQL_ENSURE(MaxOutputBlockLen_ > 0);
         InputData_.reserve(inputs.size());
         for (auto& input : inputs) {
             InputData_.emplace_back(std::move(input), this);
@@ -534,7 +524,9 @@ private:
                     return compare > 0;
                 }
             }
-            return false;
+            // resolve equal elements: when InputIndex()es are equal, we must first process element with smaller BlockIndex()
+            // Note: operator> here since this comparator is used together with max-heap
+            return std::tuple(InputIndex(), BlockIndex()) > std::tuple(other.InputIndex(), other.BlockIndex());
         }
 
         TBlockItem GetItem(ui32 columnIndex) const {

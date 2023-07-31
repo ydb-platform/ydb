@@ -1,11 +1,13 @@
 #pragma once
 
+#include "dq_columns_resolve.h"
 #include "dq_output.h"
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 
 namespace NKikimr::NMiniKQL {
 class TTypeEnvironment;
+class THolderFactory;
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
@@ -44,7 +46,8 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output);
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
-    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices, TMaybe<ui32> outputWidth);
+    TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 

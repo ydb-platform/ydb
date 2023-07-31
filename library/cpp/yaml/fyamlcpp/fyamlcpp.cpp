@@ -6,8 +6,8 @@
 
 namespace NFyaml {
 
-#define ENSURE_NODE_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Node")
-#define ENSURE_DOCUMENT_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Document")
+#define ENSURE_NODE_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx("Expected non-empty Node"))
+#define ENSURE_DOCUMENT_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx("Expected non-empty Document"))
 
 const char* zstr = "";
 
@@ -312,7 +312,11 @@ TNodeRef TNodeRef::ResolveAlias() const {
 
 TString TNodeRef::Scalar() const {
     ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_ENSURE_EX(fy_node_is_scalar(Node_), TFyamlEx() << "Node is not Scalar: " << Path());
+    Y_ENSURE_EX(fy_node_is_scalar(Node_), ({
+        TStringStream ss;
+        ss << "Node is not Scalar: " << Path();
+        TFyamlEx(ss.Str());
+    }));
     size_t size;
     const char* text = fy_node_get_scalar(Node_, &size);
     return TString(text, size);
@@ -331,7 +335,7 @@ TMark TNodeRef::BeginMark() const {
     auto* mark = fy_event_start_mark(ev.get());
 
     if (!mark) {
-        ythrow yexception() << "can't get begin mark for a node";
+        ythrow TFyamlEx("can't get begin mark for a node");
     }
 
     return TMark{
@@ -417,7 +421,7 @@ TMark TNodeRef::EndMark() const {
     }
 
     if (!mark) {
-        ythrow yexception() << "can't get end mark for a node";
+        ythrow TFyamlEx("can't get end mark for a node");
     }
 
     return TMark{
@@ -429,13 +433,21 @@ TMark TNodeRef::EndMark() const {
 
 TMapping TNodeRef::Map() const {
     ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_ENSURE_EX(fy_node_is_mapping(Node_), TFyamlEx() << "Node is not Mapping: " << Path());
+    Y_ENSURE_EX(fy_node_is_mapping(Node_), ({
+        TStringStream ss;
+        ss << "Node is not Mapping: " << Path();
+        TFyamlEx(ss.Str());
+    }));
     return TMapping(*this);
 }
 
 TSequence TNodeRef::Sequence() const {
     ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_ENSURE_EX(fy_node_is_sequence(Node_), TFyamlEx() << "Node is not Sequence: " << Path());
+    Y_ENSURE_EX(fy_node_is_sequence(Node_), ({
+        TStringStream ss;
+        ss << "Node is not Sequence: " << Path();
+        TFyamlEx(ss.Str());
+    }));
     return TSequence(*this);
 }
 
@@ -598,7 +610,11 @@ size_t TMapping::empty() const {
 TNodePairRef TMapping::at(int index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_mapping_get_by_index(Node_, index);
-    Y_ENSURE_EX(res, TFyamlEx() << "No such child: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such child: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodePairRef(res);
 }
 
@@ -610,14 +626,22 @@ TNodePairRef TMapping::operator[](int index) const {
 TNodeRef TMapping::at(const TString& index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_mapping_lookup_by_string(Node_, index.data(), index.size());
-    Y_ENSURE_EX(res, TFyamlEx() << "No such child: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such child: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodeRef(res);
 }
 
 TNodePairRef TMapping::pair_at(const TString& index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_mapping_lookup_pair_by_string(Node_, index.data(), index.size());
-    Y_ENSURE_EX(res, TFyamlEx() << "No such child: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such child: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodePairRef(res);
 }
 
@@ -741,7 +765,11 @@ size_t TSequence::empty() const {
 TNodeRef TSequence::at(int index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_sequence_get_by_index(Node_, index);
-    Y_ENSURE_EX(res, TFyamlEx() << "No such index: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such index: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodeRef(res);
 }
 
@@ -835,7 +863,6 @@ TDocument::TDocument(fy_document* doc, fy_diag* diag)
     RegisterUserDataCleanup();
 }
 
-
 TDocument TDocument::Parse(TString str) {
     const char* cstr = str.empty() ? zstr : str.cbegin();
     fy_diag_cfg dcfg;
@@ -851,11 +878,7 @@ TDocument TDocument::Parse(TString str) {
     };
     fy_document* doc = fy_document_build_from_string(&cfg, cstr, FY_NT);
     if (!doc) {
-        fy_diag_error* err;
-        void *iter = nullptr;
-        while ((err = fy_diag_errors_iterate(diag.get(), &iter)) != nullptr) {
-            ythrow yexception() << err->file << ":" << err->line << ":" << err->column << " " << err->msg;
-        }
+        NDetail::ThrowAllExceptionsIfAny(diag.get());
     }
     return TDocument(std::move(str), doc, diag.release());
 }
@@ -886,11 +909,7 @@ TNodeRef TDocument::Buildf(const char* content) {
 void TDocument::Resolve() {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
     if (fy_document_resolve(Document_.get()) != 0) {
-        fy_diag_error* err;
-        void *iter = nullptr;
-        while ((err = fy_diag_errors_iterate(Diag_.get(), &iter)) != nullptr) {
-            ythrow yexception() << err->line << ":" << err->column << " " << err->msg;
-        }
+        NDetail::ThrowAllExceptionsIfAny(Diag_.get());
     }
 }
 
@@ -1001,11 +1020,7 @@ TParser TParser::Create(TString str)
     };
     auto* parser = fy_parser_create(&cfg);
     if (!parser) {
-        fy_diag_error* err;
-        void *iter = nullptr;
-        while ((err = fy_diag_errors_iterate(diag.get(), &iter)) != nullptr) {
-            ythrow yexception() << err->file << ":" << err->line << ":" << err->column << " " << err->msg;
-        }
+        NDetail::ThrowAllExceptionsIfAny(diag.get());
     }
 
     fy_parser_set_string(parser, stream, -1);
@@ -1024,6 +1039,24 @@ std::optional<TDocument> TParser::NextDocument() {
 
 namespace NDetail {
 
+void ThrowAllExceptionsIfAny(fy_diag* diag) {
+    void* iter = nullptr;
+    fy_diag_error* err = fy_diag_errors_iterate(diag, &iter);
+    if (err != nullptr) {
+        TStringStream ss;
+        ss << err->line << ":" << err->column << " " << err->msg;
+        TFyamlEx ex(ss.Str());
+
+        while ((err = fy_diag_errors_iterate(diag, &iter)) != nullptr) {
+            TStringStream ss;
+            ss << err->line << ":" << err->column << " " << err->msg;
+            ex.AddError(ss.Str());
+        }
+
+        ythrow ex;
+    }
+}
+
 void RethrowError(fy_diag* diag) {
     void *iter = nullptr;
     fy_diag_error* err;
@@ -1031,7 +1064,7 @@ void RethrowError(fy_diag* diag) {
     while ((err = fy_diag_errors_iterate(diag, &iter)) != nullptr) {
         ss << err->line << ":" << err->column << " " << err->msg << "\n";
     }
-    ythrow yexception() << ss.Str();
+    ythrow TFyamlEx(ss.Str());
 }
 
 void RethrowOnError(bool isError, fy_node* node) {

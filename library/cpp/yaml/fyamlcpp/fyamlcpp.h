@@ -5,6 +5,7 @@
 #include <util/system/yassert.h>
 #include <util/stream/str.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
 
 #include <memory>
 #include <optional>
@@ -25,7 +26,42 @@ struct TStringPtrHashT {
     }
 };
 
-struct TFyamlEx : public yexception {};
+// do TFyaml(str) instead of TFyaml() << str;
+class TFyamlEx : public yexception {
+public:
+    TFyamlEx() {}
+
+    TFyamlEx(TString error) : Errors_({error}) {}
+
+    TFyamlEx(std::initializer_list<TString> errors) : Errors_(errors) {}
+
+    const TVector<TString>& Errors() {
+        return Errors_;
+    }
+
+    const char* what() const noexcept override {
+        What_ = TString(yexception::what());
+        for (auto& err : Errors_) {
+            What_.push_back('\n');
+            What_.append(err);
+        }
+
+        return What_.c_str();
+    }
+
+    TFyamlEx& AddError(TString error) {
+        Errors_.push_back(error);
+        return *this;
+    }
+
+    TStringBuf AsStrBuf() const {
+        return what();
+    }
+
+private:
+    TVector<TString> Errors_;
+    mutable TString What_;
+};
 
 enum class ENodeType {
     Scalar,
@@ -64,6 +100,8 @@ private:
     std::unique_ptr<IBasicUserData> Next_ = nullptr;
     std::unique_ptr<T> Data_ = nullptr;
 };
+
+void ThrowAllExceptionsIfAny(fy_diag* diag);
 
 void RethrowError(fy_diag* diag);
 

@@ -155,8 +155,9 @@ namespace {
         }
 
         void Bootstrap(const TActorContext& ctx) {
+            TryUpdateCounters();
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
-            Self()->Become(&TDerived::StateWork);
+            static_cast<TDerived*>(this)->Become(&TDerived::StateWork);
         }
 
         STFUNC(StateWork) {
@@ -167,13 +168,14 @@ namespace {
 
     private:
         void Wakeup(const TActorContext& ctx) {
-            Self()->UpdateCounters(ProcStat);
+            TryUpdateCounters();
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
         }
 
-        TDerived* Self() {
-            ProcStat.Fill(getpid());
-            return static_cast<TDerived*>(this);
+        void TryUpdateCounters() {
+            if (ProcStat.Fill(getpid())) {
+                static_cast<TDerived*>(this)->UpdateCounters(ProcStat);
+            }
         }
 
     private:

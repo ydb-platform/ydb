@@ -659,9 +659,10 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr, !many)) {
+    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
+    YQL_ENSURE(blockItemTypes.size() > 0);
 
     TTypeAnnotationNode::TListType retMultiType;
     if (!ValidateBlockKeys(input->Pos(), blockItemTypes, *input->Child(1), retMultiType, ctx.Expr)) {
@@ -682,7 +683,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
         }
 
         ui32 streamIndex;
-        if (!TryFromString(input->Child(3)->Content(), streamIndex) || streamIndex >= blockItemTypes.size()) {
+        if (!TryFromString(input->Child(3)->Content(), streamIndex) || streamIndex >= blockItemTypes.size() - 1) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), "Bad stream index"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -693,6 +694,16 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
 
         if (!ValidateAggManyStreams(*input->Child(4), input->Child(2)->ChildrenSize(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        // disallow any scalar columns except for streamIndex column
+        auto itemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+        for (ui32 i = 0; i + 1 < itemTypes.size(); ++i) {
+            bool isScalar = itemTypes[i]->GetKind() == ETypeAnnotationKind::Scalar;
+            if (isScalar && i != streamIndex) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Unexpected scalar type " << *itemTypes[i] << ", on input column #" << i));
+                return IGraphTransformer::TStatus::Error;
+            }
         }
     }
 

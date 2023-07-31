@@ -701,10 +701,15 @@ public:
                 }
 
                 const ui32* streamIndexData = nullptr;
+                TMaybe<ui32> streamIndexScalar;
                 if constexpr (Many) {
                     auto streamIndexDatum = TArrowBlock::From(s.Values_[StreamIndex_]).GetDatum();
-                    MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
-                    streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
+                    if (streamIndexDatum.is_scalar()) {
+                        streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
+                    } else {
+                        MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
+                        streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
+                    }
                     s.UnwrappedValues_ = s.Values_;
                     for (const auto& p : AggsParams_) {
                         const auto& columnDatum = TArrowBlock::From(s.UnwrappedValues_[p.Column_]).GetDatum();
@@ -748,10 +753,14 @@ public:
                             s.HashSet_->CheckGrow();
                         }
                     } else {
+                        ui32 streamIndex = 0;
+                        if constexpr (Many) {
+                            streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                        }
                         if (!InlineAggState) {
-                            Insert(*s.HashFixedMap_, key, row, streamIndexData, output, s);
+                            Insert(*s.HashFixedMap_, key, row, streamIndex, output, s);
                         } else {
-                            Insert(*s.HashMap_, key, row, streamIndexData, output, s);
+                            Insert(*s.HashMap_, key, row, streamIndex, output, s);
                         }
                     }
                 }
@@ -948,7 +957,7 @@ private:
     }
 
     template <typename THash>
-    void Insert(THash& hash, const TKey& key, ui64 row, const ui32* streamIndexData, NUdf::TUnboxedValue*const* output, TState& s) const {
+    void Insert(THash& hash, const TKey& key, ui64 row, ui32 currentStreamIndex, NUdf::TUnboxedValue*const* output, TState& s) const {
         bool isNew;
         auto iter = hash.Insert(key, isNew);
         char* payload = (char*)hash.GetMutablePayload(iter);
@@ -964,7 +973,6 @@ private:
 
             if constexpr (Many) {
                 static_assert(Finalize);
-                ui32 currentStreamIndex = streamIndexData[row];
                 MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
                 memset(ptr, 0, Streams_.size());
                 ptr[currentStreamIndex] = 1;
@@ -1002,7 +1010,6 @@ private:
 
             if constexpr (Many) {
                 static_assert(Finalize);
-                ui32 currentStreamIndex = streamIndexData[row];
                 MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
 
                 bool isNewStream = !ptr[currentStreamIndex];

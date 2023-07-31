@@ -9,5 +9,6 @@
 add_subdirectory(decimal)
 add_subdirectory(fastcheck)
 add_subdirectory(issue)
+add_subdirectory(purecalc)
 add_subdirectory(types)
 add_subdirectory(udf)

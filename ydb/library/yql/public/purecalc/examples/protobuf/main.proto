@@ -1,0 +1,11 @@
+package NExampleProtos;
+
+message TInput {
+    required string Url = 1;
+    required string Ip = 2;
+}
+
+message TOutput {
+    required string Path = 1;
+    required string Host = 2;
+}

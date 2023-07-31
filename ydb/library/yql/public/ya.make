@@ -2,6 +2,10 @@ RECURSE(
     decimal
     fastcheck
     issue
+    purecalc
+    purecalc/examples
+    purecalc/helpers
+    purecalc/io_specs
     types
     udf
     udf/arrow

@@ -138,6 +138,18 @@ protected:
 
         TBase::Send(Owner_, new TEvEvents::TEvProxyCompleted(Connection_));
     }
+
+    void FillError(const NKikimrKqp::TEvQueryResponse& record, std::vector<std::pair<char, TString>>& errorFields) {
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
+        TString message(TStringBuilder() << status);
+        errorFields.push_back({'E', "ERROR"});
+        errorFields.push_back({'M', message});
+        if (message.find("Error: Cannot find table") != TString::npos) {
+            errorFields.push_back({'C', "42P01"});
+        }
+    }
 };
 
 class TPgwireKqpProxyQuery : public TPgwireKqpProxy<TPgwireKqpProxyQuery> {
@@ -238,11 +250,7 @@ public:
                         response->Tag = TStringBuilder() << response->Tag << " " << RowsSelected_;
                     }
                 } else {
-                    NYql::TIssues issues;
-                    NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-                    NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', TStringBuilder() << status});
+                    FillError(record, response->ErrorFields);
                 }
             } else {
                 response->ErrorFields.push_back({'E', "ERROR"});
@@ -333,11 +341,7 @@ public:
                     }
                     Send(Owner_, new TEvEvents::TEvProxyCompleted(statement));
                 } else {
-                    NYql::TIssues issues;
-                    NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-                    NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', TStringBuilder() << status});
+                    FillError(record, response->ErrorFields);
                 }
             } else {
                 response->ErrorFields.push_back({'E', "ERROR"});
@@ -448,11 +452,7 @@ public:
                         response->Tag = TStringBuilder() << response->Tag << " " << RowsSelected_;
                     }
                 } else {
-                    NYql::TIssues issues;
-                    NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-                    NYdb::TStatus status(NYdb::EStatus(record.GetYdbStatus()), std::move(issues));
-                    response->ErrorFields.push_back({'E', "ERROR"});
-                    response->ErrorFields.push_back({'M', TStringBuilder() << status});
+                    FillError(record, response->ErrorFields);
                 }
             } else {
                 response->ErrorFields.push_back({'E', "ERROR"});

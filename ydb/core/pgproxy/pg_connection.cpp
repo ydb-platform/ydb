@@ -25,6 +25,7 @@ public:
     bool PasswordWasSupplied = false;
     TPollerToken::TPtr PollerToken;
     TSocketBuffer BufferInput;
+    std::size_t MAX_BUFFER_SIZE = 2 * 1024 * 1024;
     std::unordered_map<TString, TString> ServerParams = {
         {"client_encoding", "UTF8"},
         {"server_encoding", "UTF8"},
@@ -702,6 +703,15 @@ protected:
         if (event->Get()->Read) {
             for (;;) {
                 ssize_t need = BufferInput.Avail();
+                if (need == 0) {
+                    size_t capacity = BufferInput.Capacity() * 2;
+                    if (capacity > MAX_BUFFER_SIZE) {
+                        BLOG_ERROR("connection closed - not enough buffer size (" << capacity << " > " << MAX_BUFFER_SIZE << ")");
+                        return PassAway();
+                    }
+                    BufferInput.Reserve(capacity);
+                    need = BufferInput.Avail();
+                }
                 ssize_t res = SocketReceive(BufferInput.Pos(), need);
                 if (res > 0) {
                     InactivityTimer.Reset();
@@ -759,17 +769,17 @@ protected:
                     continue;
                 } else if (!res) {
                     // connection closed
-                    BLOG_D("connection closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
+                    BLOG_ERROR("connection closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
                     return PassAway();
                 } else {
-                    BLOG_D("connection closed - error in recv: " << strerror(-res));
+                    BLOG_ERROR("connection closed - error in recv: " << strerror(-res));
                     return PassAway();
                 }
             }
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    BLOG_D("connection closed by inactivity timeout");
+                    BLOG_ERROR("connection closed by inactivity timeout");
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));

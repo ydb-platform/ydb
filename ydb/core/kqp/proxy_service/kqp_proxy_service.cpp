@@ -240,6 +240,14 @@ public:
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
+        if (TableServiceConfig.enableasynccomputationpatterncompilation())
+        {
+            CompileComputationPatternService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileComputationPatternService(TableServiceConfig,
+                Counters));
+            TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
+                MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
+        }
+
         KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, AsyncIoFactory));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpNodeServiceID(SelfId().NodeId()), KqpNodeService);
@@ -422,6 +430,11 @@ public:
 
     void PassAway() override {
         Send(CompileService, new TEvents::TEvPoisonPill());
+
+        if (TableServiceConfig.enableasynccomputationpatterncompilation()) {
+            Send(CompileComputationPatternService, new TEvents::TEvPoisonPill());
+        }
+
         Send(SpillingService, new TEvents::TEvPoison);
         Send(KqpNodeService, new TEvents::TEvPoison);
         if (BoardPublishActor) {
@@ -1540,6 +1553,7 @@ private:
     TActorId BoardLookupActor;
     TActorId BoardPublishActor;
     TActorId CompileService;
+    TActorId CompileComputationPatternService;
     TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;

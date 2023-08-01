@@ -1,3 +1,4 @@
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
@@ -224,49 +225,78 @@ Y_UNIT_TEST_SUITE(KqpService) {
          UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(PatternCache, UseCache) {
+    void ConfigureSettings(TKikimrSettings & settings, bool useCache, bool useAsyncPatternCompilation) {
+        size_t cacheSize = 0;
+        if (useCache) {
+            cacheSize = useAsyncPatternCompilation ? 10_MB : 1_MB;
+        }
+
+        auto * tableServiceConfig = settings.AppConfig.MutableTableServiceConfig();
+        tableServiceConfig->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
+        tableServiceConfig->SetEnableAsyncComputationPatternCompilation(useAsyncPatternCompilation);
+
+        if (useAsyncPatternCompilation) {
+            tableServiceConfig->MutableCompileComputationPatternServiceConfig()->SetWakeupIntervalMs(1);
+            tableServiceConfig->MutableResourceManager()->SetKqpPatternCachePatternAccessTimesBeforeTryToCompile(0);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(PatternCache, UseCache, UseAsyncPatternCompilation) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
-        size_t cacheSize = UseCache ? 1_MB : 0;
-        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
+        ConfigureSettings(settings, UseCache, UseAsyncPatternCompilation);
+
         auto kikimr = TKikimrRunner{settings};
         auto driver = kikimr.GetDriver();
 
-        size_t InFlight = 10;
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = 5;
+
+        auto async_compilation_condition = [&]() {
+            if constexpr (UseCache && UseAsyncPatternCompilation) {
+                return *counters.CompiledComputationPatterns < AsyncPatternCompilationUniqueRequestsSize;
+            }
+
+            return false;
+        };
+
+        size_t InFlight = 1;
         NPar::LocalExecutor().RunAdditionalThreads(InFlight);
-        NPar::LocalExecutor().ExecRange([&driver](int /*id*/) {
-            TTimer t;
+        NPar::LocalExecutor().ExecRange([&](int /*id*/) {
             NYdb::NTable::TTableClient db(driver);
             auto session = db.CreateSession().GetValueSync().GetSession();
-                for (ui32 i = 0; i < 500; ++i) {
+
+            for (ui32 i = 0; i < 500 || async_compilation_condition(); ++i) {
+                ui32 value = UseCache && UseAsyncPatternCompilation ? i % AsyncPatternCompilationUniqueRequestsSize : i / 5;
                 ui64 total = 100500;
                 TString request = (TStringBuilder() << R"_(
                     $data = AsList(
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
 
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << value << R"_(u AS Value),
 
-                        AsStruct("aaa" AS Key,)_" << total - 10 * (i / 5) << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << total - 10 * value << R"_(u AS Value),
 
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
 
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value),
-                        AsStruct("bbb" AS Key,)_" << i / 5 << R"_(u AS Value)
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value),
+                        AsStruct("bbb" AS Key,)_" << value << R"_(u AS Value)
                     );
 
                     SELECT * FROM (
@@ -286,6 +316,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 CompareYson(R"( [ ["aaa";100500u] ])", FormatResultSetYson(result.GetResultSet(0)));
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+
+        if constexpr (UseCache && UseAsyncPatternCompilation) {
+            UNIT_ASSERT(*counters.CompiledComputationPatterns >= AsyncPatternCompilationUniqueRequestsSize);
+        }
     }
 
     // YQL-15582

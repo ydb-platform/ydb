@@ -36,4 +36,9 @@ inline NActors::TActorId MakeKqpLocalFileSpillingServiceID(ui32 nodeId) {
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 
+inline NActors::TActorId MakeKqpCompileComputationPatternServiceID(ui32 nodeId) {
+    const char name[12] = "kqp_comp_cp";
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
+
 } // namespace NKikimr::NKqp

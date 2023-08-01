@@ -150,7 +150,7 @@ public:
         }
         ActorSystem = actorSystem;
         SelfId = selfId;
-        UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes());
+        UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes(), Config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         if (PublishResourcesByExchanger) {
             CreateResourceInfoExchanger(Config.GetInfoExchangerSettings());
@@ -619,13 +619,15 @@ public:
         ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
     }
 
-    void UpdatePatternCache(ui64 size) {
-        if (size) {
-            if (!PatternCache || PatternCache->GetMaxSize() != size) {
-                PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(size, Counters->GetKqpCounters());
-            }
-        } else {
+    void UpdatePatternCache(ui64 maxSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
+        if (maxSizeBytes == 0) {
             PatternCache.reset();
+            return;
+        }
+
+        NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, patternAccessTimesBeforeTryToCompile};
+        if (!PatternCache || PatternCache->GetConfiguration() != config) {
+            PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
         }
     }
 
@@ -886,7 +888,7 @@ private:
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(event), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         auto& config = *event.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
-        ResourceManager->UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes());
+        ResourceManager->UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(), config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         bool enablePublishResourcesByExchanger = config.GetEnablePublishResourcesByExchanger();
         if (enablePublishResourcesByExchanger != PublishResourcesByExchanger) {

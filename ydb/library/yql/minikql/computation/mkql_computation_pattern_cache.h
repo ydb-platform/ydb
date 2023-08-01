@@ -27,6 +27,7 @@ struct TPatternCacheEntry {
     TStructType* ParamsStruct;
     IComputationPattern::TPtr Pattern;
     size_t SizeForCache = 0; // set only by cache to lock the size, which can slightly vary when pattern is used
+    std::atomic<size_t> AccessTimes = 0; // set only by cache
 
     void UpdateSizeForCache() {
         Y_VERIFY_DEBUG(!SizeForCache);
@@ -50,22 +51,8 @@ struct TPatternCacheEntry {
         }
     }
 };
+
 class TComputationPatternLRUCache {
-    mutable std::mutex Mutex;
-
-    THashMap<TString, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
-    TLRUCache<TString, std::shared_ptr<TPatternCacheEntry>> Cache;
-    size_t CurrentSizeBytes = 0;
-    const size_t MaxSizeBytes = 0;
-public:
-    NMonitoring::TDynamicCounters::TCounterPtr Hits;
-    NMonitoring::TDynamicCounters::TCounterPtr Waits;
-    NMonitoring::TDynamicCounters::TCounterPtr Misses;
-    NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeItems;
-    NMonitoring::TDynamicCounters::TCounterPtr SizeBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr MaxSizeBytesCounter;
-
 public:
     class TTicket : private TNonCopyable {
     public:
@@ -102,138 +89,63 @@ public:
         TComputationPatternLRUCache* Cache;
     };
 
-    TComputationPatternLRUCache(size_t sizeBytes, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>())
-        : Cache(10000)
-        , MaxSizeBytes(sizeBytes)
-        , Hits(counters->GetCounter("PatternCache/Hits", true))
-        , Waits(counters->GetCounter("PatternCache/Waits", true))
-        , Misses(counters->GetCounter("PatternCache/Misses", true))
-        , NotSuitablePattern(counters->GetCounter("PatternCache/NotSuitablePattern", true))
-        , SizeItems(counters->GetCounter("PatternCache/SizeItems", false))
-        , SizeBytes(counters->GetCounter("PatternCache/SizeBytes", false))
-        , MaxSizeBytesCounter(counters->GetCounter("PatternCache/MaxSizeBytes", false))
-    {
-        *MaxSizeBytesCounter = MaxSizeBytes;
+    struct Config {
+        Config(size_t maxSizeBytes)
+            : MaxSizeBytes(maxSizeBytes)
+        {}
+
+        Config(size_t maxSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
+            : MaxSizeBytes(maxSizeBytes)
+            , PatternAccessTimesBeforeTryToCompile(patternAccessTimesBeforeTryToCompile)
+        {}
+
+        size_t MaxSizeBytes = 0;
+        std::optional<size_t> PatternAccessTimesBeforeTryToCompile;
+
+        bool operator==(const Config & rhs) {
+            return std::tie(MaxSizeBytes, PatternAccessTimesBeforeTryToCompile) ==
+                std::tie(rhs.MaxSizeBytes, rhs.PatternAccessTimesBeforeTryToCompile);
+        }
+
+        bool operator!=(const Config & rhs) {
+            return !(*this == rhs);
+        }
+    };
+
+    TComputationPatternLRUCache(Config configuration, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+
+    ~TComputationPatternLRUCache() {
+        CleanCache();
     }
 
     static std::shared_ptr<TPatternCacheEntry> CreateCacheEntry(bool useAlloc = true) {
         return std::make_shared<TPatternCacheEntry>(useAlloc);
     }
 
-    std::shared_ptr<TPatternCacheEntry> Find(const TString& serialized) {
-        auto guard = std::scoped_lock<std::mutex>(Mutex);
-        if (auto it = Cache.Find(serialized); it != Cache.End()) {
-            ++*Hits;
-            return *it;
-        } else {
-            ++*Misses;
-            return {};
-        }
-    }
+    std::shared_ptr<TPatternCacheEntry> Find(const TString& serialized);
 
-    TTicket FindOrSubscribe(const TString& serialized) {
-        auto guard = std::scoped_lock<std::mutex>(Mutex);
-        if (auto it = Cache.Find(serialized); it != Cache.End()) {
-            ++*Hits;
-            return TTicket(serialized, false, NThreading::MakeFuture<std::shared_ptr<TPatternCacheEntry>>(*it), nullptr);
-        }
+    TTicket FindOrSubscribe(const TString& serialized);
 
-        auto [notifyIt, isNew] = Notify.emplace(serialized, Nothing());
-        if (isNew) {
-            ++*Misses;
-            return TTicket(serialized, true, {}, this);
-        }
+    void NotifyMissing(const TString& serialized);
 
-        ++*Waits;
-        auto promise = NThreading::NewPromise<std::shared_ptr<TPatternCacheEntry>>();
-        auto& subscribers = Notify[serialized];
-        if (!subscribers) {
-            subscribers.ConstructInPlace();
-        }
+    void EmplacePattern(const TString& serialized, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
 
-        subscribers->push_back(promise);
-        return TTicket(serialized, false, promise, nullptr);
-    }
-
-    void RemoveOldest() {
-        auto oldest = Cache.FindOldest();
-        Y_VERIFY_DEBUG(oldest != Cache.End());
-        CurrentSizeBytes -= oldest.Value()->SizeForCache;
-        Cache.Erase(oldest);
-    }
-
-    void NotifyMissing(const TString& serialized) {
-        TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>> subscribers;
-        {
-            auto guard = std::scoped_lock<std::mutex>(Mutex);
-            auto notifyIt = Notify.find(serialized);
-            if (notifyIt != Notify.end()) {
-                subscribers.swap(notifyIt->second);
-                Notify.erase(notifyIt);
-            }
-       }
-
-        if (subscribers) {
-            for (auto& s : *subscribers) {
-                s.SetValue(nullptr);
-            }
-        }
-    }
-
-    void EmplacePattern(const TString& serialized, std::shared_ptr<TPatternCacheEntry> patternWithEnv) {
-        Y_VERIFY_DEBUG(patternWithEnv && patternWithEnv->Pattern);
-        TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>> subscribers;
-        {
-            auto guard = std::scoped_lock<std::mutex>(Mutex);
-            // normally remove only one old cache entry by iteration to prevent bursts
-            if (CurrentSizeBytes > MaxSizeBytes) {
-                RemoveOldest();
-            }
-            // to prevent huge memory overusage remove as much as needed
-            while (CurrentSizeBytes > 2 * MaxSizeBytes) {
-                RemoveOldest();
-            }
-    
-            patternWithEnv->UpdateSizeForCache();
-            CurrentSizeBytes += patternWithEnv->SizeForCache;
-    
-            Cache.Insert(serialized, patternWithEnv);
-            auto notifyIt = Notify.find(serialized);
-            if (notifyIt != Notify.end()) {
-                subscribers.swap(notifyIt->second);
-                Notify.erase(notifyIt);
-            }
-    
-            *SizeItems = Cache.Size();
-            *SizeBytes = CurrentSizeBytes;
-        }
-
-        if (subscribers) {
-            for (auto& s : *subscribers) {
-                s.SetValue(patternWithEnv);
-            }
-        }
-    }
-
-    void CleanCache() {
-        *SizeItems = 0;
-        *SizeBytes = 0;
-        *MaxSizeBytesCounter = 0;
-        auto guard = std::scoped_lock<std::mutex>(Mutex);
-        CurrentSizeBytes = 0;
-        Cache.Clear();
-    }
+    void CleanCache();
 
     size_t GetSize() const {
-        auto guard = std::scoped_lock<std::mutex>(Mutex);
+        std::lock_guard lock(Mutex);
         return Cache.Size();
     }
 
-    size_t GetMaxSize() const {
-        auto guard = std::scoped_lock<std::mutex>(Mutex);
-        return MaxSizeBytes;
+    Config GetConfiguration() const {
+        std::lock_guard lock(Mutex);
+        return Configuration;
     }
 
+    size_t GetMaxSizeBytes() const {
+        std::lock_guard lock(Mutex);
+        return Configuration.MaxSizeBytes;
+    }
 
     i64 GetCacheHits() const {
         return *Hits;
@@ -243,9 +155,38 @@ public:
         ++*NotSuitablePattern;
     }
 
-    ~TComputationPatternLRUCache() {
-        CleanCache();
+    size_t GetPatternsToCompileSize() const {
+        std::lock_guard lock(Mutex);
+        return PatternsToCompile.size();
     }
+
+    void GetPatternsToCompile(THashMap<TString, std::shared_ptr<TPatternCacheEntry>> & result) {
+        std::lock_guard lock(Mutex);
+        result.swap(PatternsToCompile);
+    }
+
+private:
+    void RemoveOldest();
+
+    void AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry);
+
+    static constexpr size_t CacheMaxElementsSize = 10000;
+
+    mutable std::mutex Mutex;
+    THashMap<TString, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
+    TLRUCache<TString, std::shared_ptr<TPatternCacheEntry>> Cache;
+    size_t CurrentSizeBytes = 0;
+    THashMap<TString, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;
+
+    const Config Configuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr Hits;
+    NMonitoring::TDynamicCounters::TCounterPtr Waits;
+    NMonitoring::TDynamicCounters::TCounterPtr Misses;
+    NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern;
+    NMonitoring::TDynamicCounters::TCounterPtr SizeItems;
+    NMonitoring::TDynamicCounters::TCounterPtr SizeBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxSizeBytesCounter;
 };
 
 } // namespace NKikimr::NMiniKQL

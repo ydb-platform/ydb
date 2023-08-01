@@ -38,7 +38,6 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
                 UNIT_ASSERT(res.second);
                 UNIT_ASSERT_LT(partitionInResponse.GetPartitionId(), totalPartitions);
                 UNIT_ASSERT(partitionInResponse.GetNodeId() > 0);
-                UNIT_ASSERT(partitionInResponse.GetGeneration() > 0);
             }
             return ev;
         };

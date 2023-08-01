@@ -19,6 +19,48 @@
 namespace NYdb::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+    Y_UNIT_TEST(ConnectToYDB) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "invalid:" << setup->GetGrpcPort());
+        cfg.SetDatabase("/Invalid");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        auto driver = NYdb::TDriver(cfg);
+
+        {
+            TTopicClient client(driver);
+
+            auto writeSettings = TWriteSessionSettings()
+                .Path(setup->GetTestTopic())
+                .MessageGroupId("group_id")
+                // TODO why retries? see LOGBROKER-8490
+                .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+            auto writeSession = client.CreateWriteSession(writeSettings);
+
+            auto event = writeSession->GetEvent(true);
+            UNIT_ASSERT(event.Defined() && std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+        }
+
+        {
+            auto settings = TTopicClientSettings()
+                .Database({"/Root"})
+                .DiscoveryEndpoint({TStringBuilder() << "localhost:" << setup->GetGrpcPort()});
+
+            TTopicClient client(driver, settings);
+
+            auto writeSettings = TWriteSessionSettings()
+                .Path(setup->GetTestTopic())
+                .MessageGroupId("group_id")
+                .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+            auto writeSession = client.CreateWriteSession(writeSettings);
+
+            auto event = writeSession->GetEvent(true);
+            UNIT_ASSERT(event.Defined() && !std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+        }
+    }
+
+
     Y_UNIT_TEST(WriteRead) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         TTopicClient client(setup->GetDriver());

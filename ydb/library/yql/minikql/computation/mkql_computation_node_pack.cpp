@@ -861,16 +861,10 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
     }
 }
 
-bool HasNonTrivialNulls(const arrow::ArrayData& array, i64 expectedOffset) {
-    MKQL_ENSURE(array.offset == expectedOffset, "Unexpected offset in child arrays");
-    i64 nulls = array.GetNullCount();
-    if (nulls > 0 && nulls != array.length) {
-        return true;
-    }
-
-    return AnyOf(array.child_data, [&](const auto& child) { return HasNonTrivialNulls(*child, expectedOffset); });
+bool HasOffset(const arrow::ArrayData& array, i64 expectedOffset) {
+    return array.offset == expectedOffset &&
+        AllOf(array.child_data, [&](const auto& child) { return HasOffset(*child, expectedOffset); });
 }
-
 
 } // namespace
 
@@ -1106,59 +1100,52 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     const ui64 len = TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 
     auto metadataBuffer = std::make_shared<TPagedBuffer>();
+    // save block length
     PackData<false>(len, *metadataBuffer);
 
-    TMaybe<ui64> originalOffset;
-    bool hasNonTrivialNulls = false;
-    // all offsets should be equal
-    for (size_t i = 0; i < width - 1; ++i) {
-        arrow::Datum datum = TArrowBlock::From(values[i]).GetDatum();
-        if (datum.is_array()) {
-            i64 offset = datum.array()->offset;
-            MKQL_ENSURE(offset >= 0, "Negative offset");
-            if (!originalOffset.Defined()) {
-                originalOffset = offset;
-            } else {
-                MKQL_ENSURE(*originalOffset == offset, "All columns should have equal offsets");
-            }
-            hasNonTrivialNulls = hasNonTrivialNulls || HasNonTrivialNulls(*datum.array(), offset);
-        }
-    }
-
-    const ui64 desiredOffset = (originalOffset.Defined() && hasNonTrivialNulls) ? (*originalOffset % 8) : 0;
-    PackData<false>(desiredOffset, *metadataBuffer);
-
-    // "scalars are present"
+    // save feature flags
+    // 1 = "scalars are present"
     const ui64 metadataFlags = 1 << 0;
     PackData<false>(metadataFlags, *metadataBuffer);
 
+    TVector<std::shared_ptr<arrow::ArrayData>> arrays;
+    arrays.reserve(width - 1);
+    // save reminder of original offset for each column - it is needed to properly handle offset in bitmaps
+    for (size_t i = 0; i < width - 1; ++i) {
+        arrow::Datum datum = TArrowBlock::From(values[i]).GetDatum();
+        ui8 reminder = 0;
+        if (datum.is_array()) {
+            i64 offset = datum.array()->offset;
+            MKQL_ENSURE(offset >= 0, "Negative offset");
+            // all offsets should be equal
+            MKQL_ENSURE(HasOffset(*datum.array(), offset), "Unexpected offset in child data");
+            reminder = offset % 8;
+            arrays.emplace_back(datum.array());
+        } else {
+            MKQL_ENSURE(datum.is_scalar(), "Expecting array or scalar");
+            if (!ConvertedScalars_[i]) {
+                const TType* itemType = static_cast<const TMultiType*>(Type_)->GetElementType(i);
+                datum = MakeArrayFromScalar(*datum.scalar(), 1, static_cast<const TBlockType*>(itemType)->GetItemType(), ArrowPool_);
+                MKQL_ENSURE(HasOffset(*datum.array(), 0), "Expected zero array offset after scalar is converted to array");
+                ConvertedScalars_[i] = datum.array();
+            }
+            arrays.emplace_back(ConvertedScalars_[i]);
+        }
+        PackData<false>(reminder, *metadataBuffer);
+    }
+
+    // save count of metadata words
     ui32 totalMetadataCount = 0;
     for (size_t i = 0; i < width - 1; ++i) {
         totalMetadataCount += BlockSerializers_[i]->ArrayMetadataCount();
     }
     PackData<false>(totalMetadataCount, *metadataBuffer);
 
-    TVector<std::shared_ptr<arrow::ArrayData>> arrays;
-    arrays.reserve(width - 1);
-    for (ui32 i = 0; i < width - 1; ++i) {
-        arrow::Datum datum = TArrowBlock::From(values[i]).GetDatum();
-        if (datum.is_scalar()) {
-            if (!ConvertedScalars_[i]) {
-                const TType* itemType = static_cast<const TMultiType*>(Type_)->GetElementType(i);
-                datum = MakeArrayFromScalar(*datum.scalar(), 1, static_cast<const TBlockType*>(itemType)->GetItemType(), ArrowPool_);
-                ConvertedScalars_[i] = datum.array();
-            }
-            arrays.emplace_back(ConvertedScalars_[i]);
-        } else {
-            MKQL_ENSURE(datum.is_array(), "Expecting array or scalar");
-            arrays.emplace_back(datum.array());
-        }
-    }
-
+    // save metadata itself
     ui32 savedMetadata = 0;
     for (size_t i = 0; i < width - 1; ++i) {
         const bool isScalar = BlockReaders_[i] != nullptr;
-        BlockSerializers_[i]->StoreMetadata(*arrays[i], isScalar ? 0 : desiredOffset, [&](ui64 meta) {
+        BlockSerializers_[i]->StoreMetadata(*arrays[i], [&](ui64 meta) {
             PackData<false>(meta, *metadataBuffer);
             ++savedMetadata;
         });
@@ -1167,9 +1154,10 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     MKQL_ENSURE(savedMetadata == totalMetadataCount, "Serialization metadata error");
 
     BlockBuffer_.Insert(BlockBuffer_.End(), TPagedBuffer::AsRope(metadataBuffer));
+    // save buffers
     for (size_t i = 0; i < width - 1; ++i) {
         const bool isScalar = BlockReaders_[i] != nullptr;
-        BlockSerializers_[i]->StoreArray(*arrays[i], isScalar ? 0 : desiredOffset, BlockBuffer_);
+        BlockSerializers_[i]->StoreArray(*arrays[i], BlockBuffer_);
     }
     ++ItemCount_;
     return *this;
@@ -1179,15 +1167,25 @@ template<bool Fast>
 void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
     while (!buf.empty()) {
         TChunkedInputBuffer chunked(std::move(buf));
+
+        // unpack block length
         const ui64 len = UnpackData<false, ui64>(chunked);
         if (len == 0) {
             continue;
         }
 
-        const ui64 offset = UnpackData<false, ui64>(chunked);
+        // unpack flags
         const ui64 metadataFlags = UnpackData<false, ui64>(chunked);
         MKQL_ENSURE(metadataFlags == 1, "Unsupported metadata flags");
 
+        // unpack array offsets
+        TVector<ui64> offsets;
+        for (size_t i = 0; i < BlockDeserializers_.size(); ++i) {
+            offsets.emplace_back(UnpackData<false, ui8>(chunked));
+            MKQL_ENSURE(offsets.back() < 8, "Unexpected offset value");
+        }
+
+        // unpack metadata
         ui32 metaCount = UnpackData<false, ui32>(chunked);
         for (auto& deserializer : BlockDeserializers_) {
             deserializer->LoadMetadata([&]() -> ui64 {
@@ -1198,10 +1196,11 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFa
         }
         MKQL_ENSURE(metaCount == 0, "Partial buffers read");
         TRope ropeTail = chunked.ReleaseRope();
+        // unpack buffers
         result.PushRow([&](ui32 i) {
             if (i < BlockDeserializers_.size()) {
                 const bool isScalar = BlockReaders_[i] != nullptr;
-                auto array = BlockDeserializers_[i]->LoadArray(ropeTail, isScalar ? 1 : len, isScalar ? 0 : offset);
+                auto array = BlockDeserializers_[i]->LoadArray(ropeTail, isScalar ? 1 : len, offsets[i]);
                 if (isScalar) {
                     TBlockItem item = BlockReaders_[i]->GetItem(*array, 0);
                     const TBlockType* itemType = static_cast<const TBlockType*>(static_cast<const TMultiType*>(Type_)->GetElementType(i));

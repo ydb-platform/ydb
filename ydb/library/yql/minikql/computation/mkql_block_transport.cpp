@@ -49,13 +49,14 @@ bool NeedStoreBitmap(const arrow::ArrayData& data) {
     return nullCount != 0 && nullCount != data.length;
 }
 
-void StoreNullsSizes(const arrow::ArrayData& data, ui64 desiredOffset, const IBlockSerializer::TMetadataSink& metaSink) {
+void StoreNullsSizes(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) {
     metaSink(data.GetNullCount());
     if (!NeedStoreBitmap(data)) {
         metaSink(0);
         return;
     }
 
+    const ui64 desiredOffset = data.offset % 8;
     size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
     metaSink(nullBytes);
 }
@@ -66,10 +67,11 @@ void LoadNullsSizes(const IBlockDeserializer::TMetadataSource& metaSource, TMayb
     nullsSize = metaSource();
 }
 
-void StoreNulls(const arrow::ArrayData& data, ui64 desiredOffset, TRope& dst) {
+void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
     if (!NeedStoreBitmap(data)) {
         return;
     }
+    const ui64 desiredOffset = data.offset % 8;
     size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
     YQL_ENSURE(desiredOffset <= data.offset);
     YQL_ENSURE((data.offset - desiredOffset) % 8 == 0);
@@ -177,30 +179,30 @@ private:
         return Nullable ? 3 : 1;
     }
 
-    void StoreMetadata(const arrow::ArrayData& data, ui64 offset, const IBlockSerializer::TMetadataSink& metaSink) const final {
-        YQL_ENSURE(offset <= data.offset);
+    void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
         if constexpr (Nullable) {
-            StoreNullsSizes(data, offset, metaSink);
+            StoreNullsSizes(data, metaSink);
             if (data.GetNullCount() == data.length) {
                 metaSink(0);
                 return;
             }
         }
-        size_t dataBytes = ((size_t)data.length + offset) * ObjectSize;
+        const ui64 desiredOffset = data.offset % 8;
+        size_t dataBytes = ((size_t)data.length + desiredOffset) * ObjectSize;
         metaSink(dataBytes);
     }
 
-    void StoreArray(const arrow::ArrayData& data, ui64 offset, TRope& dst) const final {
-        YQL_ENSURE(offset <= data.offset);
+    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
         if constexpr (Nullable) {
-            StoreNulls(data, offset, dst);
+            StoreNulls(data, dst);
             if (data.GetNullCount() == data.length) {
                 return;
             }
         }
 
-        const char* buf = reinterpret_cast<const char*>(data.buffers[1]->data()) + (data.offset - offset) * ObjectSize;
-        size_t dataBytes = ((size_t)data.length + offset) * ObjectSize;
+        const ui64 desiredOffset = data.offset % 8;
+        const char* buf = reinterpret_cast<const char*>(data.buffers[1]->data()) + (data.offset - desiredOffset) * ObjectSize;
+        size_t dataBytes = ((size_t)data.length + desiredOffset) * ObjectSize;
         dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[1], buf, dataBytes));
     }
 };
@@ -246,10 +248,9 @@ private:
         return Nullable ? 4 : 2;
     }
 
-    void StoreMetadata(const arrow::ArrayData& data, ui64 offset, const IBlockSerializer::TMetadataSink& metaSink) const final {
-        YQL_ENSURE(offset <= data.offset);
+    void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
         if constexpr (Nullable) {
-            StoreNullsSizes(data, offset, metaSink);
+            StoreNullsSizes(data, metaSink);
             if (data.GetNullCount() == data.length) {
                 metaSink(0);
                 metaSink(0);
@@ -257,22 +258,23 @@ private:
             }
         }
 
-        size_t offsetsSize = ((size_t)data.length + 1 + offset) * sizeof(TOffset);
+        const ui64 desiredOffset = data.offset % 8;
+        size_t offsetsSize = ((size_t)data.length + 1 + desiredOffset) * sizeof(TOffset);
         metaSink(offsetsSize);
         metaSink(data.buffers[2]->size());
     }
 
-    void StoreArray(const arrow::ArrayData& data, ui64 offset, TRope& dst) const {
-        YQL_ENSURE(offset <= data.offset);
+    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
         if constexpr (Nullable) {
-            StoreNulls(data, offset, dst);
+            StoreNulls(data, dst);
             if (data.GetNullCount() == data.length) {
                 return;
             }
         }
 
-        const char* offsets = reinterpret_cast<const char*>(data.GetValues<TOffset>(1) - offset);
-        size_t offsetsSize = ((size_t)data.length + 1 + offset) * sizeof(TOffset);
+        const ui64 desiredOffset = data.offset % 8;
+        const char* offsets = reinterpret_cast<const char*>(data.GetValues<TOffset>(1) - desiredOffset);
+        size_t offsetsSize = ((size_t)data.length + 1 + desiredOffset) * sizeof(TOffset);
         dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[1], offsets, offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data());
@@ -327,24 +329,22 @@ private:
         return 2 + Inner_->ArrayMetadataCount();
     }
 
-    void StoreMetadata(const arrow::ArrayData& data, ui64 offset, const IBlockSerializer::TMetadataSink& metaSink) const final {
-        YQL_ENSURE(offset <= data.offset);
-        StoreNullsSizes(data, offset, metaSink);
+    void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        StoreNullsSizes(data, metaSink);
         if (data.GetNullCount() == data.length) {
             auto innerCount = Inner_->ArrayMetadataCount();
             for (size_t i = 0; i < innerCount; ++i) {
                 metaSink(0);
             }
         } else {
-            Inner_->StoreMetadata(*data.child_data[0], offset, metaSink);
+            Inner_->StoreMetadata(*data.child_data[0], metaSink);
         }
     }
 
-    void StoreArray(const arrow::ArrayData& data, ui64 offset, TRope& dst) const {
-        YQL_ENSURE(offset <= data.offset);
-        StoreNulls(data, offset, dst);
+    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
+        StoreNulls(data, dst);
         if (data.GetNullCount() != data.length) {
-            Inner_->StoreArray(*data.child_data[0], offset, dst);
+            Inner_->StoreArray(*data.child_data[0], dst);
         }
     }
 
@@ -403,10 +403,9 @@ private:
         return result;
     }
 
-    void StoreMetadata(const arrow::ArrayData& data, ui64 offset, const IBlockSerializer::TMetadataSink& metaSink) const final {
-        YQL_ENSURE(offset <= data.offset);
+    void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
         if constexpr (Nullable) {
-            StoreNullsSizes(data, offset, metaSink);
+            StoreNullsSizes(data, metaSink);
         }
         if (data.GetNullCount() == data.length) {
             auto childCount = GetChildMetaCount();
@@ -415,19 +414,18 @@ private:
             }
         } else {
             for (size_t i = 0; i < Children_.size(); ++i) {
-                Children_[i]->StoreMetadata(*data.child_data[i], offset, metaSink);
+                Children_[i]->StoreMetadata(*data.child_data[i], metaSink);
             }
         }
     }
 
-    void StoreArray(const arrow::ArrayData& data, ui64 offset, TRope& dst) const {
-        YQL_ENSURE(offset <= data.offset);
+    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
         if constexpr (Nullable) {
-            StoreNulls(data, offset, dst);
+            StoreNulls(data, dst);
         }
         if (data.GetNullCount() != data.length) {
             for (size_t i = 0; i < Children_.size(); ++i) {
-                Children_[i]->StoreArray(*data.child_data[i], offset, dst);
+                Children_[i]->StoreArray(*data.child_data[i], dst);
             }
         }
     }

@@ -18,8 +18,8 @@ public:
     virtual size_t ArrayMetadataCount() const = 0;
 
     using TMetadataSink = std::function<void(ui64 meta)>;
-    virtual void StoreMetadata(const arrow::ArrayData& data, ui64 desiredOffset, const TMetadataSink& metaSink) const = 0;
-    virtual void StoreArray(const arrow::ArrayData& data, ui64 desiredOffset, TRope& dst) const = 0;
+    virtual void StoreMetadata(const arrow::ArrayData& data, const TMetadataSink& metaSink) const = 0;
+    virtual void StoreArray(const arrow::ArrayData& data, TRope& dst) const = 0;
 };
 
 class IBlockDeserializer {

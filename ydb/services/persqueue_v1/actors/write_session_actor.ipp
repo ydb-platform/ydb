@@ -1556,7 +1556,11 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
             InitCheckSchema(ctx);
         }
     } else {
-        Request->ReplyUnauthenticated("refreshed token is invalid");
+        if (ev->Get()->Retryable) {
+            Request->ReplyUnavaliable();
+        } else {
+            Request->ReplyUnauthenticated("refreshed token is invalid");
+        }
         Die(ctx);
     }
 }

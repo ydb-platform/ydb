@@ -1418,7 +1418,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
             WriteToStreamOrDie(ctx, std::move(result));
         }
     } else {
-        Request->ReplyUnauthenticated("refreshed token is invalid");
+        if (ev->Get()->Retryable) {
+            Request->ReplyUnavaliable();
+        } else {
+            Request->ReplyUnauthenticated("refreshed token is invalid");
+        }
         Die(ctx);
     }
 }

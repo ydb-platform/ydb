@@ -2024,7 +2024,7 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
 
     if (result.ComputeNode) {
         result.ExpectedMaxRanges = CalcMaxRanges(rebuiltRange, indexKeysOrder);
-        if (result.ExpectedMaxRanges && (!Settings.MaxRanges || *result.ExpectedMaxRanges < *Settings.MaxRanges)) {
+        if (!Settings.MaxRanges || (result.ExpectedMaxRanges && *result.ExpectedMaxRanges < *Settings.MaxRanges)) {
             TCoLambda lambda(result.PrunedLambda);
             auto newPred = MakePredicateFromPrunedRange(prunedRange, lambda.Args().Arg(0).Ptr(), ctx);
 

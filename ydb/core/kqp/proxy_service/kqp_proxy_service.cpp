@@ -352,7 +352,7 @@ public:
 
         const auto& info = record.GetSystemStateInfo(0);
         if (AppData()->UserPoolId >= info.PoolStatsSize()) {
-            KQP_PROXY_LOG_C("Unexpected whiteboard info: pool size is smaller than user pool id"
+            KQP_PROXY_LOG_D("Unexpected whiteboard info: pool size is smaller than user pool id"
                 << ", pool size: " << info.PoolStatsSize()
                 << ", user pool id: " << AppData()->UserPoolId);
             return;

@@ -187,7 +187,7 @@ size_t EncodedSizeOfKey(HttpSchemeMetadata, HttpSchemeMetadata::ValueType x) {
   }
 }
 
-const char* HttpSchemeMetadata::DisplayValue(MementoType content_type) {
+const char* HttpSchemeMetadata::DisplayValue(ValueType content_type) {
   switch (content_type) {
     case kHttp:
       return "http";
@@ -300,7 +300,10 @@ TString GrpcStreamNetworkState::DisplayValue(ValueType x) {
   GPR_UNREACHABLE_CODE(return "unknown value");
 }
 
-TString PeerString::DisplayValue(ValueType x) { return TString(x); }
+TString PeerString::DisplayValue(const ValueType& x) {
+  return TString(x.as_string_view());
+}
+
 const TString& GrpcStatusContext::DisplayValue(const TString& x) {
   return x;
 }

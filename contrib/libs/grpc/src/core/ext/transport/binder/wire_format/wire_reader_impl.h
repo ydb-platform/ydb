@@ -18,9 +18,11 @@
 #include <grpc/support/port_platform.h>
 
 #include <memory>
+#include <queue>
 #include <utility>
 
 #include "y_absl/container/flat_hash_map.h"
+#include "y_absl/functional/any_invocable.h"
 
 #include <grpcpp/security/binder_security_policy.h>
 
@@ -99,9 +101,11 @@ class WireReaderImpl : public WireReader {
  private:
   y_absl::Status ProcessStreamingTransaction(transaction_code_t code,
                                            ReadableParcel* parcel);
-  y_absl::Status ProcessStreamingTransactionImpl(transaction_code_t code,
-                                               ReadableParcel* parcel,
-                                               int* cancellation_flags)
+  y_absl::Status ProcessStreamingTransactionImpl(
+      transaction_code_t code, ReadableParcel* parcel, int* cancellation_flags,
+      // The queue saves the actions needed to be done "WITHOUT" `mu_`.
+      // It prevents deadlock against wire writer issues.
+      std::queue<y_absl::AnyInvocable<void() &&>>& deferred_func_queue)
       Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   std::shared_ptr<TransportStreamReceiver> transport_stream_receiver_;

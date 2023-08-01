@@ -25,8 +25,6 @@
 #include <stdint.h>
 
 #include <memory>
-#include <util/generic/string.h>
-#include <util/string/cast.h>
 
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
@@ -62,6 +60,7 @@
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/resource_quota/memory_quota.h"
+#include "src/core/lib/slice/slice.h"
 #include "src/core/lib/slice/slice_buffer.h"
 #include "src/core/lib/surface/init_internally.h"
 #include "src/core/lib/transport/connectivity_state.h"
@@ -69,6 +68,14 @@
 #include "src/core/lib/transport/transport.h"
 #include "src/core/lib/transport/transport_fwd.h"
 #include "src/core/lib/transport/transport_impl.h"
+
+// Flag that this closure barrier may be covering a write in a pollset, and so
+//   we should not complete this closure until we can prove that the write got
+//   scheduled
+#define CLOSURE_BARRIER_MAY_COVER_WRITE (1 << 0)
+// First bit of the reference count, stored in the high order bits (with the low
+//   bits being used for flags defined above)
+#define CLOSURE_BARRIER_FIRST_REF_BIT (1 << 16)
 
 namespace grpc_core {
 class ContextList;
@@ -262,7 +269,7 @@ struct grpc_chttp2_transport
   grpc_transport base;  // must be first
   grpc_core::RefCount refs;
   grpc_endpoint* ep;
-  TString peer_string;
+  grpc_core::Slice peer_string;
 
   grpc_core::MemoryOwner memory_owner;
   const grpc_core::MemoryAllocator::Reservation self_reservation;
@@ -473,6 +480,10 @@ struct grpc_chttp2_transport
   /// Based on channel args, preferred_rx_crypto_frame_sizes are advertised to
   /// the peer
   bool enable_preferred_rx_crypto_frame_advertisement = false;
+  /// Set to non zero if closures associated with the transport may be
+  /// covering a write in a pollset. Such closures cannot be scheduled until
+  /// we can prove that the write got scheduled.
+  uint8_t closure_barrier_may_cover_write = CLOSURE_BARRIER_MAY_COVER_WRITE;
 
   std::shared_ptr<grpc_event_engine::experimental::EventEngine> event_engine;
 };
@@ -700,7 +711,8 @@ void grpc_chttp2_complete_closure_step(grpc_chttp2_transport* t,
                                        grpc_chttp2_stream* s,
                                        grpc_closure** pclosure,
                                        grpc_error_handle error,
-                                       const char* desc);
+                                       const char* desc,
+                                       grpc_core::DebugLocation whence = {});
 
 #define GRPC_HEADER_SIZE_IN_BYTES 5
 #define MAX_SIZE_T (~(size_t)0)

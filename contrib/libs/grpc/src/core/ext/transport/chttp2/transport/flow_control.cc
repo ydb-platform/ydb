@@ -102,7 +102,7 @@ std::ostream& operator<<(std::ostream& out, const FlowControlAction& action) {
   return out << action.DebugString();
 }
 
-TransportFlowControl::TransportFlowControl(const char* name,
+TransportFlowControl::TransportFlowControl(y_absl::string_view name,
                                            bool enable_bdp_probe,
                                            MemoryOwner* memory_owner)
     : memory_owner_(memory_owner),
@@ -176,7 +176,10 @@ int64_t TransportFlowControl::target_window() const {
 }
 
 FlowControlAction TransportFlowControl::UpdateAction(FlowControlAction action) {
-  if (announced_window_ < target_window() / 2) {
+  const int64_t target = target_window();
+  // round up so that one byte targets are sent.
+  const int64_t send_threshold = (target + 1) / 2;
+  if (announced_window_ < send_threshold) {
     action.set_send_transport_update(
         FlowControlAction::Urgency::UPDATE_IMMEDIATELY);
   }

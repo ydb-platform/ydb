@@ -34,94 +34,80 @@ using namespace NBus;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TGrpcCallTracer final
-    : public grpc_core::CallTracer
+    : public grpc_core::ServerCallTracer
 {
 public:
-    CallAttemptTracer* StartNewAttempt(bool /*is_transparent_retry*/) override
+    void RecordAnnotation(y_absl::string_view /*annotation*/) override
+    { }
+
+    TString TraceId() override
     {
-        return &AttemptTracer_;
+        return {};
+    }
+
+    TString SpanId() override
+    {
+        return {};
+    }
+
+    bool IsSampled() override
+    {
+        return false;
+    }
+
+    void RecordSendInitialMetadata(
+        grpc_metadata_batch* /*send_initial_metadata*/) override
+    { }
+
+    void RecordSendTrailingMetadata(grpc_metadata_batch* /*send_trailing_metadata*/) override
+    { }
+
+    void RecordSendMessage(const grpc_core::SliceBuffer& /*send_message*/) override
+    { }
+
+    void RecordReceivedInitialMetadata(grpc_metadata_batch* /*recv_initial_metadata*/) override
+    { }
+
+    void RecordSendCompressedMessage(const grpc_core::SliceBuffer& /*send_compressed_message*/) override
+    { }
+
+    void RecordReceivedMessage(const grpc_core::SliceBuffer& /*recv_message*/) override
+    { }
+
+    void RecordReceivedDecompressedMessage(const grpc_core::SliceBuffer& /*recv_decompressed_message*/) override
+    { }
+
+    void RecordCancel(grpc_error_handle cancelError) override
+    {
+        auto current = Error_.get();
+        Error_.set(cancelError);
     }
 
     TError GetError()
     {
-        return AttemptTracer_.GetError();
+        auto error = Error_.get();
+        intptr_t statusCode;
+        if (!grpc_error_get_int(error, grpc_core::StatusIntProperty::kRpcStatus, &statusCode)) {
+            statusCode = GRPC_STATUS_UNKNOWN;
+        }
+        TString statusDetail;
+        if (!grpc_error_get_str(error, grpc_core::StatusStrProperty::kDescription, &statusDetail)) {
+            statusDetail = "Unknown error";
+        }
+
+        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), statusDetail)
+            << TErrorAttribute("status_code", statusCode);
     }
 
-    void RecordAnnotation(y_absl::string_view /*annotation*/) override
+    void RecordReceivedTrailingMetadata(
+        grpc_metadata_batch* /*recv_trailing_metadata*/) override
+    { }
+
+    void RecordEnd(const grpc_call_final_info* /*final_info*/) override
     { }
 
 private:
-    class TAttemptTracer
-        : public CallAttemptTracer
-    {
-    public:
-        TAttemptTracer()
-            : Error_(y_absl::OkStatus())
-        { }
-
-        ~TAttemptTracer() override
-        { }
-
-        void RecordSendInitialMetadata(
-            grpc_metadata_batch* /*send_initial_metadata*/) override
-        { }
-
-        void RecordOnDoneSendInitialMetadata(gpr_atm* /*peer_string*/) override
-        { }
-
-        void RecordSendTrailingMetadata(grpc_metadata_batch* /*send_trailing_metadata*/) override
-        { }
-
-        void RecordSendMessage(const grpc_core::SliceBuffer& /*send_message*/) override
-        { }
-
-        void RecordReceivedInitialMetadata(
-            grpc_metadata_batch* /*recv_initial_metadata*/,
-            uint32_t /*flags*/) override
-        { }
-
-        void RecordReceivedMessage(const grpc_core::SliceBuffer& /*recv_message*/) override
-        { }
-
-        void RecordReceivedTrailingMetadata(
-            y_absl::Status /*status*/,
-            grpc_metadata_batch* /*recv_trailing_metadata*/,
-            const grpc_transport_stream_stats* /*transport_stream_stats*/) override
-        { }
-
-        void RecordCancel(grpc_error_handle cancelError) override
-        {
-            auto current = Error_.get();
-            Error_.set(cancelError);
-        }
-
-        void RecordEnd(const gpr_timespec& /*latency*/) override
-        { }
-
-        void RecordAnnotation(y_absl::string_view /*annotation*/) override
-        { }
-
-        TError GetError()
-        {
-            auto error = Error_.get();
-            intptr_t statusCode;
-            if (!grpc_error_get_int(error, grpc_core::StatusIntProperty::kRpcStatus, &statusCode)) {
-                statusCode = GRPC_STATUS_UNKNOWN;
-            }
-            TString statusDetail;
-            if (!grpc_error_get_str(error, grpc_core::StatusStrProperty::kDescription, &statusDetail)) {
-                statusDetail = "Unknown error";
-            }
-
-            return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), statusDetail)
-                << TErrorAttribute("status_code", statusCode);
-        }
-
-    private:
-        AtomicError Error_;
-    };
-
-    TAttemptTracer AttemptTracer_;
+    AtomicError Error_;
 };
 
 DECLARE_REFCOUNTED_TYPE(TGrpcCallTracer)

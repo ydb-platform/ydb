@@ -48,6 +48,7 @@
 #include <grpc/grpc.h>
 
 #include "src/core/lib/gprpp/unique_type_name.h"
+#include "src/core/lib/slice/slice.h"
 
 #define XXH_INLINE_ALL
 #include "xxhash.h"
@@ -85,7 +86,6 @@
 #include "src/core/lib/resource_quota/arena.h"
 #include "src/core/lib/service_config/service_config.h"
 #include "src/core/lib/service_config/service_config_impl.h"
-#include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/uri/uri_parser.h"
 
@@ -659,8 +659,10 @@ y_absl::optional<uint64_t> HeaderHashHelper(
 
 y_absl::StatusOr<ConfigSelector::CallConfig>
 XdsResolver::XdsConfigSelector::GetCallConfig(GetCallConfigArgs args) {
+  Slice* path = args.initial_metadata->get_pointer(HttpPathMetadata());
+  GPR_ASSERT(path != nullptr);
   auto route_index = XdsRouting::GetRouteForRequest(
-      RouteListIterator(&route_table_), StringViewFromSlice(*args.path),
+      RouteListIterator(&route_table_), path->as_string_view(),
       args.initial_metadata);
   if (!route_index.has_value()) {
     return y_absl::UnavailableError(

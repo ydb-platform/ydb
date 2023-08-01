@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.53.1)
+VERSION(1.54.2)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.53.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.54.2.tar.gz)
 
 LICENSE(
     Apache-2.0 AND
@@ -26,6 +26,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/algorithm
     contrib/restricted/abseil-cpp-tstring/y_absl/base
     contrib/restricted/abseil-cpp-tstring/y_absl/container
+    contrib/restricted/abseil-cpp-tstring/y_absl/flags
     contrib/restricted/abseil-cpp-tstring/y_absl/functional
     contrib/restricted/abseil-cpp-tstring/y_absl/hash
     contrib/restricted/abseil-cpp-tstring/y_absl/memory
@@ -108,7 +109,6 @@ SRCS(
     src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc
     src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc
     src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc
-    src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.cc
     src/core/ext/filters/client_channel/resolver/dns/native/dns_resolver.cc
     src/core/ext/filters/client_channel/resolver/fake/fake_resolver.cc
     src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc
@@ -136,6 +136,7 @@ SRCS(
     src/core/ext/filters/server_config_selector/server_config_selector_filter.cc
     src/core/ext/filters/stateful_session/stateful_session_filter.cc
     src/core/ext/filters/stateful_session/stateful_session_service_config_parser.cc
+    src/core/ext/gcp/metadata_query.cc
     src/core/ext/transport/binder/client/binder_connector.cc
     src/core/ext/transport/binder/client/channel_create.cc
     src/core/ext/transport/binder/client/channel_create_impl.cc
@@ -522,6 +523,7 @@ SRCS(
     src/core/lib/address_utils/sockaddr_utils.cc
     src/core/lib/backoff/backoff.cc
     src/core/lib/backoff/random_early_detection.cc
+    src/core/lib/channel/call_tracer.cc
     src/core/lib/channel/channel_args.cc
     src/core/lib/channel/channel_args_preconditioning.cc
     src/core/lib/channel/channel_stack.cc
@@ -532,11 +534,15 @@ SRCS(
     src/core/lib/channel/channelz_registry.cc
     src/core/lib/channel/connected_channel.cc
     src/core/lib/channel/promise_based_filter.cc
+    src/core/lib/channel/server_call_tracer_filter.cc
     src/core/lib/channel/status_util.cc
     src/core/lib/compression/compression.cc
     src/core/lib/compression/compression_internal.cc
     src/core/lib/compression/message_compress.cc
+    src/core/lib/config/config_vars.cc
+    src/core/lib/config/config_vars_non_generated.cc
     src/core/lib/config/core_configuration.cc
+    src/core/lib/config/load_config.cc
     src/core/lib/debug/event_log.cc
     src/core/lib/debug/histogram_view.cc
     src/core/lib/debug/stats.cc
@@ -579,56 +585,56 @@ SRCS(
     src/core/lib/event_engine/windows/win_socket.cc
     src/core/lib/event_engine/windows/windows_endpoint.cc
     src/core/lib/event_engine/windows/windows_engine.cc
+    src/core/lib/event_engine/windows/windows_listener.cc
     src/core/lib/experiments/config.cc
     src/core/lib/experiments/experiments.cc
     src/core/lib/gpr/alloc.cc
+    src/core/lib/gpr/android/log.cc
     src/core/lib/gpr/atm.cc
-    src/core/lib/gpr/cpu_iphone.cc
-    src/core/lib/gpr/cpu_linux.cc
-    src/core/lib/gpr/cpu_posix.cc
-    src/core/lib/gpr/cpu_windows.cc
+    src/core/lib/gpr/iphone/cpu.cc
+    src/core/lib/gpr/linux/cpu.cc
+    src/core/lib/gpr/linux/log.cc
     src/core/lib/gpr/log.cc
-    src/core/lib/gpr/log_android.cc
-    src/core/lib/gpr/log_linux.cc
-    src/core/lib/gpr/log_posix.cc
-    src/core/lib/gpr/log_windows.cc
+    src/core/lib/gpr/msys/tmpfile.cc
+    src/core/lib/gpr/posix/cpu.cc
+    src/core/lib/gpr/posix/log.cc
+    src/core/lib/gpr/posix/string.cc
+    src/core/lib/gpr/posix/sync.cc
+    src/core/lib/gpr/posix/time.cc
+    src/core/lib/gpr/posix/tmpfile.cc
     src/core/lib/gpr/string.cc
-    src/core/lib/gpr/string_posix.cc
-    src/core/lib/gpr/string_util_windows.cc
-    src/core/lib/gpr/string_windows.cc
     src/core/lib/gpr/sync.cc
     src/core/lib/gpr/sync_abseil.cc
-    src/core/lib/gpr/sync_posix.cc
-    src/core/lib/gpr/sync_windows.cc
     src/core/lib/gpr/time.cc
-    src/core/lib/gpr/time_posix.cc
     src/core/lib/gpr/time_precise.cc
-    src/core/lib/gpr/time_windows.cc
-    src/core/lib/gpr/tmpfile_msys.cc
-    src/core/lib/gpr/tmpfile_posix.cc
-    src/core/lib/gpr/tmpfile_windows.cc
+    src/core/lib/gpr/windows/cpu.cc
+    src/core/lib/gpr/windows/log.cc
+    src/core/lib/gpr/windows/string.cc
+    src/core/lib/gpr/windows/string_util.cc
+    src/core/lib/gpr/windows/sync.cc
+    src/core/lib/gpr/windows/time.cc
+    src/core/lib/gpr/windows/tmpfile.cc
     src/core/lib/gpr/wrap_memcpy.cc
     src/core/lib/gprpp/crash.cc
-    src/core/lib/gprpp/env_linux.cc
-    src/core/lib/gprpp/env_posix.cc
-    src/core/lib/gprpp/env_windows.cc
     src/core/lib/gprpp/examine_stack.cc
     src/core/lib/gprpp/fork.cc
-    src/core/lib/gprpp/global_config_env.cc
     src/core/lib/gprpp/host_port.cc
+    src/core/lib/gprpp/linux/env.cc
     src/core/lib/gprpp/load_file.cc
     src/core/lib/gprpp/mpscq.cc
-    src/core/lib/gprpp/stat_posix.cc
-    src/core/lib/gprpp/stat_windows.cc
+    src/core/lib/gprpp/posix/env.cc
+    src/core/lib/gprpp/posix/stat.cc
+    src/core/lib/gprpp/posix/thd.cc
     src/core/lib/gprpp/status_helper.cc
     src/core/lib/gprpp/strerror.cc
     src/core/lib/gprpp/tchar.cc
-    src/core/lib/gprpp/thd_posix.cc
-    src/core/lib/gprpp/thd_windows.cc
     src/core/lib/gprpp/time.cc
     src/core/lib/gprpp/time_averaged_stats.cc
     src/core/lib/gprpp/time_util.cc
     src/core/lib/gprpp/validation_errors.cc
+    src/core/lib/gprpp/windows/env.cc
+    src/core/lib/gprpp/windows/stat.cc
+    src/core/lib/gprpp/windows/thd.cc
     src/core/lib/gprpp/work_serializer.cc
     src/core/lib/handshaker/proxy_mapper_registry.cc
     src/core/lib/http/format_request.cc
@@ -720,6 +726,7 @@ SRCS(
     src/core/lib/load_balancing/lb_policy_registry.cc
     src/core/lib/matchers/matchers.cc
     src/core/lib/promise/activity.cc
+    src/core/lib/promise/party.cc
     src/core/lib/promise/sleep.cc
     src/core/lib/promise/trace.cc
     src/core/lib/resolver/resolver.cc
@@ -786,7 +793,6 @@ SRCS(
     src/core/lib/security/security_connector/security_connector.cc
     src/core/lib/security/security_connector/ssl/ssl_security_connector.cc
     src/core/lib/security/security_connector/ssl_utils.cc
-    src/core/lib/security/security_connector/ssl_utils_config.cc
     src/core/lib/security/security_connector/tls/tls_security_connector.cc
     src/core/lib/security/transport/client_auth_filter.cc
     src/core/lib/security/transport/secure_endpoint.cc
@@ -824,6 +830,7 @@ SRCS(
     src/core/lib/surface/server.cc
     src/core/lib/surface/validate_metadata.cc
     src/core/lib/surface/version.cc
+    src/core/lib/transport/batch_builder.cc
     src/core/lib/transport/bdp_estimator.cc
     src/core/lib/transport/connectivity_state.cc
     src/core/lib/transport/error_utils.cc
@@ -874,6 +881,7 @@ SRCS(
     src/cpp/client/client_callback.cc
     src/cpp/client/client_context.cc
     src/cpp/client/client_interceptor.cc
+    src/cpp/client/client_stats_interceptor.cc
     src/cpp/client/create_channel.cc
     src/cpp/client/create_channel_internal.cc
     src/cpp/client/create_channel_posix.cc

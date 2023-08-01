@@ -233,7 +233,7 @@ EventEngine::ConnectionHandle PosixEventEngine::ConnectInternal(
          ep = y_absl::FailedPreconditionError(y_absl::StrCat(
              "connect failed: ", "invalid addr: ",
              addr_uri.value()))]() mutable { on_connect(std::move(ep)); });
-    return EventEngine::kInvalidConnectionHandle;
+    return EventEngine::ConnectionHandle::kInvalid;
   }
 
   TString name = y_absl::StrCat("tcp-client:", addr_uri.value());
@@ -254,7 +254,7 @@ EventEngine::ConnectionHandle PosixEventEngine::ConnectInternal(
                                   std::move(allocator), options)]() mutable {
       on_connect(std::move(ep));
     });
-    return EventEngine::kInvalidConnectionHandle;
+    return EventEngine::ConnectionHandle::kInvalid;
   }
   if (saved_errno != EWOULDBLOCK && saved_errno != EINPROGRESS) {
     // Connection already failed. Return 0 to discourage any cancellation
@@ -266,7 +266,7 @@ EventEngine::ConnectionHandle PosixEventEngine::ConnectInternal(
                           " error: ", std::strerror(saved_errno)))]() mutable {
       on_connect(std::move(ep));
     });
-    return EventEngine::kInvalidConnectionHandle;
+    return EventEngine::ConnectionHandle::kInvalid;
   }
   AsyncConnect* ac = new AsyncConnect(
       std::move(on_connect), shared_from_this(), executor_.get(), handle,
@@ -300,7 +300,8 @@ PosixEnginePollerManager::PosixEnginePollerManager(
 PosixEnginePollerManager::PosixEnginePollerManager(PosixEventPoller* poller)
     : poller_(poller),
       poller_state_(PollerState::kExternal),
-      executor_(nullptr) {
+      executor_(nullptr),
+      trigger_shutdown_called_(false) {
   GPR_DEBUG_ASSERT(poller_ != nullptr);
 }
 
@@ -560,7 +561,7 @@ EventEngine::ConnectionHandle PosixEventEngine::Connect(
   if (!socket.ok()) {
     Run([on_connect = std::move(on_connect),
          status = socket.status()]() mutable { on_connect(status); });
-    return EventEngine::kInvalidConnectionHandle;
+    return EventEngine::ConnectionHandle::kInvalid;
   }
   return ConnectInternal((*socket).sock, std::move(on_connect),
                          (*socket).mapped_target_addr,

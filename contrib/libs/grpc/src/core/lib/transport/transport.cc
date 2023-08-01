@@ -26,13 +26,17 @@
 #include <new>
 
 #include "y_absl/status/status.h"
+#include "y_absl/strings/str_cat.h"
 
 #include <grpc/event_engine/event_engine.h>
+#include <grpc/grpc.h>
 
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/gpr/alloc.h"
+#include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/slice/slice.h"
+#include "src/core/lib/transport/error_utils.h"
 #include "src/core/lib/transport/transport_impl.h"
 
 grpc_core::DebugOnlyTraceFlag grpc_trace_stream_refcount(false,
@@ -271,11 +275,35 @@ namespace grpc_core {
 ServerMetadataHandle ServerMetadataFromStatus(const y_absl::Status& status,
                                               Arena* arena) {
   auto hdl = arena->MakePooled<ServerMetadata>(arena);
-  hdl->Set(GrpcStatusMetadata(), static_cast<grpc_status_code>(status.code()));
+  grpc_status_code code;
+  TString message;
+  grpc_error_get_status(status, Timestamp::InfFuture(), &code, &message,
+                        nullptr, nullptr);
+  hdl->Set(GrpcStatusMetadata(), code);
   if (!status.ok()) {
-    hdl->Set(GrpcMessageMetadata(), Slice::FromCopiedString(status.message()));
+    hdl->Set(GrpcMessageMetadata(), Slice::FromCopiedString(message));
   }
   return hdl;
+}
+
+TString Message::DebugString() const {
+  TString out = y_absl::StrCat(payload_.Length(), "b");
+  auto flags = flags_;
+  auto explain = [&flags, &out](uint32_t flag, y_absl::string_view name) {
+    if (flags & flag) {
+      flags &= ~flag;
+      y_absl::StrAppend(&out, ":", name);
+    }
+  };
+  explain(GRPC_WRITE_BUFFER_HINT, "write_buffer");
+  explain(GRPC_WRITE_NO_COMPRESS, "no_compress");
+  explain(GRPC_WRITE_THROUGH, "write_through");
+  explain(GRPC_WRITE_INTERNAL_COMPRESS, "compress");
+  explain(GRPC_WRITE_INTERNAL_TEST_ONLY_WAS_COMPRESSED, "was_compressed");
+  if (flags != 0) {
+    y_absl::StrAppend(&out, ":huh=0x", y_absl::Hex(flags));
+  }
+  return out;
 }
 
 }  // namespace grpc_core

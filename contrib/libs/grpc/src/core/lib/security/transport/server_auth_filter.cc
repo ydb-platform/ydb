@@ -18,12 +18,13 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <string.h>
-
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <util/generic/string.h>
+#include <util/string/cast.h>
 #include <utility>
 
 #include "y_absl/status/status.h"
@@ -41,6 +42,7 @@
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/context.h"
 #include "src/core/lib/channel/promise_based_filter.h"
+#include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/status_helper.h"
@@ -57,6 +59,7 @@
 #include "src/core/lib/security/transport/auth_filters.h"  // IWYU pragma: keep
 #include "src/core/lib/slice/slice.h"
 #include "src/core/lib/slice/slice_internal.h"
+#include "src/core/lib/surface/call_trace.h"
 #include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"
 
@@ -120,10 +123,26 @@ class ServerAuthFilter::RunApplicationCode {
   // memory later
   RunApplicationCode(ServerAuthFilter* filter, CallArgs call_args)
       : state_(GetContext<Arena>()->ManagedNew<State>(std::move(call_args))) {
+    if (grpc_call_trace.enabled()) {
+      gpr_log(GPR_ERROR,
+              "%s[server-auth]: Delegate to application: filter=%p this=%p "
+              "auth_ctx=%p",
+              Activity::current()->DebugTag().c_str(), filter, this,
+              filter->auth_context_.get());
+    }
     filter->server_credentials_->auth_metadata_processor().process(
         filter->server_credentials_->auth_metadata_processor().state,
         filter->auth_context_.get(), state_->md.metadata, state_->md.count,
         OnMdProcessingDone, state_);
+  }
+
+  RunApplicationCode(const RunApplicationCode&) = delete;
+  RunApplicationCode& operator=(const RunApplicationCode&) = delete;
+  RunApplicationCode(RunApplicationCode&& other) noexcept
+      : state_(std::exchange(other.state_, nullptr)) {}
+  RunApplicationCode& operator=(RunApplicationCode&& other) noexcept {
+    state_ = std::exchange(other.state_, nullptr);
+    return *this;
   }
 
   Poll<y_absl::StatusOr<CallArgs>> operator()() {

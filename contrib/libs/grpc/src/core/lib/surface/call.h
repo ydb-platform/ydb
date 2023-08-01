@@ -119,11 +119,19 @@ class CallContext {
   // TODO(ctiller): remove this once transport APIs are promise based
   void Unref(const char* reason = "call_context");
 
+  RefCountedPtr<CallContext> Ref() {
+    IncrementRefCount();
+    return RefCountedPtr<CallContext>(this);
+  }
+
   grpc_call_stats* call_stats() { return &call_stats_; }
   gpr_atm* peer_string_atm_ptr();
   grpc_polling_entity* polling_entity() { return &pollent_; }
 
   ServerCallContext* server_call_context();
+
+  void set_traced(bool traced) { traced_ = traced; }
+  bool traced() const { return traced_; }
 
  private:
   friend class PromiseBasedCall;
@@ -135,6 +143,8 @@ class CallContext {
   // TODO(ctiller): remove this once transport APIs are promise based and we
   // don't need refcounting here.
   PromiseBasedCall* const call_;
+  // Is this call traced?
+  bool traced_ = false;
 };
 
 template <>

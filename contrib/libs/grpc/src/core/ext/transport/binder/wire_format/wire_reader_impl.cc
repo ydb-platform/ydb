@@ -25,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "y_absl/functional/any_invocable.h"
 #include "y_absl/memory/memory.h"
 #include "y_absl/status/statusor.h"
 
@@ -249,40 +250,24 @@ y_absl::Status WireReaderImpl::ProcessStreamingTransaction(
     transaction_code_t code, ReadableParcel* parcel) {
   bool need_to_send_ack = false;
   int64_t num_bytes = 0;
+  // Indicates which callbacks should be cancelled. It will be initialized as
+  // the flags the in-coming transaction carries, and when a particular
+  // callback is completed, the corresponding bit in cancellation_flag will be
+  // set to 0 so that we won't cancel it afterward.
+  int cancellation_flags = 0;
+  // The queue saves the actions needed to be done "WITHOUT" `mu_`.
+  // It prevents deadlock against wire writer issues.
+  std::queue<y_absl::AnyInvocable<void() &&>> deferred_func_queue;
   y_absl::Status tx_process_result;
+
   {
     grpc_core::MutexLock lock(&mu_);
     if (!connected_) {
       return y_absl::InvalidArgumentError("Transports not connected yet");
     }
 
-    // Indicate which callbacks should be cancelled. It will be initialized as
-    // the flags the in-coming transaction carries, and when a particular
-    // callback is completed, the corresponding bit in cancellation_flag will be
-    // set to 0 so that we won't cancel it afterward.
-    int cancellation_flags = 0;
-    tx_process_result =
-        ProcessStreamingTransactionImpl(code, parcel, &cancellation_flags);
-    if (!tx_process_result.ok()) {
-      gpr_log(GPR_ERROR, "Failed to process streaming transaction: %s",
-              tx_process_result.ToString().c_str());
-      // Something went wrong when receiving transaction. Cancel failed
-      // requests.
-      if (cancellation_flags & kFlagPrefix) {
-        gpr_log(GPR_INFO, "cancelling initial metadata");
-        transport_stream_receiver_->NotifyRecvInitialMetadata(
-            code, tx_process_result);
-      }
-      if (cancellation_flags & kFlagMessageData) {
-        gpr_log(GPR_INFO, "cancelling message data");
-        transport_stream_receiver_->NotifyRecvMessage(code, tx_process_result);
-      }
-      if (cancellation_flags & kFlagSuffix) {
-        gpr_log(GPR_INFO, "cancelling trailing metadata");
-        transport_stream_receiver_->NotifyRecvTrailingMetadata(
-            code, tx_process_result, 0);
-      }
-    }
+    tx_process_result = ProcessStreamingTransactionImpl(
+        code, parcel, &cancellation_flags, deferred_func_queue);
     if ((num_incoming_bytes_ - num_acknowledged_bytes_) >=
         kFlowControlAckBytes) {
       need_to_send_ack = true;
@@ -290,6 +275,32 @@ y_absl::Status WireReaderImpl::ProcessStreamingTransaction(
       num_acknowledged_bytes_ = num_incoming_bytes_;
     }
   }
+  // Executes all actions in the queue.
+  while (!deferred_func_queue.empty()) {
+    std::move(deferred_func_queue.front())();
+    deferred_func_queue.pop();
+  }
+
+  if (!tx_process_result.ok()) {
+    gpr_log(GPR_ERROR, "Failed to process streaming transaction: %s",
+            tx_process_result.ToString().c_str());
+    // Something went wrong when receiving transaction. Cancel failed requests.
+    if (cancellation_flags & kFlagPrefix) {
+      gpr_log(GPR_INFO, "cancelling initial metadata");
+      transport_stream_receiver_->NotifyRecvInitialMetadata(code,
+                                                            tx_process_result);
+    }
+    if (cancellation_flags & kFlagMessageData) {
+      gpr_log(GPR_INFO, "cancelling message data");
+      transport_stream_receiver_->NotifyRecvMessage(code, tx_process_result);
+    }
+    if (cancellation_flags & kFlagSuffix) {
+      gpr_log(GPR_INFO, "cancelling trailing metadata");
+      transport_stream_receiver_->NotifyRecvTrailingMetadata(
+          code, tx_process_result, 0);
+    }
+  }
+
   if (need_to_send_ack) {
     if (!wire_writer_ready_notification_.WaitForNotificationWithTimeout(
             y_absl::Seconds(5))) {
@@ -311,7 +322,8 @@ y_absl::Status WireReaderImpl::ProcessStreamingTransaction(
 }
 
 y_absl::Status WireReaderImpl::ProcessStreamingTransactionImpl(
-    transaction_code_t code, ReadableParcel* parcel, int* cancellation_flags) {
+    transaction_code_t code, ReadableParcel* parcel, int* cancellation_flags,
+    std::queue<y_absl::AnyInvocable<void() &&>>& deferred_func_queue) {
   GPR_ASSERT(cancellation_flags);
   num_incoming_bytes_ += parcel->GetDataSize();
   gpr_log(GPR_INFO, "Total incoming bytes: %" PRId64, num_incoming_bytes_);
@@ -381,8 +393,12 @@ y_absl::Status WireReaderImpl::ProcessStreamingTransactionImpl(
                                                 "binder.authority");
       }
     }
-    transport_stream_receiver_->NotifyRecvInitialMetadata(
-        code, *initial_metadata_or_error);
+    deferred_func_queue.emplace([this, code,
+                                 initial_metadata_or_error = std::move(
+                                     initial_metadata_or_error)]() mutable {
+      this->transport_stream_receiver_->NotifyRecvInitialMetadata(
+          code, std::move(initial_metadata_or_error));
+    });
     *cancellation_flags &= ~kFlagPrefix;
   }
   if (flags & kFlagMessageData) {
@@ -397,7 +413,9 @@ y_absl::Status WireReaderImpl::ProcessStreamingTransactionImpl(
     if ((flags & kFlagMessageDataIsPartial) == 0) {
       TString s = std::move(message_buffer_[code]);
       message_buffer_.erase(code);
-      transport_stream_receiver_->NotifyRecvMessage(code, std::move(s));
+      deferred_func_queue.emplace([this, code, s = std::move(s)]() mutable {
+        this->transport_stream_receiver_->NotifyRecvMessage(code, std::move(s));
+      });
     }
     *cancellation_flags &= ~kFlagMessageData;
   }
@@ -417,8 +435,12 @@ y_absl::Status WireReaderImpl::ProcessStreamingTransactionImpl(
       }
       trailing_metadata = *trailing_metadata_or_error;
     }
-    transport_stream_receiver_->NotifyRecvTrailingMetadata(
-        code, std::move(trailing_metadata), status);
+    deferred_func_queue.emplace(
+        [this, code, trailing_metadata = std::move(trailing_metadata),
+         status]() mutable {
+          this->transport_stream_receiver_->NotifyRecvTrailingMetadata(
+              code, std::move(trailing_metadata), status);
+        });
     *cancellation_flags &= ~kFlagSuffix;
   }
   return y_absl::OkStatus();

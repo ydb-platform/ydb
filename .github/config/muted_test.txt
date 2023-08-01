@@ -1,2 +1,16 @@
 KqpFederatedQuery
 KqpSpillingFileTests::StartError
+YdbWorkloadTopic
+YdbWorkloadTransferTopicToTable
+SpaceCheckForDiskReassign::Basic
+TBsHuge
+SpaceCheckForDiskReassign
+IntermediateDirsReboots::CreateKesusWithIntermediateDirs
+TReplicationWithRebootsTests::CreateDropRecreate
+TSectorMap
+TSentinelTests::PDiskRackGuardHalfRack
+TSentinelTests::PDiskRackGuardFullRack
+TMiniKQLAllocTest::TestDeallocated
+ConsistentIndexRead::InteractiveTx
+KqpExtTest::SecondaryIndexSelectUsingScripting
+KqpQuerySession::NoLocalAttach

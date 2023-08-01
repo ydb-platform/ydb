@@ -76,13 +76,6 @@ void TConfigsManager::Bootstrap(const TActorContext &ctx)
                                                          false,
                                                          NKikimrServices::CMS_CONFIGS);
     ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID));
-
-    if (!YamlConfig.empty()) {
-        auto resp = MakeHolder<TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig>(
-            YamlConfig,
-            VolatileYamlConfigs);
-        ctx.Send(ConfigsProvider, resp.Release());
-    }
 }
 
 void TConfigsManager::Detach()
@@ -918,6 +911,9 @@ void TConfigsManager::Handle(TEvPrivate::TEvStateLoaded::TPtr &/*ev*/, const TAc
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetConfigs(ConfigIndex.GetConfigItems()));
     ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvSetSubscriptions(SubscriptionIndex.GetSubscriptions()));
     ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+    if (!YamlConfig.empty()) {
+        ctx.Send(ConfigsProvider, new TConfigsProvider::TEvPrivate::TEvUpdateYamlConfig(YamlConfig, VolatileYamlConfigs));
+    }
     ScheduleLogCleanup(ctx);
 }
 

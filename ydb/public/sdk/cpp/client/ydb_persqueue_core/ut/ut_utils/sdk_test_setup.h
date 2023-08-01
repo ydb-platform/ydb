@@ -17,13 +17,16 @@ protected:
     TString LocalDC = "dc1";
     TTestServer Server;
     TLog Log = TLog("cerr");
+    size_t TopicPartitionsCount = 1;
 
 public:
     SDKTestSetup(const TString& testCaseName, bool start = true,
-                 const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG)
-        : TestCaseName(testCaseName) 
+                 const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES,
+                 NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
+                 size_t topicPartitionsCount = 1)
+        : TestCaseName(testCaseName)
         , Server(false, Nothing(), logServices, logPriority)
-    {
+        , TopicPartitionsCount(topicPartitionsCount) {
         InitOptions();
         if (start) {
             Start();
@@ -76,7 +79,7 @@ public:
             Server.AnnoyingClient->CheckClustersList(Server.CleverServer->GetRuntime(), true, DataCenters);
         }
         Server.AnnoyingClient->InitSourceIds();
-        CreateTopic(GetTestTopic(), GetLocalCluster());
+        CreateTopic(GetTestTopic(), GetLocalCluster(), TopicPartitionsCount);
         if (waitInit) {
             Server.WaitInit(GetTestTopic());
         }
@@ -105,6 +108,17 @@ public:
 
     ui16 GetGrpcPort() const {
         return Server.GrpcPort;
+    }
+
+    TSimpleSharedPtr<TPortManager> GetPortManager() {
+        return Server.PortManager;
+    }
+
+    std::unique_ptr<grpc::Server> StartGrpcService(const ui16 port, grpc::Service* service) {
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort("[::]:" + ToString(port), grpc::InsecureServerCredentials()).RegisterService(service);
+        std::unique_ptr<grpc::Server> grpcServer(builder.BuildAndStart());
+        return grpcServer;
     }
 
     NGrpc::TServerOptions& GetGrpcServerOptions() {

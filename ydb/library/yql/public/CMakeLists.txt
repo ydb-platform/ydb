@@ -7,6 +7,7 @@
 
 
 add_subdirectory(decimal)
+add_subdirectory(embedded)
 add_subdirectory(fastcheck)
 add_subdirectory(issue)
 add_subdirectory(purecalc)

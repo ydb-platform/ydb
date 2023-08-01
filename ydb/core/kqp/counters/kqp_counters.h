@@ -361,6 +361,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
+    NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
+    NMonitoring::THistogramPtr NodeServiceProcessTime;
+    NMonitoring::THistogramPtr NodeServiceProcessCancelTime;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNodeNumberInSnapshot;
 

@@ -268,10 +268,15 @@ private:
         }
     };
 
+    static constexpr double SecToUsec = 1e6;
+
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
 
+        NHPTimer::STime workHandlerStart = ev->SendTime;
         auto& msg = ev->Get()->Record;
+        Counters->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
+
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
@@ -510,6 +515,8 @@ private:
 
         Send(request.Executer, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
 
+        Counters->NodeServiceProcessTime->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
+
         bucket.NewRequest(txId, requester, std::move(request), memoryPool);
     }
 
@@ -520,11 +527,14 @@ private:
     }
 
     void HandleWork(TEvKqpNode::TEvCancelKqpTasksRequest::TPtr& ev) {
+        THPTimer timer;
         ui64 txId = ev->Get()->Record.GetTxId();
         auto& reason = ev->Get()->Record.GetReason();
 
         LOG_W("TxId: " << txId << ", terminate transaction, reason: " << reason);
         TerminateTx(txId, reason);
+
+        Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
     }
 
     void TerminateTx(ui64 txId, const TString& reason) {

@@ -13,6 +13,7 @@ target_link_libraries(cpp-actors-util PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-containers-absl_flat_hash
   cpp-deprecated-atomic
   library-cpp-pop_count
 )
@@ -20,6 +21,7 @@ target_sources(cpp-actors-util PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/affinity.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/memory_track.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/memory_tracker.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/rope.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/rc_buf.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/shared_data.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/should_continue.cpp

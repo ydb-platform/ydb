@@ -806,6 +806,8 @@ public:
         return TRcBuf(Begin().GetChunk());
     }
 
+    size_t GetOccupiedMemorySize() const;
+
     friend bool operator==(const TRope& x, const TRope& y) { return Compare(x, y) == 0; }
     friend bool operator!=(const TRope& x, const TRope& y) { return Compare(x, y) != 0; }
     friend bool operator< (const TRope& x, const TRope& y) { return Compare(x, y) <  0; }

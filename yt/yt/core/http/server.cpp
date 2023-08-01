@@ -269,7 +269,7 @@ private:
 
             DoHandleConnection(connection, connectionId);
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Unhandled exception (ConnectionId: %v)");
+            YT_LOG_ERROR(ex, "Unhandled exception (ConnectionId: %v)", connectionId);
         }
     }
 

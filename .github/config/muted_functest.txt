@@ -13,3 +13,5 @@ sqs.messaging.test_fifo_messaging.TestSqsFifoMessagingWithPath
 ::suite_tests.test_stream_query
 tenants.test_tenants.TestTenants
 tenants.test_tenants
+tenants.test_dynamic_tenants
+tenants.test_storage_config.TestStorageConfig

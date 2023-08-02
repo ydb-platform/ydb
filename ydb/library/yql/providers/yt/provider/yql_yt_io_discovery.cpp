@@ -17,6 +17,7 @@
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
+#include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/vector.h>
@@ -323,7 +324,7 @@ public:
                 IYtGateway::TFolderOptions(State_->SessionId)
                     .Cluster(cluster)
                     .Prefix(folder.Prefix)
-                    .Attributes(folder.Attributes)
+                    .Attributes(TSet<TString>(folder.Attributes.begin(), folder.Attributes.end()))
                     .Config(State_->Configuration->Snapshot())
                     .Pos(x.second.first)
             );
@@ -372,147 +373,50 @@ public:
             }
 
             if (keys.GetType() == TYtKey::EType::Folder) {
-                auto p = PendingFolders_.FindPtr(std::make_pair(cluster, *keys.GetKeys().front().GetFolder()));
-                YQL_ENSURE(p);
-                auto& res = p->second.GetValue();
-                res.ReportIssues(ctx.IssueManager);
-                if (!res.Success()) {
-                    return {};
+                const auto res = FetchFolderResult(ctx, cluster, *keys.GetKeys().front().GetFolder());
+                if (!res) {
+                    return node;
                 }
-
-                if (res.File) {
+                if (auto file = std::get_if<TFileLinkPtr>(&res->ItemsOrFileLink)) {
                     TString alias;
-                    if (auto p = FolderFileToAlias_.FindPtr(res.File->GetPath().GetPath())) {
+                    if (auto p = FolderFileToAlias_.FindPtr(file->Get()->GetPath().GetPath())) {
                         alias = *p;
                     } else {
                         alias = TString("_yql_folder").append(ToString(FolderFileToAlias_.size()));
-                        FolderFileToAlias_.emplace(res.File->GetPath().GetPath(), alias);
+                        FolderFileToAlias_.emplace(file->Get()->GetPath().GetPath(), alias);
 
                         TUserDataBlock tmpBlock;
                         tmpBlock.Type = EUserDataType::PATH;
-                        tmpBlock.Data = res.File->GetPath().GetPath();
+                        tmpBlock.Data = file->Get()->GetPath().GetPath();
                         tmpBlock.Usage.Set(EUserDataBlockUsage::Path);
-                        tmpBlock.FrozenFile = res.File;
+                        tmpBlock.FrozenFile = file->Get();
 
                         State_->Types->UserDataStorage->AddUserDataBlock(alias, tmpBlock);
                     }
 
-                    return ctx.Builder(node->Pos())
-                        .Callable("Cons!")
-                            .World(0)
-                            .Callable(1, "AssumeColumnOrder")
-                                .Callable(0, "Collect")
-                                    .Callable(0, "Apply")
-                                        .Callable(0, "Udf")
-                                            .Atom(0, "File.FolderListFromFile")
-                                        .Seal()
-                                        .Callable(1, "FilePath")
-                                            .Atom(0, alias)
-                                        .Seal()
-                                    .Seal()
+                    auto folderListFromFile = ctx.Builder(node->Pos())
+                        .Callable("Collect")
+                            .Callable(0, "Apply")
+                                .Callable(0, "Udf")
+                                    .Atom(0, "File.FolderListFromFile")
                                 .Seal()
-                                .List(1)
-                                    .Atom(0, "Path")
-                                    .Atom(1, "Type")
-                                    .Atom(2, "Attributes")
+                                .Callable(1, "FilePath")
+                                    .Atom(0, alias)
                                 .Seal()
                             .Seal()
                         .Seal()
                         .Build();
+
+                    return BuildFolderTableResExpr(ctx, node->Pos(), read.World(), folderListFromFile).Ptr();
                 }
 
+                auto items = std::get<TVector<IYtGateway::TFolderResult::TFolderItem>>(res->ItemsOrFileLink);
                 TVector<TExprBase> listItems;
-                for (auto& item: res.Items) {
-                    listItems.push_back(Build<TCoAsStruct>(ctx, node->Pos())
-                        .Add()
-                            .Add<TCoAtom>()
-                                .Value("Path")
-                            .Build()
-                            .Add<TCoString>()
-                                .Literal()
-                                    .Value(item.Path)
-                                .Build()
-                            .Build()
-                        .Build()
-                        .Add()
-                            .Add<TCoAtom>()
-                                .Value("Type")
-                            .Build()
-                            .Add<TCoString>()
-                                .Literal()
-                                    .Value(item.Type)
-                                .Build()
-                            .Build()
-                        .Build()
-                        .Add()
-                            .Add<TCoAtom>()
-                                .Value("Attributes")
-                            .Build()
-                            .Add<TCoYson>()
-                                .Literal()
-                                    .Value(item.Attributes)
-                                .Build()
-                            .Build()
-                        .Build()
-                        .Done()
-                    );
+                for (auto& item: items) {
+                    listItems.push_back(BuildFolderListItemExpr(ctx, node->Pos(), item));
                 }
 
-                return Build<TCoCons>(ctx, node->Pos())
-                    .World(read.World())
-                    .Input<TCoAssumeColumnOrder>()
-                        .Input<TCoList>()
-                            .ListType<TCoListType>()
-                                .ItemType<TCoStructType>()
-                                    .Add<TExprList>()
-                                        .Add<TCoAtom>()
-                                            .Value("Path")
-                                        .Build()
-                                        .Add<TCoDataType>()
-                                            .Type()
-                                                .Value("String")
-                                            .Build()
-                                        .Build()
-                                    .Build()
-                                    .Add<TExprList>()
-                                        .Add<TCoAtom>()
-                                            .Value("Type")
-                                        .Build()
-                                        .Add<TCoDataType>()
-                                            .Type()
-                                                .Value("String")
-                                            .Build()
-                                        .Build()
-                                    .Build()
-                                    .Add<TExprList>()
-                                        .Add<TCoAtom>()
-                                            .Value("Attributes")
-                                        .Build()
-                                        .Add<TCoDataType>()
-                                            .Type()
-                                                .Value("Yson")
-                                            .Build()
-                                        .Build()
-                                    .Build()
-                                .Build()
-                            .Build()
-                            .FreeArgs()
-                                .Add(listItems)
-                            .Build()
-                        .Build()
-                        .ColumnOrder<TCoAtomList>()
-                            .Add()
-                                .Value("Path")
-                            .Build()
-                            .Add()
-                                .Value("Type")
-                            .Build()
-                            .Add()
-                                .Value("Attributes")
-                            .Build()
-                        .Build()
-                    .Build()
-                    .Done().Ptr();
+                return BuildFolderTableResExpr(ctx, node->Pos(), read.World(), BuildFolderListExpr(ctx, node->Pos(), listItems).Ptr()).Ptr();
             }
 
             if (keys.GetType() != TYtKey::EType::Table) {
@@ -753,6 +657,115 @@ private:
         auto res = read.Ptr();
         res->ChildRef(2) = Build<TExprList>(ctx, read.Pos()).Add(tables).Done().Ptr();
         res->ChildRef(4) = Build<TCoNameValueTupleList>(ctx, read.Pos()).Add(readSettings).Done().Ptr();
+        return res;
+    }
+
+    TExprBase BuildFolderListItemExpr(TExprContext& ctx, NYql::TPositionHandle pos, const IYtGateway::TFolderResult::TFolderItem& folderItem)  {
+        return Build<TCoAsStruct>(ctx, pos)
+            .Add()
+                .Add<TCoAtom>()
+                    .Value("Path")
+                .Build()
+                .Add<TCoString>()
+                    .Literal()
+                        .Value(folderItem.Path)
+                    .Build()
+                .Build()
+            .Build()
+            .Add()
+                .Add<TCoAtom>()
+                    .Value("Type")
+                .Build()
+                .Add<TCoString>()
+                    .Literal()
+                        .Value(folderItem.Type)
+                    .Build()
+                .Build()
+            .Build()
+            .Add()
+                .Add<TCoAtom>()
+                    .Value("Attributes")
+                .Build()
+                .Add<TCoYson>()
+                    .Literal()
+                        .Value(folderItem.Attributes)
+                    .Build()
+                .Build()
+            .Build()
+            .Done();
+    }
+
+    TCoList BuildFolderListExpr(TExprContext& ctx, NYql::TPositionHandle pos, const TVector<TExprBase>& folderItems) {
+        return Build<TCoList>(ctx, pos)
+            .ListType<TCoListType>()
+                .ItemType<TCoStructType>()
+                    .Add<TExprList>()
+                        .Add<TCoAtom>()
+                            .Value("Path")
+                        .Build()
+                        .Add<TCoDataType>()
+                            .Type()
+                                .Value("String")
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Add<TExprList>()
+                        .Add<TCoAtom>()
+                            .Value("Type")
+                        .Build()
+                        .Add<TCoDataType>()
+                            .Type()
+                                .Value("String")
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Add<TExprList>()
+                        .Add<TCoAtom>()
+                            .Value("Attributes")
+                        .Build()
+                        .Add<TCoDataType>()
+                            .Type()
+                                .Value("Yson")
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+            .FreeArgs()
+                .Add(folderItems)
+            .Build()
+        .Build()
+        .Value();
+    }
+
+    TCoCons BuildFolderTableResExpr(TExprContext& ctx, NYql::TPositionHandle pos, const TExprBase& world, const TExprNodePtr& folderList) {
+        return Build<TCoCons>(ctx, pos)
+            .World(world)
+            .Input<TCoAssumeColumnOrder>()
+                .Input(folderList)
+            .ColumnOrder<TCoAtomList>()
+                    .Add()
+                        .Value("Path")
+                    .Build()
+                    .Add()
+                        .Value("Type")
+                    .Build()
+                    .Add()
+                        .Value("Attributes")
+                    .Build()
+                .Build()
+            .Build()
+            .Done();
+    }
+
+    TMaybe<NYql::IYtGateway::TFolderResult> FetchFolderResult(TExprContext& ctx, const TString& cluster, const TYtKey::TFolderList& folder) {
+        auto p = PendingFolders_.FindPtr(std::make_pair(cluster, folder));
+        YQL_ENSURE(p);
+        auto res = p->second.GetValue();
+        res.ReportIssues(ctx.IssueManager);
+        if (!res.Success()) {
+            return {};
+        }
         return res;
     }
 

@@ -54,7 +54,11 @@ public:
         TString DefaultTmpFolder;
         THashMap<std::tuple<TString, TString, TString>, std::vector<NYT::TRichYPath>> RangeCache;
         THashMap<TString, std::pair<std::vector<TString>, std::vector<std::exception_ptr>>> PartialRangeCache;
-        THashMap<TString, std::variant<std::vector<std::tuple<TString, TString, TString>>, TFileLinkPtr>> FolderCache;
+
+        using TFolderCache = THashMap<TString, std::vector<std::tuple<TString, TString, NYT::TNode>>>;
+        TFolderCache FolderCache;
+
+        THashMap<TString, TFileLinkPtr> FolderFilePtrCache;
 
         TMutex Lock_;
 

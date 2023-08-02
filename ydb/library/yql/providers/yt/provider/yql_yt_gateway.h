@@ -263,9 +263,41 @@ public:
 
         OPTION_FIELD(TString, Cluster)
         OPTION_FIELD(TString, Prefix)
-        OPTION_FIELD(TVector<TString>, Attributes)
+        OPTION_FIELD(TSet<TString>, Attributes)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TPosition, Pos)
+    };
+
+    struct TBatchFolderOptions : public TCommonOptions {
+        using TSelf = TBatchFolderOptions;
+
+        TBatchFolderOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        struct TFolderPrefixAttrs {
+            TString Prefix;
+            TSet<TString> AttrKeys;
+        };
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TVector<TFolderPrefixAttrs>, Folders)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TPosition, Pos)
+    };
+
+    struct TBatchFolderResult : public NCommon::TOperationResult {
+        struct TFolderItem {
+            TString Path;
+            TString Type;
+            NYT::TNode Attributes;
+
+        };
+        TVector<TFolderItem> Items;
+    };
+
+    struct TSerializedFolderItem {
     };
 
     struct TFolderResult : public NCommon::TOperationResult {
@@ -273,9 +305,31 @@ public:
             TString Path;
             TString Type;
             TString Attributes;
+
+            auto operator<=>(const TFolderItem&) const = default;
         };
-        TVector<TFolderItem> Items;
-        TFileLinkPtr File;
+        std::variant<TVector<TFolderItem>, TFileLinkPtr> ItemsOrFileLink;
+    };
+
+    //////////////////////////////////////////////////////////////
+
+    struct TResolveOptions : public TCommonOptions {
+        using TSelf = TResolveOptions;
+
+        TResolveOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        struct TItemWithReqAttrs {
+            TBatchFolderResult::TFolderItem Item;
+            TSet<TString> AttrKeys;
+        };
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TVector<TItemWithReqAttrs>, Items)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TPosition, Pos)
     };
 
     //////////////////////////////////////////////////////////////
@@ -521,6 +575,10 @@ public:
     virtual NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) = 0;
 
     virtual NThreading::TFuture<TFolderResult> GetFolder(TFolderOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TBatchFolderResult> ResolveLinks(TResolveOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) = 0;
 
     virtual NThreading::TFuture<TResOrPullResult> ResOrPull(const TExprNode::TPtr& node, TExprContext& ctx, TResOrPullOptions&& options) = 0;
 

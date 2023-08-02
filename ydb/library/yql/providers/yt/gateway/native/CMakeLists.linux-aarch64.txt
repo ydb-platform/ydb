@@ -66,6 +66,7 @@ target_sources(yt-gateway-native PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_exec_ctx.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_lambda_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_native.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_native_folders.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_op_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_qb2.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_session.cpp

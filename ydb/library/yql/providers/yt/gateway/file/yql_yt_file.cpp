@@ -529,6 +529,7 @@ public:
                 }
             }
 
+            TVector<TFolderResult::TFolderItem> items;
             TFolderResult res;
             res.SetSuccess();
 
@@ -545,13 +546,68 @@ public:
                 }
 
                 item.Attributes = NYT::NodeToYsonString(attrs);
-                res.Items.push_back(item);
+                items.push_back(std::move(item));
             }
-
+            res.ItemsOrFileLink = std::move(items);
             return MakeFuture(res);
         } catch (const yexception& e) {
             return MakeFuture(NCommon::ResultFromException<TFolderResult>(e, pos));
         }
+    }
+
+    TFuture<TBatchFolderResult> ResolveLinks(TResolveOptions&& options) final {
+        TBatchFolderResult res;
+        res.SetSuccess();
+        for (auto&& [item, reqAttrs] : options.Items()) {
+            if (item.Type != "link") {
+                res.Items.push_back(item);
+            }
+            else {
+                if (item.Attributes.HasKey("broken") || item.Attributes["broken"].AsBool()) {
+                    continue;
+                }
+                const TStringBuf targetPath = item.Attributes["target_path"].AsString();
+                const auto folder = targetPath.RBefore('/');
+                const auto folderContent = GetFolder(TFolderOptions(options.SessionId())
+                    .Attributes(reqAttrs)
+                    .Cluster(options.Cluster())
+                    .Prefix(TString(folder))
+                    .Config(options.Config())
+                    .Pos(options.Pos())).GetValue();
+
+                if (std::holds_alternative<TFileLinkPtr>(folderContent.ItemsOrFileLink)) {
+                    continue;
+                }
+                for (const auto& item: std::get<TVector<TFolderResult::TFolderItem>>(folderContent.ItemsOrFileLink)) {
+                    if (item.Path == targetPath) {
+                        res.Items.push_back({item.Path, item.Type, NYT::NodeFromYsonString(item.Attributes)});
+                        break;
+                    }
+                }
+            }
+        }
+        return MakeFuture(res);
+    }
+
+    TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) final {
+        TBatchFolderResult res;
+        res.SetSuccess();
+        for (const auto& folder : options.Folders()) {
+            TFolderOptions folderOptions(options.SessionId());
+            folderOptions.Attributes(folder.AttrKeys)
+                .Cluster(options.Cluster())
+                .Prefix(folder.Prefix)
+                .Config(options.Config())
+                .Pos(options.Pos());
+            const auto folderContent = GetFolder(TFolderOptions(std::move(folderOptions))).GetValue();
+            if (std::holds_alternative<TFileLinkPtr>(folderContent.ItemsOrFileLink)) {
+                continue;
+            }
+            for (const auto& item: std::get<TVector<TFolderResult::TFolderItem>>(folderContent.ItemsOrFileLink)) {
+                res.Items.push_back({item.Path, item.Type, NYT::NodeFromYsonString(item.Attributes)});
+            }
+        }
+        return MakeFuture(res);
     }
 
     TFuture<TResOrPullResult> ResOrPull(const TExprNode::TPtr& node, TExprContext& ctx, TResOrPullOptions&& options) final {

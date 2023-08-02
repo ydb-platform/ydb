@@ -4,6 +4,7 @@ SRCS(
     yql_yt_exec_ctx.cpp
     yql_yt_lambda_builder.cpp
     yql_yt_native.cpp
+    yql_yt_native_folders.cpp
     yql_yt_op_tracker.cpp
     yql_yt_qb2.cpp
     yql_yt_session.cpp
@@ -63,3 +64,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

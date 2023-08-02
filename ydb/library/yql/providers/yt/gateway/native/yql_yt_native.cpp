@@ -5,6 +5,7 @@
 #include "yql_yt_session.h"
 #include "yql_yt_spec.h"
 #include "yql_yt_transform.h"
+#include "yql_yt_native_folders.h"
 
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/config_clusters/config_clusters.h>
@@ -132,22 +133,6 @@ TString ToColumnList(const TVector<T>& list) {
         builder.pop_back();
     }
     return (builder << ']');
-}
-
-TString GetType(const NYT::TNode& attr) {
-    if (!attr.HasKey("type")) {
-        return "unknown";
-    }
-
-    return attr["type"].AsString();
-}
-
-TString GetAttrType(const NYT::TNode& node) {
-    if (!node.HasAttributes()) {
-        return "unknown";
-    }
-
-    return GetType(node.GetAttributes());
 }
 
 const NYT::TJobBinaryConfig GetJobBinary(const NYT::TRawMapOperationSpec& spec) {
@@ -474,6 +459,88 @@ public:
 
         YQL_CLOG(INFO, ProviderYt) << "Server=" << options.Cluster() << ", Prefix=" << options.Prefix();
 
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+
+            auto batchOptions = TBatchFolderOptions(options.SessionId())
+                .Cluster(options.Cluster())
+                .Pos(options.Pos())
+                .Config(options.Config())
+                .Folders({{options.Prefix(), options.Attributes()}});
+            auto execCtx = MakeExecCtx(std::move(batchOptions), session, options.Cluster(), nullptr, nullptr);
+
+            if (auto filePtr = MaybeGetFilePtrFromCache(execCtx->GetOrCreateEntry(), execCtx->Options_.Folders().front())) {
+                TFolderResult res;
+                res.SetSuccess();
+                res.ItemsOrFileLink = *filePtr;
+                return MakeFuture(res);
+            }
+
+            auto getFolderFuture = session->Queue_->Async([execCtx] () {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                return ExecGetFolder(execCtx);
+            });
+            auto resolvedLinksFuture = getFolderFuture.Apply([options, this, session] (const TFuture<TBatchFolderResult>& f) {
+                TVector<IYtGateway::TResolveOptions::TItemWithReqAttrs> resolveItems;
+                auto res = f.GetValue();
+                for (auto&& item : res.Items) {
+                    IYtGateway::TResolveOptions::TItemWithReqAttrs resolveItem {
+                        .Item = item,
+                        .AttrKeys = options.Attributes()
+                    };
+                    resolveItems.push_back(std::move(resolveItem));
+                }
+
+                auto resolveOptions = TResolveOptions(options.SessionId())
+                    .Cluster(options.Cluster())
+                    .Pos(options.Pos())
+                    .Config(options.Config())
+                    .Items(resolveItems);
+                auto execCtx = MakeExecCtx(std::move(resolveOptions), session, options.Cluster(), nullptr, nullptr);
+                return ExecResolveLinks(execCtx);
+            });
+
+            return resolvedLinksFuture.Apply([execCtx] (const TFuture<TBatchFolderResult>& f) {
+                const ui32 countLimit = execCtx->Options_.Config()->FolderInlineItemsLimit.Get().GetOrElse(100);
+                const ui64 sizeLimit = execCtx->Options_.Config()->FolderInlineDataLimit.Get().GetOrElse(100_KB);
+
+                TFolderResult res;
+                res.SetSuccess();
+
+                auto resolveRes = f.GetValue();
+                TVector<TFolderResult::TFolderItem> items;
+                for (auto& batchItem : resolveRes.Items) {
+                    TFolderResult::TFolderItem item {
+                        .Path = std::move(batchItem.Path),
+                        .Type = std::move(batchItem.Type),
+                        .Attributes = NYT::NodeToYsonString(batchItem.Attributes)
+                    };
+                    items.emplace_back(std::move(item));
+                }
+                if (items.size() > countLimit) {
+                    res.ItemsOrFileLink = SaveItemsToTempFile(execCtx, items);
+                    return res;
+                }
+                ui64 total_size = std::accumulate(items.begin(), items.end(), 0, [] (ui64 size, const TFolderResult::TFolderItem& i) {
+                    return size + i.Type.length() + i.Path.length() + i.Attributes.length();
+                });
+                if (total_size > sizeLimit) {
+                    res.ItemsOrFileLink = SaveItemsToTempFile(execCtx, items);
+                    return res;
+                }
+                res.ItemsOrFileLink = std::move(items);
+                return res;
+            });
+        } catch (...) {
+            return MakeFuture(ResultFromCurrentException<TFolderResult>(options.Pos()));
+        }
+    }
+
+    TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
+        YQL_CLOG(INFO, ProviderYt) << "Server=" << options.Cluster();
+
         auto pos = options.Pos();
         try {
             TSession::TPtr session = GetSession(options.SessionId());
@@ -486,7 +553,29 @@ public:
                 return ExecGetFolder(execCtx);
             });
         } catch (...) {
-            return MakeFuture(ResultFromCurrentException<TFolderResult>(pos));
+            return MakeFuture(ResultFromCurrentException<TBatchFolderResult>(pos));
+        }
+    }
+
+
+    TFuture<TBatchFolderResult> ResolveLinks(TResolveOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+
+        YQL_CLOG(INFO, ProviderYt) << "Server=" << options.Cluster();
+
+        auto pos = options.Pos();
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+
+            auto cluster = options.Cluster();
+            auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
+
+            return session->Queue_->Async([execCtx] () {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                return ExecResolveLinks(execCtx);
+            });
+        } catch (...) {
+            return MakeFuture(ResultFromCurrentException<TBatchFolderResult>(pos));
         }
     }
 
@@ -1827,193 +1916,6 @@ private:
             SortBy(rangeRes.Tables, [] (const TCanonizedPath& path) { return path.Path; });
         }
         return rangeRes;
-    }
-
-    static TFolderResult ExecGetFolder(const TExecContext<TFolderOptions>::TPtr& execCtx)
-    {
-        try {
-            auto entry = execCtx->GetOrCreateEntry();
-
-            TFolderResult res;
-            res.SetSuccess();
-
-            TString prefix = execCtx->Options_.Prefix();
-            TString cacheKey = prefix;
-
-            TSet<TString> uniqueAttrs;
-            for (const auto& attr : execCtx->Options_.Attributes()) {
-                uniqueAttrs.insert(attr);
-            }
-            // Make key with sorted attrs
-            std::for_each(uniqueAttrs.cbegin(), uniqueAttrs.cend(), [&cacheKey](const auto& attr) { cacheKey.append('&').append(attr); } );
-
-            with_lock(entry->Lock_) {
-                if (auto p = entry->FolderCache.FindPtr(cacheKey)) {
-                    if (auto file = std::get_if<TFileLinkPtr>(p)) {
-                        res.File = *file;
-                        YQL_CLOG(INFO, ProviderYt) << "Found folder in cache with key ('" << cacheKey << "') with tmp file " << res.File->GetPath().GetPath();
-                    } else {
-                        const auto& list = std::get<std::vector<std::tuple<TString, TString, TString>>>(*p);
-                        YQL_CLOG(INFO, ProviderYt) << "Found folder in cache with key ('" << cacheKey << "') with " << list.size() << " items";
-                        for (auto& el: list) {
-                            TFolderResult::TFolderItem item;
-                            std::tie(item.Type, item.Path, item.Attributes) = el;
-                            res.Items.push_back(std::move(item));
-                        }
-                    }
-                    return res;
-                }
-            }
-
-            if (!prefix.empty() && !entry->Tx->Exists(prefix)) {
-                YQL_CLOG(INFO, ProviderYt) << "Storing empty folder in cache with key ('" << cacheKey << "')";
-                with_lock(entry->Lock_) {
-                    entry->FolderCache[cacheKey] = std::vector<std::tuple<TString, TString, TString>>{};
-                }
-                return res;
-            }
-
-
-            TSet<TString> uniqueAttrsWithSystemAttrs = uniqueAttrs;
-            uniqueAttrsWithSystemAttrs.insert("type");
-            uniqueAttrsWithSystemAttrs.insert("target_path");
-            uniqueAttrsWithSystemAttrs.insert("broken");
-
-            auto makeAttrFilter = [](const TSet<TString>& attrs) {
-                NYT::TAttributeFilter ret;
-                for (const auto& attr : attrs) {
-                    ret.AddAttribute(attr);
-                }
-                return ret;
-            };
-
-            auto nodeList = entry->Tx->List(prefix, TListOptions().AttributeFilter(makeAttrFilter(uniqueAttrsWithSystemAttrs)));
-            res.Items.reserve(nodeList.size());
-
-            uniqueAttrsWithSystemAttrs.erase("target_path");
-            uniqueAttrsWithSystemAttrs.erase("broken");
-
-            if (prefix) {
-                prefix.append('/');
-            }
-
-            THolder<TOFStream> out;
-            ui32 count = 0;
-            ui64 size = 0;
-            const ui32 countLimit = execCtx->Options_.Config()->FolderInlineItemsLimit.Get().GetOrElse(100);
-            const ui64 sizeLimit = execCtx->Options_.Config()->FolderInlineDataLimit.Get().GetOrElse(100_KB);
-            TString file;
-            Y_DEFER {
-                if (file) {
-                    NFs::Remove(file);
-                }
-            };
-
-            auto writeItem = [&uniqueAttrs, &out, &res, &count, &file,
-                              countLimit, &size, sizeLimit, execCtx](const NYT::TNode& node, TString path) {
-                auto type = GetAttrType(node);
-                if (path.StartsWith(NYT::TConfig::Get()->Prefix)) {
-                    path = path.substr(NYT::TConfig::Get()->Prefix.size());
-                }
-                NYT::TNode retAttrs = NYT::TNode::CreateMap();
-                auto& nodeAttrs = node.GetAttributes();
-                for (const auto& attrName : uniqueAttrs) {
-                    if (attrName && nodeAttrs.HasKey(attrName)) {
-                        retAttrs[attrName] = nodeAttrs[attrName];
-                    }
-                }
-                auto attrs = NYT::NodeToYsonString(retAttrs);
-
-                if (!out) {
-                    ++count;
-                    size += type.length() + path.length() + attrs.length();
-                    if (count <= countLimit && size <= sizeLimit) {
-                        TFolderResult::TFolderItem item;
-                        item.Type = std::move(type);
-                        item.Path = std::move(path);
-                        item.Attributes = std::move(attrs);
-                        res.Items.push_back(std::move(item));
-                        return;
-                    }
-                    file = execCtx->FileStorage_->GetTemp() / GetGuidAsString(execCtx->Session_->RandomProvider_->GenGuid());
-                    out = MakeHolder<TOFStream>(file);
-                    for (auto& item: res.Items) {
-                        ::SaveMany(out.Get(), item.Type, item.Path, item.Attributes);
-                    }
-                    res.Items.clear();
-                    YQL_CLOG(INFO, ProviderYt) << "Folder limit exceeded. Writing items to file " << file;
-                }
-
-                ::SaveMany(out.Get(), type, path, attrs);
-            };
-
-            auto batchGet = entry->Tx->CreateBatchRequest();
-            TVector<TFuture<void>> batchRes;
-
-            for (const auto& node : nodeList) {
-                auto path = prefix + node.AsString();
-                auto type = GetAttrType(node);
-                if (type != "link") {
-                    writeItem(node, path);
-                }
-                else if (!node.GetAttributes()["broken"].AsBool()) {
-                    auto targetPath = node.GetAttributes()["target_path"].AsString();
-                    batchRes.push_back(
-                        batchGet->Get(targetPath, TGetOptions().AttributeFilter(makeAttrFilter(uniqueAttrsWithSystemAttrs)))
-                            .Apply([path, writeItem](const NThreading::TFuture<NYT::TNode>& f) {
-                                try {
-                                    writeItem(f.GetValue(), path);
-                                } catch (...) {
-                                    writeItem(NYT::TNode::CreateMap(), path);
-                                }
-                            })
-                    );
-                }
-            }
-
-            if (!batchRes.empty()) {
-                batchGet->ExecuteBatch();
-                WaitExceptionOrAll(batchRes).GetValue();
-            }
-            if (out) {
-                ::SaveSize(out.Get(), 0);
-                out.Destroy();
-                res.File = CreateFakeFileLink(file, TString(), true);
-                file = {};
-            }
-            YQL_CLOG(INFO, ProviderYt) << "Folder items count=" << count << ", size=" << size;
-
-            if (res.File) {
-                YQL_CLOG(INFO, ProviderYt) << "Storing folder tmp file " << res.File->GetPath().GetPath() << " in cache with key ('" << cacheKey << "')";
-                with_lock(entry->Lock_) {
-                    entry->FolderCache[cacheKey] = res.File;
-                }
-            } else {
-                YQL_CLOG(INFO, ProviderYt) << "Storing folder with " << res.Items.size() << " items in cache with key ('" << cacheKey << "')";
-                std::vector<std::tuple<TString, TString, TString>> cache;
-                for (const auto& item: res.Items) {
-                    cache.emplace_back(item.Type, item.Path, item.Attributes);
-                }
-                with_lock(entry->Lock_) {
-                    entry->FolderCache[cacheKey] = std::move(cache);
-                }
-            }
-
-            return res;
-
-        } catch (const NYT::TErrorResponse &e) {
-            if (e.GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NRpc::NoSuchMethod)) {
-                TFolderResult res;
-                TString errMsg = execCtx->Options_.Prefix() + " is not a folder.";
-                TIssue rootIssue = YqlIssue(execCtx->Options_.Pos(), TIssuesIds::YT_FOLDER_INPUT_IS_NOT_A_FOLDER, errMsg);
-                res.SetStatus(TIssuesIds::YT_FOLDER_INPUT_IS_NOT_A_FOLDER);
-                res.AddIssue(rootIssue);
-                return res;
-            }
-            return ResultFromCurrentException<TFolderResult>(execCtx->Options_.Pos());
-        } catch (...) {
-            return ResultFromCurrentException<TFolderResult>(execCtx->Options_.Pos());
-        }
     }
 
     static TFuture<void> ExecPublish(

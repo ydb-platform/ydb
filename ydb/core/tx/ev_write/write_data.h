@@ -23,7 +23,7 @@ class TWriteMeta {
     // Long Tx logic
     YDB_OPT(NLongTxService::TLongTxId, LongTxId)
     YDB_ACCESSOR(ui64, WritePartId, 0);
-    YDB_ACCESSOR(ui64, MetaShard, 0);
+    YDB_READONLY(ui64, MetaShard, 0);
     YDB_ACCESSOR_DEF(TString, DedupId);
 
 public:

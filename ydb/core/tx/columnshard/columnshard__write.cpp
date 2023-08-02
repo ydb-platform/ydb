@@ -228,19 +228,15 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
     const auto& record = Proto(ev->Get());
     const ui64 tableId = record.GetTableId();
-    const ui64 metaShard = record.GetTxInitiator();
     const ui64 writeId = record.GetWriteId();
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Get()->GetSource();
 
     NEvWrite::TWriteMeta writeMeta(writeId, tableId, source);
-    writeMeta.SetMetaShard(metaShard);
     writeMeta.SetDedupId(dedupId);
-    if (record.HasLongTxId()) {
-        Y_VERIFY(metaShard == 0);
-        writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
-        writeMeta.SetWritePartId(record.GetWritePartId());
-    }
+    Y_VERIFY(record.HasLongTxId());
+    writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
+    writeMeta.SetWritePartId(record.GetWritePartId());
 
     if (!TablesManager.IsReadyForWrite(tableId)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex()? "": " no index")
@@ -269,20 +265,17 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);
         OverloadWriteFail(overloadStatus, writeData, std::move(result), ctx);
     } else {
-        if (writeMeta.HasLongTxId()) {
-            // TODO: multiple blobs in one longTx ({longTxId, dedupId} -> writeId)
-            if (ui64 writeId = (ui64) HasLongTxWrite(writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId())) {
-                LOG_S_DEBUG("Write (duplicate) into pathId " << writeMeta.GetTableId()
-                    << " longTx " << writeMeta.GetLongTxIdUnsafe().ToString()
-                    << " at tablet " << TabletID());
+        if (ui64 writeId = (ui64) HasLongTxWrite(writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId())) {
+            LOG_S_DEBUG("Write (duplicate) into pathId " << writeMeta.GetTableId()
+                << " longTx " << writeMeta.GetLongTxIdUnsafe().ToString()
+                << " at tablet " << TabletID());
 
-                IncCounter(COUNTER_WRITE_DUPLICATE);
+            IncCounter(COUNTER_WRITE_DUPLICATE);
 
-                auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
-                    TabletID(), writeMeta, writeId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
-                ctx.Send(writeMeta.GetSource(), result.release());
-                return;
-            }
+            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+                TabletID(), writeMeta, writeId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
+            ctx.Send(writeMeta.GetSource(), result.release());
+            return;
         }
 
         WritesMonitor.RegisterWrite(writeData.GetSize());

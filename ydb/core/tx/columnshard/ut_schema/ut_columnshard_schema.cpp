@@ -257,8 +257,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn, ydbSchema);
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
     for (auto& data : blobs) {
-        UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data));
-        ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, ydbSchema, true, &writeIds));
+        ProposeCommit(runtime, sender, ++txId, writeIds);
         PlanCommit(runtime, sender, ++planStep, txId);
     }
 
@@ -345,8 +346,10 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
     PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
 
-    UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, blobs[0]));
-    ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
+
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, blobs[0], ydbSchema, true, &writeIds));
+    ProposeCommit(runtime, sender, ++txId, writeIds);
     PlanCommit(runtime, sender, ++planStep, txId);
 
     if (internal) {
@@ -613,8 +616,9 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     }
 
     for (auto& data : blobs) {
-        UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data));
-        ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema, true, &writeIds));
+        ProposeCommit(runtime, sender, ++txId, writeIds);
         PlanCommit(runtime, sender, ++planStep, txId);
     }
 
@@ -1080,13 +1084,15 @@ void TestDrop(bool reboots) {
     UNIT_ASSERT(data2.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
     // Write into index
-    UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data1));
-    ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data1, testYdbSchema, true, &writeIds));
+    ProposeCommit(runtime, sender, ++txId, writeIds);
     PlanCommit(runtime, sender, ++planStep, txId);
 
     // Write into InsertTable
-    UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, data2));
-    ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
+    writeIds.clear();
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data2, testYdbSchema, true, &writeIds));
+    ProposeCommit(runtime, sender, ++txId, writeIds);
     PlanCommit(runtime, sender, ++planStep, txId);
 
     if (reboots) {
@@ -1150,7 +1156,7 @@ void TestDropWriteRace() {
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
     // Write into InsertTable
-    auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, "0", data);
+    auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, 1, data, testYdbSchema);
     UNIT_ASSERT(writeIdOpt);
     ProposeCommit(runtime, sender, ++txId, {*writeIdOpt});
     auto commitTxId = txId;
@@ -1179,8 +1185,6 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     runtime.DispatchEvents(options);
 
     // Create table
-
-    ui64 metaShard = TTestTxConfig::TxTablet1;
     ui64 writeId = 0;
     ui64 tableId = 1;
     ui64 planStep = 100;
@@ -1227,9 +1231,10 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ++planStep;
     ++txId;
     for (ui32 i = 0; i < *numWrites; ++i, ++writeId, ++planStep, ++txId) {
-        UNIT_ASSERT(WriteData(runtime, sender, metaShard, writeId, tableId, triggerData));
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, testYdbSchema, true, &writeIds));
 
-        ProposeCommit(runtime, sender, metaShard, txId, {writeId});
+        ProposeCommit(runtime, sender, txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
 
         if (i % 2 == 0) {

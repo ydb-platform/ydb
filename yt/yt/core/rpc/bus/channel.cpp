@@ -184,11 +184,19 @@ private:
             while (bucket.Sessions.size() <= index) {
                 auto session = New<TSession>(options.MultiplexingBand);
                 auto messageHandler = New<TMessageHandler>(session);
+
                 auto bus = Client_->CreateBus(
                     messageHandler,
                     {
                         .MultiplexingBand = options.MultiplexingBand
                     });
+
+                auto& attrs = bus->GetEndpointAttributes();
+                YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
+                    attrs.Get<EVerificationMode>("verification_mode"),
+                    attrs.Get<EEncryptionMode>("encryption_mode"),
+                    attrs.Get<TString>("address"));
+
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
                 results.emplace_back(std::move(bus), std::move(session));

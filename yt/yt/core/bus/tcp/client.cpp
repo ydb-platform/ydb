@@ -154,6 +154,8 @@ public:
         EndpointAttributes_ = ConvertToAttributes(BuildYsonStringFluently()
             .BeginMap()
                 .Item("address").Value(EndpointDescription_)
+                .Item("encryption_mode").Value(Config_->EncryptionMode)
+                .Item("verification_mode").Value(Config_->VerificationMode)
             .EndMap());
     }
 

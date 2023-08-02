@@ -64,12 +64,7 @@ void TSummary::Persist(const TStreamPersistenceContext& context)
     Persist(context, Count_);
     Persist(context, Min_);
     Persist(context, Max_);
-    // COMPAT(ignat)
-    if (context.IsLoad() && context.GetVersion() < /* ESnapshotVersion::LastFieldInStatistics */ 300610) {
-        Last_ = std::nullopt;
-    } else {
-        Persist(context, Last_);
-    }
+    Persist(context, Last_);
 }
 
 void Serialize(const TSummary& summary, IYsonConsumer* consumer)

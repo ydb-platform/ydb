@@ -66,6 +66,20 @@ void TClientConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TRetrialbeClientConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("request_timeout", &TThis::RequestTimeout)
+        .Default(TDuration::Seconds(15));
+    registrar.Parameter("attempt_timeout", &TThis::AttemptTimeout)
+        .Default(TDuration::Seconds(10));
+    registrar.Parameter("backoff_timeout", &TThis::BackoffTimeout)
+        .Default(TDuration::Seconds(1));
+    registrar.Parameter("max_attempt_count", &TThis::MaxAttemptCount)
+        .Default(3);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TCorsConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("disable_cors_check", &TThis::DisableCorsCheck)

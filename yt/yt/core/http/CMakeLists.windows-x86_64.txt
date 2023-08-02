@@ -20,6 +20,7 @@ target_sources(yt-core-http PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/http/connection_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/http/connection_reuse_helpers.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/http/http.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/http/retriable_client.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/http/server.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/http/stream.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/http/helpers.cpp

@@ -5,6 +5,7 @@
 #include "config.h"
 #include "stream.h"
 #include "private.h"
+#include "helpers.h"
 
 #include <yt/yt/core/net/dialer.h>
 #include <yt/yt/core/net/config.h>
@@ -167,21 +168,10 @@ private:
         }
     }
 
-    TString SanitizeUrl(const TString& url)
-    {
-        // Do not expose URL parameters in error attributes.
-        auto urlRef = ParseUrl(url);
-        if (urlRef.PortStr.empty()) {
-            return TString(urlRef.Host) + urlRef.Path;
-        } else {
-            return Format("%v:%v%v", urlRef.Host, urlRef.PortStr, urlRef.Path);
-        }
-    }
-
     template <typename T>
     TFuture<T> WrapError(const TString& url, TCallback<T()> action)
     {
-        return BIND([=, this, this_ = MakeStrong(this)] {
+        return BIND([=, this_ = MakeStrong(this)] {
             try {
                 return action();
             } catch (const std::exception& ex) {
@@ -257,7 +247,9 @@ private:
             request->SetHeaders(headers);
         }
 
-        auto requestPath = Format("%v?%v", urlRef.Path, urlRef.RawQuery);
+        auto requestPath = urlRef.RawQuery.empty()
+            ? TString(urlRef.Path)
+            : Format("%v?%v", urlRef.Path, urlRef.RawQuery);
         request->WriteRequest(method, requestPath);
 
         return {std::move(request), std::move(response)};

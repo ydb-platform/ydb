@@ -56,6 +56,8 @@ NTracing::TTraceContextPtr GetOrCreateTraceContext(const IRequestPtr& req);
 std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers);
 void SetBytesRange(const THeadersPtr& headers, std::pair<i64, i64> range);
 
+TString SanitizeUrl(const TString& url);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NHttp

@@ -461,6 +461,17 @@ void SetBytesRange(const THeadersPtr& headers, std::pair<i64, i64> range)
     headers->Set(ContentRangeHeaderName, Format("bytes %v-%v/*", range.first, range.second));
 }
 
+TString SanitizeUrl(const TString& url)
+{
+    // Do not expose URL parameters in error attributes.
+    auto urlRef = ParseUrl(url);
+    if (urlRef.PortStr.empty()) {
+        return TString(urlRef.Host) + urlRef.Path;
+    } else {
+        return Format("%v:%v%v", urlRef.Host, urlRef.PortStr, urlRef.Path);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NHttp

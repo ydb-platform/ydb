@@ -46,14 +46,8 @@ void TSerializableLogger::Load(TStreamLoadContext& context)
     Load(context, Essential_);
     Load(context, MinLevel_);
     Load(context, Tag_);
-
-    // COMPAT(max42); 300616 is a version for StructuredTagsInLogger in CA snapshot.
-    if (context.GetVersion() >= 300616) {
-        TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Load(context, StructuredTags_);
-    }
+    TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Load(context, StructuredTags_);
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 

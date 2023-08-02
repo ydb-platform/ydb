@@ -254,15 +254,13 @@ struct TEvPrivate {
         class TPutBlobData {
             YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
             YDB_READONLY_DEF(TString, BlobData);
-            YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, ParsedBatch);
             YDB_ACCESSOR_DEF(TString, LogicalMeta);
         public:
             TPutBlobData() = default;
 
-            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, const std::shared_ptr<arrow::RecordBatch>& batch)
+            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data)
                 : BlobId(blobId)
                 , BlobData(data)
-                , ParsedBatch(batch)
             {}
         };
 

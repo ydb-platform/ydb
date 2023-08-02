@@ -256,7 +256,6 @@ ui64 TColumnShard::MemoryUsage() const {
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();
-    memory += BatchCache.Bytes();
     return memory;
 }
 

@@ -15,7 +15,6 @@ protected:
                                     const NOlap::TReadDescription& readDescription,
                                     const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                     const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                    const TBatchCache& batchCache,
                                     TString& error, const bool isReverse) const;
 
 protected:

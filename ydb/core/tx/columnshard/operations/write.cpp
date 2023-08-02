@@ -35,8 +35,6 @@ namespace NKikimr::NColumnShard {
         TBlobGroupSelector dsGroupSelector(owner.Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-        owner.BatchCache.Commit(WriteId);
-
         auto pathExists = [&](ui64 pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
@@ -60,7 +58,6 @@ namespace NKikimr::NColumnShard {
 
     void TWriteOperation::Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
         Y_VERIFY(Status == EOperationStatus::Prepared);
-        owner.BatchCache.EraseInserted(WriteId);
 
         TBlobGroupSelector dsGroupSelector(owner.Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);

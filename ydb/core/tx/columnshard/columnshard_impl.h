@@ -517,7 +517,6 @@ private:
     TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
-    TBatchCache BatchCache;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");

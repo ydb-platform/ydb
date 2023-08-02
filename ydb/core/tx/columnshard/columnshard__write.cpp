@@ -96,10 +96,6 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         Y_VERIFY(logoBlobId.BlobSize() == data.size());
         NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
 
-        // Put new data into batch cache
-        Y_VERIFY(blobData.GetParsedBatch());
-        Self->BatchCache.Insert(TWriteId(writeId), logoBlobId, blobData.GetParsedBatch());
-
         Self->UpdateInsertTableCounters();
 
         const auto& blobBatch(PutBlobResult->Get()->GetPutResult().GetBlobBatch());

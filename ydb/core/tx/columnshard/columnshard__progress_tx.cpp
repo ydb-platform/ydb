@@ -102,11 +102,6 @@ public:
                     TBlobGroupSelector dsGroupSelector(Self->Info());
                     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-                    // CacheInserted -> CacheCommitted
-                    for (auto& writeId : meta.WriteIds) {
-                        Self->BatchCache.Commit(writeId);
-                    }
-
                     auto pathExists = [&](ui64 pathId) {
                         return Self->TablesManager.HasTable(pathId);
                     };

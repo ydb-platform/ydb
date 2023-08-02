@@ -10,11 +10,9 @@
 namespace NKikimr::NOlap {
 
 TDataStorageAccessor::TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
-                                const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                const NColumnShard::TBatchCache& batchCache)
+                                const std::unique_ptr<NOlap::IColumnEngine>& index)
     : InsertTable(insertTable)
     , Index(index)
-    , BatchCache(batchCache)
 {}
 
 std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const {
@@ -29,10 +27,6 @@ std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TR
 
 std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const {
     return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot()));
-}
-
-std::shared_ptr<arrow::RecordBatch> TDataStorageAccessor::GetCachedBatch(const TUnifiedBlobId& blobId) const {
-    return BatchCache.Get(blobId);
 }
 
 std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const NOlap::TReadContext& readContext) const {
@@ -92,12 +86,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
     }
 
     CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription);
-    for (auto& cmt : CommittedBlobs) {
-        if (auto batch = dataAccessor.GetCachedBatch(cmt.GetBlobId())) {
-            CommittedBatches.emplace(cmt.GetBlobId(), batch);
-        }
-    }
-    
+
     THashSet<ui32> columnIds;
     for (auto& columnId : AllColumns) {
         columnIds.insert(columnId);

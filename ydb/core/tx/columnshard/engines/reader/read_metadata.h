@@ -58,15 +58,12 @@ class TDataStorageAccessor {
 private:
     const std::unique_ptr<NOlap::TInsertTable>& InsertTable;
     const std::unique_ptr<NOlap::IColumnEngine>& Index;
-    const NColumnShard::TBatchCache& BatchCache;
 
 public:
     TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
-                                 const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                 const NColumnShard::TBatchCache& batchCache);
+                                 const std::unique_ptr<NOlap::IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const;
     std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const;
-    std::shared_ptr<arrow::RecordBatch> GetCachedBatch(const TUnifiedBlobId& blobId) const;
 };
 
 // Holds all metadata that is needed to perform read/scan

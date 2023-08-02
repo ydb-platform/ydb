@@ -390,7 +390,6 @@ void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTabl
         if (!RemoveLongTxWrite(db, writeId)) {
             failedAborts.push_back(writeId);
         }
-        BatchCache.EraseInserted(TWriteId(writeId));
     }
     for (auto& writeId : failedAborts) {
         writesToAbort.erase(writeId);
@@ -711,7 +710,6 @@ void TColumnShard::SetupIndexation() {
         LOG_S_DEBUG("Few data for indexation (" << bytesToIndex << " bytes in " << blobs << " blobs, ignored "
             << ignored << ") at tablet " << TabletID());
 
-        // Force small indexations sometimes to keep BatchCache smaller
         if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
             ++SkippedIndexations;
             return;
@@ -729,10 +727,6 @@ void TColumnShard::SetupIndexation() {
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
-        if (auto inserted = BatchCache.GetInserted(TWriteId(ptr->WriteTxId)); inserted.second) {
-            Y_VERIFY(ptr->BlobId == inserted.first);
-            cachedBlobs.emplace(ptr->BlobId, inserted.second);
-        }
     }
 
     Y_VERIFY(data.size());

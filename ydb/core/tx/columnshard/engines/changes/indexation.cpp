@@ -33,7 +33,6 @@ void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, 
     for (const auto& cmtd : DataToIndex) {
         self.InsertTable->EraseCommitted(context.DBWrapper, cmtd);
         self.BlobManager->DeleteBlob(cmtd.BlobId, *context.BlobManagerDb);
-        self.BatchCache.EraseCommitted(cmtd.BlobId);
     }
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();

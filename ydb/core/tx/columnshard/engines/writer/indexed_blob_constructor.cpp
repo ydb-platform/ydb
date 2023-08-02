@@ -49,7 +49,7 @@ IBlobConstructor::EStatus TIndexedWriteController::TBlobConstructor::BuildNext()
 
 bool TIndexedWriteController::TBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
     Y_VERIFY(blobId.BlobSize() == DataPrepared.size());
-    Owner.AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData(blobId, DataPrepared, Batch));
+    Owner.AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData(blobId, DataPrepared), Batch->num_rows(), NArrow::GetBatchDataSize(Batch));
     return true;
 }
 
@@ -72,14 +72,14 @@ void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx,
     }
 }
 
-void TIndexedWriteController::AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data) {
+void TIndexedWriteController::AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data, const ui64 numRows, const ui64 batchSize) {
     Y_VERIFY(BlobData.empty());
 
     ui64 dirtyTime = AppData()->TimeProvider->Now().Seconds();
     Y_VERIFY(dirtyTime);
     NKikimrTxColumnShard::TLogicalMetadata outMeta;
-    outMeta.SetNumRows(data.GetParsedBatch()->num_rows());
-    outMeta.SetRawBytes(NArrow::GetBatchDataSize(data.GetParsedBatch()));
+    outMeta.SetNumRows(numRows);
+    outMeta.SetRawBytes(batchSize);
     outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
 
     TString metaString;

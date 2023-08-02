@@ -1680,10 +1680,10 @@ message THiveConfig {
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
     optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
     optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
-    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 5000]; // milliseconds
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 1500]; // milliseconds
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
     optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
-    optional bool WarmUpEnabled = 55 [default = true];
+    optional bool WarmUpEnabled = 55 [default = false];
     optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
     optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
     optional bool ContinueEmergencyBalancer = 58 [default = true];

@@ -7,7 +7,7 @@ copy=[
     "cmake/global_flags.linker.msvc.cmake"
 ]
 
-[attr.target]
+[attrs.target]
 vcs_info="list"
 target_joined_source="list"
 target_sources_custom="list"

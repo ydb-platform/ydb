@@ -412,7 +412,7 @@ struct TIdentifyData {
     static const ui32 IdentifySizeBytes = 512;
     bool IsGathered = false;
     ui8 Data[IdentifySizeBytes];
-    // Offset in words, descirption, size bytes for strings
+    // Offset in words, description, size bytes for strings
     // 10, serial number, 20 ASCII
     // 23, firmware revision, 8 ASCII
     // 27, Model number, 40 ASCII

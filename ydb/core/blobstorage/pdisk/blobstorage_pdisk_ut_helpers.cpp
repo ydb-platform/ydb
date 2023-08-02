@@ -12,11 +12,16 @@
 namespace NKikimr {
 
 TString PrepareData(ui32 size, ui32 flavor) {
-    TString data = TString::Uninitialized(size);
+    TString str = TString::Uninitialized(size);
+    
+    // Using char* enables possibility to vectorize the following loop.
+    char* data = str.Detach();
+
     for (ui32 i = 0; i < size; ++i) {
         data[i] = '0' + (i + size + flavor) % 8;
     }
-    return data;
+
+    return str;
 }
 
 TString StatusToString(const NKikimrProto::EReplyStatus status) {

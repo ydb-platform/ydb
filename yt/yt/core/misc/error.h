@@ -299,9 +299,9 @@ TException&& operator <<= (TException&& ex, TError&& error);
     THROW_ERROR ::NYT::TError(head __VA_OPT__(,) __VA_ARGS__)
 
 #define THROW_ERROR_EXCEPTION_IF_FAILED(error, ...) \
-    if (const auto& error__ ## __LINE__  = (error); error__ ## __LINE__ .IsOK()) { \
+    if (const auto& error__  = (error); error__ .IsOK()) { \
     } else { \
-        THROW_ERROR error__ ## __LINE__.Wrap(__VA_ARGS__); \
+        THROW_ERROR error__.Wrap(__VA_ARGS__); \
     }
 
 #define THROW_ERROR_EXCEPTION_UNLESS(condition, head, ...) \

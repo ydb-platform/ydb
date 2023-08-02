@@ -292,54 +292,54 @@ void LogStructuredEvent(
 
 #define YT_LOG_EVENT_WITH_ANCHOR(logger, level, anchor, ...) \
     do { \
-        const auto& logger__##__LINE__ = (logger); \
-        auto level__##__LINE__ = (level); \
+        const auto& logger__ = (logger); \
+        auto level__ = (level); \
         \
-        if (!logger__##__LINE__.IsLevelEnabled(level__##__LINE__)) { \
+        if (!logger__.IsLevelEnabled(level__)) { \
             break; \
         } \
         \
-        auto location__##__LINE__ = __LOCATION__; \
+        auto location__ = __LOCATION__; \
         \
-        ::NYT::NLogging::TLoggingAnchor* anchor__##__LINE__ = (anchor); \
-        if (!anchor__##__LINE__) { \
-            static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> staticAnchor__##__LINE__; \
-            anchor__##__LINE__ = staticAnchor__##__LINE__.Get(); \
+        ::NYT::NLogging::TLoggingAnchor* anchor__ = (anchor); \
+        if (!anchor__) { \
+            static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> staticAnchor__; \
+            anchor__ = staticAnchor__.Get(); \
         } \
         \
-        bool anchorUpToDate__##__LINE__ = logger__##__LINE__.IsAnchorUpToDate(*anchor__##__LINE__); \
-        if (anchorUpToDate__##__LINE__ && !anchor__##__LINE__->Enabled.load(std::memory_order::relaxed)) { \
+        bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__); \
+        if (anchorUpToDate__ && !anchor__->Enabled.load(std::memory_order::relaxed)) { \
             break; \
         } \
         \
-        auto loggingContext__##__LINE__ = ::NYT::NLogging::GetLoggingContext(); \
-        auto message__##__LINE__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__##__LINE__, logger__##__LINE__, __VA_ARGS__); \
+        auto loggingContext__ = ::NYT::NLogging::GetLoggingContext(); \
+        auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__); \
         \
-        if (!anchorUpToDate__##__LINE__) { \
-            logger__##__LINE__.RegisterStaticAnchor(anchor__##__LINE__, location__##__LINE__, message__##__LINE__.Anchor); \
-            logger__##__LINE__.UpdateAnchor(anchor__##__LINE__); \
+        if (!anchorUpToDate__) { \
+            logger__.RegisterStaticAnchor(anchor__, location__, message__.Anchor); \
+            logger__.UpdateAnchor(anchor__); \
         } \
         \
-        if (!anchor__##__LINE__->Enabled.load(std::memory_order::relaxed)) { \
+        if (!anchor__->Enabled.load(std::memory_order::relaxed)) { \
             break; \
         } \
         \
-        static thread_local i64 localByteCounter__##__LINE__; \
-        static thread_local ui8 localMessageCounter__##__LINE__; \
+        static thread_local i64 localByteCounter__; \
+        static thread_local ui8 localMessageCounter__; \
         \
-        localByteCounter__##__LINE__ += message__##__LINE__.MessageRef.Size(); \
-        if (Y_UNLIKELY(++localMessageCounter__##__LINE__ == 0)) { \
-            anchor__##__LINE__->MessageCounter.Current += 256; \
-            anchor__##__LINE__->ByteCounter.Current += localByteCounter__##__LINE__; \
-            localByteCounter__##__LINE__ = 0; \
+        localByteCounter__ += message__.MessageRef.Size(); \
+        if (Y_UNLIKELY(++localMessageCounter__ == 0)) { \
+            anchor__->MessageCounter.Current += 256; \
+            anchor__->ByteCounter.Current += localByteCounter__; \
+            localByteCounter__ = 0; \
         } \
         \
         ::NYT::NLogging::NDetail::LogEventImpl( \
-            loggingContext__##__LINE__, \
-            logger__##__LINE__, \
-            level__##__LINE__, \
-            location__##__LINE__, \
-            std::move(message__##__LINE__.MessageRef)); \
+            loggingContext__, \
+            logger__, \
+            level__, \
+            location__, \
+            std::move(message__.MessageRef)); \
     } while (false)
 
 ////////////////////////////////////////////////////////////////////////////////

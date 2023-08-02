@@ -1,5 +1,6 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
+#include "kqp_table_creator.h"
 
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -20,6 +21,44 @@ constexpr TDuration TestLeaseDuration = TDuration::Seconds(1);
 constexpr TDuration TestOperationTtl = TDuration::Minutes(1);
 constexpr TDuration TestResultsTtl = TDuration::Minutes(1);
 const TString TestDatabase = "test_db";
+
+NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, const char* columnType) {
+    NKikimrSchemeOp::TColumnDescription desc;
+    desc.SetName(columnName);
+    desc.SetType(columnType);
+    return desc;
+}
+
+NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, NScheme::TTypeId columnType) {
+    return Col(columnName, NScheme::TypeName(columnType));
+}
+
+[[maybe_unused]] NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName) {
+    NKikimrSchemeOp::TTTLSettings settings;
+    settings.MutableEnabled()->SetExpireAfterSeconds(TDuration::Minutes(20).Seconds());
+    settings.MutableEnabled()->SetColumnName(columnName);
+    settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(TDuration::Minutes(60).MicroSeconds());
+    return settings;
+}
+
+const TVector<NKikimrSchemeOp::TColumnDescription> DEFAULT_COLUMNS = {
+    Col("col1", NScheme::NTypeIds::Int32),
+    Col("col2", NScheme::NTypeIds::Int32),
+    Col("col3", NScheme::NTypeIds::String)
+};
+
+const TVector<NKikimrSchemeOp::TColumnDescription> EXTENDED_COLUMNS = {
+    Col("col1", NScheme::NTypeIds::Int32),
+    Col("col2", NScheme::NTypeIds::Int32),
+    Col("col3", NScheme::NTypeIds::String),
+    Col("col4", NScheme::NTypeIds::JsonDocument),
+    Col("col5", NScheme::NTypeIds::Interval)
+};
+
+const TVector<TString> TEST_TABLE_PATH = { ".test", "test_table" };
+
+const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
+
 
 struct TScriptExecutionsYdbSetup {
     TScriptExecutionsYdbSetup() {
@@ -98,6 +137,53 @@ struct TScriptExecutionsYdbSetup {
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(executionId, reply->Get()->ExecutionId);
         return reply->Get()->ExecutionId;
+    }
+
+    void CreateTableInDbSync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, i32 numberOfRequests = 1, TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
+                             TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing()) {
+
+        TVector<TActorId> edgeActors;
+        for (i32 i = 0; i < numberOfRequests; ++i) {
+            edgeActors.push_back(CreateTableInDbAsync(columns, pathComponents, keyColumns, ttlSettings));
+        }
+        WaitTableCreation(std::move(edgeActors));
+    }
+
+    TActorId CreateTableInDbAsync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
+                             TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing()) {
+        const ui32 node = 0;
+        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
+        GetRuntime()->Register(CreateTableCreator(std::move(pathComponents), std::move(columns), std::move(keyColumns), std::move(ttlSettings)), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        return edgeActor;
+    }
+
+    void WaitTableCreation(TVector<TActorId> edgeActors) {
+        for (const auto& actor: edgeActors) {
+            GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateTableResponse>(actor);
+        }
+    }
+
+    void VerifyColumnsList( TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS) {
+        TStringBuilder path;
+        path << "/dc-1/";
+        for (size_t i = 0; i < pathComponents.size() - 1; ++i) {
+            path << pathComponents[i] << "/";
+        }
+        path << pathComponents.back();
+
+        auto result = TableClientSession->DescribeTable(path).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        const auto&  existingColumns = result.GetTableDescription().GetColumns();
+        UNIT_ASSERT_C(existingColumns.size() == columns.size(), "Expected size: " << columns.size() << ", actual size: " << existingColumns.size());
+
+        THashSet<TString> existingNames;
+        for (const auto& col: existingColumns) {
+            existingNames.emplace(col.Name);
+        }
+
+        for (const auto& col: columns) {
+            UNIT_ASSERT_C(existingNames.contains(col.GetName()), "Column \"" << col.GetName() << "\" is not present" );
+        }
     }
 
     NPrivate::TEvPrivate::TEvLeaseCheckResult::TPtr CheckLeaseStatus(const TString& executionId) {
@@ -231,5 +317,104 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         auto updateResponse = ydb.UpdateLease(executionId, TestLeaseDuration);
         UNIT_ASSERT(!updateResponse->ExecutionEntryExists);
     }
+}
+
+Y_UNIT_TEST_SUITE(TableCreation) {
+
+    Y_UNIT_TEST(SimpleTableCreation) {
+        TScriptExecutionsYdbSetup ydb;
+
+        ydb.CreateTableInDbSync();
+        ydb.VerifyColumnsList();
+    }
+
+    Y_UNIT_TEST(ConcurrentTableCreation) {
+        TScriptExecutionsYdbSetup ydb;
+
+        constexpr i32 requests = 20;
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS, requests);
+        ydb.VerifyColumnsList();
+    }
+
+    Y_UNIT_TEST(MultipleTablesCreation) {
+        TScriptExecutionsYdbSetup ydb;
+
+        constexpr i32 requests = 2;
+        
+        TVector<TActorId> edgeActors;
+        for (i32 i = 0; i < requests; ++i) {
+            edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, { ".test", "test_table" + ToString(i)}));
+        }
+        
+        ydb.WaitTableCreation(std::move(edgeActors));
+
+        for(i32 i = 0; i < requests; i++) {
+            ydb.VerifyColumnsList({".test", "test_table" + ToString(i)});
+        }
+    }
+
+    Y_UNIT_TEST(ConcurrentMultipleTablesCreation) {
+        TScriptExecutionsYdbSetup ydb;
+
+        constexpr i32 tables = 2;
+        constexpr i32 requests = 20;
+
+        TVector<TActorId> edgeActors;
+        for (i32 i = 0; i < tables; ++i) {
+            for (i32 j = 0; j < requests; ++j){
+                edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, { ".test", "test_table" + ToString(i)}));
+            }
+        }
+        
+        ydb.WaitTableCreation(std::move(edgeActors));
+
+        for(i32 i = 0; i < tables; i++) {
+            ydb.VerifyColumnsList({".test", "test_table" + ToString(i)});
+        }
+    }
+
+    Y_UNIT_TEST(ConcurrentTableCreationWithDifferentVersions) {
+        TScriptExecutionsYdbSetup ydb;
+
+        constexpr i32 requests = 10;
+
+        TVector<TActorId> edgeActors;
+        for (i32 i = 0; i < requests; ++i) {
+            edgeActors.push_back(ydb.CreateTableInDbAsync(i % 2 ? EXTENDED_COLUMNS : DEFAULT_COLUMNS));
+    
+        }
+
+        ydb.WaitTableCreation(edgeActors);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS);
+    }
+
+    Y_UNIT_TEST(SimpleUpdateTable) {
+        TScriptExecutionsYdbSetup ydb;
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
+        ydb.CreateTableInDbSync(EXTENDED_COLUMNS);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS);
+    }
+
+    Y_UNIT_TEST(ConcurrentUpdateTable) {
+        TScriptExecutionsYdbSetup ydb;
+
+        constexpr i32 requests = 10;
+        
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
+        ydb.CreateTableInDbSync(EXTENDED_COLUMNS, requests);
+
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS);
+    }
+
+    Y_UNIT_TEST(CreateOldTable) {
+        TScriptExecutionsYdbSetup ydb;
+
+        ydb.CreateTableInDbSync(EXTENDED_COLUMNS);
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS);
+    }
+
 }
 } // namespace NKikimr::NKqp

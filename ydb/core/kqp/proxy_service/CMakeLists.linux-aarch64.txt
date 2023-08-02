@@ -43,4 +43,5 @@ target_sources(core-kqp-proxy_service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_peer_stats_calculator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_script_executions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_table_creator.cpp
 )

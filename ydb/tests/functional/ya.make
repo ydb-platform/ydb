@@ -26,4 +26,5 @@ RECURSE(
     ttl
     ydb_cli
     query_cache
+    script_execution
 )

@@ -4,6 +4,7 @@ SRCS(
     kqp_proxy_service.cpp
     kqp_proxy_peer_stats_calculator.cpp
     kqp_script_executions.cpp
+    kqp_table_creator.cpp
 )
 
 PEERDIR(

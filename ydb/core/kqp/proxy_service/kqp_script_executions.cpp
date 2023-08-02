@@ -1,22 +1,17 @@
 #include "kqp_script_executions.h"
 #include "kqp_script_executions_impl.h"
+#include "kqp_table_creator.h"
 
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
@@ -30,7 +25,6 @@
 
 #include <util/generic/guid.h>
 #include <util/generic/utility.h>
-#include <util/random/random.h>
 
 namespace NKikimr::NKqp {
 
@@ -84,235 +78,6 @@ public:
 };
 
 
-class TTableCreator : public NActors::TActorBootstrapped<TTableCreator> {
-public:
-    TTableCreator(TVector<TString> pathComponents, TVector<NKikimrSchemeOp::TColumnDescription> columns, TVector<TString> keyColumns,
-                  TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing())
-        : PathComponents(std::move(pathComponents))
-        , Columns(std::move(columns))
-        , KeyColumns(std::move(keyColumns))
-        , TtlSettings(std::move(ttlSettings))
-    {
-        Y_VERIFY(!PathComponents.empty());
-        Y_VERIFY(!Columns.empty());
-    }
-
-    void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override {
-        NActors::TActorBootstrapped<TTableCreator>::Registered(sys, owner);
-        Owner = owner;
-    }
-
-    STRICT_STFUNC(StateFuncCheck,
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        sFunc(NActors::TEvents::TEvWakeup, CheckTableExistence);
-    )
-
-    STRICT_STFUNC(StateFuncCreate,
-        hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-        sFunc(NActors::TEvents::TEvWakeup, RunCreateTableRequest);
-        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
-    )
-
-    void Bootstrap() {
-        Become(&TTableCreator::StateFuncCheck);
-        CheckTableExistence();
-    }
-
-    void CheckTableExistence() {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto pathComponents = SplitPath(AppData()->TenantName);
-        request->DatabaseName = CanonizePath(pathComponents);
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        pathComponents.insert(pathComponents.end(), PathComponents.begin(), PathComponents.end());
-        entry.Path = pathComponents;
-        entry.ShowPrivatePath = true;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-    }
-
-    void RunCreateTableRequest() {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        NKikimrSchemeOp::TModifyScheme& modifyScheme = *request->Record.MutableTransaction()->MutableModifyScheme();
-        auto pathComponents = SplitPath(AppData()->TenantName);
-        for (size_t i = 0; i < PathComponents.size() - 1; ++i) {
-            pathComponents.emplace_back(PathComponents[i]);
-        }
-        modifyScheme.SetWorkingDir(CanonizePath(pathComponents));
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
-        modifyScheme.SetInternal(true);
-        modifyScheme.SetAllowAccessToPrivatePaths(true);
-        NKikimrSchemeOp::TTableDescription& tableDesc = *modifyScheme.MutableCreateTable();
-        tableDesc.SetName(TableName());
-        for (const TString& k : KeyColumns) {
-            tableDesc.AddKeyColumnNames(k);
-        }
-        for (const NKikimrSchemeOp::TColumnDescription& col : Columns) {
-            *tableDesc.AddColumns() = col;
-        }
-        if (TtlSettings) {
-            tableDesc.MutableTTLSettings()->CopyFrom(*TtlSettings);
-        }
-        Send(MakeTxProxyID(), std::move(request));
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
-        const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
-        Y_VERIFY(request.ResultSet.size() == 1);
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& result  = request.ResultSet[0];
-        if (result.Status != EStatus::Ok) {
-            KQP_PROXY_LOG_D("Describe table " << TableName() << " result: " << result.Status);
-        }
-
-        switch (result.Status) {
-            case EStatus::Unknown:
-                [[fallthrough]];
-            case EStatus::PathNotTable:
-                [[fallthrough]];
-            case EStatus::PathNotPath:
-                [[fallthrough]];
-            case EStatus::RedirectLookupError:
-                Fail(result.Status);
-                break;
-            case EStatus::RootUnknown:
-                [[fallthrough]];
-            case EStatus::PathErrorUnknown:
-                Become(&TTableCreator::StateFuncCreate);
-                RunCreateTableRequest();
-                break;
-            case EStatus::LookupError:
-                [[fallthrough]];
-            case EStatus::TableCreationNotComplete:
-                Retry();
-                break;
-            case EStatus::Ok:
-                Success();
-                break;
-        }
-    }
-
-    void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        KQP_PROXY_LOG_D("TEvProposeTransactionStatus " << TableName() << ": " << ev->Get()->Record);
-        const auto ssStatus = ev->Get()->Record.GetSchemeShardStatus();
-        switch (ev->Get()->Status()) {
-            case NTxProxy::TResultStatus::ExecComplete:
-                [[fallthrough]];
-            case NTxProxy::TResultStatus::ExecAlready:
-                if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    Success(ev);
-                } else {
-                    Fail(ev);
-                }
-                break;
-            case NTxProxy::TResultStatus::ProxyShardNotAvailable:
-                Retry();
-                break;
-            case NTxProxy::TResultStatus::ExecError:
-                if (ssStatus == NKikimrScheme::EStatus::StatusMultipleModifications) {
-                    SubscribeOnTransaction(ev);
-                // In the process of creating a database, errors of the form may occur -
-                // database doesn't have storage pools at all to create tablet
-                // channels to storage pool binding by profile id
-                } else if (ssStatus == NKikimrScheme::EStatus::StatusInvalidParameter) {
-                    Retry();
-                } else {
-                    Fail(ev);
-                }
-                break;
-            case NTxProxy::TResultStatus::ExecInProgress:
-                SubscribeOnTransaction(ev);
-                break;
-            default:
-                Fail(ev);
-        }
-    }
-
-    void Retry() {
-        Schedule(TDuration::MilliSeconds(50 + RandomNumber<ui64>(30)), new NActors::TEvents::TEvWakeup());
-    }
-
-    void SubscribeOnTransaction(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        NActors::IActor* pipeActor = NTabletPipe::CreateClient(SelfId(), ev->Get()->Record.GetSchemeShardTabletId());
-        Y_VERIFY(pipeActor);
-        SchemePipeActorId = Register(pipeActor);
-        auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-        const ui64 txId = ev->Get()->Status() == NTxProxy::TResultStatus::ExecInProgress ? ev->Get()->Record.GetTxId() : ev->Get()->Record.GetPathCreateTxId();
-        request->Record.SetTxId(txId);
-        NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
-        KQP_PROXY_LOG_D("Subscribe on create table " << TableName() << " tx: " << txId);
-    }
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            KQP_PROXY_LOG_E("Create table " << TableName() << ". Tablet to pipe not conected: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status) << ", retry");
-            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-            SchemePipeActorId = {};
-            Retry();
-        }
-    }
-
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        KQP_PROXY_LOG_E("Create table " << TableName() << ". Tablet to pipe destroyed, retry");
-        SchemePipeActorId = {};
-    }
-
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
-    }
-
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        KQP_PROXY_LOG_D("Create table " << TableName() << ". Transaction completed: " << ev->Get()->Record.GetTxId());
-        Success(ev);
-    }
-
-    void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
-        KQP_PROXY_LOG_E("Failed to create table " << TableName() << ": " << status);
-        Reply();
-    }
-
-    void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        KQP_PROXY_LOG_E("Failed to create table " << TableName() << ": " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
-        Reply();
-    }
-
-    void Success() {
-        Reply();
-    }
-
-    void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        KQP_PROXY_LOG_I("Successfully created table " << TableName() << ": " << ev->Get()->Status());
-        Reply();
-    }
-
-    void Success(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        KQP_PROXY_LOG_I("Successfully created table " << TableName() << ". TxId: " << ev->Get()->Record.GetTxId());
-        Reply();
-    }
-
-    void Reply() {
-        Send(Owner, new TEvPrivate::TEvCreateTableResponse());
-        if (SchemePipeActorId) {
-            NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
-        }
-        PassAway();
-    }
-
-    const TString& TableName() const {
-        return PathComponents.back();
-    }
-
-private:
-    const TVector<TString> PathComponents;
-    const TVector<NKikimrSchemeOp::TColumnDescription> Columns;
-    const TVector<TString> KeyColumns;
-    const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
-    NActors::TActorId Owner;
-    NActors::TActorId SchemePipeActorId;
-};
-
 class TScriptExecutionsTablesCreator : public TActorBootstrapped<TScriptExecutionsTablesCreator> {
 public:
     explicit TScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent)
@@ -355,7 +120,7 @@ private:
     void RunCreateScriptExecutions() {
         TablesCreating++;
         Register(
-            new TTableCreator(
+            CreateTableCreator(
                 { ".metadata", "script_executions" },
                 {
                     Col("database", NScheme::NTypeIds::Text),
@@ -386,7 +151,7 @@ private:
     void RunCreateScriptExecutionLeases() {
         TablesCreating++;
         Register(
-            new TTableCreator(
+            CreateTableCreator(
                 { ".metadata", "script_execution_leases" },
                 {
                     Col("database", NScheme::NTypeIds::Text),
@@ -402,7 +167,7 @@ private:
     void RunCreateScriptResultSets() {
         TablesCreating++;
         Register(
-            new TTableCreator(
+            CreateTableCreator(
                 { ".metadata", "result_sets" },
                 {
                     Col("database", NScheme::NTypeIds::Text),

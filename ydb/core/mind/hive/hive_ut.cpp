@@ -1696,7 +1696,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT(createTabletReply->Record.HasForwardRequest());
             UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
 
-        });
+        }, Max<ui32>(), Max<ui64>(), 1, 2);
     }
 
     Y_UNIT_TEST(TestCreateAndDeleteTabletWithStoragePoolsReboots) {

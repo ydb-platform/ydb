@@ -114,6 +114,13 @@ public:
         return totalSize;
     }
 
+    ui32 GetTabletsRunning() const {
+        auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
+        if (it != Tablets.end())
+            return it->second.size();
+        return 0;
+    }
+
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {

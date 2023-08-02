@@ -336,7 +336,6 @@ message TEvPingSessionRequest {
 
 message TPingSessionResponse {
     optional Ydb.Table.KeepAliveResult.SessionStatus SessionStatus = 1;
-    optional bool WorkerIsClosing = 2 [default = false];
 }
 
 message TEvPingSessionResponse {

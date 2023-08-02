@@ -41,6 +41,7 @@ PEERDIR(
 )
 
 ADDINCL(
+    GLOBAL ${ARCADIA_BUILD_ROOT}/contrib/libs/apache/arrow/cpp/src
     GLOBAL contrib/libs/apache/arrow/cpp/src
     GLOBAL contrib/libs/apache/arrow/src
     contrib/libs/apache/arrow/cpp/src/generated
@@ -79,6 +80,8 @@ IF (NOT OS_WINDOWS)
         -DHAVE_NETINET_IN_H
     )
 ENDIF()
+
+FLATC_FLAGS(--scoped-enums)
 
 SRCS(
     cpp/src/arrow/adapters/orc/adapter.cc
@@ -249,6 +252,12 @@ SRCS(
     cpp/src/arrow/vendored/datetime/tz.cpp
     cpp/src/arrow/vendored/musl/strptime.c
     cpp/src/arrow/visitor.cc
+    cpp/src/generated/File.fbs
+    cpp/src/generated/Message.fbs
+    cpp/src/generated/Schema.fbs
+    cpp/src/generated/SparseTensor.fbs
+    cpp/src/generated/Tensor.fbs
+    cpp/src/generated/feather.fbs
     cpp/src/generated/parquet_constants.cpp
     cpp/src/generated/parquet_types.cpp
     cpp/src/parquet/arrow/path_internal.cc

@@ -102,6 +102,8 @@ public:
 public:
     ~TProgram();
 
+    void AddUserDataTable(const TUserDataTable& userDataTable);
+
     bool ParseYql();
     bool ParseSql();
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);

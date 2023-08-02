@@ -3,9 +3,6 @@ import sys
 
 
 def fix(s):
-    # disable dbg DEVTOOLS-2744
-    if s == '-g':
-        return None
     if s == '/Z7' or s == '/Od' or s == '/Ob0' or s == '/D_DEBUG':
         return None
 

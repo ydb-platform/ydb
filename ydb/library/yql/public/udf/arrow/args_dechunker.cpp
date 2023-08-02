@@ -20,6 +20,12 @@ TArgsDechunker::TArgsDechunker(std::vector<arrow::Datum>&& args)
 }
 
 bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk) {
+    ui64 chunkLen;
+    return Next(chunk, chunkLen);
+}
+
+bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
+    chunkLen = 0;
     if (Finish) {
         return false;
     }
@@ -55,6 +61,7 @@ bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk) {
             chunk[i] = arrow::Datum(Chop(Arrays[i].front(), minSize));
         }
     }
+    chunkLen = minSize;
     return true;
 }
 

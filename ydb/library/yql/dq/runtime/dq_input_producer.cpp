@@ -563,7 +563,8 @@ private:
         }
 
         std::vector<arrow::Datum> chunk;
-        while (!Output_ || !Output_->Next(chunk)) {
+        ui64 blockLen = 0;
+        while (!Output_ || !Output_->Next(chunk, blockLen)) {
             auto status = DoMerge();
             if (status != NUdf::EFetchStatus::Ok) {
                 IsFinished_ = status == NUdf::EFetchStatus::Finish;
@@ -572,24 +573,13 @@ private:
             YQL_ENSURE(Output_);
         }
 
-        TMaybe<ui64> blockLen;
         YQL_ENSURE(width == chunk.size() + 1);
         for (ui32 i = 0; i < chunk.size(); ++i) {
-            auto& item = chunk[i];
-            if (item.is_array()) {
-                if (blockLen.Defined()) {
-                    YQL_ENSURE(*blockLen == (ui64)item.array()->length);
-                } else {
-                    blockLen = item.array()->length;
-                }
-            } else {
-                YQL_ENSURE(item.is_scalar());
-            }
-            result[i] = Factory_.CreateArrowBlock(std::move(item));
+            result[i] = Factory_.CreateArrowBlock(std::move(chunk[i]));
         }
 
-        YQL_ENSURE(blockLen.Defined());
-        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(*blockLen)));
+        YQL_ENSURE(blockLen > 0);
+        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
         // TODO: support stats for blocks
         //if (Stats_) {
         //    Stats_.Add(result, width);

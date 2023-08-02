@@ -421,7 +421,6 @@ private:
                     output.emplace_back(Builders_[j]->Build(false));
                 }
             }
-            output.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(outputBlockLen)));
             outputData.emplace_back(std::make_unique<TArgsDechunker>(std::move(output)));
         }
 
@@ -439,12 +438,15 @@ private:
                 }
 
                 std::vector<arrow::Datum> chunk;
-                if (outputData[i] && outputData[i]->Next(chunk)) {
+                ui64 blockLen = 0;
+                if (outputData[i] && outputData[i]->Next(chunk, blockLen)) {
+                    YQL_ENSURE(blockLen > 0);
                     hasData = true;
                     TUnboxedValueVector outputValues;
                     for (auto& datum : chunk) {
                         outputValues.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum)));
                     }
+                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen))));
                     Outputs_[i]->WidePush(outputValues.data(), outputValues.size());
                 }
             }

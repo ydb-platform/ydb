@@ -663,14 +663,19 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx)
 {
-    ClosePipe(ev->Get()->TabletId, ctx);
-    RequestTabletIfNeeded(ev->Get()->TabletId, ctx);
+    auto tabletId = ev->Get()->TabletId;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientDestroyed " << tabletId);
+
+    ClosePipe(tabletId, ctx);
+    RequestTabletIfNeeded(tabletId, ctx);
 }
 
 
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected TabletId " << tabletId);
+
     PipesRequested.erase(tabletId);
 
     if (ev->Get()->Status != NKikimrProto::OK) {
@@ -681,6 +686,8 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         if (!it.IsEnd()) {
             it->second.Generation = ev->Get()->Generation;
             it->second.NodeId = ev->Get()->ServerId.NodeId();
+
+            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Generation " << ev->Get()->Generation << ", NodeId " << ev->Get()->ServerId.NodeId());
         }
     }
 }
@@ -1345,6 +1352,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
         }
         pResponse->SetNodeId(iter->second.NodeId.GetRef());
         pResponse->SetGeneration(iter->second.Generation.GetRef());
+
+        LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "addPartitionToResponse tabletId " << tabletId << ", partitionId " << partitionId << ", NodeId " << pResponse->GetNodeId() << ", Generation " << pResponse->GetGeneration());
         return true;
     };
     auto sendResponse = [&](bool status) {

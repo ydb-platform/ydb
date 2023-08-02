@@ -13,6 +13,7 @@ using namespace NKikimr::NGRpcProxy::V1;
 using namespace NIcNodeCache;
 
 const static TString topicName = "rt3.dc1--topic-x";
+const static TString topicPath = "/Root/PQ/" + topicName;
 
 class TDescribeTestServer {
 public: 
@@ -174,17 +175,6 @@ private:
 };
 
 Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
-    void KillTopicTablets(NPersQueue::TTestServer& server, const TString& topicName) {
-        auto pqGroup = server.AnnoyingClient->Ls(TString("/Root/PQ/" + topicName))->Record.GetPathDescription()
-                                                                                                .GetPersQueueGroup();
-
-        THashSet<ui64> restartedTablets;
-        for (const auto& p : pqGroup.GetPartitions())
-            if (restartedTablets.insert(p.GetTabletId()).second)
-                server.AnnoyingClient->KillTablet(*server.CleverServer, p.GetTabletId());
-
-        server.CleverServer->GetRuntime()->DispatchEvents();
-    }
 
     Y_UNIT_TEST(GetLocalDescribe) {
         TDescribeTestServer server{};
@@ -254,11 +244,11 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         server.DescribePartition(150, true, false);
         server.DescribePartition(2, false, true);
         server.DescribePartition(0, false, false);
-        KillTopicTablets(server.Server, topicName);
+        server.Server.KillTopicPqTablets(topicPath);
         bool checkRes = server.DescribePartition(1, true, false, true);
         
         if (!checkRes) {
-            KillTopicTablets(server.Server, topicName);
+            server.Server.KillTopicPqTablets(topicPath);
             server.DescribePartition(1, true, false);
         }
         server.DescribePartition(3, true, true);
@@ -270,7 +260,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         auto server = TDescribeTestServer();
         Cerr << "Describe topic with stats and location\n";
         server.DescribeTopic(true, true);
-        KillTopicTablets(server.Server, topicName);
+        server.Server.KillTopicPqTablets(topicPath);
         Cerr << "Describe topic with stats\n";
         server.DescribeTopic(true, false);
         Cerr << "Describe topic with location\n";
@@ -285,7 +275,7 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         auto server = TDescribeTestServer();
         server.AddConsumer("my-consumer");
         server.DescribeConsumer("my-consumer", true, true);
-        KillTopicTablets(server.Server, topicName);
+        server.Server.KillTopicPqTablets(topicPath);
         server.DescribeConsumer("my-consumer",true, false);
         server.DescribeConsumer("my-consumer",false, true);
         server.DescribeConsumer("my-consumer",false, false);

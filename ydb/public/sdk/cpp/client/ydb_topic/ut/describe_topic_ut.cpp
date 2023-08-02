@@ -63,7 +63,7 @@ namespace NYdb::NTopic::NTests {
 
             if (killTablets)
             {
-                setup.KillTopicTablets(setup.GetTestTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetTestTopicPath());
 
                 auto result = client.DescribeTopic(setup.GetTestTopicPath(), settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -162,7 +162,7 @@ namespace NYdb::NTopic::NTests {
 
             if (killTablets)
             {
-                setup.KillTopicTablets(setup.GetTestTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetTestTopicPath());
 
                 auto result = client.DescribeConsumer(setup.GetTestTopicPath(), ::NPersQueue::SDKTestSetup::GetTestConsumer(), settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -235,7 +235,7 @@ namespace NYdb::NTopic::NTests {
 
             if (killTablets)
             {
-                setup.KillTopicTablets(setup.GetTestTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetTestTopicPath());
 
                 auto result = client.DescribePartition(setup.GetTestTopicPath(), testPartitionId, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());

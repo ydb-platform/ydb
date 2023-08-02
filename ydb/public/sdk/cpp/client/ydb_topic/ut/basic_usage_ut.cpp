@@ -300,8 +300,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             WaitPlannedTasks(e, n);
             size_t completed = e->GetExecutedCount();
 
-            setup->KillPqrb(setup->GetTestTopic(), setup->GetLocalCluster());
-            Cerr << ">>> TEST: PQRB killed" << Endl;
+            setup->GetServer().KillTopicPqrbTablet(setup->GetTestTopicPath());
             Sleep(TDuration::MilliSeconds(100));
 
             e->StartFuncs(tasks);

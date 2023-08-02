@@ -16,7 +16,7 @@ protected:
     THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> DataCenters;
     TString LocalDC = "dc1";
     TTestServer Server;
-    TLog Log = TLog("cerr");
+    TLog Log = CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG);
     size_t TopicPartitionsCount = 1;
 
 public:
@@ -26,7 +26,8 @@ public:
                  size_t topicPartitionsCount = 1)
         : TestCaseName(testCaseName)
         , Server(false, Nothing(), logServices, logPriority)
-        , TopicPartitionsCount(topicPartitionsCount) {
+        , TopicPartitionsCount(topicPartitionsCount)
+    {
         InitOptions();
         if (start) {
             Start();
@@ -137,6 +138,10 @@ public:
         return Log;
     }
 
+    TTestServer& GetServer() {
+        return Server;
+    }
+
     template <class TConsumerOrProducer>
     void Start(const THolder<TConsumerOrProducer>& obj) {
         auto startFuture = obj->Start();
@@ -222,23 +227,6 @@ public:
 
     void CreateTopic(const TString& topic, const TString& cluster, size_t partitionsCount = 1) {
         Server.AnnoyingClient->CreateTopic(BuildFullTopicName(topic, cluster), partitionsCount);
-    }
-
-    void KillPqrb(const TString& topic, const TString& cluster) {
-        auto describeResult = Server.AnnoyingClient->Ls(TStringBuilder() << "/Root/PQ/" << BuildFullTopicName(topic, cluster));
-        UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasPersQueueGroup(), describeResult->Record);
-        Server.AnnoyingClient->KillTablet(*Server.CleverServer, describeResult->Record.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID());
-    }
-
-    void KillTopicTablets(const TString& topicName) {
-        auto pqGroup = Server.AnnoyingClient->Ls(TString("/Root/PQ/" + topicName))->Record.GetPathDescription().GetPersQueueGroup();
-
-        THashSet<ui64> restartedTablets;
-        for (const auto& p : pqGroup.GetPartitions()) 
-            if (restartedTablets.insert(p.GetTabletId()).second) 
-                Server.AnnoyingClient->KillTablet(*Server.CleverServer, p.GetTabletId());
-
-        Server.CleverServer->GetRuntime()->DispatchEvents();
     }
 };
 }

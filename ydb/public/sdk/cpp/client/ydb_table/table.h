@@ -930,6 +930,7 @@ struct TSessionPoolSettings {
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSelf = TClientSettings;
+    using TSessionPoolSettings = TSessionPoolSettings;
 
     // Enable client query cache. Client query cache is used to map query text to
     // prepared query id for ExecuteDataQuery calls on client side.
@@ -998,6 +999,8 @@ public:
     using TOperationSyncFunc = std::function<TStatus(TSession session)>;
     using TOperationWithoutSessionFunc = std::function<TAsyncStatus(TTableClient& tableClient)>;
     using TOperationWithoutSessionSyncFunc = std::function<TStatus(TTableClient& tableClient)>;
+    using TSettings = TClientSettings;
+    using TSession = TSession;
 
 public:
     TTableClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());

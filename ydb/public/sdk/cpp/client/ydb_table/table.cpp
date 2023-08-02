@@ -31,6 +31,7 @@ namespace NYdb {
 namespace NTable {
 
 using namespace NThreading;
+using namespace NSessionPool;
 
 ////////////////////////////////////////////////////////////////////////////////
 

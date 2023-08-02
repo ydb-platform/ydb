@@ -12,6 +12,7 @@
 namespace NYdb {
 
 ////////////////////////////////////////////////////////////////////////////////
+ui64 GetNodeIdFromSession(const TStringType& sessionId);
 
 class TKqpSessionCommon : public TEndpointObj {
 public:

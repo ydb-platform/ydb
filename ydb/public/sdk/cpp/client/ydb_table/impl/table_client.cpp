@@ -8,28 +8,6 @@ using namespace NThreading;
 
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
 
-bool IsSessionCloseRequested(const TStatus& status) {
-    const auto& meta = status.GetResponseMetadata();
-    auto hints = meta.equal_range(NYdb::YDB_SERVER_HINTS);
-    for(auto it = hints.first; it != hints.second; ++it) {
-        if (it->second == NYdb::YDB_SESSION_CLOSE) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-TDuration RandomizeThreshold(TDuration duration) {
-    TDuration::TValue value = duration.GetValue();
-    if (KEEP_ALIVE_RANDOM_FRACTION) {
-        const i64 randomLimit = value / KEEP_ALIVE_RANDOM_FRACTION;
-        if (randomLimit < 2)
-            return duration;
-        value += static_cast<i64>(RandomNumber<ui64>(randomLimit));
-    }
-    return TDuration::FromValue(value);
-}
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
     return Min(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
@@ -37,14 +15,6 @@ TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
 
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
     return Max(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
-}
-
-TStatus GetStatus(const TOperation& operation) {
-    return operation.Status();
-}
-
-TStatus GetStatus(const TStatus& status) {
-    return status;
 }
 
 ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber) {
@@ -143,7 +113,6 @@ void TTableClient::TImpl::AsyncBackoff(const TBackoffSettings& settings, ui32 re
 }
 
 void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
-
     // Session pool guarantees than client is alive during call callbacks
     auto deletePredicate = [this](TKqpSessionCommon* s, size_t sessionsCount) {
 
@@ -205,7 +174,7 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
 
         auto timeToNextTouch = calcTimeToNextTouch(spentTime);
         session.SessionImpl_->ScheduleTimeToTouchFast(
-            RandomizeThreshold(timeToNextTouch),
+            NSessionPool::RandomizeThreshold(timeToNextTouch),
             spentTime >= maxTimeToTouch
         );
     };
@@ -216,7 +185,7 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
             weak,
             std::move(keepAliveCmd),
             std::move(deletePredicate)
-        ), PERIODIC_ACTION_INTERVAL);
+        ), NSessionPool::PERIODIC_ACTION_INTERVAL);
 }
 
 ui64 TTableClient::TImpl::ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client) {

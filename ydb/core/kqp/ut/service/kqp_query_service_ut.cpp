@@ -4,6 +4,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
+#include <ydb/core/kqp/counters/kqp_counters.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -11,6 +13,38 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpQueryService) {
+    Y_UNIT_TEST(SessionFromPoolError) {
+        auto kikimr = DefaultKikimrRunner();
+        auto settings = NYdb::NQuery::TClientSettings().Database("WrongDB");
+        auto db = kikimr.GetQueryClient(settings);
+
+        auto result = db.GetSession().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(SessionFromPoolSuccess) {
+        auto kikimr = DefaultKikimrRunner();
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetQueryClient();
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId());
+                id = result.GetSession().GetId();
+            }
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetSession().GetId(), id);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
     Y_UNIT_TEST(StreamExecuteQueryPure) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

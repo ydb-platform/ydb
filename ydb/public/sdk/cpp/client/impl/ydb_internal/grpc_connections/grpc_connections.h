@@ -399,6 +399,7 @@ public:
         TStreamRpc<TService, TRequest, TResponse, NGrpc::TStreamRequestReadProcessor> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
+        const TEndpointKey& preferredEndpoint = TEndpointKey(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         using NGrpc::TGrpcStatus;
@@ -489,7 +490,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TEndpointKey(), endpointPolicy);
+            }, dbState, preferredEndpoint, endpointPolicy);
     }
 
     template<class TService, class TRequest, class TResponse, class TCallback>

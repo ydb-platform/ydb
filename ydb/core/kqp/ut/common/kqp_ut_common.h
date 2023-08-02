@@ -143,8 +143,10 @@ public:
             .UseQueryCache(false));
     }
 
-    NYdb::NQuery::TQueryClient GetQueryClient() const {
-        return NYdb::NQuery::TQueryClient(*Driver);
+    NYdb::NQuery::TQueryClient GetQueryClient(
+        NYdb::NQuery::TClientSettings settings = NYdb::NQuery::TClientSettings()) const
+    {
+        return NYdb::NQuery::TQueryClient(*Driver, settings);
     }
 
     bool IsUsingSnapshotReads() const {

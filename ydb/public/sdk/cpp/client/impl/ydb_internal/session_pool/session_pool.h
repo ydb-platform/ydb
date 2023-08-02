@@ -7,6 +7,7 @@
 
 namespace NYdb {
 
+class TOperation;
 namespace NSessionPool {
 
 class IGetSessionCtx : private TNonCopyable {
@@ -18,9 +19,66 @@ public:
     virtual void ReplyNewSession() = 0;
 };
 
+//How often run session pool keep alive check
+constexpr TDuration PERIODIC_ACTION_INTERVAL = TDuration::Seconds(5);
 constexpr TDuration MAX_WAIT_SESSION_TIMEOUT = TDuration::Seconds(5); //Max time to wait session
 constexpr ui64 PERIODIC_ACTION_BATCH_SIZE = 10; //Max number of tasks to perform during one interval
 constexpr TDuration CREATE_SESSION_INTERNAL_TIMEOUT = TDuration::Seconds(2); //Timeout for createSession call inside session pool
+
+TStatus GetStatus(const TOperation& operation);
+TStatus GetStatus(const TStatus& status);
+
+TDuration RandomizeThreshold(TDuration duration);
+bool IsSessionCloseRequested(const TStatus& status);
+
+template<typename TResponse>
+NThreading::TFuture<TResponse> InjectSessionStatusInterception(
+        std::shared_ptr<::NYdb::TKqpSessionCommon> impl, NThreading::TFuture<TResponse> asyncResponse,
+        bool updateTimeout,
+        TDuration timeout,
+        std::function<void(const TResponse&, TKqpSessionCommon&)> cb = {})
+{
+    auto promise = NThreading::NewPromise<TResponse>();
+    asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
+        Y_VERIFY(future.HasValue());
+
+        // TResponse can hold refcounted user provided data (TSession for example)
+        // and we do not want to have copy of it (for example it can cause delay dtor call)
+        // so using move semantic here is mandatory.
+        // Also we must reset captured shared pointer to session impl
+        TResponse value = std::move(future.ExtractValue());
+
+        const TStatus& status = GetStatus(value);
+        // Exclude CLIENT_RESOURCE_EXHAUSTED from transport errors which can cause to session disconnect
+        // since we have guarantee this request wasn't been started to execute.
+
+        if (status.IsTransportError() && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
+            impl->MarkBroken();
+        } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
+            impl->MarkBroken();
+        } else if (status.GetStatus() == EStatus::BAD_SESSION) {
+            impl->MarkBroken();
+        } else if (IsSessionCloseRequested(status)) {
+            impl->MarkAsClosing();
+        } else {
+            // NOTE: About GetState and lock
+            // Simultanious call multiple requests on the same session make no sence, due to server limitation.
+            // But user can perform this call, right now we do not protect session from this, it may cause
+            // raise on session state if respoise is not success.
+            // It should not be a problem - in case of this race we close session
+            // or put it in to settler.
+            if (updateTimeout && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
+                impl->ScheduleTimeToTouch(RandomizeThreshold(timeout), impl->GetState() == TKqpSessionCommon::EState::S_ACTIVE);
+            }
+        }
+        if (cb) {
+            cb(value, *impl);
+        }
+        impl.reset();
+        promise.SetValue(std::move(value));
+    });
+    return promise.GetFuture();
+}
 
 class TSessionPool {
 private:

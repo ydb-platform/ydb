@@ -4,17 +4,54 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+
+#include <util/random/random.h>
+
 namespace NYdb {
 namespace NSessionPool {
 
 using namespace NThreading;
 
+constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
 static const TStatus CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT = TStatus(
     TPlainStatus(
         EStatus::CLIENT_RESOURCE_EXHAUSTED,
             "Active sessions limit exceeded"
         )
     );
+
+TStatus GetStatus(const TOperation& operation) {
+    return operation.Status();
+}
+
+TStatus GetStatus(const TStatus& status) {
+    return status;
+}
+
+TDuration RandomizeThreshold(TDuration duration) {
+    TDuration::TValue value = duration.GetValue();
+    if (KEEP_ALIVE_RANDOM_FRACTION) {
+        const i64 randomLimit = value / KEEP_ALIVE_RANDOM_FRACTION;
+        if (randomLimit < 2)
+            return duration;
+        value += static_cast<i64>(RandomNumber<ui64>(randomLimit));
+    }
+    return TDuration::FromValue(value);
+}
+
+bool IsSessionCloseRequested(const TStatus& status) {
+    const auto& meta = status.GetResponseMetadata();
+    auto hints = meta.equal_range(NYdb::YDB_SERVER_HINTS);
+    for(auto it = hints.first; it != hints.second; ++it) {
+        if (it->second == NYdb::YDB_SESSION_CLOSE) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 TSessionPool::TWaitersQueue::TWaitersQueue(ui32 maxQueueSize, TDuration maxWaitSessionTimeout)
     : MaxQueueSize_(maxQueueSize)

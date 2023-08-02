@@ -4,7 +4,7 @@
 
 namespace NYdb {
 
-static ui64 GetNodeIdFromSession(const TStringType& sessionId) {
+ui64 GetNodeIdFromSession(const TStringType& sessionId) {
     if (sessionId.empty()) {
         return 0;
     }

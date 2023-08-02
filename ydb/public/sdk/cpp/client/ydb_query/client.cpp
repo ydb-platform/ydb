@@ -1,7 +1,11 @@
 #include "client.h"
+#include "impl/client_session.h"
 
 #define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_client/session_client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/lib/operation_id/operation_id.h>
@@ -10,11 +14,17 @@
 
 namespace NYdb::NQuery {
 
-class TQueryClient::TImpl: public TClientImplCommon<TQueryClient::TImpl> {
+TCreateSessionSettings::TCreateSessionSettings() {
+    ClientTimeout_ = TDuration::Seconds(5);
+};
+
+class TQueryClient::TImpl: public TClientImplCommon<TQueryClient::TImpl>, public ISessionClient {
+    friend class ::NYdb::NQuery::TSession;
 public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
         , Settings_(settings)
+        , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
     {
     }
 
@@ -23,15 +33,18 @@ public:
     }
 
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
-        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings)
+        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TString& sessionId = {})
     {
-        return TExecQueryImpl::StreamExecuteQuery(Connections_, DbDriverState_, query, txControl, params, settings);
+        return TExecQueryImpl::StreamExecuteQuery(
+            Connections_, DbDriverState_, query, txControl, params, settings, sessionId);
     }
 
     TAsyncExecuteQueryResult ExecuteQuery(const TString& query, const TTxControl& txControl,
-        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings)
+        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings,
+        const TString& sessionId = {})
     {
-        return TExecQueryImpl::ExecuteQuery(Connections_, DbDriverState_, query, txControl, params, settings);
+        return TExecQueryImpl::ExecuteQuery(
+            Connections_, DbDriverState_, query, txControl, params, settings, sessionId);
     }
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script, const TExecuteScriptSettings& settings) {
@@ -127,13 +140,222 @@ public:
         return promise.GetFuture();
     }
 
+    void DeleteSession(TKqpSessionCommon* sessionImpl) override {
+        //TODO: Remove this copy-paste
+
+        // Closing not owned by session pool session should not fire getting new session
+        if (sessionImpl->IsOwnedBySessionPool()) {
+            if (SessionPool_.CheckAndFeedWaiterNewSession(sessionImpl->NeedUpdateActiveCounter())) {
+                // We requested new session for waiter which already incremented
+                // active session counter and old session will be deleted
+                // - skip update active counter in this case
+                sessionImpl->SetNeedUpdateActiveCounter(false);
+            }
+        }
+
+        if (sessionImpl->NeedUpdateActiveCounter()) {
+            SessionPool_.DecrementActiveCounter();
+        }
+
+        delete sessionImpl;
+    }
+
+    bool ReturnSession(TKqpSessionCommon* sessionImpl) override {
+        Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
+            sessionImpl->GetState() == TSession::TImpl::S_IDLE);
+
+        //TODO: Remove this copy-paste from table client
+        bool needUpdateCounter = sessionImpl->NeedUpdateActiveCounter();
+        // Also removes NeedUpdateActiveCounter flag
+        sessionImpl->MarkIdle();
+        sessionImpl->SetTimeInterval(TDuration::Zero());
+        if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
+            sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
+            return false;
+        }
+        return true;
+    }
+
+    void DoAttachSession(Ydb::Query::CreateSessionResponse* resp,
+        NThreading::TPromise<TCreateSessionResult> promise, const TString& endpoint,
+        std::shared_ptr<TQueryClient::TImpl> client)
+    {
+        using TStreamProcessorPtr = TSession::TImpl::TStreamProcessorPtr;
+        Ydb::Query::AttachSessionRequest request;
+        const auto sessionId = resp->session_id();
+        request.set_session_id(sessionId);
+
+        const auto endpointKey = TEndpointKey(endpoint, GetNodeIdFromSession(sessionId));
+
+        auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client);
+
+        // Do not pass client timeout here. Session must be alive
+        static const TRpcRequestSettings rpcSettings;
+
+        Connections_->StartReadStream<
+            Ydb::Query::V1::QueryService,
+            Ydb::Query::AttachSessionRequest,
+            Ydb::Query::SessionState>
+        (
+            std::move(request),
+            [args] (TPlainStatus status, TStreamProcessorPtr processor) mutable {
+            if (processor) {
+                TSession::TImpl::MakeImplAsync(processor, args);
+            } else {
+                TStatus st(std::move(status));
+                args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+            }
+        },
+        &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession,
+        DbDriverState_,
+        rpcSettings,
+        endpointKey);
+    }
+
+    TAsyncCreateSessionResult CreateAttachedSession(TDuration timeout) {
+        using namespace Ydb::Query;
+
+        Ydb::Query::CreateSessionRequest request;
+
+        auto promise = NThreading::NewPromise<TCreateSessionResult>();
+
+        auto self = shared_from_this();
+
+        auto extractor = [promise, self] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
+            if (resp) {
+                if (resp->status() != Ydb::StatusIds::SUCCESS) {
+                    NYql::TIssues opIssues;
+                    NYql::IssuesFromMessage(resp->issues(), opIssues);
+                    TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
+                    promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+                } else {
+                    self->DoAttachSession(resp, promise, status.Endpoint, self);
+                }
+            } else {
+                TStatus st(std::move(status));
+                promise.SetValue(TCreateSessionResult(std::move(st), TSession()));
+            }
+        };
+
+        TRpcRequestSettings rpcSettings;
+        rpcSettings.ClientTimeout = timeout;
+
+        Connections_->Run<V1::QueryService, CreateSessionRequest, CreateSessionResponse>(
+            std::move(request),
+            extractor,
+            &V1::QueryService::Stub::AsyncCreateSession,
+            DbDriverState_,
+            rpcSettings,
+            TEndpointKey());
+
+        return promise.GetFuture();
+    }
+
+    TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings) {
+        using namespace NSessionPool;
+
+        class TQueryClientGetSessionCtx : public IGetSessionCtx {
+        public:
+            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, TDuration timeout)
+                : Promise(NThreading::NewPromise<TCreateSessionResult>())
+                , Client(client)
+                , ClientTimeout(timeout)
+            {}
+
+            TAsyncCreateSessionResult GetFuture() {
+                return Promise.GetFuture();
+            }
+
+            void ReplyError(TStatus status) override {
+                TSession session;
+                ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
+            }
+
+            void ReplySessionToUser(TKqpSessionCommon* session) override {
+                TCreateSessionResult val(
+                    TStatus(TPlainStatus()),
+                    TSession(
+                        Client,
+                        static_cast<TSession::TImpl*>(session)
+                    )
+                );
+
+                ScheduleReply(std::move(val));
+            }
+
+            void ReplyNewSession() override {
+                Client->CreateAttachedSession(ClientTimeout).Subscribe(
+                    [promise{std::move(Promise)}](TAsyncCreateSessionResult future) mutable
+                {
+                    promise.SetValue(future.ExtractValue());
+                });
+            }
+
+        private:
+            void ScheduleReply(TCreateSessionResult val) {
+                Promise.SetValue(std::move(val));
+            }
+            NThreading::TPromise<TCreateSessionResult> Promise;
+            std::shared_ptr<TQueryClient::TImpl> Client;
+            TDuration ClientTimeout;
+        };
+
+        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings.ClientTimeout_);
+        auto future = ctx->GetFuture();
+        SessionPool_.GetSession(std::move(ctx));
+        return future;
+    }
+
+    i64 GetActiveSessionCount() const {
+        return SessionPool_.GetActiveSessions();
+    }
+
+    i64 GetActiveSessionsLimit() const {
+        return SessionPool_.GetActiveSessionsLimit();
+    }
+
+    i64 GetCurrentPoolSize() const {
+        return SessionPool_.GetCurrentPoolSize();
+    }
+
+    void StartPeriodicSessionPoolTask() {
+        // Session pool guarantees than client is alive during call callbacks
+        auto deletePredicate = [this](TKqpSessionCommon* s, size_t sessionsCount) {
+
+            const auto& sessionPoolSettings = Settings_.SessionPoolSettings_;
+            const auto spentTime = s->GetTimeToTouchFast() - s->GetTimeInPastFast();
+
+            if (spentTime >= sessionPoolSettings.CloseIdleThreshold_) {
+                if (sessionsCount > sessionPoolSettings.MinPoolSize_) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        // No need to keep-alive
+        auto keepAliveCmd = [](TKqpSessionCommon*) {
+        };
+
+        std::weak_ptr<TQueryClient::TImpl> weak = shared_from_this();
+        Connections_->AddPeriodicTask(
+            SessionPool_.CreatePeriodicTask(
+                weak,
+                std::move(keepAliveCmd),
+                std::move(deletePredicate)
+            ), NSessionPool::PERIODIC_ACTION_INTERVAL);
+    }
+
 private:
     TClientSettings Settings_;
+    NSessionPool::TSessionPool SessionPool_;
 };
 
 TQueryClient::TQueryClient(const TDriver& driver, const TClientSettings& settings)
     : Impl_(new TQueryClient::TImpl(CreateInternalInterface(driver), settings))
 {
+    Impl_->StartPeriodicSessionPoolTask();
 }
 
 TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const TString& query, const TTxControl& txControl,
@@ -171,6 +393,89 @@ TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::N
     const TFetchScriptResultsSettings& settings)
 {
     return Impl_->FetchScriptResults(operationId, resultSetIndex, settings);
+}
+
+TAsyncCreateSessionResult TQueryClient::GetSession(const TCreateSessionSettings& settings)
+{
+    return Impl_->GetSession(settings);
+}
+
+i64 TQueryClient::GetActiveSessionCount() const {
+    return Impl_->GetActiveSessionCount();
+}
+
+i64 TQueryClient::GetActiveSessionsLimit() const {
+    return Impl_->GetActiveSessionsLimit();
+}
+
+i64 TQueryClient::GetCurrentPoolSize() const {
+    return Impl_->GetCurrentPoolSize();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TCreateSessionResult::TCreateSessionResult(TStatus&& status, TSession&& session)
+    : TStatus(std::move(status))
+    , Session_(std::move(session))
+{}
+
+TSession TCreateSessionResult::GetSession() const {
+    CheckStatusOk("TCreateSessionResult::GetSession");
+    return Session_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSession::TSession()
+{}
+
+TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* session)
+    : Client_(client)
+    , SessionImpl_(session, TKqpSessionCommon::GetSmartDeleter(client))
+{}
+
+const TString& TSession::GetId() const {
+    return SessionImpl_->GetId();
+}
+
+TAsyncExecuteQueryResult TSession::ExecuteQuery(const TString& query, const TTxControl& txControl,
+    const TExecuteQuerySettings& settings)
+{
+    return NSessionPool::InjectSessionStatusInterception(
+        SessionImpl_,
+        Client_->ExecuteQuery(query, txControl, {}, settings, SessionImpl_->GetId()),
+        true,
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
+}
+
+TAsyncExecuteQueryResult TSession::ExecuteQuery(const TString& query, const TTxControl& txControl,
+    const TParams& params, const TExecuteQuerySettings& settings)
+{
+    return NSessionPool::InjectSessionStatusInterception(
+        SessionImpl_,
+        Client_->ExecuteQuery(query, txControl, params, settings, SessionImpl_->GetId()),
+        true,
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
+}
+
+TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const TString& query, const TTxControl& txControl,
+    const TExecuteQuerySettings& settings)
+{
+    return NSessionPool::InjectSessionStatusInterception(
+        SessionImpl_,
+        Client_->StreamExecuteQuery(query, txControl, {}, settings, SessionImpl_->GetId()),
+        true,
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
+}
+
+TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const TString& query, const TTxControl& txControl,
+    const TParams& params, const TExecuteQuerySettings& settings)
+{
+    return NSessionPool::InjectSessionStatusInterception(
+        SessionImpl_,
+        Client_->StreamExecuteQuery(query, txControl, params, settings, SessionImpl_->GetId()),
+        true,
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
 } // namespace NYdb::NQuery

@@ -13,11 +13,11 @@ class TExecQueryImpl {
 public:
     static TAsyncExecuteQueryIterator StreamExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
         const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
-        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings);
+        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TString& sessionId);
 
     static TAsyncExecuteQueryResult ExecuteQuery(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
         const TDbDriverStatePtr& driverState, const TString& query, const TTxControl& txControl,
-        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings);
+        const TMaybe<TParams>& params, const TExecuteQuerySettings& settings, const TString& sessionId);
 };
 
 } // namespace NYdb::NQuery::NImpl

@@ -13,8 +13,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
-#include <util/random/random.h>
-
 #include "client_session.h"
 #include "data_query.h"
 #include "request_migrator.h"
@@ -24,73 +22,16 @@
 namespace NYdb {
 namespace NTable {
 
-//How often run session pool keep alive check
-constexpr TDuration PERIODIC_ACTION_INTERVAL = TDuration::Seconds(5);
 //How ofter run host scan to perform session balancing
 constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
-constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
 ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
-bool IsSessionCloseRequested(const TStatus& status);
-TDuration RandomizeThreshold(TDuration duration);
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
-TStatus GetStatus(const TOperation& operation);
-TStatus GetStatus(const TStatus& status);
-
-template<typename TResponse>
-NThreading::TFuture<TResponse> InjectSessionStatusInterception(
-        std::shared_ptr<TSession::TImpl>& impl, NThreading::TFuture<TResponse> asyncResponse,
-        bool updateTimeout,
-        TDuration timeout,
-        std::function<void(const TResponse&, TSession::TImpl&)> cb = {})
-{
-    auto promise = NThreading::NewPromise<TResponse>();
-    asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
-        Y_VERIFY(future.HasValue());
-
-        // TResponse can hold refcounted user provided data (TSession for example)
-        // and we do not want to have copy of it (for example it can cause delay dtor call)
-        // so using move semantic here is mandatory.
-        // Also we must reset captured shared pointer to session impl
-        TResponse value = std::move(future.ExtractValue());
-
-        const TStatus& status = GetStatus(value);
-        // Exclude CLIENT_RESOURCE_EXHAUSTED from transport errors which can cause to session disconnect
-        // since we have guarantee this request wasn't been started to execute.
-
-        if (status.IsTransportError() && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::BAD_SESSION) {
-            impl->MarkBroken();
-        } else if (IsSessionCloseRequested(status)) {
-            impl->MarkAsClosing();
-        } else {
-            // NOTE: About GetState and lock
-            // Simultanious call multiple requests on the same session make no sence, due to server limitation.
-            // But user can perform this call, right now we do not protect session from this, it may cause
-            // raise on session state if respoise is not success.
-            // It should not be a problem - in case of this race we close session
-            // or put it in to settler.
-            if (updateTimeout && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
-                impl->ScheduleTimeToTouch(RandomizeThreshold(timeout), impl->GetState() == TSession::TImpl::EState::S_ACTIVE);
-            }
-        }
-        if (cb) {
-            cb(value, *impl);
-        }
-        impl.reset();
-        promise.SetValue(std::move(value));
-    });
-    return promise.GetFuture();
-}
-
 
 class TTableClient::TImpl: public TClientImplCommon<TTableClient::TImpl>, public ISessionClient {
 public:
@@ -105,7 +46,7 @@ public:
     NThreading::TFuture<void> Drain();
     NThreading::TFuture<void> Stop();
     void ScheduleTask(const std::function<void()>& fn, TDuration timeout);
-    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) override;
+    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout);
     void AsyncBackoff(const TBackoffSettings& settings, ui32 retryNumber, const std::function<void()>& fn);
     void StartPeriodicSessionPoolTask();
     static ui64 ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client);
@@ -143,7 +84,7 @@ public:
 
         CacheMissCounter.Inc();
 
-        return InjectSessionStatusInterception(session.SessionImpl_,
+        return ::NYdb::NSessionPool::InjectSessionStatusInterception(session.SessionImpl_,
             ExecuteDataQueryInternal(session, query, txControl, params, settings, false),
             true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
     }
@@ -153,13 +94,13 @@ public:
         TParamsType params, const TExecDataQuerySettings& settings,
         bool fromCache) {
         TString queryKey = dataQuery.Impl_->GetTextHash();
-        auto cb = [queryKey](const TDataQueryResult& result, TSession::TImpl& session) {
+        auto cb = [queryKey](const TDataQueryResult& result, TKqpSessionCommon& session) {
             if (result.GetStatus() == EStatus::NOT_FOUND) {
-                session.InvalidateQueryInCache(queryKey);
+                static_cast<TSession::TImpl&>(session).InvalidateQueryInCache(queryKey);
             }
         };
 
-        return InjectSessionStatusInterception<TDataQueryResult>(
+        return ::NYdb::NSessionPool::InjectSessionStatusInterception<TDataQueryResult>(
             session.SessionImpl_,
             session.Client_->ExecuteDataQueryInternal(session, dataQuery, txControl, params, settings, fromCache),
             true,

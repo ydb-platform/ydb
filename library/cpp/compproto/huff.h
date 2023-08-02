@@ -353,7 +353,7 @@ namespace NCompProto {
                 if (cum > (ui32)(-1)) {
                     return;
                 }
-            };
+            }
         }
 
         TCache<1024, TCoderEntry> Cache;

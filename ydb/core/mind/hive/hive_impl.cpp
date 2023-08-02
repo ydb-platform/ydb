@@ -1383,6 +1383,7 @@ TNodeInfo& THive::GetNode(TNodeId nodeId) {
     auto it = Nodes.find(nodeId);
     if (it == Nodes.end()) {
         it = Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *this)).first;
+        TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Add(1);
     }
     return it->second;
 }
@@ -1502,6 +1503,7 @@ void THive::DeleteTablet(TTabletId tabletId) {
 }
 
 void THive::DeleteNode(TNodeId nodeId) {
+    TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
     Nodes.erase(nodeId);
 }
 
@@ -1565,6 +1567,14 @@ void THive::UpdateCounterEventQueueSize(i64 eventQueueSizeDiff) {
     if (TabletCounters != nullptr) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_EVENTQUEUE_SIZE];
         auto newValue = counter.Get() + eventQueueSizeDiff;
+        counter.Set(newValue);
+    }
+}
+
+void THive::UpdateCounterNodesConnected(i64 nodesConnectedDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED];
+        auto newValue = counter.Get() + nodesConnectedDiff;
         counter.Set(newValue);
     }
 }

@@ -712,6 +712,7 @@ public:
         Self->SetCounterTabletsTotal(tabletsTotal);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
+        Self->TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Set(Self->Nodes.size());
         Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_READY;
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
 

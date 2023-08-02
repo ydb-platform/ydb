@@ -611,6 +611,7 @@ public:
     void UpdateCounterTabletsAlive(i64 tabletsAliveDiff);
     void UpdateCounterBootQueueSize(ui64 bootQueueSize);
     void UpdateCounterEventQueueSize(i64 eventQueueSizeDiff);
+    void UpdateCounterNodesConnected(i64 nodesConnectedDiff);
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();

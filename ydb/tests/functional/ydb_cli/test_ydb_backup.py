@@ -391,13 +391,13 @@ class TestRecursiveConsistent(BaseTestBackupInFiles):
 
 class TestSingleBackupRestore(BaseTestBackupInFiles):
     def test_single_table_with_data_backup_restore(self):
-        self.test_single_table_with_data_backup_restore_impl(False, False)
-        self.test_single_table_with_data_backup_restore_impl(False, True)
-        self.test_single_table_with_data_backup_restore_impl(True, False)
-        self.test_single_table_with_data_backup_restore_impl(True, True)
+        self._test_single_table_with_data_backup_restore_impl(False, False)
+        self._test_single_table_with_data_backup_restore_impl(False, True)
+        self._test_single_table_with_data_backup_restore_impl(True, False)
+        self._test_single_table_with_data_backup_restore_impl(True, True)
 
     @classmethod
-    def test_single_table_with_data_backup_restore_impl(self, use_bulk_upsert, not_null):
+    def _test_single_table_with_data_backup_restore_impl(self, use_bulk_upsert, not_null):
         self.driver.scheme_client.make_directory(
             '/Root/folder'
         )

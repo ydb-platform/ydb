@@ -2,10 +2,12 @@ PY3_PROGRAM(local_ydb)
 
 IF (OPENSOURCE)
 
-    RESTRICT_LICENSES(
+    LICENSE_RESTRICTION(
         DENY REQUIRE_DISCLOSURE FORBIDDEN PROTESTWARE
-        # DTCC-553
-        EXCEPT contrib/libs/linux-headers
+    )
+
+    LICENSE_RESTRICTION_EXCEPTIONS(
+        contrib/libs/linux-headers  # DTCC-553
     )
 
 ENDIF()

@@ -11,11 +11,11 @@ IF (OPENSOURCE)
         EXCLUDE_TAGS(PY2)
     ENDIF()
 
-    RESTRICT_LICENSES(
+    LICENSE_RESTRICTION(
         DENY REQUIRE_DISCLOSURE FORBIDDEN PROTESTWARE
-        # https://st.yandex-team.ru/DTCC-553
-        EXCEPT contrib/libs/linux-headers
-        # CHYT
-        EXCEPT contrib/libs/fmt
+    )
+    LICENSE_RESTRICTION_EXCEPTIONS(
+        contrib/libs/linux-headers      # DTCC-553
+        contrib/libs/fmt                # DTCC-1317
     )
 ENDIF()

@@ -162,8 +162,8 @@ x: b
                 auto docNodeRef = doc->Root().Map().at("test");
                 auto node1 = item1NodeRef.Copy(*doc);
                 auto node2 = item2NodeRef.Copy(*doc);
-                docNodeRef.Sequence().Append(node1.Ref());
-                docNodeRef.Sequence().Append(node2.Ref());
+                docNodeRef.Sequence().Append(node1);
+                docNodeRef.Sequence().Append(node2);
                 item1.reset();
                 item2.reset();
             }

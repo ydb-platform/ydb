@@ -10,6 +10,9 @@
 #include <memory>
 #include <optional>
 
+#define ENSURE_NODE_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Node")
+#define ENSURE_DOCUMENT_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Document")
+
 struct fy_parser;
 struct fy_node;
 struct fy_document;
@@ -17,6 +20,18 @@ struct fy_diag;
 struct fy_document_iterator;
 struct fy_node_pair;
 extern "C" struct fy_node *fy_node_buildf(struct fy_document *fyd, const char *fmt, ...);
+
+namespace NFyaml {
+    namespace NDetail {
+        template <class T>
+        class TNodeOps;
+    }
+    class TNodeRef;
+    class TNode;
+}
+
+bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNodeRef>& node2);
+bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNode>& node2);
 
 namespace NFyaml {
 
@@ -81,6 +96,20 @@ enum class ENodeStyle {
     Alias,
 };
 
+class TNodeRef;
+class TDocumentIterator;
+class TDocument;
+class TNode;
+class TMappingIterator;
+class TReverseMappingIterator;
+class TMapping;
+class TSequenceIterator;
+class TReverseSequenceIterator;
+class TSequence;
+class TJsonEmitter;
+class TParser;
+struct TMark;
+
 namespace NDetail {
 
 class IBasicUserData {
@@ -113,60 +142,76 @@ void RethrowOnError(bool isError, fy_diag* diag);
 
 void FreeChar(char* mem);
 
-} // namespace NDetail
+bool IsComplexType(ENodeType type);
 
-class TNodeRef;
-class TDocumentIterator;
-class TDocument;
-class TNode;
-class TMappingIterator;
-class TReverseMappingIterator;
-class TMapping;
-class TSequenceIterator;
-class TReverseSequenceIterator;
-class TSequence;
-class TJsonEmitter;
-class TParser;
-struct TMark;
+class TNodeOpsBase {
+protected:
+    TString Path(fy_node* node) const;
 
-class TDocumentIterator {
-    friend class TDocument;
-public:
-    TDocumentIterator(fy_document_iterator* iterator = nullptr);
+    ENodeType Type(fy_node* node) const;
+
+    fy_node* Copy(fy_node* node) const;
+
+    fy_node* Copy(fy_node* node, fy_document* to) const;
+
+    bool IsAlias(fy_node* node) const;
+
+    fy_node* ResolveAlias(fy_node* node) const;
+
+    fy_node* CreateReference(fy_node* node) const;
+
+    fy_node* Sequence(fy_node* node) const;
+
+    fy_node* Map(fy_node* node) const;
+
+    TString Scalar(fy_node* node) const;
+
+    TMark BeginMark(fy_node* node) const;
+
+    TMark EndMark(fy_node* node) const;
+
+    void Insert(fy_node* thisNode, fy_node* node);
+
+    std::optional<TString> Tag(fy_node* node) const;
+
+    void SetTag(fy_node* node, const TString& tag);
+
+    bool RemoveTag(fy_node* node);
+
+    bool HasAnchor(fy_node* node) const;
+
+    void SetAnchor(fy_node* node, const TString& anchor);
+
+    bool DeepEqual(fy_node* thisNode, fy_node* other);
+
+    std::unique_ptr<char, void(*)(char*)> EmitToCharArray(fy_node* node) const;
+
+    void SetStyle(fy_node* node, ENodeStyle style);
+
+    ENodeStyle Style(fy_node* node) const;
 
 protected:
-    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> Iterator_;
+    void SetUserData(fy_node* node, NDetail::IBasicUserData* data);
+
+    NDetail::IBasicUserData* UserData(fy_node* node) const;
+
+    void ClearUserData(fy_node* node);
 };
 
-class TNodeRef {
-    friend class TDocument;
-    friend class TDocumentNodeIterator;
-    friend class TNode;
-    friend class TMapping;
-    friend class TMappingIterator;
-    friend class TReverseMappingIterator;
-    friend class TNodePairRef;
-    friend class TSequence;
-    friend class TSequenceIterator;
-    friend class TReverseSequenceIterator;
-    friend class TJsonEmitter;
-
-    TNodeRef(fy_node* node)
-        : Node_(node)
-    {}
+template <class T>
+class TNodeOps : public TNodeOpsBase {
+friend class ::NFyaml::TNodeRef;
 
 public:
-    TNodeRef() = default;
+    template <class OtherT>
+    bool operator==(const TNodeOps<OtherT>& other) const { return Node() == other.Node(); }
 
-    TNodeRef(const TNodeRef& other) { Node_ = other.Node_; }
+    bool operator==(const fy_node* node) const { return Node() == node; }
 
-    TNodeRef& operator=(const TNodeRef& other) { Node_ = other.Node_; return *this; }
+    friend bool ::operator==(const fy_node* node1, const TNodeOps<NFyaml::TNodeRef>& node2);
+    friend bool ::operator==(const fy_node* node1, const TNodeOps<NFyaml::TNode>& node2);
 
-    TNodeRef& operator=(fy_node* node) { Node_ = node; return *this; }
-
-    bool operator==(const TNodeRef& other) const { return Node_ == other.Node_; }
-
-    explicit operator bool() const { return Node_ != nullptr; }
+    explicit operator bool() const { return Node() != nullptr; }
 
     TString Path() const;
 
@@ -194,7 +239,7 @@ public:
 
     void Insert(const TNodeRef& node);
 
-    bool Empty() const { return Node_ == nullptr; }
+    bool Empty() const { return Node() == nullptr; }
 
     std::optional<TString> Tag() const;
 
@@ -215,41 +260,93 @@ public:
     ENodeStyle Style() const;
 
 protected:
-    fy_node* Node_ = nullptr;
+    const T& AsDerived() const;
+
+    fy_node* Node() const;
+
+    fy_node* Node();
 
     void SetUserData(NDetail::IBasicUserData* data);
+
     NDetail::IBasicUserData* UserData() const;
+
     void ClearUserData();
 };
 
-class TNode {
+} // namespace NDetail
+
+class TDocumentIterator {
+    friend class TDocument;
+public:
+    explicit TDocumentIterator(fy_document_iterator* iterator = nullptr);
+
+protected:
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> Iterator_;
+};
+
+class TNodeRef : public NDetail::TNodeOps<TNodeRef> {
+    friend class TNodeOps<TNodeRef>;
+    friend class TNodeOpsBase;
     friend class TDocument;
     friend class TDocumentNodeIterator;
-    friend class TNodeRef;
+    friend class TMapping;
+    friend class TMappingIterator;
+    friend class TReverseMappingIterator;
+    friend class TNodePairRef;
     friend class TSequence;
+    friend class TSequenceIterator;
+    friend class TReverseSequenceIterator;
+    friend class TJsonEmitter;
 
-    TNode& operator=(fy_node* node);
+public:
+    TNodeRef() = default;
+
+    template <class T>
+    TNodeRef(const TNodeOps<T>& other) : Node_(other.Node()) {}
+
+    explicit TNodeRef(const TNodeRef& other) : Node_(other.Node_) {}
+
+    TNodeRef(fy_node* node);
+
+    TNodeRef& operator=(const TNodeRef& other) { Node_ = other.Node_; return *this; }
+
+    TNodeRef& operator=(fy_node* node) { Node_ = node; return *this; }
+
+protected:
+    fy_node* Node_ = nullptr;
+
+private:
+    fy_node* NodeRawPointer() const;
+};
+
+class TNode : public NDetail::TNodeOps<TNode> {
+    friend class TNodeOps<TNode>;
+
 public:
     TNode(fy_node* node = nullptr);
 
-    bool operator==(const TNode& other) const { return Node_ == other.Node_; }
+    template <class T>
+    explicit TNode(const TNodeOps<T>& other) : Node_(other.Node_) {}
 
-    explicit operator bool() { return Node_ != nullptr; }
-
-    TNodeRef Ref() { return TNodeRef(Node_.get()); }
+    TNodeRef Ref() { return TNodeRef(*this); }
 
 private:
     std::shared_ptr<fy_node> Node_;
+
+    TNode& operator=(fy_node* node);
+
+    fy_node* NodeRawPointer() const {
+        return Node_.get();
+    }
 };
 
 class TNodePairRef {
-    friend class TMappingIterator;
-    friend class TReverseMappingIterator;
-    friend class TMapping;
+friend class TMappingIterator;
+friend class TReverseMappingIterator;
+friend class TMapping;
+
 public:
-    TNodePairRef(fy_node_pair* pair = nullptr)
-        : Pair_(pair)
-    {}
+    TNodePairRef(fy_node_pair* pair = nullptr) : Pair_(pair) {}
 
     bool operator==(const TNodePairRef& other) const { return Pair_ == other.Pair_; }
 
@@ -272,7 +369,7 @@ private:
 class TMappingIterator {
     friend class TMapping;
 public:
-    TMappingIterator(const TNodeRef& node, bool end = false);
+    explicit TMappingIterator(const TNodeRef& node, bool end = false);
 
     TMappingIterator(const TMappingIterator& other) {
         Node_ = other.Node_;
@@ -307,7 +404,7 @@ private:
 class TReverseMappingIterator {
     friend class TMapping;
 public:
-    TReverseMappingIterator(const TNodeRef& node, bool end = false);
+    explicit TReverseMappingIterator(const TNodeRef& node, bool end = false);
 
     TReverseMappingIterator(const TReverseMappingIterator& other) {
         Node_ = other.Node_;
@@ -343,26 +440,27 @@ private:
 
 class TMapping : public TNodeRef {
 public:
-    explicit TMapping(const TNodeRef& node)
+    template <class T>
+    explicit TMapping(const TNodeOps<T>& node)
         : TNodeRef(node)
     {
         Y_VERIFY_DEBUG(Type() == ENodeType::Mapping);
     }
 
     TMappingIterator begin() const {
-        return TMappingIterator(Node_);
+        return TMappingIterator(*this);
     }
 
     TMappingIterator end() const {
-        return TMappingIterator(Node_, true);
+        return TMappingIterator(*this, true);
     }
 
     TReverseMappingIterator rbegin() const {
-        return TReverseMappingIterator(Node_);
+        return TReverseMappingIterator(*this);
     }
 
     TReverseMappingIterator rend() const {
-        return TReverseMappingIterator(Node_, true);
+        return TReverseMappingIterator(*this, true);
     }
 
     size_t size() const;
@@ -397,7 +495,7 @@ public:
 class TSequenceIterator {
     friend class TSequence;
 public:
-    TSequenceIterator(const TNodeRef& node, bool end = false);
+    explicit TSequenceIterator(const TNodeRef& node, bool end = false);
 
     TSequenceIterator(const TSequenceIterator& other) {
         Node_ = other.Node_;
@@ -443,7 +541,7 @@ private:
 class TReverseSequenceIterator {
     friend class TSequence;
 public:
-    TReverseSequenceIterator(const TNodeRef& node, bool end = false);
+    explicit TReverseSequenceIterator(const TNodeRef& node, bool end = false);
 
     TReverseSequenceIterator(const TReverseSequenceIterator& other) {
         Node_ = other.Node_;
@@ -495,19 +593,19 @@ public:
     }
 
     TSequenceIterator begin() const {
-        return TSequenceIterator(Node_);
+        return TSequenceIterator(*this);
     }
 
     TSequenceIterator end() const {
-        return TSequenceIterator(Node_, true);
+        return TSequenceIterator(*this, true);
     }
 
     TReverseSequenceIterator rbegin() const {
-        return TReverseSequenceIterator(Node_);
+        return TReverseSequenceIterator(*this);
     }
 
     TReverseSequenceIterator rend() const {
-        return TReverseSequenceIterator(Node_, true);
+        return TReverseSequenceIterator(*this, true);
     }
 
     size_t size() const;
@@ -537,7 +635,7 @@ class TDocumentNodeIterator
     : public TDocumentIterator
 {
 public:
-    TDocumentNodeIterator(TNodeRef&& node);
+    explicit TDocumentNodeIterator(TNodeRef&& node);
 
     TDocumentNodeIterator(const TDocumentNodeIterator& other)
         : TDocumentIterator(other.Iterator_.get())
@@ -573,14 +671,12 @@ private:
 };
 
 class TDocument {
-    friend class TNode;
-    friend class TNodeRef;
-    friend class TJsonEmitter;
+    friend class NDetail::TNodeOps<TNodeRef>;
+    friend class NDetail::TNodeOps<TNode>;
     friend class TParser;
-    friend class TMapping;
 
-    TDocument(TString str, fy_document* doc = nullptr, fy_diag* diag = nullptr);
-    TDocument(fy_document* doc = nullptr, fy_diag* diag = nullptr);
+    explicit TDocument(TString str, fy_document* doc = nullptr, fy_diag* diag = nullptr);
+    explicit TDocument(fy_document* doc = nullptr, fy_diag* diag = nullptr);
 
 public:
     TDocument(TDocument&& other)
@@ -667,8 +763,8 @@ private:
 
 class TJsonEmitter {
 public:
-    TJsonEmitter(TDocument& doc) : Node_(doc.Root()) {}
-    TJsonEmitter(const TNodeRef& node) : Node_(node) {}
+    explicit TJsonEmitter(TDocument& doc) : Node_(doc.Root()) {}
+    explicit TJsonEmitter(const TNodeRef& node) : Node_(node) {}
 
     std::unique_ptr<char, void(*)(char*)> EmitToCharArray() const;
 
@@ -693,5 +789,149 @@ struct TMark {
     int Line;
     int Column;
 };
+
+namespace NDetail {
+
+template <class T>
+TNode TNodeOps<T>::CreateReference() const {
+    return TNode(TNodeOpsBase::CreateReference(Node()));
+}
+
+template <class T>
+TNode TNodeOps<T>::Copy() const {
+    return TNode(TNodeOpsBase::Copy(Node()));
+}
+
+template <class T>
+TNode TNodeOps<T>::Copy(TDocument& to) const {
+    return TNode(TNodeOpsBase::Copy(Node(), to.Document_.get()));
+}
+
+template <class T>
+TString TNodeOps<T>::Path() const {
+    return TNodeOpsBase::Path(Node());
+}
+
+template <class T>
+ENodeType TNodeOps<T>::Type() const {
+    return TNodeOpsBase::Type(Node());
+}
+
+template <class T>
+bool TNodeOps<T>::IsAlias() const {
+    return TNodeOpsBase::IsAlias(Node());
+}
+
+template <class T>
+TNodeRef TNodeOps<T>::ResolveAlias() const {
+    return TNodeRef(TNodeOpsBase::ResolveAlias(Node()));
+}
+
+template <class T>
+TString TNodeOps<T>::Scalar() const {
+    return TNodeOpsBase::Scalar(Node());
+}
+
+template <class T>
+TMark TNodeOps<T>::BeginMark() const {
+    return TNodeOpsBase::BeginMark(Node());
+}
+
+template <class T>
+TMark TNodeOps<T>::EndMark() const {
+    return TNodeOpsBase::EndMark(Node());
+}
+
+template <class T>
+TMapping TNodeOps<T>::Map() const {
+    return TMapping(TNodeRef(TNodeOpsBase::Map(Node())));
+}
+
+template <class T>
+TSequence TNodeOps<T>::Sequence() const {
+    return TSequence(TNodeRef(TNodeOpsBase::Sequence(Node())));
+}
+
+template <class T>
+void TNodeOps<T>::Insert(const TNodeRef& node) {
+    return TNodeOpsBase::Insert(Node(), node.Node_);
+}
+
+template <class T>
+std::optional<TString> TNodeOps<T>::Tag() const {
+    return TNodeOpsBase::Tag(Node());
+}
+
+template <class T>
+void TNodeOps<T>::SetTag(const TString& tag) {
+    return TNodeOpsBase::SetTag(Node(), tag);
+}
+
+template <class T>
+bool TNodeOps<T>::RemoveTag() {
+    return TNodeOpsBase::RemoveTag(Node());
+}
+
+template <class T>
+bool TNodeOps<T>::HasAnchor() const {
+    return TNodeOpsBase::HasAnchor(Node());
+}
+
+template <class T>
+void TNodeOps<T>::SetAnchor(const TString& anchor) {
+    return TNodeOpsBase::SetAnchor(Node(), anchor);
+}
+
+template <class T>
+bool TNodeOps<T>::DeepEqual(const TNodeRef& other) {
+    return TNodeOpsBase::DeepEqual(Node(), other.Node_);
+}
+
+template <class T>
+std::unique_ptr<char, void(*)(char*)> TNodeOps<T>::EmitToCharArray() const {
+    return TNodeOpsBase::EmitToCharArray(Node());
+}
+
+template <class T>
+void TNodeOps<T>::SetStyle(ENodeStyle style) {
+    return TNodeOpsBase::SetStyle(Node(), style);
+}
+
+template <class T>
+ENodeStyle TNodeOps<T>::Style() const {
+    return TNodeOpsBase::Style(Node());
+}
+
+template <class T>
+const T& TNodeOps<T>::AsDerived() const {
+    return static_cast<const T&>(*this);
+}
+
+template <class T>
+fy_node* TNodeOps<T>::Node() const {
+    return AsDerived().NodeRawPointer();
+}
+
+template <class T>
+fy_node* TNodeOps<T>::Node() {
+    return AsDerived().NodeRawPointer();
+}
+
+template <class T>
+void TNodeOps<T>::SetUserData(IBasicUserData* data) {
+    return TNodeOpsBase::SetUserData(Node(), data);
+}
+
+template <class T>
+IBasicUserData* TNodeOps<T>::UserData() const {
+    return TNodeOpsBase::UserData(Node());
+}
+
+template <class T>
+void TNodeOps<T>::ClearUserData() {
+    return TNodeOpsBase::ClearUserData(Node());
+}
+
+} // namespace NDetail
 
 } // namesapce NFyaml

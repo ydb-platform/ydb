@@ -282,60 +282,88 @@ private:
     IComputationNode* const Flow;
 };
 
-class TToWideFlowWrapper : public TWideFlowSourceComputationNode<TToWideFlowWrapper> {
-    typedef TWideFlowSourceComputationNode<TToWideFlowWrapper> TBaseComputation;
+class TToWideFlowWrapper : public TWideFlowSourceCodegeneratorNode<TToWideFlowWrapper> {
+using TBaseComputation = TWideFlowSourceCodegeneratorNode<TToWideFlowWrapper>;
 public:
     TToWideFlowWrapper(TComputationMutables& mutables, IComputationNode* stream, ui32 width)
         : TBaseComputation(mutables, EValueRepresentation::Any)
         , Stream(stream)
         , Width(width)
+        , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + Width))
     {}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const
-    {
-        auto& s = GetState(state, ctx);
-        auto status = s.StreamValue.WideFetch(s.Values.data(), Width);
-        switch (status) {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        if (!state.HasValue()) {
+            state = Stream->GetValue(ctx);
+        }
+
+        switch (const auto status = state.WideFetch(ctx.MutableValues.get() + TempStateIndex, Width)) {
         case NUdf::EFetchStatus::Finish:
             return EFetchResult::Finish;
         case NUdf::EFetchStatus::Yield:
             return EFetchResult::Yield;
         case NUdf::EFetchStatus::Ok:
-            for (ui32 i = 0; i < Width; ++i) {
-                if (output[i]) {
-                  *output[i] = std::move(s.Values[i]);
-                }
+            break;
+        }
+
+        for (auto i = 0U; i < Width; ++i) {
+            if (const auto out = output[i]) {
+                *out = std::move(ctx.MutableValues[TempStateIndex + i]);
             }
-            return EFetchResult::One;
         }
+        return EFetchResult::One;
     }
+#ifndef MKQL_DISABLE_CODEGEN
+    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen->GetContext();
+        const auto valueType = Type::getInt128Ty(context);
+        const auto indexType = Type::getInt32Ty(context);
+        const auto values = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, TempStateIndex)}, "values", &ctx.Func->getEntryBlock().back());
 
+        const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        const auto load = new LoadInst(valueType, statePtr, "load", block);
+        const auto state = PHINode::Create(load->getType(), 2U, "state", main);
+        state->addIncoming(load, block);
+
+        BranchInst::Create(init, main, IsInvalid(load, block), block);
+
+        block = init;
+
+        GetNodeValue(statePtr, Stream, ctx, block);
+
+        const auto save = new LoadInst(valueType, statePtr, "save", block);
+        state->addIncoming(save, block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::WideFetch>(indexType, state, ctx.Codegen, block, values, ConstantInt::get(indexType, Width));
+
+        const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
+        const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "yield", block);
+        const auto special = SelectInst::Create(yield, ConstantInt::get(indexType, static_cast<i32>(EFetchResult::Yield)), ConstantInt::get(indexType, static_cast<i32>(EFetchResult::Finish)), "special", block);
+        const auto complete = SelectInst::Create(ok, ConstantInt::get(indexType, static_cast<i32>(EFetchResult::One)), special, "complete", block);
+
+        TGettersList getters(Width);
+        for (auto i = 0U; i < getters.size(); ++i) {
+            getters[i] = [idx = TempStateIndex + i, values, valueType, indexType](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, idx)}, (TString("ptr_") += ToString(idx)).c_str(), block);
+                return new LoadInst(valueType, valuePtr, (TString("val_") += ToString(idx)).c_str(), block);
+            };
+        };
+        return {complete, std::move(getters)};
+    }
+#endif
 private:
-    struct TState : public TComputationValue<TState> {
-        NUdf::TUnboxedValue StreamValue;
-        TVector<NUdf::TUnboxedValue> Values;
-
-        TState(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& streamValue, ui32 width)
-            : TComputationValue(memInfo)
-            , StreamValue(std::move(streamValue))
-            , Values(width)
-        {
-        }
-    };
-
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
     }
 
-    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Stream->GetValue(ctx), Width);
-        }
-        return *static_cast<TState*>(state.AsBoxed().Get());
-    }
-
     IComputationNode* const Stream;
     const ui32 Width;
+    const ui32 TempStateIndex;
 };
 
 class TFromWideFlowWrapper : public TMutableComputationNode<TFromWideFlowWrapper> {
@@ -412,10 +440,9 @@ IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryC
     const auto outType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType();
     const auto kind = GetValueRepresentation(outType);
     if (type->IsStream()) {
-        auto streamType = AS_TYPE(TStreamType, type);
-        if (streamType->GetItemType()->IsMulti()) {
-            ui32 width = GetWideComponentsCount(streamType);
-            return new TToWideFlowWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), width);
+        if (const auto streamType = AS_TYPE(TStreamType, type); streamType->GetItemType()->IsMulti()) {
+            const auto multiType = AS_TYPE(TMultiType, streamType->GetItemType());
+            return new TToWideFlowWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), multiType->GetElementsCount());
         }
         return new TToFlowWrapper<true>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
     } else if (type->IsList()) {

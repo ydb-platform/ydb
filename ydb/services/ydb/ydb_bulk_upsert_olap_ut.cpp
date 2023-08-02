@@ -480,6 +480,55 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
+
+        // Excess columns
+        {
+            // CREATE TABLE import1(a Text NOT NULL, b Text, PRIMARY KEY(a))
+            std::vector<std::pair<TString, NYdb::EPrimitiveType>> schema = {
+                { "a", NYdb::EPrimitiveType::Utf8 },
+                { "b", NYdb::EPrimitiveType::Utf8 }
+            };
+
+            auto tableBuilder = client.GetTableBuilder();
+            for (auto& [name, type] : schema) {
+                if (name == "a") {
+                    tableBuilder.AddNonNullableColumn(name, type);
+                } else {
+                    tableBuilder.AddNullableColumn(name, type);
+                }
+            }
+            tableBuilder.SetPrimaryKeyColumns({"a"});
+            auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString csv;
+            csv += "a,b,c\n"; // header have more columns than table
+            for (size_t i = 0; i < 100; ++i) {
+                csv += TString("aaa") + ToString(i) + ",bbb,ccc\n";
+            }
+
+            Ydb::Formats::CsvSettings csvSettings;
+            csvSettings.set_header(true);
+            csvSettings.set_delimiter(",");
+
+            TString formatSettings;
+            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+
+            NYdb::NTable::TBulkUpsertSettings upsertSettings;
+            upsertSettings.FormatSettings(formatSettings);
+
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::CSV, csv, {}, upsertSettings).GetValueSync();
+
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+
+            result = session.DropTable(tablePath).GetValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
     }
 
     Y_UNIT_TEST(UpsertCSV) {

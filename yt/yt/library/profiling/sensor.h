@@ -4,6 +4,8 @@
 #include "tag.h"
 #include "histogram_snapshot.h"
 
+#include <library/cpp/yt/misc/preprocessor.h>
+
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 #include <library/cpp/yt/memory/weak_ptr.h>
 
@@ -393,14 +395,11 @@ using TRegistry = TProfiler;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define YT_PROFILE_GENNAME0(line) PROFILE_TIMING__ ## line
-#define YT_PROFILE_GENNAME(line) YT_PROFILE_GENNAME0(line)
-
 //! Measures execution time of the statement that immediately follows this macro.
 #define YT_PROFILE_TIMING(name) \
-    static auto YT_PROFILE_GENNAME(__LINE__) = ::NYT::NProfiling::TProfiler{name}.WithHot().Timer(""); \
-    if (auto PROFILE_TIMING__Guard = ::NYT::NProfiling::TEventTimerGuard(YT_PROFILE_GENNAME(__LINE__)); false) \
-    { YT_ABORT(); } \
+    static auto PP_CONCAT(TimingProfiler__, __LINE__) = ::NYT::NProfiling::TProfiler(name).WithHot().Timer(""); \
+    if (auto PP_CONCAT(timingProfilerGuard__, __LINE__) = ::NYT::NProfiling::TEventTimerGuard(PP_CONCAT(TimingProfiler__, __LINE__)); false) \
+    { Y_UNREACHABLE(); } \
     else
 
 ////////////////////////////////////////////////////////////////////////////////

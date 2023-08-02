@@ -33,13 +33,25 @@
 #include "src/core/lib/event_engine/thread_local.h"
 #include "src/core/lib/gprpp/thd.h"
 #include "src/core/lib/gprpp/time.h"
-
+#include "src/core/lib/gprpp/env.h"
+#include "src/core/lib/gpr/string.h"
 namespace {
     size_t threads_limit_ = 0;
 }
 
 namespace grpc_event_engine {
 namespace experimental {
+
+size_t GetMaxPoolThreadFromEnv() {
+  auto value = grpc_core::GetEnv("GRPC_MAX_THREADS_THREAD_POOL_ENV");
+  if (!value.has_value()) return 0;
+  int parse_succeeded = gpr_parse_nonnegative_int(value->c_str());
+
+  if (parse_succeeded <= 0) {
+      return 0;
+  }
+  return static_cast<size_t>(parse_succeeded);
+}
 
 size_t ThreadPool::SetThreadsLimit(size_t count) {
     size_t prev = threads_limit_;
@@ -50,11 +62,19 @@ size_t ThreadPool::SetThreadsLimit(size_t count) {
 unsigned ThreadPool::GetMaxSystemThread() {
     unsigned max_threads = grpc_core::Clamp(gpr_cpu_num_cores(), 2u, 32u);
 
+    auto threads_limit_env = GetMaxPoolThreadFromEnv();
+    if (threads_limit_env) {
+        unsigned new_max_threads = std::min(max_threads, static_cast<unsigned>(threads_limit_env));
+        gpr_log(GPR_INFO, "Threads limit changed via env from %u to %u", max_threads, new_max_threads);
+        max_threads = new_max_threads;
+    }
+
     if (threads_limit_) {
         unsigned new_max_threads = std::min(max_threads, static_cast<unsigned>(threads_limit_));
         gpr_log(GPR_INFO, "Threads limit changed from %u to %u", max_threads, new_max_threads);
         max_threads = new_max_threads;
     }
+    gpr_log(GPR_INFO, "Threads limit:[%u]", max_threads);
     return max_threads;
 }
 

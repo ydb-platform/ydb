@@ -1,5 +1,6 @@
 KqpFederatedQuery
 KqpSpillingFileTests::StartError
+KqpScanSpilling::SelfJoin
 YdbWorkloadTopic
 YdbWorkloadTransferTopicToTable
 SpaceCheckForDiskReassign::Basic
@@ -14,3 +15,6 @@ TMiniKQLAllocTest::TestDeallocated
 ConsistentIndexRead::InteractiveTx
 KqpExtTest::SecondaryIndexSelectUsingScripting
 KqpQuerySession::NoLocalAttach
+TSentinelTests::PDiskErrorState
+TSentinelTests::PDiskFaultyState
+Describe::Statistics

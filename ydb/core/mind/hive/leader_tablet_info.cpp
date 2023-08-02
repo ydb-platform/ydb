@@ -238,37 +238,53 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
             case NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_SPACE: {
                 NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy balanceStrategy = Hive.CurrentConfig.GetStorageBalanceStrategy();
                 Hive.CurrentConfig.SetStorageBalanceStrategy(NKikimrConfig::THiveConfig::HIVE_STORAGE_BALANCE_STRATEGY_SIZE);
-                double maxUsage = 0;
-                auto filterBySpace = [params = *params, currentGroup, &maxUsage](const TStorageGroupInfo& newGroup) -> bool {
+                std::optional<double> maxUsage;
+                bool areAllWeightsSame = true;
+                auto filterBySpace = [params = *params, currentGroup, &maxUsage, &areAllWeightsSame](const TStorageGroupInfo& newGroup) -> bool {
+                    bool result = false;
                     if (newGroup.IsMatchesParameters(params)) {
                         if (currentGroup) {
-                            bool result = newGroup.Id != currentGroup->Id;
+                            result = newGroup.Id != currentGroup->Id;
                             if (currentGroup->GroupParameters.GetCurrentResources().HasOccupancy()) {
                                 result &= newGroup.GroupParameters.GetCurrentResources().GetOccupancy()
                                           < currentGroup->GroupParameters.GetCurrentResources().GetOccupancy();
                             }
-                            if (result) {
-                                maxUsage = std::max(maxUsage, newGroup.GetUsage());
-                            }
-                            return result;
+                        } else {
+                            result = true;
                         }
-                        maxUsage = std::max(maxUsage, newGroup.GetUsage());
-                        return true;
                     }
-                    return false;
+                    if (result) {
+                        double usage = newGroup.GetUsage();
+                        if (maxUsage) {
+                            if (fabs(usage - *maxUsage) > 1e-10) {
+                                areAllWeightsSame = false;
+                            }
+                            maxUsage = std::max(*maxUsage, usage);
+                        } else {
+                            maxUsage = usage;
+                        }
+                    }
+                    return result;
                 };
+                double maxUsageFound = maxUsage.value_or(0.0);
+                if (areAllWeightsSame) {
+                    // In this case all weights get turned into zero
+                    // and multiplicative penalty does nothing.
+                    // To avoid this, we modify maxUsageFound so there is room to add penalty
+                    maxUsageFound += 1;
+                }
                 double spacePenaltyThreshold = Hive.GetSpaceUsagePenaltyThreshold();
                 double spacePenalty = Hive.GetSpaceUsagePenalty();
-                auto calculateUsageWithSpacePenalty = [currentGroup, &maxUsage, spacePenaltyThreshold, spacePenalty](const TStorageGroupInfo* newGroup) -> double {
+                auto calculateUsageWithSpacePenalty = [currentGroup, maxUsageFound, spacePenaltyThreshold, spacePenalty](const TStorageGroupInfo* newGroup) -> double {
                     double usage = newGroup->GetUsage();
                     if (currentGroup && currentGroup->GroupParameters.GetCurrentResources().HasOccupancy()) {
                         if (!newGroup->GroupParameters.GetCurrentResources().HasOccupancy()) {
-                            return maxUsage;
+                            return maxUsageFound;
                         }
                         if (1 - newGroup->GroupParameters.GetCurrentResources().GetOccupancy()
                             < spacePenaltyThreshold * (1 - currentGroup->GroupParameters.GetCurrentResources().GetOccupancy())) {
-                            double avail = maxUsage - usage;
-                            usage = maxUsage - avail * spacePenalty;
+                            double avail = maxUsageFound - usage;
+                            usage = maxUsageFound - avail * spacePenalty;
                         }
                     }
                     return usage;

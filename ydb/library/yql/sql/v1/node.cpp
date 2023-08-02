@@ -278,6 +278,10 @@ bool INode::IsSelect() const {
     return false;
 }
 
+bool INode::HasSelectResult() const {
+    return false;
+}
+
 const TString* INode::FuncName() const {
     return nullptr;
 }

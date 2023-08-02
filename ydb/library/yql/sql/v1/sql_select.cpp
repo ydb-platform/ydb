@@ -1211,8 +1211,8 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
 {
     const bool discard = node.HasBlock1();
     const bool hasLabel = node.HasBlock3();
-    if ((discard || hasLabel) && (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW || Mode == NSQLTranslation::ESqlMode::SUBQUERY)) {
-        Ctx.Error() << "DISCARD and INTO RESULT are not allowed in current mode";
+    if (hasLabel && (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW || Mode == NSQLTranslation::ESqlMode::SUBQUERY)) {
+        Ctx.Error() << "INTO RESULT is not allowed in current mode";
         return {};
     }
 

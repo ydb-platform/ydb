@@ -1946,6 +1946,13 @@ void TTcpConnection::TryEstablishSslSession()
         return;
     }
 
+    if (Config_->CipherList) {
+        if (SSL_set_cipher_list(Ssl_.get(), Config_->CipherList->data()) != 1) {
+            Abort(TError(NBus::EErrorCode::SslError, "Failed to set cipher list: %v", GetLastSslErrorString()));
+            return;
+        }
+    }
+
     if (ConnectionType_ == EConnectionType::Server) {
         SSL_set_accept_state(Ssl_.get());
 

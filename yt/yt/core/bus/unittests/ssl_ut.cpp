@@ -541,6 +541,61 @@ JFWcF3ghP7uPmbONWLiTFwxsSJHT0svVQZgq1aZz
         .ThrowOnError();
 }
 
+TEST_F(TSslTest, ServerCipherList)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->UseKeyPairFromSslContext = true;
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CipherList = "AES128-GCM-SHA256:PSK-AES128-GCM-SHA256";
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::None;
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+    EXPECT_TRUE(bus->IsEncrypted());
+
+    for (int i = 0; i < 2; ++i) {
+        auto message = CreateMessage(1);
+        auto sendFuture = bus->Send(message, NBus::TSendOptions(EDeliveryTrackingLevel::Full));
+        Cerr << sendFuture.Get().GetMessage() << Endl;
+        EXPECT_TRUE(sendFuture.Get().IsOK());
+    }
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
+}
+
+TEST_F(TSslTest, DifferentCipherLists)
+{
+    auto serverConfig = TBusServerConfig::CreateTcp(Port);
+    serverConfig->UseKeyPairFromSslContext = true;
+    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CipherList = "PSK-AES128-GCM-SHA256";
+    auto server = CreateBusServer(serverConfig);
+    server->Start(New<TEmptyBusHandler>());
+
+    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
+    clientConfig->VerificationMode = EVerificationMode::None;
+    clientConfig->CipherList = "AES128-GCM-SHA256";
+    auto client = CreateBusClient(clientConfig);
+
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    EXPECT_FALSE(bus->GetReadyFuture().Get().IsOK());
+
+    server->Stop()
+        .Get()
+        .ThrowOnError();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

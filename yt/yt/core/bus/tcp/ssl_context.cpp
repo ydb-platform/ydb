@@ -77,9 +77,10 @@ public:
         return SslCtx_.get();
     }
 
+    //! This function is for testing purposes.
     void LoadCAFile(const TString& filePath)
     {
-        TGuard<TMutex> guard(CAMutex_);
+        TGuard<TMutex> guard(Mutex_);
 
         LoadCAFileUnlocked(filePath);
 
@@ -92,7 +93,7 @@ public:
             return;
         }
 
-        TGuard<TMutex> guard(CAMutex_);
+        TGuard<TMutex> guard(Mutex_);
 
         if (CAIsLoaded_) {
             return;
@@ -119,9 +120,10 @@ public:
         }
     }
 
+    //! This function is for testing purposes.
     void UseCA(const TString& ca)
     {
-        TGuard<TMutex> guard(CAMutex_);
+        TGuard<TMutex> guard(Mutex_);
 
         UseCAUnlocked(ca);
 
@@ -171,11 +173,31 @@ public:
         }
     }
 
+    void SetCipherListIfUnset(const TString& cipherList)
+    {
+        if (CipherListIsSet_) {
+            return;
+        }
+
+        TGuard<TMutex> guard(Mutex_);
+
+        if (CipherListIsSet_) {
+            return;
+        }
+
+        SetCipherListUnlocked(cipherList);
+
+        CipherListIsSet_ = true;
+    }
+
+    //! This function is for testing purposes.
     void SetCipherList(const TString& cipherList)
     {
-        if (SSL_CTX_set_cipher_list(SslCtx_.get(), cipherList.data()) != 1) {
-            THROW_ERROR_EXCEPTION("Failed to set cipher list: %v", GetLastSslErrorString());
-        }
+        TGuard<TMutex> guard(Mutex_);
+
+        SetCipherListUnlocked(cipherList);
+
+        CipherListIsSet_ = true;
     }
 
     //! Check the consistency of a private key with the corresponding certificate.
@@ -193,6 +215,13 @@ private:
         auto ret = SSL_CTX_load_verify_locations(SslCtx_.get(), filePath.data(), nullptr);
         if (ret != 1) {
             THROW_ERROR_EXCEPTION("Failed to load CA file: %v", GetLastSslErrorString());
+        }
+    }
+
+    void SetCipherListUnlocked(const TString& cipherList)
+    {
+        if (SSL_CTX_set_cipher_list(SslCtx_.get(), cipherList.data()) != 1) {
+            THROW_ERROR_EXCEPTION("Failed to set cipher list: %v", GetLastSslErrorString());
         }
     }
 
@@ -215,8 +244,9 @@ private:
     }
 
 private:
-    TMutex CAMutex_;
+    TMutex Mutex_;
     std::atomic<bool> CAIsLoaded_ = false;
+    std::atomic<bool> CipherListIsSet_ = false;
     std::unique_ptr<SSL_CTX, TDeleter> SslCtx_;
 };
 
@@ -277,6 +307,11 @@ void TSslContext::UsePrivateKey(const TString& privateKey)
 void TSslContext::SetCipherList(const TString& cipherList)
 {
     return Impl_->SetCipherList(cipherList);
+}
+
+void TSslContext::SetCipherListIfUnset(const TString& cipherList)
+{
+    return Impl_->SetCipherListIfUnset(cipherList);
 }
 
 void TSslContext::CheckPrivateKeyWithCertificate()

@@ -23,17 +23,19 @@ public:
     SSL_CTX* GetSslCtx();
     static TSslContext* Get();
 
-    void LoadCAFile(const TString& filePath);
     void LoadCAFileIfNotLoaded(const TString& filePath);
     void LoadCertificateChain(const TString& filePath);
     void LoadPrivateKey(const TString& filePath);
-    void UseCA(const TString& ca);
     void UseCertificateChain(const TString& certificate);
     void UsePrivateKey(const TString& privateKey);
-    void SetCipherList(const TString& cipherList);
+    void SetCipherListIfUnset(const TString& cipherList);
     void CheckPrivateKeyWithCertificate();
+
     // For testing purposes.
+    void LoadCAFile(const TString& filePath);
     void Reset();
+    void SetCipherList(const TString& cipherList);
+    void UseCA(const TString& ca);
 
 private:
     class TImpl;

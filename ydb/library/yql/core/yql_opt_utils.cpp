@@ -435,25 +435,31 @@ template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNod
 template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TSet<TString>& subsetFields, TExprContext& ctx, bool singleValue);
 
 
-bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeSet& visited) {
+bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeMap<bool>& deps) {
     if (from == to)
         return true;
 
-    if (!visited.emplace(from).second) {
-        return false;
+    auto [it, inserted] = deps.emplace(from, false);
+    if (!inserted) {
+        return it->second;
     }
 
     for (const auto& child : from->Children()) {
-        if (IsDependedImpl(child.Get(), to, visited))
-            return true;
+        if (IsDependedImpl(child.Get(), to, deps)) {
+            return it->second = true;
+        }
     }
 
     return false;
 }
 
 bool IsDepended(const TExprNode& from, const TExprNode& to) {
-    TNodeSet visited;
-    return IsDependedImpl(&from, &to, visited);
+    TNodeMap<bool> deps;
+    return IsDependedImpl(&from, &to, deps);
+}
+
+bool MarkDepended(const TExprNode& from, const TExprNode& to, TNodeMap<bool>& deps) {
+    return IsDependedImpl(&from, &to, deps);
 }
 
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx) {

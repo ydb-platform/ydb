@@ -31,7 +31,7 @@ public:
     TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
     ~TEndpointPool();
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
-    TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint) const;
+    TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const TStringType& endpoint);
     int GetPessimizationRatio();

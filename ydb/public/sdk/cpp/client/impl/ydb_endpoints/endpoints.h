@@ -82,7 +82,7 @@ public:
     void SetStatCollector(const NSdkStats::TStatCollector::TEndpointElectorStatCollector& endpointStatCollector);
 
     // Returns preferred (if presents) or best endpoint
-    TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint) const;
+    TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
 
     // Move endpoint to the end
     void PessimizeEndpoint(const TStringType& endpoint);

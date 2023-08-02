@@ -128,7 +128,7 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
     return removed;
 }
 
-TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredEndpoint) const {
+TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred) const {
     std::shared_lock guard(Mutex_);
 
     if (preferredEndpoint.GetNodeId()) {
@@ -144,9 +144,13 @@ TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredE
             return it->second;
         }
     }
+
+    if(onlyPreferred)
+        return {};
+
     if (BestK_ == -1) {
         Y_ASSERT(Records_.empty());
-        return TEndpointRecord();
+        return {};
     } else {
         // returns value in range [0, n)
         auto idx = RandomNumber<size_t>(BestK_ + 1);

@@ -122,8 +122,8 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     return {future, true};
 }
 
-TEndpointRecord TEndpointPool::GetEndpoint(const TEndpointKey& preferredEndpoint) const {
-    return Elector_.GetEndpoint(preferredEndpoint);
+TEndpointRecord TEndpointPool::GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred) const {
+    return Elector_.GetEndpoint(preferredEndpoint, onlyPreferred);
 }
 
 TDuration TEndpointPool::TimeSinceLastUpdate() const {

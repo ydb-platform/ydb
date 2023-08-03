@@ -34,8 +34,11 @@ def get_property_value(testcase, name):
 
 def create_error_testsuite(testcases):
     n = str(len(testcases))
-    root = ET.Element("testsuite", dict(tests=n, failures=n))
-    root.extend(testcases)
+    suite = ET.Element("testsuite", dict(tests=n, errors=n))
+    suite.extend(testcases)
+
+    root = ET.Element("testsuites", dict(tests=n, errors=n))
+    root.append(suite)
     return ET.ElementTree(root)
 
 

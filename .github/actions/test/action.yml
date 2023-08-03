@@ -162,6 +162,22 @@ runs:
     if: inputs.run_unit_tests == 'true'
     shell: bash
     run: |
+      echo "::group::extract-logs"
+
+      mkdir $ARTIFACTS_DIR/logs/
+
+      .github/scripts/tests/attach-logs.py \
+        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
+        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
+        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
+        --ctest-report $TESTREPDIR/suites/ctest_report.xml \
+        --junit-reports-path $TESTREPDIR/unittests/ \
+        --decompress \
+        $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
+        $ARTIFACTS_DIR/logs/
+
+      echo "::endgroup::"
+
       echo "::group::junit-postprocess"
       
       .github/scripts/tests/junit-postprocess.py \
@@ -177,22 +193,6 @@ runs:
         --decompress \
         $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
         $TESTREPDIR/suites/ctest_report.xml
-
-      echo "::endgroup::"
-
-      echo "::group::extract-logs"
-
-      mkdir $ARTIFACTS_DIR/logs/
-
-      .github/scripts/tests/attach-logs.py \
-        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
-        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
-        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
-        --ctest-report $TESTREPDIR/suites/ctest_report.xml \
-        --junit-reports-path $TESTREPDIR/unittests/ \
-        --decompress \
-        $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
-        $ARTIFACTS_DIR/logs/
 
       echo "::endgroup::"
 

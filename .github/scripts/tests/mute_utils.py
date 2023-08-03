@@ -60,7 +60,13 @@ def mute_target(node, node_name="failure"):
     if failure is None:
         return False
 
-    skipped = ET.Element("skipped", {"message": failure.attrib["message"]})
+    msg = failure.get("message")
+
+    skipped = ET.Element("skipped")
+
+    if msg:
+        skipped.set('message', msg)
+
     skipped.text = failure.text
 
     node.remove(failure)

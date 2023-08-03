@@ -846,6 +846,12 @@ protected:
 
         if (source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+            if (Stats) {
+                THashMap<ui64, TShardInfo> partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+                for (auto& [shardId, _] : partitions) {
+                    Stats->AffectedShards.insert(shardId);
+                }
+            }
             if (shardInfo.KeyReadRanges) {
                 addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
                 return Nothing();

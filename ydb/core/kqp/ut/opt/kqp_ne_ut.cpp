@@ -3245,8 +3245,13 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(PagingNoPredicateExtract) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(PagingNoPredicateExtract, SourceRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3286,6 +3291,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // Cerr << result.GetPlan() << Endl;
+
+        if (SourceRead) {
+            return;
+        }
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);

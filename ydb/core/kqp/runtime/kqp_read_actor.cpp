@@ -670,23 +670,23 @@ public:
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
-                    CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
-                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr));
+                    auto comparison = CompareRanges(partitionRange, ranges[j].ToTableRange(), KeyColumnTypes);
+                    CA_LOG_D("Compare range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
+                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
+                        << " : " << comparison);
 
-                    auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
-
-                    if (!intersection.IsEmptyRange(KeyColumnTypes)) {
+                    if (comparison > 0) {
+                        continue;
+                    } else if (comparison == 0) {
+                        auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
                         CA_LOG_D("Add range to new shardId: " << partition.ShardId
                             << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
 
                         newShard->AddRange(TSerializedTableRange(intersection));
                     } else {
-                        CA_LOG_D("empty intersection");
-                        if (j > rangeIndex) {
-                            rangeIndex = j - 1;
-                        }
                         break;
                     }
+                    rangeIndex = j;
                 }
 
                 if (newShard->HasRanges()) {

@@ -1425,7 +1425,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             }
 
             UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
-        }     
+        }
     }
 
     Y_UNIT_TEST(CreateNotNullPgColumn) {
@@ -1641,6 +1641,39 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
             testType(spec);
+        }
+    }
+
+    Y_UNIT_TEST(DeleteWithQueryService) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test (
+                key int4 PRIMARY KEY,
+                value int4
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                DELETE FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetResultSets().empty(), "results are not empty");
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

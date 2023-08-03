@@ -147,10 +147,9 @@ private:
 namespace NQuery {
 
 void DoFetchScriptResults(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    Y_UNUSED(f);
     auto* req = dynamic_cast<TEvFetchScriptResultsRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TFetchScriptResultsRPC(req));
+    f.RegisterActor(new TFetchScriptResultsRPC(req));
 }
 
 }

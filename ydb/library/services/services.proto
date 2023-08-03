@@ -996,5 +996,6 @@ message TActivity {
         KQP_SCAN_FETCH_ACTOR = 614;
         COLUMNSHARD_CONVEYOR = 615;
         PERSQUEUE_READ_QUOTER = 616;
+        KAFKA_PRODUCE_ACTOR = 617;
     };
 };

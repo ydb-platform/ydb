@@ -30,6 +30,8 @@ enum EApiKey {
 
 class TRequestHeaderData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TRequestHeaderData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 2};
         static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
@@ -109,6 +111,8 @@ public:
 
 class TResponseHeaderData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TResponseHeaderData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 1};
         static constexpr TKafkaVersions FlexibleVersions = {1, Max<TKafkaVersion>()};
@@ -143,6 +147,8 @@ public:
 
 class TProduceRequestData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TProduceRequestData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 9};
         static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
@@ -317,6 +323,8 @@ public:
 
 class TProduceResponseData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TProduceResponseData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 9};
         static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
@@ -585,6 +593,8 @@ public:
 
 class TFetchRequestData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TFetchRequestData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 13};
         static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
@@ -1005,6 +1015,8 @@ public:
 
 class TFetchResponseData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TFetchResponseData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 13};
         static constexpr TKafkaVersions FlexibleVersions = {12, Max<TKafkaVersion>()};
@@ -1518,6 +1530,8 @@ public:
 
 class TMetadataRequestData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TMetadataRequestData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 12};
         static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
@@ -1645,6 +1659,8 @@ public:
 
 class TMetadataResponseData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TMetadataResponseData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 12};
         static constexpr TKafkaVersions FlexibleVersions = {9, Max<TKafkaVersion>()};
@@ -2066,6 +2082,8 @@ public:
 
 class TApiVersionsRequestData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TApiVersionsRequestData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 3};
         static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
@@ -2115,6 +2133,8 @@ public:
 
 class TApiVersionsResponseData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TApiVersionsResponseData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 3};
         static constexpr TKafkaVersions FlexibleVersions = {3, Max<TKafkaVersion>()};
@@ -2432,6 +2452,8 @@ public:
 
 class TInitProducerIdRequestData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TInitProducerIdRequestData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 4};
         static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
@@ -2511,6 +2533,8 @@ public:
 
 class TInitProducerIdResponseData : public TApiMessage {
 public:
+    typedef std::shared_ptr<TInitProducerIdResponseData> TPtr;
+    
     struct MessageMeta {
         static constexpr TKafkaVersions PresentVersions = {0, 4};
         static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};

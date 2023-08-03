@@ -123,6 +123,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
     }
 
     void BecomeZombie(const TString& error) {
+        SendError(error);
+        Become(&TThis::StateZombie);
+    }
+
+    void SendError(const TString& error) {
         for (auto cookie : std::exchange(PendingWrite, {})) {
             SendWriteResult(error, MakeResponse(cookie));
         }
@@ -132,8 +137,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         for (const auto& [cookie, _] : std::exchange(Pending, {})) {
             SendWriteResult(error, MakeResponse(cookie));
         }
-
-        Become(&TThis::StateZombie);
     }
 
     template <typename... Args>
@@ -453,7 +456,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         if (PipeClient) {
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeClient);
         }
-
+        SendError("Unexpected termination");
         TActorBootstrapped::PassAway();
     }
 

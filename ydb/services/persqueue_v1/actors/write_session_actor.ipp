@@ -1417,6 +1417,8 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
     ui64 maxMessageMetadataSize = 0;
     auto addData = [&](const Topic::StreamWriteMessage::WriteRequest& writeRequest, const i32 messageIndex) {
+        const auto& msg = writeRequest.messages(messageIndex);
+
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
         w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
         if (UseDeduplication) {
@@ -1424,14 +1426,15 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         } else {
             w->SetDisableDeduplication(true);
         }
-        w->SetSeqNo(writeRequest.messages(messageIndex).seq_no());
+        w->SetSeqNo(msg.seq_no());
         SeqNoInflight.push_back(w->GetSeqNo());
-        w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(writeRequest.messages(messageIndex).created_at()));
-        w->SetUncompressedSize(writeRequest.messages(messageIndex).uncompressed_size());
+        w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
+        w->SetUncompressedSize(msg.uncompressed_size());
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
+
         payloadSize += w->GetData().size() + w->GetSourceId().size();
-        const auto& msg = writeRequest.messages(messageIndex);
+
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
             currMetadataSize += metaItem.key().size() + metaItem.value().size();

@@ -11,6 +11,8 @@ SRCS(
     kafka_messages.h
     kafka_messages_int.cpp
     kafka_messages_int.h
+    kafka_produce_actor.cpp
+    kafka_produce_actor.h
     kafka_proxy.h
     kafka_records.cpp
 )

@@ -1,8 +1,11 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/raw_socket/sock_config.h>
+#include <ydb/core/util/address_classifier.h>
 
 #include "kafka_connection.h"
+#include "kafka_events.h"
 #include "kafka_messages.h"
+#include "kafka_produce_actor.h"
 #include "kafka_log_impl.h"
 
 #include <strstream>
@@ -12,6 +15,7 @@
 namespace NKafka {
 
 using namespace NActors;
+using namespace NKikimr;
 
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;
@@ -82,6 +86,9 @@ public:
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
 
+    NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
+    TString ClientDC;
+
     Msg Request;
 
     enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGTH_CHECK, MESSAGE_READ, MESSAGE_PROCESS };
@@ -90,6 +97,10 @@ public:
     TReadDemand Demand;
 
     size_t InflightSize;
+
+    TActorId ProduceActorId;
+
+    std::unordered_map<ui64, Msg> PendingRequests;
 
     TKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
                      const NKikimrConfig::TKafkaProxyConfig& config)
@@ -103,33 +114,48 @@ public:
         IsSslSupported = IsSslSupported && Socket->IsSslSupported();
     }
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext& ctx) {
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        KAFKA_LOG_D("incoming connection opened");
+        KAFKA_LOG_I("incoming connection opened " << Address);
+
+        ProduceActorId = ctx.RegisterWithSameMailbox(new TKafkaProduceActor(SelfId(), ClientDC));
+
         OnAccept();
     }
 
     void PassAway() override {
+        KAFKA_LOG_D("PassAway");
+
         if (ConnectionEstablished) {
             ConnectionEstablished = false;
+        }
+        if (ProduceActorId) {
+            Send(ProduceActorId, new TEvents::TEvPoison());
         }
         Shutdown();
         TBase::PassAway();
     }
 
 protected:
+    void LogEvent(IEventHandle& ev) {
+        KAFKA_LOG_T("Event: " << ev.GetTypeName());
+    }
+
     void SetNonBlock() noexcept {
         Socket->SetNonBlock();
     }
 
     void Shutdown() {
+        KAFKA_LOG_D("Shutdown");
+
         if (Socket) {
             Socket->Shutdown();
         }
     }
 
     ssize_t SocketSend(const void* data, size_t size) {
+        KAFKA_LOG_T("SocketSend Size=" << size);
         return Socket->Send(data, size);
     }
 
@@ -146,7 +172,17 @@ protected:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "(#" << GetRawSocket() << "," << Address->ToString() << ") ";
+        TStringBuilder sb;
+        sb << "TKafkaConnection " << SelfId() << "(#" << GetRawSocket() << "," << Address->ToString() << ") State: ";
+        auto stateFunc = CurrentStateFunc();
+        if (stateFunc == &TKafkaConnection::StateConnected) {
+            sb << "Connected ";
+        } else if (stateFunc == &TKafkaConnection::StateAccepting) {
+            sb << "Accepting ";
+        } else {
+            sb << "Unknown ";
+        }
+        return sb;
     }
 
     void OnAccept() {
@@ -165,9 +201,13 @@ protected:
     }
 
     STATEFN(StateAccepting) {
+        LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
+            hFunc(TEvKafka::TEvResponse, Handle);
+            default:
+                KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }
     }
 
@@ -177,29 +217,17 @@ protected:
         InflightSize -= messageSize;
     }
 
-    void HandleMessage(TRequestHeaderData* header, TProduceRequestData* message, size_t messageSize) {
-        TProduceResponseData response;
-        response.Responses.resize(message->TopicData.size());
-        int i = 0;
-        for (auto& data : message->TopicData) {
-            response.Responses[i].Name = data.Name;
-            response.Responses[i].PartitionResponses.resize(data.PartitionData.size());
-            int j = 0;
-            for (auto& p : data.PartitionData) {
-                response.Responses[i].PartitionResponses[j].Index = p.Index;
-                response.Responses[i].PartitionResponses[j].BaseOffset = 40;
-
-                ++j;
-            }
-            ++i;
-        }
-
-        Reply(header, &response);
-
-        InflightSize -= messageSize;
+    void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message, size_t /*messageSize*/) {
+        PendingRequests[header->CorrelationId] = std::move(Request);
+        Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(TRequestHeaderData* header, TInitProducerIdRequestData* /*message*/, size_t messageSize) {
+    void Handle(TEvKafka::TEvResponse::TPtr response) {
+        auto r = response->Get();
+        Reply(r->Cookie, r->Response.get());
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TInitProducerIdRequestData* /*message*/, size_t messageSize) {
         TInitProducerIdResponseData response;
         response.ProducerEpoch = 1;
         response.ProducerId = 1;
@@ -211,7 +239,7 @@ protected:
         InflightSize -= messageSize;
     }
 
-    void HandleMessage(TRequestHeaderData* header, TMetadataRequestData* message, size_t messageSize) {
+    void HandleMessage(const TRequestHeaderData* header, const TMetadataRequestData* message, size_t messageSize) {
         TMetadataResponseData response;
         response.ThrottleTimeMs = 0;
         response.ClusterId = "cluster-ahjgk";
@@ -266,8 +294,24 @@ protected:
         }
     }
 
+    void Reply(const ui64 cookie, const TApiMessage* response) {
+        auto it = PendingRequests.find(cookie);
+        if (it == PendingRequests.end()) {
+            KAFKA_LOG_ERROR("Unexpected cookie " << cookie);
+            return;
+        }
+
+        auto& request = it->second;
+        Reply(&request.Header, response);
+
+        InflightSize -= request.ExpectedSize;
+
+        PendingRequests.erase(it);
+
+        DoRead();
+    }
+
     void Reply(const TRequestHeaderData* header, const TApiMessage* reply) {
-        // TODO improve allocation
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
 
@@ -284,9 +328,13 @@ protected:
         reply->Write(writable, version);
 
         buffer.flush();
+
+        KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
     }
 
     void DoRead() {
+        KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
+
         for (;;) {
             while (Demand) {
                 ssize_t received = 0;
@@ -296,16 +344,13 @@ protected:
                 } else if (-res == EINTR) {
                     continue;
                 } else if (!res) {
-                    KAFKA_LOG_ERROR("connection closed");
+                    KAFKA_LOG_I("connection closed");
                     return PassAway();
                 } else if (res < 0) {
-                    KAFKA_LOG_ERROR("connection closed - error in recv: " << strerror(-res));
+                    KAFKA_LOG_I("connection closed - error in recv: " << strerror(-res));
                     return PassAway();
                 }
                 received = res;
-                if (!received) {
-                    return;
-                }
 
                 Request.Size += received;
                 Demand.Buffer += received;
@@ -408,9 +453,13 @@ protected:
     }
 
     STATEFN(StateConnected) {
+        LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
+            hFunc(TEvKafka::TEvResponse, Handle);
+            default:
+                KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }
     }
 };

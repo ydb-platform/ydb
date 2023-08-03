@@ -14,7 +14,7 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
     MKQL_ENSURE(isOptional, "Expected optional");
-    if (unpacked->IsOptional() || unpacked->IsVariant()) {
+    if (unpacked->IsOptional() || unpacked->IsVariant() || unpacked->IsPg()) {
         MKQL_ENSURE(data.child_data.size() == 1, "Expected struct with one element");
         return data.child_data[0];
     } else {

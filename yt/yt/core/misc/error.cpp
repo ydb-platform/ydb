@@ -319,12 +319,7 @@ private:
         Fid_ = Attributes_->GetAndRemove<NConcurrency::TFiberId>(FidKey, NConcurrency::InvalidFiberId);
 
         static const TString TraceIdKey("trace_id");
-        // COMPAT(babenko): some older versions use uint64 for trace id.
-        try {
-            TraceId_ = Attributes_->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
-        } catch (const std::exception&) {
-            TraceId_ = NTracing::TTraceId(Attributes_->GetAndRemove<ui64>(TraceIdKey, 0), 0);
-        }
+        TraceId_ = Attributes_->GetAndRemove<NTracing::TTraceId>(TraceIdKey, NTracing::InvalidTraceId);
 
         static const TString SpanIdKey("span_id");
         SpanId_ = Attributes_->GetAndRemove<NTracing::TSpanId>(SpanIdKey, NTracing::InvalidSpanId);

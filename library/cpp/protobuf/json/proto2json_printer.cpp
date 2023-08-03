@@ -4,6 +4,8 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <library/cpp/protobuf/json/proto/enum_options.pb.h>
+
 #include <util/generic/yexception.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
@@ -142,6 +144,15 @@ namespace NProtobufJson {
                                             IJsonOutput& json) {
         if (Config.EnumValueGenerator) {
             WriteWithMaybeEmptyKey<InMapContext>(json, key, Config.EnumValueGenerator(*value));
+            return;
+        }
+
+        if (Config.UseJsonEnumValue) {
+            auto jsonEnumValue = value->options().GetExtension(json_enum_value);
+            if (!jsonEnumValue) {
+                ythrow yexception() << "Trying to using json enum value for field " << value->name() << " which is not set.";
+            }
+            WriteWithMaybeEmptyKey<InMapContext>(json, key, jsonEnumValue);
             return;
         }
 

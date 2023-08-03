@@ -1,0 +1,23 @@
+syntax="proto3";
+
+import "google/protobuf/descriptor.proto";
+
+/**
+Allows custom strings for Enum proto values when converting to/from json
+
+Example:
+
+Enum SomeEnum {
+    DefaultEnumValue = 0 [json_enum_value="custom_name_for_default_value"];
+}
+message TProtoTest {
+    SomeEnum someField = 0 [json_name="some_field"];
+}
+
+will correspond {"some_field": "custom_name_for_default_value"}
+when [Proto2JsonConfig|Json2ProtoConfig].UseJsonEnumValue = True
+
+*/
+extend google.protobuf.EnumValueOptions {
+    string json_enum_value = 4242279;
+}

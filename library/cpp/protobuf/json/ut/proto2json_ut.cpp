@@ -887,6 +887,22 @@ Y_UNIT_TEST(TestFieldNameMode) {
         UNIT_ASSERT_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
 
+    // UseJsonName and UseJsonEnumValue
+    {
+        TString modelStr(R"_({"json_enum":"enum_1"})_");
+
+        TCustomJsonEnumValue proto;
+        proto.SetJsonEnum(EJsonEnum::J_1);
+
+        TStringStream jsonStr;
+        TProto2JsonConfig config;
+        config.SetUseJsonName(true);
+        config.SetUseJsonEnumValue(true);
+
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
+        UNIT_ASSERT_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+    }
+
     // FieldNameMode with UseJsonName
     {
         TProto2JsonConfig config;

@@ -12,8 +12,6 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 TChecksum GetChecksum(TRef data, TChecksum seed = 0);
-// COMPAT(akozhikhov)
-TChecksum GetChecksumOld(TRef data, TChecksum seed = 0);
 
 TChecksum CombineChecksums(const std::vector<TChecksum>& blockChecksums);
 

@@ -700,18 +700,6 @@ ui64 Crc(const void* buf, size_t buflen, ui64 crcinit)
 
 namespace {
 
-// COMPAT(akozhikhov): drop this code after a while
-ui64 CrcImplOld(const void* data, size_t length, ui64 seed)
-{
-#ifdef YT_USE_SSE42
-    static const bool Native = NX86::CachedHaveSSE42() && NX86::CachedHavePCLMUL();
-    if (Native) {
-        return NCrcNative0xE543279765927881::Crc(data, length, seed);
-    }
-#endif
-    return NCrcTable0xE543279765927881::Crc(data, length, seed);
-}
-
 ui64 CrcImpl(const void* data, size_t length, ui64 seed)
 {
 #ifdef YT_USE_SSE42
@@ -734,11 +722,6 @@ TChecksum CombineChecksums(const std::vector<TChecksum>& blockChecksums)
         HashCombine(combined, checksum);
     }
     return combined;
-}
-
-TChecksum GetChecksumOld(TRef data, TChecksum seed)
-{
-    return CrcImplOld(data.Begin(), data.Size(), seed);
 }
 
 TChecksum GetChecksum(TRef data, TChecksum seed)

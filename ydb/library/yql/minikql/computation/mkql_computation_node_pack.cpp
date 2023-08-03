@@ -10,6 +10,7 @@
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/utils/rope_over_buffer.h>
 #include <library/cpp/resource/resource.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 
@@ -1099,9 +1100,31 @@ template<bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 width) {
     const ui64 len = TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 
-    auto metadataBuffer = std::make_shared<TPagedBuffer>();
+    auto metadataBuffer = std::make_shared<TBuffer>();
+
+    ui32 totalMetadataCount = 0;
+    for (size_t i = 0; i < width - 1; ++i) {
+        totalMetadataCount += BlockSerializers_[i]->ArrayMetadataCount();
+    }
+
+    // calculate approximate metadata size
+    const size_t metadataReservedSize =
+        MAX_PACKED64_SIZE +                     // block len
+        MAX_PACKED64_SIZE +                     // feature flags
+        (width - 1) +                           // 1-byte offsets
+        MAX_PACKED32_SIZE +                     // metadata words count
+        MAX_PACKED64_SIZE * totalMetadataCount; // metadata words
+    metadataBuffer->Reserve(len ? metadataReservedSize : MAX_PACKED64_SIZE);
+
     // save block length
     PackData<false>(len, *metadataBuffer);
+    if (!len) {
+        // only block len should be serialized in this case
+        BlockBuffer_.Insert(BlockBuffer_.End(),
+            NYql::MakeReadOnlyRope(metadataBuffer, metadataBuffer->data(), metadataBuffer->size()));
+        ++ItemCount_;
+        return *this;
+    }
 
     // save feature flags
     // 1 = "scalars are present"
@@ -1135,10 +1158,6 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     }
 
     // save count of metadata words
-    ui32 totalMetadataCount = 0;
-    for (size_t i = 0; i < width - 1; ++i) {
-        totalMetadataCount += BlockSerializers_[i]->ArrayMetadataCount();
-    }
     PackData<false>(totalMetadataCount, *metadataBuffer);
 
     // save metadata itself
@@ -1153,7 +1172,8 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 
     MKQL_ENSURE(savedMetadata == totalMetadataCount, "Serialization metadata error");
 
-    BlockBuffer_.Insert(BlockBuffer_.End(), TPagedBuffer::AsRope(metadataBuffer));
+    BlockBuffer_.Insert(BlockBuffer_.End(),
+        NYql::MakeReadOnlyRope(metadataBuffer, metadataBuffer->data(), metadataBuffer->size()));
     // save buffers
     for (size_t i = 0; i < width - 1; ++i) {
         const bool isScalar = BlockReaders_[i] != nullptr;

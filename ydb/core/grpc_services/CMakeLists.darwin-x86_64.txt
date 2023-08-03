@@ -88,7 +88,6 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_export.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_create_coordination_node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_create_table.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_delete_session.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_coordination_node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_path.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_describe_table.cpp

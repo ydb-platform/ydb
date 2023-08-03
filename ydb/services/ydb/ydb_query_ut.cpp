@@ -68,4 +68,30 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         UNIT_ASSERT(allDoneOk);
     }
 
+    Y_UNIT_TEST(TestCreateDropAttachSession) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        {
+            CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            // We session has been destroyed by previous call
+            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+    }
 }

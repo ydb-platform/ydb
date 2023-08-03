@@ -50,6 +50,7 @@ private:
     YDB_READONLY_DEF(TString, SchemaData);
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
+    YDB_READONLY(ui32, RawBytes, 0);
 public:
     size_t GetSize() const {
         return Data.size();
@@ -59,10 +60,11 @@ public:
     static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount)
+    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes)
         : SchemaData(schemaData)
         , Data(data)
         , RowsCount(rowsCount)
+        , RawBytes(rawBytes)
     {
 
     }
@@ -83,6 +85,10 @@ public:
     }
     bool operator!() const {
         return !!ErrorMessage;
+    }
+
+    std::vector<TSerializedBatch>&& ReleaseResult() {
+        return std::move(Result);
     }
 };
 

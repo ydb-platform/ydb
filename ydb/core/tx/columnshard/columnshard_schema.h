@@ -254,9 +254,10 @@ struct Schema : NIceDb::Schema {
         struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
         struct CreatedAt : Column<4, NScheme::NTypeIds::Uint64> {};
         struct GlobalWriteId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Metadata : Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<WriteId>;
-        using TColumns = TableColumns<TxId, WriteId, Status, CreatedAt, GlobalWriteId>;
+        using TColumns = TableColumns<TxId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata>;
     };
 
     using TTables = SchemaTables<
@@ -665,10 +666,15 @@ struct Schema : NIceDb::Schema {
 
     // Operations
     static void Operations_Write(NIceDb::TNiceDb& db, const TWriteOperation& operation) {
+        TString metadata;
+        NKikimrTxColumnShard::TInternalOperationData proto;
+        operation.ToProto(proto);
+        Y_VERIFY(proto.SerializeToString(&metadata));
+
         db.Table<Operations>().Key((ui64)operation.GetWriteId()).Update(
             NIceDb::TUpdate<Operations::Status>((ui32)operation.GetStatus()),
             NIceDb::TUpdate<Operations::CreatedAt>(operation.GetCreatedAt().Seconds()),
-            NIceDb::TUpdate<Operations::GlobalWriteId>(operation.GetGlobalWriteId()),
+            NIceDb::TUpdate<Operations::Metadata>(metadata),
             NIceDb::TUpdate<Operations::TxId>(operation.GetTxId())
         );
     }

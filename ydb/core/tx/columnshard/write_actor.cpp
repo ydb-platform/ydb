@@ -94,6 +94,9 @@ public:
         }
 
         auto blobsConstructor = WriteController->GetBlobConstructor();
+        if (!blobsConstructor) {
+            return SendResultAndDie(ctx, NKikimrProto::ERROR);
+        }
         auto status = NOlap::IBlobConstructor::EStatus::Finished;
         while (true) {
             status = blobsConstructor->BuildNext();

@@ -13,7 +13,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TOperationData& proto, const IPa
         columns.emplace_back(columnId);
     }
     BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
-    return BatchSchema->GetColumnsCount() == columns.size() && !IncomingData.empty() && IncomingData.size() <= NColumnShard::TLimits::GetMaxBlobSize();
+    return BatchSchema->GetColumnsCount() == columns.size() && !IncomingData.empty();
 }
 
 std::shared_ptr<arrow::RecordBatch> TArrowData::GetArrowBatch() const {

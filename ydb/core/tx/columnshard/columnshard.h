@@ -271,7 +271,7 @@ struct TEvColumnShard {
 
         TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, const i64 writeId, ui32 status) {
             Record.SetOrigin(origin);
-            Record.SetTxInitiator(writeMeta.GetMetaShard());
+            Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
             Record.SetTableId(writeMeta.GetTableId());
             Record.SetDedupId(writeMeta.GetDedupId());
@@ -318,6 +318,22 @@ struct TEvColumnShard {
 
         TEvReadResult(const TEvReadResult& ev) {
             Record.CopyFrom(ev.Record);
+        }
+
+        std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const {
+            const auto& scheme = Record.GetMeta().GetSchema();
+            if (scheme.empty() || Record.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
+                return nullptr;
+            }
+            const auto arrowSchema = NArrow::DeserializeSchema(scheme);
+            if (Record.GetData().empty()) {
+                return NArrow::MakeEmptyBatch(arrowSchema);
+            }
+            return NArrow::DeserializeBatch(Record.GetData(), arrowSchema);
+        }
+
+        bool HasMore() const {
+            return !Record.GetFinished();
         }
     };
 

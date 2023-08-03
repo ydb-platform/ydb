@@ -28,6 +28,8 @@ private:
     const ui32 TabletTxNo;
     std::unique_ptr<NActors::IEventBase> Result;
 
+    bool InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId);
+
     TStringBuilder TxPrefix() const {
         return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";
     }
@@ -37,17 +39,7 @@ private:
     }
 };
 
-
-bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
-    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
-
-    const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
-    const auto& blobData(PutBlobResult->Get()->GetBlobData());
-
-    txc.DB.NoMoreReadsForTx();
-    NIceDb::TNiceDb db(txc.DB);
-
-    auto writeId = writeMeta.GetWriteId();
+bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId) {
     const TString data = blobData.GetBlobData();
 
     NKikimrTxColumnShard::TLogicalMetadata meta;
@@ -56,20 +48,6 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     const auto& logoBlobId = blobData.GetBlobId();
     Y_VERIFY(logoBlobId.IsValid());
 
-    Y_VERIFY(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
-
-    TWriteOperation::TPtr operation;
-    if (writeMeta.HasLongTxId()) {
-        Y_VERIFY(writeMeta.GetMetaShard() == 0);
-        writeId = (ui64)Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
-    } else {
-        operation = Self->OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
-        if (operation) {
-            Y_VERIFY(operation->GetStatus() == EOperationStatus::Started);
-            writeId = (ui64)Self->BuildNextWriteId(txc);
-        }
-    }
-
     ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
     TInstant time = TInstant::Seconds(writeUnixTime);
 
@@ -77,10 +55,13 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-    NOlap::TInsertedData insertData(writeMeta.GetMetaShard(), (ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), logoBlobId, blobData.GetLogicalMeta(), time, PutBlobResult->Get()->GetSnapshot());
+    const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
+
+    NOlap::TInsertedData insertData(0, (ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), logoBlobId, blobData.GetLogicalMeta(), time, PutBlobResult->Get()->GetSnapshot());
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
+        NIceDb::TNiceDb db(txc.DB);
         Self->TryAbortWrites(db, dbTable, std::move(writesToAbort));
 
         // TODO: It leads to write+erase for aborted rows. Abort() inserts rows, EraseAborted() erases them.
@@ -107,22 +88,54 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         Self->IncCounter(COUNTER_WRITE_SUCCESS);
 
         Self->BlobManager->SaveBlobBatch((std::move(PutBlobResult->Get()->GetPutResultPtr()->ReleaseBlobBatch())), blobManagerDb);
+        return true;
+    }
+    return false;
+}
 
-        if (operation) {
-            operation->OnWriteFinish(txc, writeId);
-            auto txInfo = Self->ProgressTxController.RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
-            Y_UNUSED(txInfo);
-        }
+
+bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
+    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
+
+    const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
+    Y_VERIFY(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
+
+    txc.DB.NoMoreReadsForTx();
+    TWriteOperation::TPtr operation;
+    if (writeMeta.HasLongTxId()) {
+        Y_VERIFY_S(PutBlobResult->Get()->GetBlobData().size() == 1, TStringBuilder() << "Blobs count: " << PutBlobResult->Get()->GetBlobData().size());
     } else {
-        LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << writeId << TxSuffix());
-        Self->IncCounter(COUNTER_WRITE_DUPLICATE);
+        operation = Self->OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
+        Y_VERIFY(operation);
+        Y_VERIFY(operation->GetStatus() == EOperationStatus::Started);
+    }
+
+    TVector<TWriteId> writeIds;
+    for (auto blobData: PutBlobResult->Get()->GetBlobData()) {
+        auto writeId = TWriteId(writeMeta.GetWriteId());
+        if (operation) {
+            writeId = Self->BuildNextWriteId(txc);
+        } else {
+            NIceDb::TNiceDb db(txc.DB);
+            writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
+        }
+
+        if (!InsertOneBlob(txc, blobData, writeId)) {
+            LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
+            Self->IncCounter(COUNTER_WRITE_DUPLICATE);
+        }
+        writeIds.push_back(writeId);
     }
 
     if (operation) {
+        operation->OnWriteFinish(txc, writeIds);
+        auto txInfo = Self->ProgressTxController.RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
+        Y_UNUSED(txInfo);
         NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController.GetCoordinatorInfo(operation->GetTxId());
         Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(operation->GetTxId(), tInfo);
     } else {
-        Result = std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, writeId, NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        Y_VERIFY(writeIds.size() == 1);
+        Result = std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)writeIds.front(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
     return true;
 }
@@ -200,20 +213,19 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
         }
 
-        auto operation = OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
-        if (operation) {
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(operation->GetTxId(), NKikimrDataEvents::TEvWriteResult::ERROR, "put data fails");
+        if (writeMeta.HasLongTxId()) {
+            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
             ctx.Send(writeMeta.GetSource(), result.release());
         } else {
-            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
+            auto operation = OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
+            Y_VERIFY(operation);
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(operation->GetTxId(), NKikimrDataEvents::TEvWriteResult::ERROR, "put data fails");
             ctx.Send(writeMeta.GetSource(), result.release());
         }
         return;
     }
 
-    const auto& blobData = ev->Get()->GetBlobData();
-    Y_VERIFY(blobData.GetBlobId().IsValid());
-    LOG_S_DEBUG("Write (record) " << blobData.GetBlobData().size() << " bytes into pathId " << writeMeta.GetTableId()
+    LOG_S_DEBUG("Write (record) into pathId " << writeMeta.GetTableId()
         << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : "") << " at tablet " << TabletID());
 
     Execute(new TTxWrite(this, ev), ctx);

@@ -10,12 +10,11 @@
 
 namespace NKikimr::NColumnShard {
 
-    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 txId, const EOperationStatus& status, const TInstant createdAt, const ui64 globalWriteId)
+    TWriteOperation::TWriteOperation(const TWriteId writeId, const ui64 txId, const EOperationStatus& status, const TInstant createdAt)
         : Status(status)
         , CreatedAt(createdAt)
         , WriteId(writeId)
         , TxId(txId)
-        , GlobalWriteId(globalWriteId)
     {
     }
 
@@ -35,25 +34,39 @@ namespace NKikimr::NColumnShard {
         TBlobGroupSelector dsGroupSelector(owner.Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-        auto pathExists = [&](ui64 pathId) {
-            return owner.TablesManager.HasTable(pathId);
-        };
+        for (auto gWriteId : GlobalWriteIds) {
+            auto pathExists = [&](ui64 pathId) {
+                return owner.TablesManager.HasTable(pathId);
+            };
 
-        auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), 0, { WriteId },
-                                                    pathExists);
+            auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), 0, { gWriteId },
+                                                        pathExists);
 
-        owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
-        owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
-        owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+            owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
+            owner.IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
+            owner.IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
+        }
         owner.UpdateInsertTableCounters();
     }
 
-    void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const ui64 globalWriteId) {
+    void TWriteOperation::OnWriteFinish(NTabletFlatExecutor::TTransactionContext& txc, const TVector<TWriteId>& globalWriteIds) {
         Y_VERIFY(Status == EOperationStatus::Started);
         Status = EOperationStatus::Prepared;
-        GlobalWriteId = globalWriteId;
+        GlobalWriteIds = globalWriteIds;
         NIceDb::TNiceDb db(txc.DB);
         Schema::Operations_Write(db, *this);
+    }
+
+    void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const  {
+        for (auto&& writeId : GlobalWriteIds) {
+            proto.AddInternalWriteIds((ui64)writeId);
+        }
+    }
+
+    void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
+        for (auto&& writeId : proto.GetInternalWriteIds()) {
+            GlobalWriteIds.push_back(TWriteId(writeId));
+        }
     }
 
     void TWriteOperation::Abort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
@@ -62,7 +75,9 @@ namespace NKikimr::NColumnShard {
         TBlobGroupSelector dsGroupSelector(owner.Info());
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-        owner.InsertTable->Abort(dbTable, 0, {WriteId});
+        THashSet<TWriteId> writeIds;
+        writeIds.insert(GlobalWriteIds.begin(), GlobalWriteIds.end());
+        owner.InsertTable->Abort(dbTable, 0, writeIds);
 
         TBlobManagerDb blobManagerDb(txc.DB);
         auto allAborted = owner.InsertTable->GetAborted();
@@ -83,10 +98,13 @@ namespace NKikimr::NColumnShard {
             const TWriteId writeId = (TWriteId) rowset.GetValue<Schema::Operations::WriteId>();
             const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
             const ui64 txId = rowset.GetValue<Schema::Operations::TxId>();
-            const ui64 globalWriteId = rowset.GetValue<Schema::Operations::GlobalWriteId>();
+            const TString metadata = rowset.GetValue<Schema::Operations::Metadata>();
+            NKikimrTxColumnShard::TInternalOperationData metaProto;
+            Y_VERIFY(metaProto.ParseFromString(metadata));
             const EOperationStatus status = (EOperationStatus) rowset.GetValue<Schema::Operations::Status>();
 
-            auto operation = std::make_shared<TWriteOperation>(writeId, txId, status, TInstant::Seconds(createdAtSec), globalWriteId);
+            auto operation = std::make_shared<TWriteOperation>(writeId, txId, status, TInstant::Seconds(createdAtSec));
+            operation->FromProto(metaProto);
 
             Y_VERIFY(operation->GetStatus() != EOperationStatus::Draft);
 

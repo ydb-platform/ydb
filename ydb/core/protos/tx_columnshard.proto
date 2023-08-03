@@ -319,3 +319,7 @@ message TEvReadBlobRangesResult {
     optional uint64 TabletId = 1;
     repeated TResult Results = 2;
 }
+
+message TInternalOperationData {
+    repeated uint64 InternalWriteIds = 1;
+}

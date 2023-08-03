@@ -10,6 +10,9 @@
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
+#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/core/formats/arrow/simple_builder/array.h>
+#include <ydb/core/formats/arrow/simple_builder/batch.h>
 
 namespace NKikimr {
 
@@ -1859,37 +1862,171 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         }
     };
 
-    Y_UNIT_TEST(WriteInTransaction) {
-        TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
-
-        TActorId sender = runtime.AllocateEdgeActor();
+    void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, TTypeInfo>>& schema) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
-        const ui64 tableId = 1;
-        const TestTableDescription table;
-        SetupSchema(runtime, sender, tableId, table);
+        TestTableDescription tableDescription;
+        tableDescription.Schema = schema;
+        tableDescription.Pk = { schema[0] };
+        TActorId sender = runtime.AllocateEdgeActor();
+        SetupSchema(runtime, sender, tableId, tableDescription);
+    }
 
+    std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<std::pair<TString, TTypeInfo>>& schema) {
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+                new TEvColumnShard::TEvRead(sender, TTestTxConfig::TxTablet1, snapshot.GetPlanStep(), snapshot.GetTxId(), tableId));
+
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        while(true) {
+            TAutoPtr<IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+            UNIT_ASSERT(event);
+            auto b = event->GetArrowBatch();
+            if (b) {
+                batches.push_back(b);
+            }
+            if (!event->HasMore()) {
+                break;
+            }
+        }
+        auto res = NArrow::CombineBatches(batches);
+        return res ? res : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
+    }
+
+    Y_UNIT_TEST(WriteInTransaction) {
+        using namespace NArrow;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<std::pair<TString, TTypeInfo>> schema = {
+                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
+                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
+                                                                };
+        PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
 
-        const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = table.Schema;
-        TString blobData = MakeTestBlob({0, 100}, ydbSchema);
+        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(8, 100));
+
+        auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+        TString blobData = NArrow::SerializeBatchNoCompression(batch);
+        UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
-        auto dataPtr = std::make_shared<TArrowData>(ydbSchema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        auto dataPtr = std::make_shared<TArrowData>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
         evWrite->AddReplaceOp(tableId, dataPtr);
 
+        TActorId sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
 
-        TAutoPtr<NActors::IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-        UNIT_ASSERT(event);
-        UNIT_ASSERT_EQUAL(event->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::PREPARED);
-        PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+        {
+            TAutoPtr<NActors::IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::PREPARED);
+
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
+
+            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+        }
+
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
+    }
+
+    Y_UNIT_TEST(AbotrInTransaction) {
+        using namespace NArrow;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<std::pair<TString, TTypeInfo>> schema = {
+                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
+                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
+                                                                };
+        PrepareTablet(runtime, tableId, schema);
+        const ui64 txId = 111;
+
+        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(8, 100));
+
+        auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+        TString blobData = NArrow::SerializeBatchNoCompression(batch);
+        UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
+        auto dataPtr = std::make_shared<TArrowData>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        evWrite->AddReplaceOp(tableId, dataPtr);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+
+        ui64 outdatedStep = 11;
+        {
+            TAutoPtr<NActors::IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::PREPARED);
+
+            outdatedStep = event->Record.GetMaxStep() + 1;
+            PlanWriteTx(runtime, sender, NOlap::TSnapshot(outdatedStep, txId + 1), false);
+        }
+
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(outdatedStep, txId), schema);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
+    }
+
+    Y_UNIT_TEST(WriteWithSplit) {
+        using namespace NArrow;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<std::pair<TString, TTypeInfo>> schema = {
+                                                                    {"key", TTypeInfo(NTypeIds::Uint64) },
+                                                                    {"field", TTypeInfo(NTypeIds::Utf8) }
+                                                                };
+        PrepareTablet(runtime, tableId, schema);
+        const ui64 txId = 111;
+
+        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(8, TLimits::GetMaxBlobSize() / 1024));
+
+        auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+        TString blobData = NArrow::SerializeBatchNoCompression(batch);
+        UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
+
+        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId);
+        auto dataPtr = std::make_shared<TArrowData>(schema, TPayloadHelper<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData)));
+        evWrite->AddReplaceOp(tableId, dataPtr);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+
+        {
+            TAutoPtr<NActors::IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::PREPARED);
+            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+        }
+
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 }
 

@@ -255,12 +255,16 @@ struct TEvPrivate {
             YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
             YDB_READONLY_DEF(TString, BlobData);
             YDB_ACCESSOR_DEF(TString, LogicalMeta);
+            YDB_ACCESSOR(ui64, RowsCount, 0);
+            YDB_ACCESSOR(ui64, RawBytes, 0);
         public:
             TPutBlobData() = default;
 
-            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data)
+            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, ui64 rowsCount, ui64 rawBytes)
                 : BlobId(blobId)
                 , BlobData(data)
+                , RowsCount(rowsCount)
+                , RawBytes(rawBytes)
             {}
         };
 
@@ -272,13 +276,13 @@ struct TEvPrivate {
             Y_VERIFY(PutResult);
         }
 
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TPutBlobData&& blobData, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)
             : TEvWriteBlobsResult(putResult, writeMeta, snapshot)
         {
             BlobData = std::move(blobData);
         }
 
-        const TPutBlobData& GetBlobData() const {
+        const TVector<TPutBlobData>& GetBlobData() const {
             return BlobData;
         }
 
@@ -300,7 +304,7 @@ struct TEvPrivate {
 
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
-        TPutBlobData BlobData;
+        TVector<TPutBlobData> BlobData;
         NEvWrite::TWriteMeta WriteMeta;
         NOlap::TSnapshot Snapshot;
     };

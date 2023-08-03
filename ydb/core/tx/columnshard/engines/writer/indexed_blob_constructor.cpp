@@ -12,44 +12,46 @@ TIndexedWriteController::TBlobConstructor::TBlobConstructor(NOlap::ISnapshotSche
 {}
 
 const TString& TIndexedWriteController::TBlobConstructor::GetBlob() const {
-    return DataPrepared;
+    Y_VERIFY(CurrentIndex > 0);
+    return BlobsSplitted[CurrentIndex - 1].GetData();
 }
 
 IBlobConstructor::EStatus TIndexedWriteController::TBlobConstructor::BuildNext() {
-    if (!!DataPrepared) {
+    if (CurrentIndex == BlobsSplitted.size()) {
         return EStatus::Finished;
     }
-
-    const auto& writeMeta = Owner.WriteData.GetWriteMeta();
-    const ui64 tableId = writeMeta.GetTableId();
-    const ui64 writeId = writeMeta.GetWriteId();
-
-    // Heavy operations inside. We cannot run them in tablet event handler.
-    {
-        NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
-        Batch = Owner.WriteData.GetData().GetArrowBatch();
-    }
-
-    if (!Batch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId);
-        return EStatus::Error;
-    }
-
-    {
-        NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
-        DataPrepared = NArrow::SerializeBatchNoCompression(Batch);
-    }
-
-    if (DataPrepared.size() > NColumnShard::TLimits::GetMaxBlobSize()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_data_too_big")("write_id", writeId)("table_id", tableId);
-        return EStatus::Error;
-    }
+    CurrentIndex++;
     return EStatus::Ok;
 }
 
 bool TIndexedWriteController::TBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
-    Y_VERIFY(blobId.BlobSize() == DataPrepared.size());
-    Owner.AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData(blobId, DataPrepared), Batch->num_rows(), NArrow::GetBatchDataSize(Batch));
+    const auto& blobInfo = BlobsSplitted[CurrentIndex - 1];
+    Owner.AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData(blobId, blobInfo.GetData(), blobInfo.GetRowsCount(), blobInfo.GetRawBytes()));
+    return true;
+}
+
+bool TIndexedWriteController::TBlobConstructor::Init() {
+    const auto& writeMeta = Owner.WriteData.GetWriteMeta();
+    const ui64 tableId = writeMeta.GetTableId();
+    const ui64 writeId = writeMeta.GetWriteId();
+
+    std::shared_ptr<arrow::RecordBatch> batch;
+    {
+        NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
+        batch = Owner.WriteData.GetData().GetArrowBatch();
+    }
+
+    if (!batch) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId);
+        return false;
+    }
+
+    auto splitResult = NArrow::SplitByBlobSize(batch, NColumnShard::TLimits::GetMaxBlobSize());
+    if (!splitResult) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
+        return false;
+    }
+    BlobsSplitted = splitResult.ReleaseResult();
     return true;
 }
 
@@ -63,8 +65,7 @@ TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const
 
 void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
     if (putResult->GetPutStatus() == NKikimrProto::OK) {
-        Y_VERIFY(BlobData.size() == 1);
-        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData[0]), WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData), WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
         ctx.Send(DstActor, result.release());
     } else {
         auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
@@ -72,14 +73,20 @@ void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx,
     }
 }
 
-void TIndexedWriteController::AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data, const ui64 numRows, const ui64 batchSize) {
-    Y_VERIFY(BlobData.empty());
+NOlap::IBlobConstructor::TPtr TIndexedWriteController::GetBlobConstructor() {
+    if (!BlobConstructor->Init()) {
+        return nullptr;
+    }
+    return BlobConstructor;
+}
 
+void TIndexedWriteController::AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data) {
     ui64 dirtyTime = AppData()->TimeProvider->Now().Seconds();
     Y_VERIFY(dirtyTime);
+
     NKikimrTxColumnShard::TLogicalMetadata outMeta;
-    outMeta.SetNumRows(numRows);
-    outMeta.SetRawBytes(batchSize);
+    outMeta.SetNumRows(data.GetRowsCount());
+    outMeta.SetRawBytes(data.GetRawBytes());
     outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
 
     TString metaString;

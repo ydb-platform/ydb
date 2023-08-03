@@ -212,23 +212,27 @@ std::shared_ptr<arrow::RecordBatch> ExtractExistedColumns(const std::shared_ptr<
 std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     auto res = arrow::Table::FromRecordBatches(batches);
     if (!res.ok()) {
-        return {};
+        return nullptr;
     }
 
     res = (*res)->CombineChunks();
     if (!res.ok()) {
-        return {};
+        return nullptr;
     }
 
-    return *res;
+    return res.ValueOrDie();
 }
 
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
+    if (batches.empty()) {
+        return nullptr;
+    }
     auto table = CombineInTable(batches);
-    return ToBatch(table);
+    return table ? ToBatch(table) : nullptr;
 }
 
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& table) {
+    Y_VERIFY(table);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(table->num_columns());
     for (auto& col : table->columns()) {

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 
 
 namespace NKikimr::NOlap {
@@ -16,10 +17,9 @@ private:
     class TBlobConstructor : public IBlobConstructor {
         TIndexedWriteController& Owner;
         NOlap::ISnapshotSchema::TPtr SnapshotSchema;
+        std::vector<NArrow::TSerializedBatch> BlobsSplitted;
 
-        TString DataPrepared;
-        std::shared_ptr<arrow::RecordBatch> Batch;
-
+        ui64 CurrentIndex = 0;
     public:
         TBlobConstructor(NOlap::ISnapshotSchema::TPtr snapshotSchema, TIndexedWriteController& owner);
 
@@ -29,11 +29,12 @@ private:
         const NOlap::TSnapshot& GetSnapshot() const {
             return SnapshotSchema->GetSnapshot();
         }
+        bool Init();
     };
 
     NEvWrite::TWriteData WriteData;
     std::shared_ptr<TBlobConstructor> BlobConstructor;
-    std::vector<NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData> BlobData;
+    TVector<NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData> BlobData;
     TActorId DstActor;
 
 public:
@@ -41,12 +42,10 @@ public:
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
 
-    NOlap::IBlobConstructor::TPtr GetBlobConstructor() override {
-        return BlobConstructor;
-    }
+    NOlap::IBlobConstructor::TPtr GetBlobConstructor() override;
 
 public:
-    void AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data, const ui64 numRows, const ui64 batchSize);
+    void AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data);
 };
 
 }

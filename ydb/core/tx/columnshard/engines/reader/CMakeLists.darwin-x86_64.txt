@@ -46,6 +46,7 @@ target_sources(columnshard-engines-reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_filter_merger.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_context.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/granule_preparation.cpp
 )
 generate_enum_serilization(columnshard-engines-reader
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/read_metadata.h

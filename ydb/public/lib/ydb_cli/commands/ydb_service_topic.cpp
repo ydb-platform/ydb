@@ -590,6 +590,9 @@ namespace {
         config.Opts->AddLongOption("timestamp", "Timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer.")
             .Optional()
             .StoreResult(&Timestamp_);
+        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions.")
+            .Optional()
+            .SplitHandler(&PartitionIds_, ',');
 
         AddAllowedMetadataFields(config);
         AddTransform(config);
@@ -650,6 +653,10 @@ namespace {
         // TODO(shmel1k@): partition can be added here.
         NTopic::TTopicReadSettings readSettings;
         readSettings.Path(TopicName);
+        for (ui64 id : PartitionIds_) {
+            readSettings.AppendPartitionIds(id);
+        }
+
         settings.AppendTopics(std::move(readSettings));
         return settings;
     }

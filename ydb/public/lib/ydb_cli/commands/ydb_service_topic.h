@@ -151,6 +151,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString Consumer_ = "";
+        TVector<ui64> PartitionIds_;
         TMaybe<uint32_t> Offset_;
         TMaybe<uint32_t> Partition_;
         TMaybe<ui64> Timestamp_;

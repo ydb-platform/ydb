@@ -780,7 +780,7 @@ protected:
             input.ConnectionInfo = NYql::NDq::TSourceInput{};
 
             // allocating source settings
-            
+
             input.Meta.SourceSettings = TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
             NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
             FillTableMeta(stageInfo, settings->MutableTable());
@@ -1026,9 +1026,9 @@ protected:
         const auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
 
         IActor* proxy;
-        if (txResult.IsStream) {
+        if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats, this->SelfId());
+                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, Stats, this->SelfId());
         } else {
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());

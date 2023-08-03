@@ -79,14 +79,14 @@ struct TKqpExecuterTxResult {
     bool IsStream = true;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
-    ui32 QueryResultIndex = 0;
+    TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
 
     explicit TKqpExecuterTxResult(
         bool isStream,
         NKikimr::NMiniKQL::TType* mkqlItemType,
         const TVector<ui32>* сolumnOrder,
-        ui32 queryResultIndex)
+        const TMaybe<ui32>& queryResultIndex)
         : IsStream(isStream)
         , MkqlItemType(mkqlItemType)
         , ColumnOrder(сolumnOrder)
@@ -199,7 +199,7 @@ private:
     THashMap<ui32, TVector<TKqpExecuterTxResult>> TxResults;
     TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
-    mutable TPartitionedParamMap PartitionedParams; 
+    mutable TPartitionedParamMap PartitionedParams;
 
 public:
     using TPtr = std::shared_ptr<TQueryData>;
@@ -268,7 +268,7 @@ public:
                 std::tie(type, value) = *param;
                 return true;
             }
-            
+
 
             return false;
         };

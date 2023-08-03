@@ -259,7 +259,7 @@ message TKqpPhyCnStreamLookup {
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
     repeated string Columns = 2;
-    repeated string AutoIncrementColumns = 3;  
+    repeated string AutoIncrementColumns = 3;
     bytes InputType = 4;
     bytes OutputType = 5;
 }
@@ -339,7 +339,7 @@ message TKqpPhyResult {
     NKikimrMiniKQL.TType ItemType = 2;
     bool IsStream = 3;
     repeated string ColumnHints = 4;
-    uint32 QueryResultIndex = 5;
+    optional uint32 QueryResultIndex = 5;
 }
 
 message TKqpSchemeOperation {

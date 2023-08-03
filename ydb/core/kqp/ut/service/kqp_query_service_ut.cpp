@@ -392,6 +392,23 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(MaterializeTxResults) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            DELETE FROM KeyValue;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT * FROM KeyValue;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, i32 tries = -1) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
         NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;

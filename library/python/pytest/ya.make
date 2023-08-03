@@ -10,6 +10,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/attrs
     contrib/python/python-dateutil
     contrib/python/ipdb
     contrib/python/py

@@ -1988,13 +1988,6 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                 "Got config subscription id=" << ConfigSubscriptionId);
 }
 
-void TCms::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                  const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,
                   const TActorContext &ctx)
 {

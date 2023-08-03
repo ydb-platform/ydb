@@ -376,7 +376,6 @@ private:
 private:
     void VerifyKesusPath(const TString& kesusPath);
 
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev);
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -424,7 +423,6 @@ private:
 private:
     STFUNC(StateInit);
     STFUNC(StateWork);
-    STFUNC(StateZombie);
 
 private:
     void AddSessionTx(ui64 sessionId) {

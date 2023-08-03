@@ -179,13 +179,6 @@ void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorCon
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
 }
 
-void TConsole::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                      const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)
 {
     return new TConsole(tablet, info);

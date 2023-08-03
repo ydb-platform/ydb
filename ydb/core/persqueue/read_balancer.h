@@ -179,11 +179,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     friend struct TTxWrite;
 
-    void Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext &ctx) {
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-    }
-
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
 
@@ -312,7 +307,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void AnswerWaitingRequests(const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
@@ -573,7 +567,6 @@ public:
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
             HFunc(TEvPersQueue::TEvWakeupClient, Handle);
             HFunc(TEvPersQueue::TEvDescribe, Handle);
@@ -597,7 +590,6 @@ public:
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             HFunc(TEvPersQueue::TEvUpdateACL, HandleUpdateACL);
             HFunc(TEvPersQueue::TEvCheckACL, Handle);
@@ -623,15 +615,6 @@ public:
             default:
                 HandleDefaultEvents(ev, SelfId());
                 break;
-        }
-    }
-
-    STFUNC(StateBroken) {
-        auto ctx(ActorContext());
-        TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
-
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
         }
     }
 

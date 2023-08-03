@@ -471,14 +471,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const T
 }
 
 
-void TPersQueueReadBalancer::Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx) {
-    Y_UNUSED(ev);
-    Y_UNUSED(ctx);
-    Become(&TThis::StateBroken);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
-
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr &ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if ((int)record.GetVersion() < Version && Inited) {

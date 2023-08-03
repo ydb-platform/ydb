@@ -73,8 +73,6 @@ private:
     void ForwardToTenantsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                const TActorContext &ctx);
 
     STFUNC(StateInit)
     {
@@ -123,7 +121,6 @@ private:
             HFuncTraced(TEvConsole::TEvSetConfigRequest, Handle);
             FFunc(TEvConsole::EvToggleConfigValidatorRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
 

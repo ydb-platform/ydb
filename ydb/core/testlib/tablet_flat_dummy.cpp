@@ -82,12 +82,6 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
     friend struct TTxSchemeInit;
     friend struct TTxInit;
 
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev);
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-    }
-
     void OnActivateExecutor(const TActorContext &ctx) override {
         Become(&TThis::StateWork);
         if (Executor()->GetStats().IsFollower)
@@ -125,16 +119,9 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
             default:
                 HandleDefaultEvents(ev, SelfId());
                 break;
-        }
-    }
-
-    STFUNC(StateBroken) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
         }
     }
 };

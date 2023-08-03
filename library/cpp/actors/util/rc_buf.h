@@ -294,6 +294,13 @@ struct IContiguousChunk : TThrRefBase {
         return GetDataMut();
     }
 
+    /**
+     * Should return true if GetDataMut() would not copy contents when called.
+     */
+    virtual bool IsPrivate() const {
+        return true;
+    }
+
     virtual size_t GetOccupiedMemorySize() const = 0;
 };
 
@@ -434,8 +441,12 @@ class TRcBuf {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return value.IsPrivate();
+                } else if constexpr (std::is_same_v<T, TString>) {
+                    return value.IsDetached();
+                } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
+                    return value.RefCount() == 1 && value->IsPrivate();
                 } else {
-                    return false;
+                    static_assert(TDependentFalse<T>);
                 }
             });
         }
@@ -865,14 +876,20 @@ public:
         return Begin;
     }
 
-    char* GetDataMut() {
-        const char* oldBegin = Backend.GetData().data();
-        ptrdiff_t offset = Begin - oldBegin;
-        size_t size = GetSize();
-        char* newBegin = Backend.GetDataMut().data();
-        Begin = newBegin + offset;
-        End = Begin + size;
-        return newBegin + offset;
+    char* GetDataMut(size_t headroom = 0, size_t tailroom = 0) {
+        const TContiguousSpan backendData = Backend.GetData();
+        if (IsPrivate() || (backendData.data() == GetData() && backendData.size() == GetSize())) { // if we own container or reference it whole
+            const char* oldBegin = backendData.data();
+            ptrdiff_t offset = Begin - oldBegin;
+            size_t size = GetSize();
+            char* newBegin = Backend.GetDataMut().data();
+            Begin = newBegin + offset;
+            End = Begin + size;
+            return newBegin + offset;
+        } else { // make a copy of referenced data
+            *this = Copy(GetContiguousSpan(), headroom, tailroom);
+            return Backend.GetDataMut().data();
+        }
     }
 
     char* UnsafeGetDataMut() {
@@ -1062,6 +1079,10 @@ public:
 
     char* Detach() {
         return GetDataMut();
+    }
+
+    bool IsPrivate() const {
+        return Backend.IsPrivate();
     }
 
     size_t UnsafeHeadroom() const {

@@ -577,7 +577,8 @@ inline
 TAsyncStatus TImportFileClient::UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder) {
     auto upsert = [this, dbPath, rows = builder.Build()]
             (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
-        return tableClient.BulkUpsert(dbPath, std::move(rows), UpsertSettings)
+        NYdb::TValue rowsCopy(rows.GetType(), rows.GetProto());
+        return tableClient.BulkUpsert(dbPath, std::move(rowsCopy), UpsertSettings)
             .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                 NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                 return NThreading::MakeFuture(status);

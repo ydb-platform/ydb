@@ -141,7 +141,7 @@ namespace NKikimr::NTestShard {
         void HandleWriteOnTime();
         void HandleDoSomeAction();
 
-        std::unordered_map<ui64, std::tuple<TString, ui32, ui32, TMonotonic, bool>> ReadsInFlight;
+        std::unordered_map<ui64, std::tuple<TString, TMonotonic, bool, std::vector<std::tuple<ui32, ui32>>>> ReadsInFlight;
         std::unordered_map<TString, ui32> KeysBeingRead;
 
         bool IssueRead();

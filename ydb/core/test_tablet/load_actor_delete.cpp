@@ -20,6 +20,7 @@ namespace NKikimr::NTestShard {
 
             auto ev = CreateRequest();
             auto& record = ev->Record;
+            const ui64 cookie = record.GetCookie();
             auto *del = record.AddCmdDeleteRange();
             auto *r = del->MutableRange();
             r->SetFrom(key);
@@ -33,7 +34,7 @@ namespace NKikimr::NTestShard {
             Y_VERIFY(it != Keys.end());
             RegisterTransition(*it, ::NTestShard::TStateServer::CONFIRMED, ::NTestShard::TStateServer::DELETE_PENDING, std::move(ev));
 
-            const auto [difIt, difInserted] = DeletesInFlight.try_emplace(record.GetCookie(), std::move(key));
+            const auto [difIt, difInserted] = DeletesInFlight.try_emplace(cookie, std::move(key));
             Y_VERIFY(difInserted);
             Y_VERIFY(difIt->second.KeysInQuery.size() == 1);
 

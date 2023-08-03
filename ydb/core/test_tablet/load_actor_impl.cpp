@@ -188,7 +188,7 @@ namespace NKikimr::NTestShard {
                 DeletesInFlight.erase(it);
             }
             if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
-                const auto& [key, offset, size, timestamp, payloadInResponse] = it->second;
+                const auto& [key, timestamp, payloadInResponse, items] = it->second;
                 const auto jt = KeysBeingRead.find(key);
                 Y_VERIFY(jt != KeysBeingRead.end() && jt->second);
                 if (!--jt->second) {

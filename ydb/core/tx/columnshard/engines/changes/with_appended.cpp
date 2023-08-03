@@ -60,7 +60,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     for (auto& portionInfo : AppendedPortions) {
         Y_VERIFY(!portionInfo.Empty());
 
-        const ui64 granule = portionInfo.Granule();
+        const ui64 granule = portionInfo.GetGranule();
         if (dryRun) {
             auto granulePtr = self.GetGranuleOptional(granule);
             if (!granulePtr && !NewGranules.contains(granule)) {
@@ -87,7 +87,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 
         if (!dryRun) {
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, record);
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
             }
         }
     }
@@ -128,12 +128,11 @@ std::vector<NKikimr::NOlap::TPortionInfo> TChangesWithAppend::MakeAppendedPortio
     std::vector<TString> portionBlobs;
     std::shared_ptr<arrow::RecordBatch> portionBatch;
     while (limiter.Next(portionBlobs, portionBatch, saverContext)) {
-        TPortionInfo portionInfo;
+        TPortionInfo portionInfo(granule, 0, snapshot);
         portionInfo.Records.reserve(resultSchema->GetSchema()->num_fields());
         for (auto&& f : resultSchema->GetSchema()->fields()) {
             const ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(f->name());
-            TColumnRecord record = TColumnRecord::Make(granule, columnId, snapshot, 0);
-            portionInfo.AppendOneChunkColumn(std::move(record));
+            portionInfo.AppendOneChunkColumn(TColumnRecord::Make(columnId));
         }
         for (auto&& i : portionBlobs) {
             blobs.emplace_back(i);

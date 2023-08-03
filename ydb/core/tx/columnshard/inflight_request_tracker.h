@@ -54,7 +54,7 @@ public:
             }
 
             for (const auto& portion : readMeta->SelectInfo->Portions) {
-                const ui64 portionId = portion.Records[0].Portion;
+                const ui64 portionId = portion.GetPortion();
                 auto it = PortionUseCount.find(portionId);
                 Y_VERIFY(it != PortionUseCount.end(), "Portion id %" PRIu64 " not found in request %" PRIu64, portionId, cookie);
                 if (it->second == 1) {
@@ -106,7 +106,7 @@ private:
         SelectStatsDelta += selectInfo->Stats();
 
         for (const auto& portion : readMeta->SelectInfo->Portions) {
-            const ui64 portionId = portion.Records[0].Portion;
+            const ui64 portionId = portion.GetPortion();
             PortionUseCount[portionId]++;
             for (auto& rec : portion.Records) {
                 blobTracker.SetBlobInUse(rec.BlobRange.BlobId, true);

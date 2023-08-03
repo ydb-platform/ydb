@@ -2912,7 +2912,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     for (const auto& portion : append->AppendedPortions) {
                         ++addedPortions;
                         ui64 portionId = addedPortions;
-                        Cerr << " " << portionId << "(" << portion.Records[0].Portion << ")";
+                        Cerr << " " << portionId << "(" << portion.GetPortion() << ")";
                     }
                     Cerr << Endl;
                 }
@@ -2924,10 +2924,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : compact->SwitchedPortions) {
                         const bool moved = compact->IsMovedPortion(portionInfo);
-                        ui64 granule = portionInfo.Granule();
+                        ui64 granule = portionInfo.GetGranule();
                         UNIT_ASSERT(!srcGranule || srcGranule == granule);
                         srcGranule = granule;
-                        ui64 portionId = portionInfo.Portion();
+                        ui64 portionId = portionInfo.GetPortion();
                         if (moved) {
                             Cerr << " MOVED: " << portionId;
                         } else {
@@ -2943,7 +2943,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << "Cleanup older than snapshot "<< msg->IndexChanges->InitSnapshot
                         << " old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        ui64 portionId = portion.Records[0].Portion;
+                        ui64 portionId = portion.GetPortion();
                         Cerr << " " << portionId;
                         deletedPortions.insert(portionId);
                     }

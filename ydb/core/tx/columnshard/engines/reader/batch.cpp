@@ -9,12 +9,13 @@ namespace NKikimr::NOlap::NIndexedReader {
 
 TBatch::TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo, const ui64 predictedBatchSize)
     : BatchAddress(address)
-    , Portion(portionInfo.Records[0].Portion)
+    , Portion(portionInfo.GetPortion())
     , Granule(owner.GetGranuleId())
     , PredictedBatchSize(predictedBatchSize)
     , Owner(&owner)
     , PortionInfo(&portionInfo)
 {
+    Y_VERIFY(Granule == PortionInfo->GetGranule());
     Y_VERIFY(portionInfo.Records.size());
 
     if (portionInfo.CanIntersectOthers()) {
@@ -71,9 +72,7 @@ ui64 TBatch::GetFetchBytes(const std::set<ui32>& columnIds) {
         if (!columnIds.contains(rec.ColumnId)) {
             continue;
         }
-        Y_VERIFY(rec.Portion == Portion);
         Y_VERIFY(rec.Valid());
-        Y_VERIFY(Granule == rec.Granule);
         result += rec.BlobRange.Size;
     }
     return result;
@@ -101,9 +100,7 @@ void TBatch::ResetNoFilter(const std::set<ui32>& columnIds) {
         }
         Y_VERIFY(WaitIndexed.emplace(rec.BlobRange).second);
         Owner->AddBlobForFetch(rec.BlobRange, *this);
-        Y_VERIFY(rec.Portion == Portion);
         Y_VERIFY(rec.Valid());
-        Y_VERIFY(Granule == rec.Granule);
         WaitingBytes += rec.BlobRange.Size;
     }
 }
@@ -118,8 +115,6 @@ void TBatch::ResetWithFilter(const std::set<ui32>& columnIds) {
         }
         orderedObjects[rec.ColumnId][rec.Chunk] = &rec;
         Y_VERIFY(rec.Valid());
-        Y_VERIFY(Portion == rec.Portion);
-        Y_VERIFY(Granule == rec.Granule);
     }
 
     for (auto&& columnInfo : orderedObjects) {

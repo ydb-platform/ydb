@@ -99,7 +99,16 @@ public:
 };
 
 struct TPortionInfo {
+private:
+    TPortionInfo() = default;
+public:
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
+    ui64 Granule = 0;
+    ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in granule
+    ui64 PlanStep = 0;  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
+    ui64 TxId = 0;
+    ui64 XPlanStep = 0; // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
+    ui64 XTxId = 0;
 
     std::vector<TColumnRecord> Records;
     TPortionMeta Meta;
@@ -107,17 +116,50 @@ struct TPortionInfo {
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
-    bool Valid() const { return !Empty() && Produced() && Meta.HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool Valid() const { return PlanStep && TxId && Granule && Portion && !Empty() && Produced() && Meta.HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool ValidSnapshotInfo() const { return PlanStep && TxId && Granule && Portion; }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool IsEvicted() const { return Meta.Produced == TPortionMeta::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumRecords() const { return Records.size(); }
 
+    TPortionInfo FilterColumns(const THashSet<ui32>& columnIds) const {
+        TPortionInfo result(Granule, Portion, GetSnapshot());
+        result.Meta = Meta;
+        result.Records.reserve(columnIds.size());
+
+        for (auto& rec : Records) {
+            Y_VERIFY(rec.Valid());
+            if (columnIds.contains(rec.ColumnId)) {
+                result.Records.push_back(rec);
+            }
+        }
+        return result;
+    }
+
+    bool IsEqualWithSnapshots(const TPortionInfo& item) const {
+        return Granule == item.Granule && PlanStep == item.PlanStep && TxId == item.TxId
+            && Portion == item.Portion && XPlanStep == item.XPlanStep && XTxId == item.XTxId;
+    }
+
+    static TPortionInfo BuildEmpty() {
+        return TPortionInfo();
+    }
+
+    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& snapshot)
+        : Granule(granuleId)
+        , Portion(portionId)
+        , PlanStep(snapshot.GetPlanStep())
+        , TxId(snapshot.GetTxId())
+    {
+
+    }
+
     TString DebugString() const {
         return TStringBuilder() <<
-            "portion_id:" << Portion() << ";" <<
-            "granule_id:" << Granule() << ";" <<
+            "portion_id:" << Portion << ";" <<
+            "granule_id:" << Granule << ";" <<
             "meta:(" << Meta.DebugString() << ");"
             ;
     }
@@ -146,44 +188,45 @@ struct TPortionInfo {
             || (Meta.Produced == TPortionMeta::INSERTED && BlobsSizes().first >= hotSize);
     }
 
-    ui64 Portion() const {
-        Y_VERIFY(!Empty());
-        auto& rec = Records[0];
-        return rec.Portion;
+    ui64 GetPortion() const {
+        return Portion;
     }
 
-    ui64 Granule() const {
-        Y_VERIFY(!Empty());
-        auto& rec = Records[0];
-        return rec.Granule;
+    ui64 GetGranule() const {
+        return Granule;
     }
 
     TPortionAddress GetAddress() const {
-        Y_VERIFY(!Empty());
-        auto& rec = Records[0];
-        return TPortionAddress(rec.Granule, rec.Portion);
+        return TPortionAddress(Granule, Portion);
     }
 
-    void SetGranule(ui64 granule) {
-        for (auto& rec : Records) {
-            rec.Granule = granule;
-        }
+    void SetGranule(const ui64 granule) {
+        Granule = granule;
     }
 
     TSnapshot GetSnapshot() const {
-        Y_VERIFY(!Empty());
-        auto& rec = Records[0];
-        return TSnapshot(rec.PlanStep, rec.TxId);
+        return TSnapshot(PlanStep, TxId);
     }
 
     TSnapshot GetXSnapshot() const {
         Y_VERIFY(!Empty());
-        auto& rec = Records[0];
-        return TSnapshot(rec.XPlanStep, rec.XTxId);
+        return TSnapshot(XPlanStep, XTxId);
     }
 
     bool IsActive() const {
         return GetXSnapshot().IsZero();
+    }
+
+    void SetSnapshot(const TSnapshot& snap) {
+        Y_VERIFY(snap.Valid());
+        PlanStep = snap.GetPlanStep();
+        TxId = snap.GetTxId();
+    }
+
+    void SetXSnapshot(const TSnapshot& snap) {
+        Y_VERIFY(snap.Valid());
+        XPlanStep = snap.GetPlanStep();
+        XTxId = snap.GetTxId();
     }
 
     std::pair<ui32, ui32> BlobsSizes() const {
@@ -205,15 +248,11 @@ struct TPortionInfo {
     }
 
     void UpdatePortionId(const ui64 portionId) {
-        for (auto& rec : Records) {
-            rec.Portion = portionId;
-        }
+        Portion = portionId;
     }
 
     void UpdateGranuleId(const ui64 granuleId) {
-        for (auto& rec : Records) {
-            rec.Granule = granuleId;
-        }
+        Granule = granuleId;
     }
 
     void UpdateRecordsMeta(TPortionMeta::EProduced produced) {
@@ -224,9 +263,7 @@ struct TPortionInfo {
     }
 
     void SetStale(const TSnapshot& snapshot) {
-        for (auto& rec : Records) {
-            rec.SetXSnapshot(snapshot);
-        }
+        SetXSnapshot(snapshot);
     }
 
     void AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec) {

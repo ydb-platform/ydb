@@ -591,10 +591,10 @@ struct Schema : NIceDb::Schema {
 
     // IndexColumns activities
 
-    static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, row.Granule, row.ColumnId, row.PlanStep, row.TxId, row.Portion, row.Chunk).Update(
-            NIceDb::TUpdate<IndexColumns::XPlanStep>(row.XPlanStep),
-            NIceDb::TUpdate<IndexColumns::XTxId>(row.XTxId),
+    static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId, portion.PlanStep, portion.TxId, portion.Portion, row.Chunk).Update(
+            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.XPlanStep),
+            NIceDb::TUpdate<IndexColumns::XTxId>(portion.XTxId),
             NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
             NIceDb::TUpdate<IndexColumns::Metadata>(row.Metadata),
             NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
@@ -602,26 +602,27 @@ struct Schema : NIceDb::Schema {
         );
     }
 
-    static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, row.Granule, row.ColumnId, row.PlanStep, row.TxId, row.Portion, row.Chunk).Delete();
+    static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        db.Table<IndexColumns>().Key(index, portion.Granule, row.ColumnId, portion.PlanStep, portion.TxId, portion.Portion, row.Chunk).Delete();
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
-                                  const std::function<void(const TColumnRecord&)>& callback) {
+                                  const std::function<void(const NOlap::TPortionInfo&, const TColumnRecord&)>& callback) {
         auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
 
         while (!rowset.EndOfSet()) {
             TColumnRecord row;
-            row.Granule = rowset.GetValue<IndexColumns::Granule>();
+            NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
+            portion.Granule = rowset.GetValue<IndexColumns::Granule>();
             row.ColumnId = rowset.GetValue<IndexColumns::ColumnIdx>();
-            row.PlanStep = rowset.GetValue<IndexColumns::PlanStep>();
-            row.TxId = rowset.GetValue<IndexColumns::TxId>();
-            row.Portion = rowset.GetValue<IndexColumns::Portion>();
+            portion.PlanStep = rowset.GetValue<IndexColumns::PlanStep>();
+            portion.TxId = rowset.GetValue<IndexColumns::TxId>();
+            portion.Portion = rowset.GetValue<IndexColumns::Portion>();
             row.Chunk = rowset.GetValue<IndexColumns::Chunk>();
-            row.XPlanStep = rowset.GetValue<IndexColumns::XPlanStep>();
-            row.XTxId = rowset.GetValue<IndexColumns::XTxId>();
+            portion.XPlanStep = rowset.GetValue<IndexColumns::XPlanStep>();
+            portion.XTxId = rowset.GetValue<IndexColumns::XTxId>();
             TString strBlobId = rowset.GetValue<IndexColumns::Blob>();
             row.Metadata = rowset.GetValue<IndexColumns::Metadata>();
             row.BlobRange.Offset = rowset.GetValue<IndexColumns::Offset>();
@@ -631,7 +632,7 @@ struct Schema : NIceDb::Schema {
             TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
             row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
 
-            callback(row);
+            callback(portion, row);
 
             if (!rowset.Next())
                 return false;

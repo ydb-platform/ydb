@@ -348,7 +348,7 @@ public:
 
     const TGranuleRecord Record;
 
-    void AddColumnRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec);
+    void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec);
 
     const THashMap<ui64, TPortionInfo>& GetPortions() const {
         return Portions;

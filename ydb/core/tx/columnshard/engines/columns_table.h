@@ -13,15 +13,15 @@ public:
         : IndexId(indexId)
     {}
 
-    void Write(IDbWrapper& db, const TColumnRecord& row) {
-        db.WriteColumn(IndexId, row);
+    void Write(IDbWrapper& db, const TPortionInfo& portion, const TColumnRecord& row) {
+        db.WriteColumn(IndexId, portion, row);
     }
 
-    void Erase(IDbWrapper& db, const TColumnRecord& row) {
-        db.EraseColumn(IndexId, row);
+    void Erase(IDbWrapper& db, const TPortionInfo& portion, const TColumnRecord& row) {
+        db.EraseColumn(IndexId, portion, row);
     }
 
-    bool Load(IDbWrapper& db, std::function<void(const TColumnRecord&)> callback) {
+    bool Load(IDbWrapper& db, std::function<void(const TPortionInfo&, const TColumnRecord&)> callback) {
         return db.LoadColumns(IndexId, callback);
     }
 

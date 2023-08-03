@@ -57,7 +57,7 @@ bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
         }
         if (!dryRun) {
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Erase(context.DB, record);
+                self.ColumnsTable->Erase(context.DB, portionInfo, record);
             }
         }
     }

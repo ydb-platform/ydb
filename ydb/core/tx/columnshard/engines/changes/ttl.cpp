@@ -34,8 +34,8 @@ bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyC
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(portionInfo.IsActive());
 
-        ui64 granule = portionInfo.Granule();
-        ui64 portion = portionInfo.Portion();
+        const ui64 granule = portionInfo.GetGranule();
+        const ui64 portion = portionInfo.GetPortion();
         if (!self.IsPortionExists(granule, portion)) {
             LOG_S_ERROR("Cannot evict unknown portion " << portionInfo << " at tablet " << self.GetTabletId());
             return false;
@@ -56,7 +56,7 @@ bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyC
 
         if (!dryRun) {
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, record);
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
             }
         }
     }

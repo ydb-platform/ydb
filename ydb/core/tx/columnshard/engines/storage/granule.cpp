@@ -27,10 +27,10 @@ ui64 TGranuleMeta::Size() const {
 }
 
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
-    auto it = Portions.find(info.Portion());
+    auto it = Portions.find(info.GetPortion());
     if (it == Portions.end()) {
         OnBeforeChangePortion(nullptr, &info);
-        Portions.emplace(info.Portion(), info);
+        Portions.emplace(info.GetPortion(), info);
     } else {
         OnBeforeChangePortion(&it->second, &info);
         it->second = info;
@@ -52,12 +52,16 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec) {
-    auto& portion = Portions[rec.Portion];
-    auto portionNew = portion;
+void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec) {
+    auto it = Portions.find(portion.GetPortion());
+    if (it == Portions.end()) {
+        it = Portions.emplace(portion.GetPortion(), portion).first;
+    }
+    Y_VERIFY(it->second.IsEqualWithSnapshots(portion));
+    auto portionNew = it->second;
     portionNew.AddRecord(indexInfo, rec);
-    OnBeforeChangePortion(&portion, &portionNew);
-    portion = std::move(portionNew);
+    OnBeforeChangePortion(&it->second, &portionNew);
+    it->second = std::move(portionNew);
     OnAfterChangePortion();
 }
 

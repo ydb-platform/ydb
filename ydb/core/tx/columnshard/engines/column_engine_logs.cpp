@@ -81,7 +81,7 @@ void TColumnEngineForLogs::UpdatePortionStats(const TPortionInfo& portionInfo, E
                                             const TPortionInfo* exPortionInfo) {
     UpdatePortionStats(Counters, portionInfo, updateType, exPortionInfo);
 
-    ui64 granule = portionInfo.Granule();
+    const ui64 granule = portionInfo.GetGranule();
     Y_VERIFY(granule);
     Y_VERIFY(Granules.contains(granule));
     ui64 pathId = Granules[granule]->PathId();
@@ -236,14 +236,15 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
-    return ColumnsTable->Load(db, [&](const TColumnRecord& rec) {
+    return ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnRecord& rec) {
         auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
+        Y_VERIFY(portion.ValidSnapshotInfo());
         Y_VERIFY(rec.Valid());
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(rec.BlobRange.BlobId);
         // Locate granule and append the record.
-        if (const auto gi = Granules.find(rec.Granule); gi != Granules.end()) {
-            gi->second->AddColumnRecord(indexInfo, rec);
+        if (const auto gi = Granules.find(portion.Granule); gi != Granules.end()) {
+            gi->second->AddColumnRecord(indexInfo, portion, rec);
         } else {
             Y_VERIFY(false);
         }
@@ -643,14 +644,18 @@ void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& 
 }
 
 bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, const TPortionInfo* exInfo) {
-    ui64 granule = portionInfo.Granule();
+    const ui64 granule = portionInfo.GetGranule();
 
     if (!apply) {
+        if (!portionInfo.ValidSnapshotInfo()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "incorrect_portion")("portion", portionInfo.DebugString());
+            return false;
+        }
+        if (granule != portionInfo.GetGranule()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "inconsistency_granule")("granule", granule)("portion_granule", portionInfo.GetGranule());
+            return false;
+        }
         for (auto& record : portionInfo.Records) {
-            if (granule != record.Granule) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "inconsistency_granule")("granule", granule)("record_granule", record.Granule);
-                return false;
-            }
             if (!record.Valid()) {
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "incorrect_record")("record", record.DebugString());
                 return false;
@@ -675,8 +680,8 @@ bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool a
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats) {
     Y_VERIFY(!portionInfo.Empty());
-    const ui64 portion = portionInfo.Portion();
-    auto it = Granules.find(portionInfo.Granule());
+    const ui64 portion = portionInfo.GetPortion();
+    auto it = Granules.find(portionInfo.GetGranule());
     Y_VERIFY(it != Granules.end());
     auto& spg = it->second;
     Y_VERIFY(spg);
@@ -777,24 +782,15 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             TMap<TSnapshot, std::vector<const TPortionInfo*>> orderedPortions = GroupPortionsBySnapshot(portions, snapshot);
             for (auto& [snap, vec] : orderedPortions) {
                 for (const auto* portionInfo : vec) {
-                    TPortionInfo outPortion;
-                    outPortion.Meta = portionInfo->Meta;
-                    outPortion.Records.reserve(columnIds.size());
-
-                    for (auto& rec : portionInfo->Records) {
-                        Y_VERIFY(rec.Valid());
-                        if (columnIds.contains(rec.ColumnId)) {
-                            outPortion.Records.push_back(rec);
-                        }
-                    }
+                    TPortionInfo outPortion = portionInfo->FilterColumns(columnIds);
                     Y_VERIFY(outPortion.Produced());
                     if (!pkRangesFilter.IsPortionInUsage(outPortion, VersionedIndex.GetLastSchema()->GetIndexInfo())) {
                         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
-                            ("granule", granule)("portion", portionInfo->Portion());
+                            ("granule", granule)("portion", portionInfo->GetPortion());
                         continue;
                     } else {
                         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
-                            ("granule", granule)("portion", portionInfo->Portion());
+                            ("granule", granule)("portion", portionInfo->GetPortion());
                     }
                     out->Portions.emplace_back(std::move(outPortion));
                     granuleHasDataForSnaphsot = true;

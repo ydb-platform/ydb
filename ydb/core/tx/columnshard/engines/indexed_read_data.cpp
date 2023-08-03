@@ -154,11 +154,11 @@ void TIndexedReadData::InitRead() {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
-        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.Granule());
+        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.GetGranule());
         granule->RegisterBatchForFetching(portionInfo);
-        if (prevGranule != portionInfo.Granule()) {
-            Y_VERIFY(granulesReady.emplace(portionInfo.Granule()).second);
-            prevGranule = portionInfo.Granule();
+        if (prevGranule != portionInfo.GetGranule()) {
+            Y_VERIFY(granulesReady.emplace(portionInfo.GetGranule()).second);
+            prevGranule = portionInfo.GetGranule();
         }
     }
     GranulesContext->PrepareForStart();

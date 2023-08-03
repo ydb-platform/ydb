@@ -18,7 +18,7 @@ class TTestDbWrapper : public IDbWrapper {
 public:
     struct TIndex {
         THashMap<ui64, std::vector<TGranuleRecord>> Granules; // pathId -> granule
-        THashMap<ui64, std::vector<TColumnRecord>> Columns; // granule -> columns
+        THashMap<ui64, THashMap<ui64, TPortionInfo>> Columns; // granule -> portions
         THashMap<ui32, ui64> Counters;
     };
 
@@ -102,40 +102,54 @@ public:
         return true;
     }
 
-    void WriteColumn(ui32 index, const TColumnRecord& row) override {
-        auto& columns = Indices[index].Columns[row.Granule];
+    void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
+        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto it = data.find(portion.GetPortion());
+        if (it == data.end()) {
+            it = data.emplace(portion.GetPortion(), portion.FilterColumns({})).first;
+        } else {
+            Y_VERIFY(portion.Granule == it->second.Granule && portion.Portion == it->second.Portion);
+        }
+        it->second.TxId = portion.TxId;
+        it->second.PlanStep = portion.PlanStep;
+        it->second.XTxId = portion.XTxId;
+        it->second.XPlanStep = portion.XPlanStep;
 
         bool replaced = false;
-        for (auto& rec : columns) {
-            if (rec == row) {
+        for (auto& rec : it->second.Records) {
+            if (rec.IsEqualTest(row)) {
                 rec = row;
                 replaced = true;
                 break;
             }
         }
         if (!replaced) {
-            columns.push_back(row);
+            it->second.Records.push_back(row);
         }
     }
 
-    void EraseColumn(ui32 index, const TColumnRecord& row) override {
-        auto& columns = Indices[index].Columns[row.Granule];
+    void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
+        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto it = data.find(portion.GetPortion());
+        Y_VERIFY(it != data.end());
+        auto& portionLocal = it->second;
 
         std::vector<TColumnRecord> filtered;
-        filtered.reserve(columns.size());
-        for (auto& rec : columns) {
-            if (rec != row) {
+        for (auto& rec : portionLocal.Records) {
+            if (!rec.IsEqualTest(row)) {
                 filtered.push_back(rec);
             }
         }
-        columns.swap(filtered);
+        portionLocal.Records.swap(filtered);
     }
 
-    bool LoadColumns(ui32 index, const std::function<void(const TColumnRecord&)>& callback) override {
+    bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnRecord&)>& callback) override {
         auto& columns = Indices[index].Columns;
-        for (auto& [granule, vec] : columns) {
-            for (const auto& rec : vec) {
-                callback(rec);
+        for (auto& [granule, portions] : columns) {
+            for (auto& [portionId, portionLocal] : portions) {
+                for (const auto& rec : portionLocal.Records) {
+                    callback(portionLocal, rec);
+                }
             }
         }
         return true;

@@ -90,10 +90,10 @@ void TColumnShard::TBackgroundController::StartTtl(const NOlap::TColumnEngineCha
     Y_VERIFY(ActiveTtlGranules.empty());
 
     for (const auto& portionInfo : ttlChanges->PortionsToDrop) {
-        ActiveTtlGranules.emplace(portionInfo.Granule());
+        ActiveTtlGranules.emplace(portionInfo.GetGranule());
     }
     for (const auto& [portionInfo, _] : ttlChanges->PortionsToEvict) {
-        ActiveTtlGranules.emplace(portionInfo.Granule());
+        ActiveTtlGranules.emplace(portionInfo.GetGranule());
     }
 }
 
@@ -834,7 +834,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     std::vector<NOlap::TPortionInfo> portionsCanBedropped;
     THashSet<ui64> excludedPortions;
     for (const auto& portionInfo : changes->PortionsToDrop) {
-        ui64 portionId = portionInfo.Records.front().Portion;
+        const ui64 portionId = portionInfo.GetPortion();
         // Exclude portions that are used by in-flight reads/scans
         if (!InFlightReadsTracker.IsPortionUsed(portionId)) {
             portionsCanBedropped.push_back(portionInfo);

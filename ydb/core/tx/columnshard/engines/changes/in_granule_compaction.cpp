@@ -20,7 +20,7 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
             if (portionInfo.IsInserted()) {
                 ++insertedCount;
             } else if (portionInfo.BlobsSizes().second >= limits.GoodBlobSize) {
-                goodCompacted.insert(portionInfo.Portion());
+                goodCompacted.insert(portionInfo.GetPortion());
             }
 
             const NArrow::TReplaceKey& start = portionInfo.IndexKeyStart();
@@ -38,7 +38,7 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
             for (const auto* portionInfo : vec) {
                 if (portionInfo) {
                     ++sum;
-                    ui64 currentPortion = portionInfo->Portion();
+                    ui64 currentPortion = portionInfo->GetPortion();
                     if (!bucketStartPortion) {
                         bucketStartPortion = currentPortion;
                     }
@@ -84,7 +84,7 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
     std::vector<TPortionInfo> tmp;
     tmp.reserve(portions.size());
     for (auto& portionInfo : portions) {
-        ui64 curPortion = portionInfo.Portion();
+        ui64 curPortion = portionInfo.GetPortion();
 
         // Prevent merge of compacted portions with no intersections
         if (filtered.contains(curPortion)) {
@@ -124,7 +124,7 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TInGranuleCompactColum
     TSnapshot maxSnapshot = resultSchema->GetSnapshot();
     for (auto& portionInfo : portions) {
         Y_VERIFY(!portionInfo.Empty());
-        Y_VERIFY(portionInfo.Granule() == granule);
+        Y_VERIFY(portionInfo.GetGranule() == granule);
         auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetSnapshot());
         auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs);
         batches.push_back(batch);
@@ -145,7 +145,7 @@ TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstr
     auto& switchedPortions = SwitchedPortions;
     Y_VERIFY(switchedPortions.size());
 
-    ui64 granule = switchedPortions[0].Granule();
+    const ui64 granule = switchedPortions[0].GetGranule();
     auto [batch, maxSnapshot] = CompactInOneGranule(granule, switchedPortions, Blobs, context);
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();

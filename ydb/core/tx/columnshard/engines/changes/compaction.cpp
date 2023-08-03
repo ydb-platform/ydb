@@ -39,7 +39,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
         if (granuleRemap.size()) {
-            auto it = granuleRemap.find(portionInfo.Granule());
+            auto it = granuleRemap.find(portionInfo.GetGranule());
             Y_VERIFY(it != granuleRemap.end());
             portionInfo.UpdateGranuleId(it->second);
         }
@@ -66,8 +66,8 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(!portionInfo.IsActive());
 
-        ui64 granule = portionInfo.Granule();
-        ui64 portion = portionInfo.Portion();
+        const ui64 granule = portionInfo.GetGranule();
+        const ui64 portion = portionInfo.GetPortion();
         if (!self.Granules.contains(granule)) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot update unknown granule")("granule_id", granule);
             return false;
@@ -99,7 +99,7 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
 
         if (!dryRun) {
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, record);
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
             }
         }
     }
@@ -108,8 +108,8 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
     for (auto& [info, dstGranule] : PortionsToMove) {
         const auto& portionInfo = info;
 
-        ui64 granule = portionInfo.Granule();
-        ui64 portion = portionInfo.Portion();
+        const ui64 granule = portionInfo.GetGranule();
+        const ui64 portion = portionInfo.GetPortion();
         if (!self.IsPortionExists(granule, portion)) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot move unknown portion")("portion", portionInfo.DebugString());
             return false;
@@ -131,10 +131,10 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
         }
         if (!dryRun) {
             for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Erase(context.DB, record);
+                self.ColumnsTable->Erase(context.DB, portionInfo, record);
             }
             for (auto& record : moved.Records) {
-                self.ColumnsTable->Write(context.DB, record);
+                self.ColumnsTable->Write(context.DB, portionInfo, record);
             }
         }
     }
@@ -243,7 +243,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
     for (const auto& [_, portionInfo] : GranuleMeta->GetPortions()) {
         if (portionInfo.IsActive()) {
             SwitchedPortions.push_back(portionInfo);
-            Y_VERIFY(portionInfo.Granule() == GranuleMeta->GetGranuleId());
+            Y_VERIFY(portionInfo.GetGranule() == GranuleMeta->GetGranuleId());
         }
     }
     Y_VERIFY(SwitchedPortions.size());

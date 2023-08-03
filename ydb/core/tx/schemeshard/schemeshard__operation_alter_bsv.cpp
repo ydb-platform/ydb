@@ -531,6 +531,15 @@ public:
             return result;
         }
 
+        if (alterVolumeConfig->HasFillToken() &&
+            alterVolumeConfig->GetFillToken() != volume->VolumeConfig.GetFillToken())
+        {
+            result->SetError(
+                NKikimrScheme::StatusPreconditionFailed,
+                "Wrong FillToken in VolumeConfig");
+            return result;
+        }
+
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;

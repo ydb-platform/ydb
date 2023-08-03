@@ -101,14 +101,12 @@ public:
 struct TPortionInfo {
 private:
     TPortionInfo() = default;
-public:
-    static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
     ui64 Granule = 0;
     ui64 Portion = 0;   // Id of independent (overlayed by PK) portion of data in granule
-    ui64 PlanStep = 0;  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
-    ui64 TxId = 0;
-    ui64 XPlanStep = 0; // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
-    ui64 XTxId = 0;
+    TSnapshot MinSnapshot = TSnapshot::Zero();  // {PlanStep, TxId} is min snapshot for {Granule, Portion}
+    TSnapshot RemoveSnapshot = TSnapshot::Zero(); // {XPlanStep, XTxId} is snapshot where the blob has been removed (i.e. compacted into another one)
+public:
+    static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
     std::vector<TColumnRecord> Records;
     TPortionMeta Meta;
@@ -116,42 +114,29 @@ public:
 
     bool Empty() const { return Records.empty(); }
     bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
-    bool Valid() const { return PlanStep && TxId && Granule && Portion && !Empty() && Produced() && Meta.HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
-    bool ValidSnapshotInfo() const { return PlanStep && TxId && Granule && Portion; }
+    bool Valid() const { return MinSnapshot.Valid() && Granule && Portion && !Empty() && Produced() && Meta.HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
+    bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && Granule && Portion; }
     bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
     bool IsEvicted() const { return Meta.Produced == TPortionMeta::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumRecords() const { return Records.size(); }
 
-    TPortionInfo FilterColumns(const THashSet<ui32>& columnIds) const {
-        TPortionInfo result(Granule, Portion, GetSnapshot());
-        result.Meta = Meta;
-        result.Records.reserve(columnIds.size());
-
-        for (auto& rec : Records) {
-            Y_VERIFY(rec.Valid());
-            if (columnIds.contains(rec.ColumnId)) {
-                result.Records.push_back(rec);
-            }
-        }
-        return result;
-    }
+    TPortionInfo CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const;
 
     bool IsEqualWithSnapshots(const TPortionInfo& item) const {
-        return Granule == item.Granule && PlanStep == item.PlanStep && TxId == item.TxId
-            && Portion == item.Portion && XPlanStep == item.XPlanStep && XTxId == item.XTxId;
+        return Granule == item.Granule && MinSnapshot == item.MinSnapshot
+            && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
     }
 
     static TPortionInfo BuildEmpty() {
         return TPortionInfo();
     }
 
-    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& snapshot)
+    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& minSnapshot)
         : Granule(granuleId)
         , Portion(portionId)
-        , PlanStep(snapshot.GetPlanStep())
-        , TxId(snapshot.GetTxId())
+        , MinSnapshot(minSnapshot)
     {
 
     }
@@ -160,6 +145,7 @@ public:
         return TStringBuilder() <<
             "portion_id:" << Portion << ";" <<
             "granule_id:" << Granule << ";" <<
+            "min_snapshot:" << MinSnapshot.DebugString() << ";" <<
             "meta:(" << Meta.DebugString() << ");"
             ;
     }
@@ -169,7 +155,7 @@ public:
             return false;
         }
 
-        return GetXSnapshot() < snapshot;
+        return GetRemoveSnapshot() < snapshot;
     }
 
     bool CheckForCleanup() const {
@@ -204,29 +190,42 @@ public:
         Granule = granule;
     }
 
-    TSnapshot GetSnapshot() const {
-        return TSnapshot(PlanStep, TxId);
+    void SetPortion(const ui64 portion) {
+        Portion = portion;
     }
 
-    TSnapshot GetXSnapshot() const {
-        Y_VERIFY(!Empty());
-        return TSnapshot(XPlanStep, XTxId);
+    const TSnapshot& GetMinSnapshot() const {
+        return MinSnapshot;
+    }
+
+    const TSnapshot& GetRemoveSnapshot() const {
+        return RemoveSnapshot;
     }
 
     bool IsActive() const {
-        return GetXSnapshot().IsZero();
+        return GetRemoveSnapshot().IsZero();
     }
 
-    void SetSnapshot(const TSnapshot& snap) {
+    void SetMinSnapshot(const TSnapshot& snap) {
         Y_VERIFY(snap.Valid());
-        PlanStep = snap.GetPlanStep();
-        TxId = snap.GetTxId();
+        MinSnapshot = snap;
     }
 
-    void SetXSnapshot(const TSnapshot& snap) {
-        Y_VERIFY(snap.Valid());
-        XPlanStep = snap.GetPlanStep();
-        XTxId = snap.GetTxId();
+    void SetMinSnapshot(const ui64 planStep, const ui64 txId) {
+        MinSnapshot = TSnapshot(planStep, txId);
+        Y_VERIFY(MinSnapshot.Valid());
+    }
+
+    void SetRemoveSnapshot(const TSnapshot& snap) {
+        const bool wasValid = RemoveSnapshot.Valid();
+        Y_VERIFY(!wasValid || snap.Valid());
+        RemoveSnapshot = snap;
+    }
+
+    void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
+        const bool wasValid = RemoveSnapshot.Valid();
+        RemoveSnapshot = TSnapshot(planStep, txId);
+        Y_VERIFY(!wasValid || RemoveSnapshot.Valid());
     }
 
     std::pair<ui32, ui32> BlobsSizes() const {
@@ -247,23 +246,11 @@ public:
         return sum;
     }
 
-    void UpdatePortionId(const ui64 portionId) {
-        Portion = portionId;
-    }
-
-    void UpdateGranuleId(const ui64 granuleId) {
-        Granule = granuleId;
-    }
-
     void UpdateRecordsMeta(TPortionMeta::EProduced produced) {
         Meta.Produced = produced;
         for (auto& record : Records) {
             record.Metadata = GetMetadata(record);
         }
-    }
-
-    void SetStale(const TSnapshot& snapshot) {
-        SetXSnapshot(snapshot);
     }
 
     void AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec) {

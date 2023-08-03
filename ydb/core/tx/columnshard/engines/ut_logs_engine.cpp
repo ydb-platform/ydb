@@ -106,14 +106,12 @@ public:
         auto& data = Indices[index].Columns[portion.GetGranule()];
         auto it = data.find(portion.GetPortion());
         if (it == data.end()) {
-            it = data.emplace(portion.GetPortion(), portion.FilterColumns({})).first;
+            it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
         } else {
-            Y_VERIFY(portion.Granule == it->second.Granule && portion.Portion == it->second.Portion);
+            Y_VERIFY(portion.GetGranule() == it->second.GetGranule() && portion.GetPortion() == it->second.GetPortion());
         }
-        it->second.TxId = portion.TxId;
-        it->second.PlanStep = portion.PlanStep;
-        it->second.XTxId = portion.XTxId;
-        it->second.XPlanStep = portion.XPlanStep;
+        it->second.SetMinSnapshot(portion.GetMinSnapshot());
+        it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
 
         bool replaced = false;
         for (auto& rec : it->second.Records) {

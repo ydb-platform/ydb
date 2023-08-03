@@ -97,12 +97,12 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
-        i.UpdatePortionId(context.NextPortionId());
+        i.SetPortion(context.NextPortionId());
         i.UpdateRecordsMeta(TPortionMeta::INSERTED);
     }
 }
 
-std::vector<NKikimr::NOlap::TPortionInfo> TChangesWithAppend::MakeAppendedPortions(
+std::vector<TPortionInfo> TChangesWithAppend::MakeAppendedPortions(
     const ui64 pathId, const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot,
     std::vector<TString>& blobs, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
     Y_VERIFY(batch->num_rows());

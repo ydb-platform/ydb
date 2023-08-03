@@ -125,11 +125,11 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TInGranuleCompactColum
     for (auto& portionInfo : portions) {
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(portionInfo.GetGranule() == granule);
-        auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetSnapshot());
+        auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
         auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs);
         batches.push_back(batch);
-        if (portionInfo.GetSnapshot() > maxSnapshot) {
-            maxSnapshot = portionInfo.GetSnapshot();
+        if (maxSnapshot < portionInfo.GetMinSnapshot()) {
+            maxSnapshot = portionInfo.GetMinSnapshot();
         }
     }
 

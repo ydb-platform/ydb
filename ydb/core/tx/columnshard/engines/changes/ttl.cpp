@@ -189,7 +189,7 @@ bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TP
 
     TPortionInfo undo = portionInfo;
 
-    auto blobSchema = context.SchemaVersions.GetSchema(undo.GetSnapshot());
+    auto blobSchema = context.SchemaVersions.GetSchema(undo.GetMinSnapshot());
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, srcBlobs);
 

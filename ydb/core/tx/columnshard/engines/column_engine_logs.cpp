@@ -243,7 +243,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>&
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(rec.BlobRange.BlobId);
         // Locate granule and append the record.
-        if (const auto gi = Granules.find(portion.Granule); gi != Granules.end()) {
+        if (const auto gi = Granules.find(portion.GetGranule()); gi != Granules.end()) {
             gi->second->AddColumnRecord(indexInfo, portion, rec);
         } else {
             Y_VERIFY(false);
@@ -705,8 +705,8 @@ static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot
             continue;
         }
 
-        TSnapshot recSnapshot = portionInfo.GetSnapshot();
-        TSnapshot recXSnapshot = portionInfo.GetXSnapshot();
+        TSnapshot recSnapshot = portionInfo.GetMinSnapshot();
+        TSnapshot recXSnapshot = portionInfo.GetRemoveSnapshot();
 
         bool visible = (recSnapshot <= snapshot);
         if (recXSnapshot.GetPlanStep()) {
@@ -782,7 +782,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             TMap<TSnapshot, std::vector<const TPortionInfo*>> orderedPortions = GroupPortionsBySnapshot(portions, snapshot);
             for (auto& [snap, vec] : orderedPortions) {
                 for (const auto* portionInfo : vec) {
-                    TPortionInfo outPortion = portionInfo->FilterColumns(columnIds);
+                    TPortionInfo outPortion = portionInfo->CopyWithFilteredColumns(columnIds);
                     Y_VERIFY(outPortion.Produced());
                     if (!pkRangesFilter.IsPortionInUsage(outPortion, VersionedIndex.GetLastSchema()->GetIndexInfo())) {
                         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")

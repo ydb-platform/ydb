@@ -33,7 +33,7 @@ NColumnShard::IDataTasksProcessor::ITask::TPtr TBatch::AssembleTask(NColumnShard
     Y_VERIFY(PortionInfo->Produced());
     Y_VERIFY(!FetchedInfo.GetFilteredBatch());
 
-    auto blobSchema = readMetadata->GetLoadSchema(PortionInfo->GetSnapshot());
+    auto blobSchema = readMetadata->GetLoadSchema(PortionInfo->GetMinSnapshot());
     auto readSchema = readMetadata->GetLoadSchema(readMetadata->GetSnapshot());
     ISnapshotSchema::TPtr resultSchema;
     if (CurrentColumnIds) {

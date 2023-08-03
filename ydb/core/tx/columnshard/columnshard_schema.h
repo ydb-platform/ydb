@@ -592,9 +592,10 @@ struct Schema : NIceDb::Schema {
     // IndexColumns activities
 
     static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId, portion.PlanStep, portion.TxId, portion.Portion, row.Chunk).Update(
-            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.XPlanStep),
-            NIceDb::TUpdate<IndexColumns::XTxId>(portion.XTxId),
+        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
+            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
+            NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
             NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
             NIceDb::TUpdate<IndexColumns::Metadata>(row.Metadata),
             NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
@@ -603,7 +604,8 @@ struct Schema : NIceDb::Schema {
     }
 
     static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, portion.Granule, row.ColumnId, portion.PlanStep, portion.TxId, portion.Portion, row.Chunk).Delete();
+        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
@@ -615,14 +617,13 @@ struct Schema : NIceDb::Schema {
         while (!rowset.EndOfSet()) {
             TColumnRecord row;
             NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
-            portion.Granule = rowset.GetValue<IndexColumns::Granule>();
+            portion.SetGranule(rowset.GetValue<IndexColumns::Granule>());
             row.ColumnId = rowset.GetValue<IndexColumns::ColumnIdx>();
-            portion.PlanStep = rowset.GetValue<IndexColumns::PlanStep>();
-            portion.TxId = rowset.GetValue<IndexColumns::TxId>();
-            portion.Portion = rowset.GetValue<IndexColumns::Portion>();
+            portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
+            portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
             row.Chunk = rowset.GetValue<IndexColumns::Chunk>();
-            portion.XPlanStep = rowset.GetValue<IndexColumns::XPlanStep>();
-            portion.XTxId = rowset.GetValue<IndexColumns::XTxId>();
+            portion.SetRemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
+
             TString strBlobId = rowset.GetValue<IndexColumns::Blob>();
             row.Metadata = rowset.GetValue<IndexColumns::Metadata>();
             row.BlobRange.Offset = rowset.GetValue<IndexColumns::Offset>();

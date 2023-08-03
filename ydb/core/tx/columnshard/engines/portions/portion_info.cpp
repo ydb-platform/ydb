@@ -228,6 +228,20 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
     return it->second.Max;
 }
 
+TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const {
+    TPortionInfo result(Granule, Portion, GetMinSnapshot());
+    result.Meta = Meta;
+    result.Records.reserve(columnIds.size());
+
+    for (auto& rec : Records) {
+        Y_VERIFY(rec.Valid());
+        if (columnIds.contains(rec.ColumnId)) {
+            result.Records.push_back(rec);
+        }
+    }
+    return result;
+}
+
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_VERIFY(!Blobs.empty());
 

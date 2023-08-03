@@ -137,12 +137,12 @@ std::pair<std::vector<std::shared_ptr<arrow::RecordBatch>>, NKikimr::NOlap::TSna
     TSnapshot maxSnapshot = resultSchema->GetSnapshot();
     for (const auto& portionInfo : portions) {
         if (!insertedOnly || portionInfo.IsInserted()) {
-            const auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetSnapshot());
+            const auto blobSchema = context.SchemaVersions.GetSchema(portionInfo.GetMinSnapshot());
 
             batches.push_back(portionInfo.AssembleInBatch(*blobSchema, *resultSchema, blobs));
 
-            if (maxSnapshot < portionInfo.GetSnapshot()) {
-                maxSnapshot = portionInfo.GetSnapshot();
+            if (maxSnapshot < portionInfo.GetMinSnapshot()) {
+                maxSnapshot = portionInfo.GetMinSnapshot();
             }
         }
     }

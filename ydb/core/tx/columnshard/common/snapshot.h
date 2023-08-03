@@ -46,6 +46,8 @@ public:
     friend IOutputStream& operator<<(IOutputStream& out, const TSnapshot& s) {
         return out << "{" << s.PlanStep << ':' << (s.TxId == std::numeric_limits<ui64>::max() ? "max" : ::ToString(s.TxId)) << "}";
     }
+
+    TString DebugString() const;
 };
 
 } // namespace NKikimr::NOlap

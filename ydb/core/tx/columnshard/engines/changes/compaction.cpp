@@ -41,7 +41,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
         if (granuleRemap.size()) {
             auto it = granuleRemap.find(portionInfo.GetGranule());
             Y_VERIFY(it != granuleRemap.end());
-            portionInfo.UpdateGranuleId(it->second);
+            portionInfo.SetGranule(it->second);
         }
 
         TPortionMeta::EProduced produced = TPortionMeta::INSERTED;
@@ -53,7 +53,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     }
     for (auto& portionInfo : SwitchedPortions) {
         Y_VERIFY(portionInfo.IsActive());
-        portionInfo.SetStale(context.GetSnapshot());
+        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
     }
 }
 

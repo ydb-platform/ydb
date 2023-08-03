@@ -321,6 +321,7 @@ message TClusterInfo {
     uint64 Hosts = 44;
     uint64 Tenants = 45;
     uint64 Tablets = 46;
+    string Domain = 47;
 }
 
 enum ETenantType {

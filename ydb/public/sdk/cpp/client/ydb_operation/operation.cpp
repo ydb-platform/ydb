@@ -52,8 +52,7 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
             extractor,
             rpc,
             DbDriverState_,
-            rpcSettings,
-            TEndpointKey());
+            rpcSettings);
 
         return promise.GetFuture();
     }
@@ -116,8 +115,7 @@ public:
             extractor,
             &V1::OperationService::Stub::AsyncListOperations,
             DbDriverState_,
-            rpcSettings,
-            TEndpointKey());
+            rpcSettings);
 
         return promise.GetFuture();
     }

@@ -79,8 +79,7 @@ public:
             responseCb,
             &V1::QueryService::Stub::AsyncExecuteScript,
             DbDriverState_,
-            TRpcRequestSettings::Make(settings),
-            TEndpointKey());
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }
@@ -134,8 +133,7 @@ public:
             extractor,
             &V1::QueryService::Stub::AsyncFetchScriptResults,
             DbDriverState_,
-            rpcSettings,
-            TEndpointKey());
+            rpcSettings);
 
         return promise.GetFuture();
     }
@@ -185,12 +183,11 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
-        const auto endpointKey = TEndpointKey(endpoint, GetNodeIdFromSession(sessionId));
-
         auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client);
 
         // Do not pass client timeout here. Session must be alive
-        static const TRpcRequestSettings rpcSettings;
+        TRpcRequestSettings rpcSettings;
+        rpcSettings.PreferredEndpoint = TEndpointKey(endpoint, GetNodeIdFromSession(sessionId));
 
         Connections_->StartReadStream<
             Ydb::Query::V1::QueryService,
@@ -208,8 +205,7 @@ public:
         },
         &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession,
         DbDriverState_,
-        rpcSettings,
-        endpointKey);
+        rpcSettings);
     }
 
     TAsyncCreateSessionResult CreateAttachedSession(TDuration timeout) {
@@ -245,8 +241,7 @@ public:
             extractor,
             &V1::QueryService::Stub::AsyncCreateSession,
             DbDriverState_,
-            rpcSettings,
-            TEndpointKey());
+            rpcSettings);
 
         return promise.GetFuture();
     }

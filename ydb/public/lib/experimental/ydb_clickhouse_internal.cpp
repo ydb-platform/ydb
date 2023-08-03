@@ -103,13 +103,13 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::ScanRequest, Ydb::ClickhouseInternal::ScanResponse>(
-                    std::move(request),
-                    extractor,
-                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncScan,
-                    DbDriverState_,
-                    INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    TEndpointKey(settings.Endpoint_, 0));
+            std::move(request),
+            extractor,
+            &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncScan,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings, TEndpointKey(settings.Endpoint_, 0))
+            );
 
         return promise.GetFuture();
     }

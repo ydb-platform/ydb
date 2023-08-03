@@ -59,8 +59,7 @@ protected:
     NThreading::TFuture<TStatus> RunSimple(
         TRequest&& request,
         TAsyncRequest<TService, TRequest, TResponse> rpc,
-        const TRpcRequestSettings& requestSettings = {},
-        const TEndpointKey& preferredEndpoint = TEndpointKey())
+        const TRpcRequestSettings& requestSettings = {})
     {
         auto promise = NThreading::NewPromise<TStatus>();
 
@@ -76,8 +75,7 @@ protected:
             rpc,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            requestSettings,
-            preferredEndpoint);
+            requestSettings);
 
         return promise.GetFuture();
     }

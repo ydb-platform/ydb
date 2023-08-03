@@ -262,8 +262,8 @@ private:
             &Ydb::Table::V1::TableService::Stub::AsyncExecuteDataQuery,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            session.SessionImpl_->GetEndpointKey());
+            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+            );
 
         return promise.GetFuture();
     }

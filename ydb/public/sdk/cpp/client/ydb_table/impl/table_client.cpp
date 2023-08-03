@@ -394,7 +394,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
-    auto rpcSettings = TRpcRequestSettings::Make(settings);
+    auto rpcSettings = TRpcRequestSettings::Make(settings, TEndpointKey(preferredLocation, 0));
     rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
 
     auto createSessionExtractor = [createSessionPromise, self, standalone]
@@ -423,8 +423,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
         &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        rpcSettings,
-        TEndpointKey(preferredLocation, 0));
+        rpcSettings);
 
     std::weak_ptr<TDbDriverState> state = DbDriverState_;
 
@@ -466,8 +465,8 @@ TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* sess
         &Ydb::Table::V1::TableService::Stub::AsyncKeepAlive,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session->GetEndpointKey())
+        );
 
     return keepAliveResultPromise.GetFuture();
 }
@@ -619,8 +618,8 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
         &Ydb::Table::V1::TableService::Stub::AsyncPrepareDataQuery,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -667,8 +666,8 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
         &Ydb::Table::V1::TableService::Stub::AsyncBeginTransaction,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -705,8 +704,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
         &Ydb::Table::V1::TableService::Stub::AsyncCommitTransaction,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -721,8 +720,8 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncRollbackTransaction,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 }
 
 TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, const TString& query,
@@ -755,8 +754,8 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
         &Ydb::Table::V1::TableService::Stub::AsyncExplainDataQuery,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -846,8 +845,7 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&&
         responseCb,
         &Ydb::Table::V1::TableService::Stub::AsyncReadRows,
         DbDriverState_,
-        TRpcRequestSettings::Make(settings), // requestSettings
-        TEndpointKey() // preferredEndpoint
+        TRpcRequestSettings::Make(settings)
         );
 
     return promise.GetFuture();
@@ -859,8 +857,8 @@ TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, co
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
         std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
-        TRpcRequestSettings::Make(settings),
-        sessionImpl->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, sessionImpl->GetEndpointKey())
+        );
 }
 
 TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* sessionImpl) {

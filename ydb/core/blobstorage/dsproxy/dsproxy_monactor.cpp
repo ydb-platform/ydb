@@ -86,6 +86,10 @@ public:
                         DIV() {
                             str << "GroupID: " << Info->GroupID << "<br/>" << "Generation: " << Info->GroupGeneration;
                         }
+                        DIV() {
+                            str << "MinREALHugeBlobInBytes: ";
+                            str << GroupQueues->MinREALHugeBlobInBytes;
+                        }
                         DIV() TABLE_CLASS("table table-bordered table-condensed") TABLEBODY() {
                             ui32 maxFailDomain = 0;
                             for (const auto& realm : top.FailRealms) {
@@ -105,9 +109,20 @@ public:
                                                         str << "<br/>";
                                                     }
 
+                                                    bool ok = true;
+                                                    GroupQueues->DisksByOrderNumber[vdisk.OrderNumber]->Queues.ForEachQueue([&](auto& q) {
+                                                        if (!q.IsConnected) {
+                                                            ok = false;
+                                                        }
+                                                    });
+
                                                     const TVDiskID vdiskId = Info->GetVDiskId(vdisk.VDiskIdShort);
                                                     if (const auto& url = urls[vdisk.OrderNumber]) {
-                                                        str << "<a href=\"" << url << "\">" << vdiskId << "</a>";
+                                                        str << "<a ";
+                                                        if (!ok) {
+                                                            str << "style='color:red' ";
+                                                        }
+                                                        str << "href=\"" << url << "\">" << vdiskId << "</a>";
                                                     } else {
                                                         str << vdiskId;
                                                     }
@@ -132,6 +147,42 @@ public:
 
                             if (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
                                 str << "<br/>LifeCyclePhase: " << Info->GetLifeCyclePhase();
+                            }
+                        }
+                    }
+                }
+            }
+
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    str << "Queue status";
+                }
+                DIV_CLASS("panel-body") {
+                    DIV() {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "VDisk"; }
+                                    TABLEH() { str << "NodeId"; }
+                                    TABLEH() { str << "Queue Status"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                const auto& fdoms = GroupQueues->FailDomains;
+                                for (size_t failDomain = 0, num = 0; failDomain < fdoms.size(); ++failDomain) {
+                                    const auto& fdom = fdoms[failDomain];
+                                    for (size_t vdisk = 0; vdisk < fdom.VDisks.size(); ++vdisk, ++num) {
+                                        TABLER() {
+                                            TABLED() { str << Info->GetVDiskId(num); }
+                                            TABLED() { str << Info->GetActorId(num).NodeId(); }
+                                            TABLED() {
+                                                fdom.VDisks[vdisk].Queues.ForEachQueue([&](auto& q) {
+                                                    str << (q.IsConnected ? '+' : '0');
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -246,7 +297,6 @@ public:
                         TABLE_CLASS ("table table-condensed") {
                             TABLEHEAD() {
                                 TABLER() {
-                                    TABLEH() { str << "FailDomain"; }
                                     TABLEH() { str << "VDisk"; }
                                     TABLEH() { str << "PutTabletLog"; }
                                     TABLEH() { str << "PutAsyncBlob"; }
@@ -258,14 +308,13 @@ public:
                                 }
                             }
                             TABLEBODY() {
-                                for (size_t fdIdx = 0; fdIdx < GroupQueues->FailDomains.size(); ++fdIdx) {
+                                for (size_t fdIdx = 0, num = 0; fdIdx < GroupQueues->FailDomains.size(); ++fdIdx) {
                                     const TGroupQueues::TFailDomain &failDomain = GroupQueues->FailDomains[fdIdx];
-                                    for (size_t vdIdx = 0; vdIdx < failDomain.VDisks.size(); ++vdIdx) {
+                                    for (size_t vdIdx = 0; vdIdx < failDomain.VDisks.size(); ++vdIdx, ++num) {
                                         const TGroupQueues::TVDisk &vDisk = failDomain.VDisks[vdIdx];
                                         const TGroupQueues::TVDisk::TQueues &q = vDisk.Queues;
                                         TABLER() {
-                                            TABLED() { str << fdIdx; }
-                                            TABLED() { str << vdIdx; }
+                                            TABLED() { str << Info->GetVDiskId(num); }
 #define LATENCY_DATA(NAME) \
             TABLED() { \
                 if (q.NAME.FlowRecord) { \

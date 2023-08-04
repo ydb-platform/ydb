@@ -108,7 +108,10 @@ namespace NKikimr {
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
 
-        if (EnablePutBatching && bytes < MaxBatchedPutSize) {
+        Y_VERIFY_DEBUG(MinREALHugeBlobInBytes);
+        const ui32 partSize = Info->Type.PartSize(ev->Get()->Id);
+
+        if (EnablePutBatching && partSize < MinREALHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_VERIFY((ui64)handleClass <= PutHandleClassCount);
@@ -119,14 +122,14 @@ namespace NKikimr {
                 PutBatchedBucketQueue.emplace_back(handleClass, tactic);
             }
 
-            if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + bytes > MaxBatchedPutSize) {
+            if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + partSize > MaxBatchedPutSize) {
                 *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
                 ++*Mon->PutBatchesSent;
                 ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
             }
 
             batchedPuts.Queue.push_back(ev.Release());
-            batchedPuts.Bytes += bytes;
+            batchedPuts.Bytes += partSize;
         } else {
             TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(ev->Get()->HandleClass);
 

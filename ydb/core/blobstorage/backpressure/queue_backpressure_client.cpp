@@ -456,7 +456,7 @@ private:
             case EState::READY:
                 QLOG_NOTICE_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
-                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false));
+                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, 0));
                 Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
                 DrainStatus(status, ctx);
                 DrainAssimilate(status, errorReason, ctx);
@@ -556,13 +556,14 @@ private:
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrProto::NOTREADY) {
             ExtraBlockChecksSupport = record.GetExtraBlockChecksSupport();
-            ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true, ExtraBlockChecksSupport));
             if (record.HasExpectedMsgId()) {
                 Queue.SetMessageId(NBackpressure::TMessageId(record.GetExpectedMsgId()));
             }
             if (record.HasCostSettings()) {
                 Queue.UpdateCostModel(ctx.Now(), record.GetCostSettings(), GType);
             }
+            ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true, ExtraBlockChecksSupport,
+                Queue.GetMinREALHugeBlobInBytes()));
             Queue.OnConnect();
             State = EState::READY;
         } else {
@@ -797,7 +798,8 @@ private:
             << " RemoteVDisk# " << RemoteVDisk
             << " VDiskId# " << VDiskId
             << " IsConnected# " << isConnected);
-        ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected, isConnected && ExtraBlockChecksSupport));
+        ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected, isConnected && ExtraBlockChecksSupport,
+            Queue.GetMinREALHugeBlobInBytes()));
     }
 
 #define QueueRequestHFunc(TEvType) \

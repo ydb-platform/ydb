@@ -28,11 +28,13 @@ void MultiPutWriteRestartRead(const TMultiPutWriteRestartReadSettings &settings,
     UNIT_ASSERT(success1);
     Conf.Shutdown();
 
-    Conf.Prepare(settings.ReadRunSetup.get(), false);
-    TManyGetsTest r(false, settings.MsgNum, settings.MsgSize, settings.Cls, badSteps);
-    bool success2 = Conf.Run<TManyGetsTest>(&r, testTimeout);
-    UNIT_ASSERT(success2);
-    Conf.Shutdown();
+    if (settings.MsgSize < 65536) { // huge blob
+        Conf.Prepare(settings.ReadRunSetup.get(), false);
+        TManyGetsTest r(false, settings.MsgNum, settings.MsgSize, settings.Cls, badSteps);
+        bool success2 = Conf.Run<TManyGetsTest>(&r, testTimeout);
+        UNIT_ASSERT(success2);
+        Conf.Shutdown();
+    }
 }
 
 void ChaoticWriteRestartWrite(const TChaoticWriteRestartWriteSettings &settings, TDuration testTimeout) {

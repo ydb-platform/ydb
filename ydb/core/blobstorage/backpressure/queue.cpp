@@ -78,6 +78,10 @@ bool TBlobStorageQueue::SetMaxWindowSize(ui64 maxWindowSize) {
     }
 }
 
+ui32 TBlobStorageQueue::GetMinREALHugeBlobInBytes() const {
+    return CostModel.MinREALHugeBlobInBytes;
+}
+
 void TBlobStorageQueue::SetItemQueue(TItem& item, EItemQueue newQueue) {
     switch (item.Queue) {
         case EItemQueue::NotSet:

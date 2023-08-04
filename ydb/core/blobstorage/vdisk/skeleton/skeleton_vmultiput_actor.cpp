@@ -116,30 +116,6 @@ namespace NKikimr {
                 }
             }
 
-            void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
-                NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
-
-                TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-                Y_VERIFY(record.HasCookie());
-                ui64 idx = record.GetCookie();
-                Y_VERIFY(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size());
-                TItem &item = Items[idx];
-                Y_VERIFY(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data());
-
-                Y_VERIFY(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
-                item.Received = true;
-                Y_VERIFY(record.HasStatus());
-                item.Status = record.GetStatus();
-                item.ErrorReason = record.GetErrorReason();
-                item.WrittenBeyondBarrier = record.GetWrittenBeyondBarrier();
-
-                ReceivedResults++;
-
-                if (ReceivedResults == Items.size()) {
-                    SendResponseAndDie(ctx);
-                }
-            }
-
             void Bootstrap(const TActorContext &ctx) {
                 Y_UNUSED(ctx);
                 NKikimrBlobStorage::TEvVMultiPut &record = Event->Get()->Record;
@@ -165,12 +141,10 @@ namespace NKikimr {
                 Become(&TThis::StateWait);
             }
 
-            STFUNC(StateWait) {
-                switch (ev->GetTypeRewrite()) {
-                    HFunc(TEvVMultiPutItemResult, Handle);
-                    HFunc(TEvBlobStorage::TEvVPutResult, Handle);
-                }
-            }
+            STRICT_STFUNC(StateWait,
+                HFunc(TEvVMultiPutItemResult, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
         };
 
     } // NPrivate

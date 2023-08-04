@@ -22,6 +22,8 @@ namespace NKikimr {
                     TActorId ActorId;
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
                     std::optional<bool> ExtraBlockChecksSupport;
+                    ui32 MinREALHugeBlobInBytes = 0;
+                    volatile bool IsConnected = false;
                 };
                 TQueue PutTabletLog;
                 TQueue PutAsyncBlob;
@@ -131,6 +133,7 @@ namespace NKikimr {
             };
 
             TQueues Queues;
+            ui32 MinREALHugeBlobInBytes = 0;
 
             TString ToString() const {
                 return TStringBuilder() << "{Queues# " << Queues.ToString() << "}";
@@ -139,6 +142,7 @@ namespace NKikimr {
 
         struct TFailDomain {
             TStackVec<TVDisk, TypicalDisksInFailDomain> VDisks;
+            ui32 MinREALHugeBlobInBytes = 0;
 
             // Ill-formed because TVDisk is not assignable.
             TFailDomain(const TFailDomain& other) = default;
@@ -158,6 +162,7 @@ namespace NKikimr {
 
         TStackVec<TFailDomain, TypicalFailDomainsInGroup> FailDomains;
         TStackVec<TVDisk*, TypicalDisksInGroup> DisksByOrderNumber;
+        ui32 MinREALHugeBlobInBytes = 0;
 
         TGroupQueues(const TBlobStorageGroupInfo::TTopology& topology)
             : FailDomains(topology.GetTotalFailDomainsNum())
@@ -241,8 +246,9 @@ namespace NKikimr {
         void Poison();
         bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-            bool extraBlockChecksSupport, const TBlobStorageGroupInfo::TTopology& topology);
+            bool extraBlockChecksSupport, ui32 minREALHugeBlobInBytes, const TBlobStorageGroupInfo::TTopology& topology);
         ui32 GetNumUnconnectedDisks();
+        ui32 GetMinREALHugeBlobInBytes() const;
     };
 
     struct TEvRequestProxySessionsState : TEventLocal<TEvRequestProxySessionsState, TEvBlobStorage::EvRequestProxySessionsState>

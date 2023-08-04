@@ -732,7 +732,23 @@ protected:
             task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
+            BuildSinks(stage, task);
+
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
+        }
+    }
+
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
+        if (stage.SinksSize() > 0) {
+            YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
+            const auto& sink = stage.GetSinks(0);
+            YQL_ENSURE(sink.HasExternalSink(), "only external sinks are supported");
+            const auto& extSink = sink.GetExternalSink();
+            YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
+            auto& output = task.Outputs[sink.GetOutputIndex()];
+            output.Type = TTaskOutputType::Sink;
+            output.SinkType = extSink.GetType();
+            output.SinkSettings = extSink.GetSettings();
         }
     }
 
@@ -740,7 +756,8 @@ protected:
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
-        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1, "multiple sources or sources mixed with connections");
+        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1,
+            "multiple sources or sources mixed with connections");
 
         const auto& stageSource = stage.GetSources(0);
         const auto& externalSource = stageSource.GetExternalSource();
@@ -762,6 +779,7 @@ protected:
 
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
+            BuildSinks(stage, task);
         }
     }
 
@@ -873,6 +891,8 @@ protected:
                 settings->SetLockTxId(*lockTxId);
                 settings->SetLockNodeId(self.NodeId());
             }
+
+            BuildSinks(stage, task);
         };
 
         if (source.GetSequentialInFlightShards()) {

@@ -7,6 +7,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
@@ -292,9 +293,10 @@ class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer
 {
 public:
     TKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
         : Gateway(gateway)
-        , SessionCtx(sessionCtx) {}
+        , SessionCtx(sessionCtx)
+        , Types(types) {}
 
 private:
     virtual TStatus HandleWriteTable(TKiWriteTable node, TExprContext& ctx) override {
@@ -382,7 +384,7 @@ private:
             if (rowType->FindItem(keyColumnName)) {
                 continue;
             }
-            
+
             if (!columnInfo.IsAutoIncrement())  {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Missing key column in input: " << keyColumnName
@@ -410,7 +412,7 @@ private:
                         //no type-level notnull check for pg types.
                         continue;
                     }
-    
+
                     if (itemType && itemType->HasOptionalOrNull()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                             << "Can't set NULL or optional value to not null column: " << name
@@ -1501,9 +1503,28 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             }
 
             if (!KikimrSupportedEffects().contains(effect.CallableName())) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                    << "Unsupported Kikimr data query effect: " << effect.CallableName()));
-                return TStatus::Error;
+                bool supported = false;
+                if (effect.Ref().ChildrenSize() > 1) {
+                    TExprBase dataSinkArg(effect.Ref().Child(1));
+                    if (auto maybeDataSink = dataSinkArg.Maybe<TCoDataSink>()) {
+                        TStringBuf dataSinkCategory = maybeDataSink.Cast().Category();
+                        auto dataSinkProviderIt = Types.DataSinkMap.find(dataSinkCategory);
+                        if (dataSinkProviderIt != Types.DataSinkMap.end()) {
+                            if (auto* dqIntegration = dataSinkProviderIt->second->GetDqIntegration()) {
+                                auto canWrite = dqIntegration->CanWrite(*effect.Raw(), ctx);
+                                if (canWrite) {
+                                    supported = *canWrite; // if false, we will exit this function a few lines later
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (!supported) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                        << "Unsupported Kikimr data query effect: " << effect.CallableName()));
+                    return TStatus::Error;
+                }
             }
         }
 
@@ -1599,6 +1620,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TTypeAnnotationContext& Types;
 };
 
 } // namespace
@@ -1610,9 +1632,9 @@ TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePt
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
 {
-    return new TKiSinkTypeAnnotationTransformer(gateway, sessionCtx);
+    return new TKiSinkTypeAnnotationTransformer(gateway, sessionCtx, types);
 }
 
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,

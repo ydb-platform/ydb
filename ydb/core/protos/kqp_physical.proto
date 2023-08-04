@@ -319,7 +319,20 @@ message TKqpSource {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
     }
-};
+}
+
+message TKqpExternalSink {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+}
+
+message TKqpSink {
+    uint32 OutputIndex = 1;
+
+    oneof Type {
+        TKqpExternalSink ExternalSink = 2;
+    }
+}
 
 message TKqpPhyStage {
     NYql.NDqProto.TProgram Program = 1;
@@ -332,6 +345,7 @@ message TKqpPhyStage {
     string StageGuid = 8;
     repeated TKqpSource Sources = 9;
     bool IsSinglePartition = 10;
+    repeated TKqpSink Sinks = 11;
 }
 
 message TKqpPhyResult {

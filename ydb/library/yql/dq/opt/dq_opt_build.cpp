@@ -116,7 +116,7 @@ void MakeConsumerReplaces(
             TNodeOnNodeOwnedMap argsMap;
             CollectArgsReplaces(dqStage, newArgs, argsMap, ctx);
             auto newStage = Build<TDqStage>(ctx, dqStage.Pos())
-                .InitFrom(dqStage) 
+                .InitFrom(dqStage)
                 .Program()
                     .Args(newArgs)
                     .Body<TCoFlatMap>()
@@ -481,7 +481,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, bool useChannelBl
                     .Callable(0, "NarrowMap")
                         .Callable(0, "ToFlow")
                             .Add(0, newArgNode)
-                        .Seal()    
+                        .Seal()
                         .Lambda(1)
                             .Params("fields", itemType->GetSize())
                             .Callable("AsStruct")
@@ -568,6 +568,7 @@ TDqPhyStage RebuildStageOutputAsWide(const TDqPhyStage& stage, const TStructExpr
             .Body(resultStream)
         .Build()
         .Settings(TDqStageSettings::New(stage).SetWideChannels(outputItemType).BuildNode(ctx, stage.Pos()))
+        .Outputs(stage.Outputs())
         .Done();
 }
 
@@ -630,7 +631,7 @@ IGraphTransformer::TStatus DqEnableWideChannels(EChannelMode mode, TExprNode::TP
                         .Stage(newStage)
                     .Build()
                     .SortColumns(builder.Build().Value())
-                    .Done().Ptr();    
+                    .Done().Ptr();
             } else {
                 auto newOutput = Build<TDqOutput>(ctx, conn.Output().Pos())
                     .InitFrom(conn.Output())

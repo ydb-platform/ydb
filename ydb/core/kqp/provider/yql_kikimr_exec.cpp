@@ -499,18 +499,31 @@ private:
 };
 
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
-
 private:
+    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        TPeepholeSettings peepholeSettings;
+        bool hasNonDeterministicFunctions;
+        auto status = PeepHoleOptimizeNode(input, output, ctx, TypesCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
+        if (status.Level != TStatus::Ok) {
+            ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TString("Peephole optimization failed for Dq stage")));
+            return status;
+        }
+        return status;
+    }
 
-    TString GetLambdaBody(TExprNode::TPtr resInput, NKikimrMiniKQL::TType& resultType, TExprContext& ctx) {
-
+    IGraphTransformer::TStatus GetLambdaBody(TExprNode::TPtr resInput, NKikimrMiniKQL::TType& resultType, TExprContext& ctx, TString& lambda) {
         auto pos = resInput->Pos();
         auto typeAnn = resInput->GetTypeAnn();
 
         const auto kind = resInput->GetTypeAnn()->GetKind();
-        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::List && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
+        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
         auto node = ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream",
                         ctx.WrapByCallableIf(data, "Just", std::move(resInput)));
+
+        auto peepHoleStatus = PeepHole(node, node, ctx);
+        if (peepHoleStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return peepHoleStatus;
+        }
 
         auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
 
@@ -530,7 +543,7 @@ private:
 
         TVector<TExprBase> fakeReads;
         auto paramsType = NDq::CollectParameters(programLambda, ctx);
-        auto lambda = NDq::BuildProgram(
+        lambda = NDq::BuildProgram(
             programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
                 *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
                 ctx, fakeReads);
@@ -542,7 +555,7 @@ private:
         auto type = NYql::NCommon::BuildType(*typeAnn, programBuilder, errorStream);
         ExportTypeToProto(type, resultType);
 
-        return lambda;
+        return IGraphTransformer::TStatus::Ok;
     }
 
     TString EncodeResultToYson(const NKikimrMiniKQL::TResult& result, bool& truncated) {
@@ -563,9 +576,11 @@ private:
 
 public:
     TKiSourceCallableExecutionTransformer(TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        TTypeAnnotationContext& types)
         : Gateway(gateway)
-        , SessionCtx(sessionCtx) {}
+        , SessionCtx(sessionCtx)
+        , TypesCtx(types) {}
 
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx)
@@ -588,7 +603,11 @@ public:
         if (input->Content() == "Result") {
             auto result = TMaybeNode<TResult>(input).Cast();
             NKikimrMiniKQL::TType resultType;
-            auto program = GetLambdaBody(result.Input().Ptr(), resultType, ctx);
+            TString program;
+            TStatus status = GetLambdaBody(result.Input().Ptr(), resultType, ctx, program);
+            if (status.Level != TStatus::Ok) {
+                return SyncStatus(status);
+            }
             auto asyncResult = Gateway->ExecuteLiteral(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
 
             return std::make_pair(IGraphTransformer::TStatus::Async, asyncResult.Apply(
@@ -745,6 +764,7 @@ private:
 private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TTypeAnnotationContext& TypesCtx;
 };
 
 template <class TKiObject, class TSettings>
@@ -1975,9 +1995,10 @@ private:
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TTypeAnnotationContext& types)
 {
-    return new TKiSourceCallableExecutionTransformer(gateway, sessionCtx);
+    return new TKiSourceCallableExecutionTransformer(gateway, sessionCtx, types);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(

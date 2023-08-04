@@ -484,6 +484,7 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
 } // namespace NYql

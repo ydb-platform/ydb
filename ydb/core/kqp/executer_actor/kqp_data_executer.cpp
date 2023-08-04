@@ -1338,6 +1338,7 @@ private:
 
     void BuildDatashardTasks(TStageInfo& stageInfo) {
         THashMap<ui64, ui64> shardTasks; // shardId -> taskId
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto getShardTask = [&](ui64 shardId) -> TTask& {
             auto it  = shardTasks.find(shardId);
@@ -1349,10 +1350,11 @@ private:
             task.Meta.ExecuterId = SelfId();
             task.Meta.ShardId = shardId;
             shardTasks.emplace(shardId, task.Id);
+
+            BuildSinks(stage, task);
+
             return task;
         };
-
-        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
         const auto& keyTypes = table.KeyColumnTypes;;
@@ -1531,6 +1533,9 @@ private:
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.ExecuterId = SelfId();
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
+
+            BuildSinks(stage, task);
+
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }

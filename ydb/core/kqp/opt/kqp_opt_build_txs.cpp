@@ -390,6 +390,7 @@ private:
                 .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
                 .Build()
             .Settings(stage.Settings())
+            .Outputs(stage.Outputs())
             .Done();
     }
 

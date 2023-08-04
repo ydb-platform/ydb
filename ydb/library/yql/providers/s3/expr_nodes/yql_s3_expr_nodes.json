@@ -140,6 +140,16 @@
             ]
         },
         {
+            "Name": "TS3Insert",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "S3Insert"},
+            "Children": [
+                {"Index": 0, "Name": "DataSink", "Type": "TS3DataSink"},
+                {"Index": 1, "Name": "Target", "Type": "TS3Target"},
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TS3SinkSettings",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "S3SinkSettings"},

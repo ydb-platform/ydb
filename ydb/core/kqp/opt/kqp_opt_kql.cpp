@@ -235,7 +235,7 @@ TCoAtomList BuildUpsertInputColumns(const TCoAtomList& inputColumns,
     for(const auto& item: inputColumns) {
         result.push_back(item.Ptr());
     }
-    
+
     for(const auto& item: autoincrement) {
         result.push_back(item.Ptr());
     }
@@ -259,7 +259,7 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
     }
 
     if (isWriteReplace) {
-        std::tie(input, inputCols) = CreateRowsToReplace(input, inputColumns, table, write.Pos(), ctx);   
+        std::tie(input, inputCols) = CreateRowsToReplace(input, inputColumns, table, write.Pos(), ctx);
     }
 
     auto baseInput = Build<TKqpWriteConstraint>(ctx, pos)
@@ -816,6 +816,32 @@ TVector<TExprBase> HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ct
     }
 }
 
+TExprNode::TPtr HandleExternalWrite(const TCallable& effect, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    if (effect.Ref().ChildrenSize() <= 1) {
+        return {};
+    }
+    // As a rule data sink is a second child for all write callables
+    TExprBase dataSinkArg(effect.Ref().Child(1));
+    if (auto maybeDataSink = dataSinkArg.Maybe<TCoDataSink>()) {
+        TStringBuf dataSinkCategory = maybeDataSink.Cast().Category();
+        auto dataSinkProviderIt = typesCtx.DataSinkMap.find(dataSinkCategory);
+        if (dataSinkProviderIt != typesCtx.DataSinkMap.end()) {
+            if (auto* dqIntegration = dataSinkProviderIt->second->GetDqIntegration()) {
+                if (auto canWrite = dqIntegration->CanWrite(*effect.Raw(), ctx)) {
+                    YQL_ENSURE(*canWrite, "Erros handling write");
+                    if (auto result = dqIntegration->WrapWrite(effect.Ptr(), ctx)) {
+                        return Build<TKqlExternalEffect>(ctx, effect.Pos())
+                            .Input(result)
+                            .Done()
+                            .Ptr();
+                    }
+                }
+            }
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 const TKikimrTableDescription& GetTableData(const TKikimrTablesData& tablesData,
@@ -836,12 +862,12 @@ TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& r
 }
 
 TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TKikimrTablesData& tablesData,
-    TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, NYql::TTypeAnnotationContext& typesCtx)
+    TExprContext& ctx, bool withSystemColumns, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typesCtx)
 {
     TVector<TKqlQuery> queryBlocks;
     queryBlocks.reserve(dataQueryBlocks.ArgCount());
     for (const auto& block : dataQueryBlocks) {
-        TVector <TExprBase> kqlEffects;
+        TVector<TExprBase> kqlEffects;
         for (const auto& effect : block.Effects()) {
             if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
                 auto result = HandleWriteTable(maybeWrite.Cast(), ctx, tablesData, kqpCtx);
@@ -861,9 +887,13 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                 auto results = HandleDeleteTable(maybeDelete.Cast(), ctx, tablesData, withSystemColumns, kqpCtx);
                 kqlEffects.insert(kqlEffects.end(), results.begin(), results.end());
             }
+
+            if (TExprNode::TPtr result = HandleExternalWrite(effect, ctx, typesCtx)) {
+                kqlEffects.emplace_back(result);
+            }
         }
 
-        TVector <TKqlQueryResult> kqlResults;
+        TVector<TKqlQueryResult> kqlResults;
         kqlResults.reserve(block.Results().Size());
         for (const auto& kiResult : block.Results()) {
             kqlResults.emplace_back(
@@ -888,7 +918,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
         TOptimizeExprSettings optSettings(nullptr);
         optSettings.VisitChanges = true;
         auto status = OptimizeExpr(queryBlock.Ptr(), optResult,
-            [&tablesData, withSystemColumns, &kqpCtx, &typesCtx](const TExprNode::TPtr& input, TExprContext &ctx) {
+            [&tablesData, withSystemColumns, &kqpCtx, &typesCtx](const TExprNode::TPtr& input, TExprContext& ctx) {
                 auto node = TExprBase(input);
                 TExprNode::TPtr effect;
 

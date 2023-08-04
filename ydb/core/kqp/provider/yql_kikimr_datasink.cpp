@@ -5,6 +5,8 @@
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
+#include <ydb/library/yql/utils/log/log.h>
+
 namespace NYql {
 namespace {
 
@@ -340,13 +342,15 @@ public:
         TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
         TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
         : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
+        , ExternalSourceFactory(externalSourceFactory)
         , IntentDeterminationTransformer(CreateKiSinkIntentDeterminationTransformer(sessionCtx))
-        , TypeAnnotationTransformer(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx))
+        , TypeAnnotationTransformer(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx, types))
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
@@ -496,6 +500,57 @@ public:
             .Ptr();
     }
 
+    TExprNode::TPtr RewriteIOExternal(const TKikimrKey& key, const TExprNode::TPtr& node, TExprContext& ctx) {
+        TKiDataSink dataSink(node->ChildPtr(1));
+        auto& tableDesc = SessionCtx->Tables().GetTable(TString{dataSink.Cluster()}, key.GetTablePath());
+        if (!tableDesc.Metadata || tableDesc.Metadata->Kind != EKikimrTableKind::External) {
+            return nullptr;
+        }
+
+        if (tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalDataSource && tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalTable) {
+            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
+            return nullptr;
+        }
+
+        ctx.Step.Repeat(TExprStep::DiscoveryIO)
+                .Repeat(TExprStep::Epochs)
+                .Repeat(TExprStep::Intents)
+                .Repeat(TExprStep::LoadTablesMetadata)
+                .Repeat(TExprStep::RewriteIO);
+
+        const auto& externalSource = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+        if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+            auto writeArgs = node->ChildrenList();
+            writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
+                            .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                            .FreeArgs()
+                                .Add(writeArgs[1]->ChildrenList()[1])
+                            .Build()
+                            .Done().Ptr();
+            return ctx.ChangeChildren(*node, std::move(writeArgs));
+        } else { // tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable
+            TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
+            auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
+            auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
+            auto r = Build<TCoWrite>(ctx, node->Pos())
+                .World(node->Child(0))
+                .DataSink()
+                    .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                    .FreeArgs()
+                        .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                        .Build()
+                    .Build()
+                .FreeArgs()
+                    .Add(keyNode)
+                    .Add(node->Child(3))
+                    .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSource, tableDesc.Metadata->ExternalSource.TableContent))
+                .Build()
+                .Done().Ptr();
+            return r;
+        }
+        return nullptr;
+    }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         YQL_ENSURE(node->IsCallable(WriteName), "Expected Write!, got: " << node->Content());
 
@@ -504,6 +559,10 @@ public:
 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table: {
+                if (TExprNode::TPtr resultNode = RewriteIOExternal(key, node, ctx)) {
+                    return resultNode;
+                }
+
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
@@ -837,6 +896,7 @@ private:
     const TTypeAnnotationContext& Types;
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
 
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
@@ -970,9 +1030,10 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory,
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
 {
-    return new TKikimrDataSink(functionRegistry, types, gateway, sessionCtx, queryExecutor);
+    return new TKikimrDataSink(functionRegistry, types, gateway, sessionCtx, externalSourceFactory, queryExecutor);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(

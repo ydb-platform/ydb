@@ -945,6 +945,14 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
             break;
         }
 
+        case TTaskOutputType::Sink: {
+            auto* sink = outputDesc.MutableSink();
+            sink->SetType(output.SinkType);
+            YQL_ENSURE(output.SinkSettings);
+            sink->MutableSettings()->CopyFrom(*output.SinkSettings);
+            break;
+        }
+
         default: {
             YQL_ENSURE(false, "Unexpected task output type " << output.Type);
         }

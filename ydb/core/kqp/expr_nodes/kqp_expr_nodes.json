@@ -205,8 +205,14 @@
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"}
         },
         {
-            "Name": "TKqlTableEffect",
+            "Name": "TKqlEffectBase",
             "Base": "TExprBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TKqlTableEffect",
+            "Base": "TKqlEffectBase",
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
             "Children": [
@@ -287,6 +293,14 @@
             "Name": "TKqlInsertRowsIndex",
             "Base": "TKqlInsertRowsBase",
             "Match": {"Type": "Callable", "Name": "TKqlInsertRowsIndex"}
+        },
+        {
+            "Name": "TKqlExternalEffect",
+            "Base": "TKqlEffectBase",
+            "Match": {"Type": "Callable", "Name": "KqlExternalEffect"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TKqpParamBinding",
@@ -447,6 +461,15 @@
             "Name": "TKqpDeleteRows",
             "Base": "TKqlDeleteRowsBase",
             "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
+        },
+        {
+            "Name": "TKqpSinkEffect",
+            "Base": "TKqlEffectBase",
+            "Match": {"Type": "Callable", "Name": "KqpSinkEffect"},
+            "Children": [
+                {"Index": 0, "Name": "Stage", "Type": "TExprBase"},
+                {"Index": 1, "Name": "SinkIndex", "Type": "TCoAtom"}
+            ]
         },
         {
             "Name": "TKqpOlapOperationBase",

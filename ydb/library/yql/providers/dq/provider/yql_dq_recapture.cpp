@@ -180,7 +180,7 @@ private:
             auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(dataSink);
             if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) {
-                if (auto canWrite = dqIntegration->CanWrite(*State_->Settings, node, ctx)) {
+                if (auto canWrite = dqIntegration->CanWrite(node, ctx)) {
                     if (!canWrite.GetRef()) {
                         good = false;
                     } else if (!State_->Settings->EnableInsert.Get().GetOrElse(false)) {

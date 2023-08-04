@@ -29,6 +29,7 @@ public:
         AddHandler({TS3Target::CallableName()}, Hndl(&TSelf::HandleTarget));
         AddHandler({TS3SinkSettings::CallableName()}, Hndl(&TSelf::HandleSink));
         AddHandler({TS3SinkOutput::CallableName()}, Hndl(&TSelf::HandleOutput));
+        AddHandler({TS3Insert::CallableName()}, Hndl(&TSelf::HandleInsert));
     }
 private:
     TStatus HandleCommit(TExprBase input, TExprContext&) {
@@ -81,6 +82,59 @@ private:
         }
 
         input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleInsert(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 3U, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataSink(*input->Child(TS3Insert::idx_DataSink), S3ProviderName, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto source = input->Child(TS3Insert::idx_Input);
+        if (!EnsureListType(*source, ctx)) {
+            return TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* sourceType = source->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (!EnsureStructType(source->Pos(), *sourceType, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto target = input->Child(TS3Insert::idx_Target);
+        if (!TS3Target::Match(target)) {
+            ctx.AddError(TIssue(ctx.GetPosition(target->Pos()), "Expected S3 target."));
+            return TStatus::Error;
+        }
+
+        TS3Target tgt(target);
+        if (auto settings = tgt.Settings()) {
+            if (auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
+                const TTypeAnnotationNode* targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                if (!IsSameAnnotation(*targetType, *sourceType)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
+                                        TStringBuilder() << "Type mismatch between schema type: " << *targetType
+                                                         << " and actual data type: " << *sourceType << ", diff is: "
+                                                         << GetTypeDiff(*targetType, *sourceType)));
+                    return TStatus::Error;
+                }
+            }
+        }
+
+        input->SetTypeAnn(
+            ctx.MakeType<TTupleExprType>(
+                TTypeAnnotationNode::TListType{
+                    ctx.MakeType<TListExprType>(
+                        ctx.MakeType<TOptionalExprType>(
+                            ctx.MakeType<TDataExprType>(EDataSlot::String)
+                        )
+                    )
+                }
+            )
+        );
         return TStatus::Ok;
     }
 

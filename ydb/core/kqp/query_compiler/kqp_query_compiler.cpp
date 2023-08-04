@@ -708,6 +708,20 @@ private:
 
         stageProto.SetOutputsCount(outputsCount);
 
+        // Dq sinks
+        if (auto maybeOutputsNode = stage.Outputs()) {
+            auto outputsNode = maybeOutputsNode.Cast();
+            for (size_t i = 0; i < outputsNode.Size(); ++i) {
+                auto outputNode = outputsNode.Item(i);
+                auto maybeSinkNode = outputNode.Maybe<TDqSink>();
+                YQL_ENSURE(maybeSinkNode);
+                auto sinkNode = maybeSinkNode.Cast();
+                auto* sinkProto = stageProto.AddSinks();
+                FillSink(sinkNode, sinkProto, ctx);
+                sinkProto->SetOutputIndex(FromString(TStringBuf(sinkNode.Index())));
+            }
+        }
+
         auto paramsType = CollectParameters(stage, ctx);
         auto programBytecode = NDq::BuildProgram(stage.Program(), *paramsType, *KqlCompiler, TypeEnv, FuncRegistry,
             ctx, {});
@@ -751,10 +765,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-
-        YQL_ENSURE(hasEffectStage == txSettings.WithEffects);
-
-        txProto.SetHasEffects(txSettings.WithEffects);
+        txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
@@ -911,7 +922,7 @@ private:
     void FillSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
     {
-        const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category().Value();
+        const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
         if (dataSourceCategory == NYql::KikimrProviderName || dataSourceCategory == NYql::YdbProviderName || dataSourceCategory == NYql::KqpReadRangesSourceName) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
@@ -947,6 +958,22 @@ private:
                 CreateStructuredTokenParser(token).ListReferences(SecretNames);
             }
         }
+    }
+
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, TExprContext& ctx) {
+        Y_UNUSED(ctx);
+        const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
+        // Delegate sink filling to dq integration of specific provider
+        const auto provider = TypesCtx.DataSinkMap.find(dataSinkCategory);
+        YQL_ENSURE(provider != TypesCtx.DataSinkMap.end(), "Unsupported data sink category: \"" << dataSinkCategory << "\"");
+        NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
+        YQL_ENSURE(dqIntegration, "Unsupported dq sink for provider: \"" << dataSinkCategory << "\"");
+        auto& externalSink = *protoSink->MutableExternalSink();
+        google::protobuf::Any& settings = *externalSink.MutableSettings();
+        TString& sinkType = *externalSink.MutableType();
+        dqIntegration->FillSinkSettings(sink.Ref(), settings, sinkType);
+        YQL_ENSURE(!settings.type_url().empty(), "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings for its dq sink node");
+        YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings type for its dq sink node");
     }
 
     void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,

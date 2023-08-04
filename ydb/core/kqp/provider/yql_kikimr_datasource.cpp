@@ -16,6 +16,48 @@
 #include <util/generic/is_in.h>
 
 namespace NYql {
+
+static Ydb::Type CreateYdbType(const NKikimr::NScheme::TTypeInfo& typeInfo, bool notNull) {
+    Ydb::Type ydbType;
+    if (typeInfo.GetTypeId() == NKikimr::NScheme::NTypeIds::Pg) {
+        auto* typeDesc = typeInfo.GetTypeDesc();
+        auto* pg = ydbType.mutable_pg_type();
+        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+    } else {
+        auto& item = notNull
+            ? ydbType
+            : *ydbType.mutable_optional_type()->mutable_item();
+        item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
+    }
+    return ydbType;
+}
+
+TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content) {
+    TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;
+    typedColumns.reserve(columns.size());
+    for (const auto& [n, c] : columns) {
+        NYdb::TTypeParser parser(NYdb::TType(CreateYdbType(c.TypeInfo, c.NotNull)));
+        auto type = NFq::MakeType(parser, ctx);
+        typedColumns.emplace_back(n, type);
+    }
+
+    const TString ysonSchema = NYql::NCommon::WriteTypeToYson(NFq::MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text);
+    TExprNode::TListType items;
+    auto schema = ctx.NewAtom(pos, ysonSchema);
+    auto type = ctx.NewCallable(pos, "SqlTypeFromYson"sv, { schema });
+    auto order = ctx.NewCallable(pos, "SqlColumnOrderFromYson"sv, { schema });
+    auto userSchema = ctx.NewAtom(pos, "userschema"sv);
+    items.emplace_back(ctx.NewList(pos, {userSchema, type, order}));
+
+    for (const auto& [key, value]: source->GetParameters(content)) {
+        auto keyAtom = ctx.NewAtom(pos, NormalizeName(key));
+        auto valueAtom = ctx.NewAtom(pos, value);
+        items.emplace_back(ctx.NewList(pos, {keyAtom, valueAtom}));
+    }
+    return ctx.NewList(pos, std::move(items));
+}
+
 namespace {
 
 using namespace NKikimr;
@@ -368,7 +410,7 @@ public:
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
-        , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx))
+        , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
 
     {
         Y_UNUSED(FunctionRegistry);
@@ -551,47 +593,6 @@ public:
         return false;
     }
 
-    static Ydb::Type CreateYdbType(const NScheme::TTypeInfo& typeInfo, bool notNull) {
-        Ydb::Type ydbType;
-        if (typeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
-            auto* typeDesc = typeInfo.GetTypeDesc();
-            auto* pg = ydbType.mutable_pg_type();
-            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-        } else {
-            auto& item = notNull
-                ? ydbType
-                : *ydbType.mutable_optional_type()->mutable_item();
-            item.set_type_id((Ydb::Type::PrimitiveTypeId)typeInfo.GetTypeId());
-        }
-        return ydbType;
-    }
-
-    TExprNode::TPtr BuildSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NExternalSource::IExternalSource::TPtr& source, const TString& content) {
-        TVector<std::pair<TString, const NYql::TTypeAnnotationNode*>> typedColumns;
-        typedColumns.reserve(columns.size());
-        for (const auto& [n, c] : columns) {
-            NYdb::TTypeParser parser(NYdb::TType(CreateYdbType(c.TypeInfo, c.NotNull)));
-            auto type = NFq::MakeType(parser, ctx);
-            typedColumns.emplace_back(n, type);
-        }
-
-        const TString ysonSchema = NYql::NCommon::WriteTypeToYson(NFq::MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text);
-        TExprNode::TListType items;
-        auto schema = ctx.NewAtom(pos, ysonSchema);
-        auto type = ctx.NewCallable(pos, "SqlTypeFromYson"sv, { schema });
-        auto order = ctx.NewCallable(pos, "SqlColumnOrderFromYson"sv, { schema });
-        auto userSchema = ctx.NewAtom(pos, "userschema"sv);
-        items.emplace_back(ctx.NewList(pos, {userSchema, type, order}));
-
-        for (const auto& [key, value]: source->GetParameters(content)) {
-            auto keyAtom = ctx.NewAtom(pos, NormalizeName(key));
-            auto valueAtom = ctx.NewAtom(pos, value);
-            items.emplace_back(ctx.NewList(pos, {keyAtom, valueAtom}));
-        }
-        return ctx.NewList(pos, std::move(items));
-    }
-
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         auto read = node->Child(0);
         if (!read->IsCallable(ReadName)) {
@@ -664,7 +665,7 @@ public:
                                     .FreeArgs()
                                         .Add(ctx.NewCallable(node->Pos(), "MrTableConcat", {key}))
                                         .Add(ctx.NewCallable(node->Pos(), "Void", {}))
-                                        .Add(BuildSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
+                                        .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
                                     .Build()
                                     .Done().Ptr();
             auto retChildren = node->ChildrenList();

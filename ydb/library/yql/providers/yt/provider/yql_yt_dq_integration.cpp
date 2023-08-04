@@ -410,7 +410,7 @@ public:
         return read;
     }
 
-    TMaybe<bool> CanWrite(const TDqSettings&, const TExprNode& node, TExprContext& ctx) override {
+    TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& ctx) override {
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {
             auto cluster = TString{maybeWrite.Cast().DataSink().Cluster().Value()};
             auto tableName = TString{TYtTableInfo::GetTableLabel(maybeWrite.Cast().Table())};

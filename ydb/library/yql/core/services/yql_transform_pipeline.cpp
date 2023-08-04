@@ -56,11 +56,11 @@ TTransformationPipeline& TTransformationPipeline::AddParametersEvaluation(const 
 
 TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     IGraphTransformer* calcTransfomer, EYqlIssueCode issueCode) {
-    auto typeCtx = TypeAnnotationContext_;
-    auto funcReg = &functionRegistry;
+    auto& typeCtx = *TypeAnnotationContext_;
+    auto& funcReg = functionRegistry;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
-        [=](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        return EvaluateExpression(input, output, *typeCtx, ctx, *funcReg, calcTransfomer);
+        [&typeCtx, &funcReg, calcTransfomer](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return EvaluateExpression(input, output, typeCtx, ctx, funcReg, calcTransfomer);
     }), "EvaluateExpression", issueCode));
 
     return *this;

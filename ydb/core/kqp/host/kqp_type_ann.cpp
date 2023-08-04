@@ -1410,7 +1410,7 @@ TStatus AnnotateSequencerConnection(const TExprNode::TPtr& node, TExprContext& c
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
     return TStatus::Ok;
-} 
+}
 
 TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns) {
@@ -1468,6 +1468,32 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
     }
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateExternalEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(node->Child(TKqlExternalEffect::idx_Input)->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!TDqStageBase::Match(node->Child(TKqpSinkEffect::idx_Stage))) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpSinkEffect::idx_SinkIndex), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(node->Child(TKqpSinkEffect::idx_Stage)->GetTypeAnn());
     return TStatus::Ok;
 }
 
@@ -1609,6 +1635,13 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
 
+            if (TKqlExternalEffect::Match(input.Get())) {
+                return AnnotateExternalEffect(input, ctx);
+            }
+
+            if (TKqpSinkEffect::Match(input.Get())) {
+                return AnnotateKqpSinkEffect(input, ctx);
+            }
 
             return dqTransformer->Transform(input, output, ctx);
         });

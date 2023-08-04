@@ -12,7 +12,8 @@ public:
     TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TExprNode& node, TExprContext& ctx) override;
     TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) override;
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override;
-    TMaybe<bool> CanWrite(const TDqSettings& config, const TExprNode& write, TExprContext& ctx) override;
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) override;
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& write, TExprContext& ctx) override;
     bool CanFallback() override;
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override;
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) override;

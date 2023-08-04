@@ -14,6 +14,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
 
 #include <util/generic/is_in.h>
 
@@ -58,7 +59,7 @@ private:
 class TKqpRunner : public IKqpRunner {
 public:
     TKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
-        TIntrusivePtr<TTypeAnnotationContext> typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         const NMiniKQL::IFunctionRegistry& funcRegistry,
         TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
         : Gateway(gateway)
@@ -82,13 +83,16 @@ public:
         PhysicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("PhysicalOptimizeTransformer", logComp, logLevel), "LogPhysicalOptimize")
+            .AddExpressionEvaluation(FuncRegistry)
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
                 *typesCtx, Config))
             .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
-            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "PhysicalOptimize")
+            .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
+            .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize")
+            .Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
@@ -347,7 +351,7 @@ private:
 } // namespace
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
-    TIntrusivePtr<TTypeAnnotationContext> typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NMiniKQL::IFunctionRegistry& funcRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
 {

@@ -66,9 +66,29 @@ NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, co
     return promise.GetFuture().GetValueSync();
 }
 
-void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id, int code, bool& allDoneOk) {
+void CheckAttach(const TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk) {
     NGrpc::TGRpcClientLow clientLow;
-    CheckAttach(clientLow, clientConfig, id, code, allDoneOk)->Cancel();
+    CheckAttach(clientLow, clientConfig, id, expected, allDoneOk)->Cancel();
+}
+
+void CheckDelete(const TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk) {
+    NGrpc::TGRpcClientLow clientLow;
+    auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
+
+    Ydb::Query::DeleteSessionRequest request;
+    request.set_session_id(id);
+
+    NGrpc::TResponseCallback<Ydb::Query::DeleteSessionResponse> responseCb =
+        [&allDoneOk, expected](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::DeleteSessionResponse&& response) -> void {
+            UNIT_ASSERT(!grpcStatus.InternalError);
+            UNIT_ASSERT_C(grpcStatus.GRpcStatusCode == 0, grpcStatus.Msg + " " + grpcStatus.Details);
+            allDoneOk &= (response.status() == expected);
+            if (!allDoneOk) {
+                Cerr << "Expected status: " << expected << ", got response: " << response.DebugString() << Endl;
+            }
+    };
+
+    connection->DoRequest(request, std::move(responseCb), &Ydb::Query::V1::QueryService::Stub::AsyncDeleteSession);
 }
 
 }

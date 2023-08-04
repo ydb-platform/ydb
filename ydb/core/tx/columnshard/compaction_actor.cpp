@@ -70,6 +70,7 @@ public:
             LOG_S_WARN("TEvReadBlobRangeResult cannot get blob "
                 << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
                 << TabletId << " (compaction)");
+            TxEvent->SetPutStatus(NKikimrProto::ERROR);
         } else {
             LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob "
                         << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "

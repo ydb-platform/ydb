@@ -515,7 +515,8 @@ namespace NKikimr {
                     LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
 
                     TMemObserver::TMemStat stat{
-                        memoryUsage->AnonRss, 
+                        // Note: we use allocated memory because AnonRss has lag
+                        TAllocState::GetAllocatedMemoryEstimate(), 
                         memoryUsage->CGroupLimit, 
                         static_cast<ui64>(memoryUsage->CGroupLimit * TDumpLogConfig::RssUsageSoftLimit)};
 

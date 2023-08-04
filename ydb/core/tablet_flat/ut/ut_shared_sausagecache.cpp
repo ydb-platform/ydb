@@ -194,6 +194,7 @@ Y_UNIT_TEST(MemTableLimits) {
     TMyEnvBase env;
 
     env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_DEBUG);
 
     auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
 

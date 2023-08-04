@@ -14,6 +14,7 @@ namespace NKikimr {
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group)
     : MemLimitBytes(group->GetCounter("MemLimitBytes"))
+    , ConfigLimitBytes(group->GetCounter("ConfigLimitBytes"))
     , ActivePages(group->GetCounter("ActivePages"))
     , ActiveBytes(group->GetCounter("ActiveBytes"))
     , ActiveLimitBytes(group->GetCounter("ActiveLimitBytes"))
@@ -29,6 +30,7 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , LoadInFlyBytes(group->GetCounter("LoadInFlyBytes"))
     , MemTableTotalBytes(group->GetCounter("MemTableTotalBytes"))
     , MemTableCompactingBytes(group->GetCounter("MemTableCompactingBytes"))
+    , MemTableCompactedBytes(group->GetCounter("MemTableCompactedBytes", true))
 { }
 
 }
@@ -108,6 +110,9 @@ public:
     void CompactionComplete(TIntrusivePtr<TSharedPageCacheMemTableRegistration> registration) {
         auto it = Compacting.find(registration);
         if (it != Compacting.end()) {
+            if (Counters) {
+                Counters->MemTableCompactedBytes->Add(it->second);
+            }
             ChangeTotalCompacting(-it->second);
             NonCompacting.insert(it->first);
             Compacting.erase(it);
@@ -351,6 +356,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Cache.UpdateCacheSize(limit);
 
         if (Config->Counters) {
+            Config->Counters->ConfigLimitBytes->Set(ConfigLimitBytes);
             Config->Counters->ActiveLimitBytes->Set(limit);
         }
     }
@@ -412,6 +418,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto registrations = MemTableTracker->SelectForCompaction(toCompact);
                 for (auto registration : registrations) {
                     Send(registration.first->Owner, new NSharedCache::TEvMemTableCompact(registration.first->Table, registration.second));
+                }
+                if (auto logl = Logger->Log(ELnLev::Debug)) {
+                    logl
+                        << "MemTable compactions triggered for " << toCompact << " bytes "
+                        << "(out of " << memTableTotal << ") "
+                        << registrations.size() << " tables ";
                 }
             }
         }

@@ -25,6 +25,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     const TCounterPtr MemLimitBytes;
+    const TCounterPtr ConfigLimitBytes;
     const TCounterPtr ActivePages;
     const TCounterPtr ActiveBytes;
     const TCounterPtr ActiveLimitBytes;
@@ -40,6 +41,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr LoadInFlyBytes;
     const TCounterPtr MemTableTotalBytes;
     const TCounterPtr MemTableCompactingBytes;
+    const TCounterPtr MemTableCompactedBytes;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group);
 };

@@ -94,4 +94,46 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         UNIT_ASSERT(allDoneOk);
     }
+
+    Y_UNIT_TEST(TestCreateAttachAndDropAttachedSession) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        NGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            EnsureSessionClosed(p, Ydb::StatusIds::SUCCESS, allDoneOk);
+        }
+
+        p->Cancel();
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
 }

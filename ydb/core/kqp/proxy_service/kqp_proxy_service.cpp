@@ -685,6 +685,7 @@ public:
         TKqpRequestInfo requestInfo(traceId);
         const auto sessionId = request.GetSessionId();
         const bool extIdleCheck = request.GetExtIdleCheck();
+        const TActorId rpcActor = ActorIdFromProto(request.GetRpcActorId());
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         Counters->ReportPingSession(dbCounters, request.ByteSize());
@@ -715,12 +716,17 @@ public:
             if (extIdleCheck && isIdle) {
                 //TODO: fix
                 ui32 flags = IEventHandle::FlagTrackDelivery;
-                if (!sameNode) {
+                if (sameNode) {
+                    KQP_PROXY_LOG_T("Attach local session: " << sessionInfo->WorkerId
+                        << " to rpc: " << rpcActor << " on same node");
+
+                    LocalSessions->AttachSession(sessionInfo, 0, rpcActor);
+                } else {
                     const TNodeId nodeId = ev->Sender.NodeId();
                     KQP_PROXY_LOG_T("Subscribe local session: " << sessionInfo->WorkerId
-                        << " to remote: " << ev->Sender << " , nodeId: " << nodeId);
+                        << " to remote: " << ev->Sender << " , nodeId: " << nodeId << ", with rpc: " << rpcActor);
 
-                    LocalSessions->AttachSession(sessionInfo, nodeId);
+                    LocalSessions->AttachSession(sessionInfo, nodeId, rpcActor);
 
                     flags |= IEventHandle::FlagSubscribeOnSession;
                 }
@@ -1380,7 +1386,7 @@ private:
 
     void RemoveSession(const TString& sessionId, const TActorId& workerId) {
         if (!sessionId.empty()) {
-            auto nodeId = LocalSessions->Erase(sessionId);
+            auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
             KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
             PublishResourceUsage();
             if (ShutdownRequested) {
@@ -1390,6 +1396,14 @@ private:
             // No more session with kqp proxy on this node
             if (nodeId) {
                 Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+            }
+
+            if (rpcActor) {
+                auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
+                closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+                closeEv->Record.MutableResponse()->SetSessionId(sessionId);
+                closeEv->Record.MutableResponse()->SetClosed(true);
+                Send(rpcActor, closeEv.Release());
             }
 
             return;

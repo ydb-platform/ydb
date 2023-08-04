@@ -86,6 +86,7 @@ struct TKqpSessionInfo {
     // position in the idle list.
     std::list<TKqpSessionInfo*>::iterator IdlePos;
     TNodeId AttachedNodeId;
+    TActorId AttachedRpcId;
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
@@ -120,8 +121,9 @@ public:
         , RandomProvider(randomProvider)
     {}
 
-    bool AttachSession(const TKqpSessionInfo* sessionInfo, TNodeId nodeId) {
+    bool AttachSession(const TKqpSessionInfo* sessionInfo, TNodeId nodeId, TActorId rpcActor) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->AttachedNodeId = nodeId;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->AttachedRpcId = rpcActor;
         auto& actors = AttachedNodesIndex[nodeId];
         return actors.insert(sessionInfo).second;
     }
@@ -225,10 +227,11 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
-    TNodeId Erase(const TString& sessionId) {
+    std::pair<TNodeId, TActorId> Erase(const TString& sessionId) {
         auto it = LocalSessions.find(sessionId);
-        TNodeId result = 0;
+        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
         if (it != LocalSessions.end()) {
+            result.second = it->second.AttachedRpcId;
             auto counter = SessionsCountPerDatabase.find(it->second.Database);
             if (counter != SessionsCountPerDatabase.end()) {
                 counter->second--;
@@ -247,7 +250,7 @@ public:
                 if (attIt != AttachedNodesIndex.end()) {
                     attIt->second.erase(&(it->second));
                     if (attIt->second.empty()) {
-                        result = nodeId;
+                        result.first = nodeId;
                         AttachedNodesIndex.erase(attIt);
                     }
                 }
@@ -293,15 +296,15 @@ public:
         return it->second;
     }
 
-    TNodeId Erase(const TActorId& targetId) {
-        TNodeId nodeId = 0;
+    std::pair<TNodeId, TActorId> Erase(const TActorId& targetId) {
+        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
 
         auto it = TargetIdIndex.find(targetId);
         if (it != TargetIdIndex.end()){
-            nodeId = Erase(it->second);
+            result = Erase(it->second);
         }
 
-        return nodeId;
+        return result;
     }
 
     template<typename TCb>

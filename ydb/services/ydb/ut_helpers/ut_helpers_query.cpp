@@ -91,4 +91,22 @@ void CheckDelete(const TGRpcClientConfig& clientConfig, const TString& id, int e
     connection->DoRequest(request, std::move(responseCb), &Ydb::Query::V1::QueryService::Stub::AsyncDeleteSession);
 }
 
+void EnsureSessionClosed(NGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDoneOk) {
+    using TProcessor = typename NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
+    TProcessor processor = dynamic_cast<NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
+    UNIT_ASSERT(processor);
+
+    auto promise = NThreading::NewPromise<void>();
+    auto resp = std::make_shared<Ydb::Query::SessionState>();
+    processor->Read(resp.get(), [&allDoneOk, resp, promise, expected](TGrpcStatus grpcStatus) mutable {
+        UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
+        allDoneOk &= (resp->status() == expected);
+        if (!allDoneOk) {
+            Cerr << "Expected status: " << expected << ", got response: " << resp->DebugString() << Endl;
+        }
+        promise.SetValue();
+    });
+    promise.GetFuture().Wait();
+}
+
 }

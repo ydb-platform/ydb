@@ -12,5 +12,6 @@ NGrpc::IStreamRequestCtrl::TPtr CheckAttach(NGrpc::TGRpcClientLow& clientLow, co
 
 void CheckAttach(const NGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 void CheckDelete(const NGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
+void EnsureSessionClosed(NGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDone);
 
 }

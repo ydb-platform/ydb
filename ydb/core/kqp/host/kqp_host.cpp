@@ -893,13 +893,14 @@ public:
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
         NYql::IHTTPGateway::TPtr httpGateway,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-        bool isInternalCall)
+        bool isInternalCall, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
         : Gateway(gateway)
         , Cluster(cluster)
         , ExprCtx(new TExprContext())
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
+        , CredentialsFactory(std::move(credentialsFactory))
         , HttpGateway(std::move(httpGateway))
         , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider))
         , ClustersMap({{Cluster, TString(KikimrProviderName)}})
@@ -1493,7 +1494,7 @@ private:
         auto state = MakeIntrusive<NYql::TS3State>();
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
-        state->CredentialsFactory = nullptr; // TODO
+        state->CredentialsFactory = CredentialsFactory;
 
         NYql::TS3GatewayConfig cfg;
         state->Configuration->Init(cfg, TypesCtx);
@@ -1631,6 +1632,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     NYql::IHTTPGateway::TPtr HttpGateway;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
@@ -1669,10 +1671,11 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall)
+    NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, std::move(httpGateway), funcRegistry,
-        keepConfigChanges, isInternalCall);
+        keepConfigChanges, isInternalCall, std::move(credentialsFactory));
 }
 
 } // namespace NKqp

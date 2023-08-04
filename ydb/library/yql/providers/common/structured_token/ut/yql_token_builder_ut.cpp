@@ -32,8 +32,8 @@ Y_UNIT_TEST_SUITE(TokenBuilderTest) {
 
     Y_UNIT_TEST(ServiceAccountIdWithSecret) {
         TStructuredTokenBuilder b;
-        b.SetServiceAccountIdAuthWithSecret("my_sa_id", "my_sa_sign_reference");
-        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
+        b.SetServiceAccountIdAuthWithSecret("my_sa_id", "my_sa_sign_reference", "my_sa_sign");
+        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature":"my_sa_sign","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
         const TStructuredTokenParser p = CreateStructuredTokenParser(b.ToJson());
         UNIT_ASSERT(p.HasServiceAccountIdAuth());
         UNIT_ASSERT(!p.HasBasicAuth());
@@ -42,8 +42,10 @@ Y_UNIT_TEST_SUITE(TokenBuilderTest) {
         TString id, sign, reference;
         UNIT_ASSERT(p.GetServiceAccountIdAuth(id, sign, reference));
         UNIT_ASSERT_VALUES_EQUAL(id, "my_sa_id");
-        UNIT_ASSERT_VALUES_EQUAL(sign, "");
+        UNIT_ASSERT_VALUES_EQUAL(sign, "my_sa_sign");
         UNIT_ASSERT_VALUES_EQUAL(reference, "my_sa_sign_reference");
+        b.RemoveSecrets();
+        UNIT_ASSERT_VALUES_EQUAL(R"({"sa_id":"my_sa_id","sa_id_signature_ref":"my_sa_sign_reference"})", b.ToJson());
         TSet<TString> references;
         p.ListReferences(references);
         UNIT_ASSERT_VALUES_EQUAL(references.size(), 1);

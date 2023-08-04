@@ -13,12 +13,13 @@ public:
     TStructuredTokenBuilder(TStructuredTokenBuilder&&) = default;
 
     TStructuredTokenBuilder& SetServiceAccountIdAuth(const TString& accountId, const TString& accountIdSignature);
-    TStructuredTokenBuilder& SetServiceAccountIdAuthWithSecret(const TString& accountId, const TString& accountIdSignatureReference);
+    TStructuredTokenBuilder& SetServiceAccountIdAuthWithSecret(const TString& accountId, const TString& accountIdSignatureReference, const TString& accountIdSignature);
     TStructuredTokenBuilder& SetBasicAuth(const TString& login, const TString& password);
     TStructuredTokenBuilder& SetBasicAuthWithSecret(const TString& login, const TString& passwordReference);
     TStructuredTokenBuilder& SetIAMToken(const TString& token);
     TStructuredTokenBuilder& SetNoAuth();
     TStructuredTokenBuilder& ReplaceReferences(const TMap<TString, TString> secrets);
+    TStructuredTokenBuilder& RemoveSecrets();
 
     TString ToJson() const;
 
@@ -48,5 +49,5 @@ private:
 
 TStructuredTokenParser CreateStructuredTokenParser(const TString& content);
 TString ComposeStructuredTokenJsonForServiceAccount(const TString& serviceAccountId, const TString& serviceAccountIdSignature, const TString& token);
-TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& serviceAccountId, const TString& serviceAccountIdSignatureSecretName);
+TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& serviceAccountId, const TString& serviceAccountIdSignatureSecretName, const TString& serviceAccountIdSignature);
 }

@@ -89,6 +89,10 @@ public:
         return Proto->GetSchemeOperation();
     }
 
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& GetSecretNames() const {
+        return Proto->GetSecretNames();
+    }
+
     TProtoStringType DebugString() const {
         return Proto->ShortDebugString();
     }

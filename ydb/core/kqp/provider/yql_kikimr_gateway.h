@@ -337,6 +337,7 @@ struct TExternalSource {
     TString DataSourcePath;
     TString DataSourceLocation;
     TString DataSourceInstallation;
+    TString ServiceAccountIdSignature;
     NKikimrSchemeOp::TAuth DataSourceAuth;
 };
 

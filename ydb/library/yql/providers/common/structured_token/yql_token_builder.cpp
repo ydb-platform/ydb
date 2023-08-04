@@ -16,9 +16,10 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetServiceAccountIdAuth(const 
     return *this;
 }
 
-TStructuredTokenBuilder& TStructuredTokenBuilder::SetServiceAccountIdAuthWithSecret(const TString& accountId, const TString& accountIdSignatureReference) {
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetServiceAccountIdAuthWithSecret(const TString& accountId, const TString& accountIdSignatureReference, const TString& accountIdSignature) {
     Data.SetField("sa_id", accountId);
     Data.SetField("sa_id_signature_ref", accountIdSignatureReference);
+    Data.SetField("sa_id_signature", accountIdSignature);
     return *this;
 }
 
@@ -55,6 +56,12 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::ReplaceReferences(const TMap<T
         Data.ClearField("sa_id_signature_ref");
         Data.SetField("sa_id_signature", secrets.at(reference));
     }
+    return *this;
+}
+
+TStructuredTokenBuilder& TStructuredTokenBuilder::RemoveSecrets() {
+    Data.ClearField("basic_password");
+    Data.ClearField("sa_id_signature");
     return *this;
 }
 
@@ -147,11 +154,11 @@ TString ComposeStructuredTokenJsonForServiceAccount(const TString& serviceAccoun
     return result.ToJson();
 }
 
-TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& serviceAccountId, const TString& serviceAccountIdSignatureSecretName) {
+TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& serviceAccountId, const TString& serviceAccountIdSignatureSecretName, const TString& serviceAccountIdSignature) {
     TStructuredTokenBuilder result;
     
-    if (serviceAccountId && serviceAccountIdSignatureSecretName) {
-        result.SetServiceAccountIdAuthWithSecret(serviceAccountId, serviceAccountIdSignatureSecretName);
+    if (serviceAccountId && serviceAccountIdSignatureSecretName && serviceAccountIdSignature) {
+        result.SetServiceAccountIdAuthWithSecret(serviceAccountId, serviceAccountIdSignatureSecretName, serviceAccountIdSignature);
         return result.ToJson();
     }
 

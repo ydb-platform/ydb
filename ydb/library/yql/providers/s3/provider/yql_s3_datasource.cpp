@@ -34,7 +34,7 @@ public:
         settings.Url = properties.Value("location", "");
         auto signReference = properties.Value("serviceAccountIdSignatureReference", "");
         if (signReference) {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), signReference);
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), signReference, properties.Value("serviceAccountIdSignature", ""));
         } else {
             State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
         }

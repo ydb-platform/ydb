@@ -24,6 +24,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
+#include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/snapshot.h>
+
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -372,6 +375,34 @@ protected:
             }
         }
         return res;
+    }
+
+    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() {
+        return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
+    }
+
+    void FetchSecrets() {
+        YQL_ENSURE(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service is not active");
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+    }
+
+    void HandleRefreshSubscriberData(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+        Secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>();
+        OnSecretsFetched();
+    }
+
+    virtual void OnSecretsFetched() {}
+
+    void ResolveSecretNames(const google::protobuf::RepeatedPtrField<TProtoStringType>& secretNames, TMap<TString, TString>& secureParams) {
+        for (const auto& secretName : secretNames) {
+            auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
+
+            TString secretValue;
+            YQL_ENSURE(Secrets->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue), "secret with name '" << secretName << "' not found");
+
+            secureParams[secretName] = secretValue;
+        }
     }
 
 protected:
@@ -1150,6 +1181,8 @@ protected:
 
     std::unique_ptr<TKqpPlanner> Planner;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
+
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

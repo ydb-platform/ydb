@@ -307,6 +307,7 @@ public:
     TKqpCompileService(const TTableServiceConfig& serviceConfig, const TKqpSettings::TConstPtr& kqpSettings,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         NYql::IHTTPGateway::TPtr httpGateway)
         : Config(serviceConfig)
         , KqpSettings(kqpSettings)
@@ -315,6 +316,7 @@ public:
         , QueryCache(Config.GetCompileQueryCacheSize(), TDuration::Seconds(Config.GetCompileQueryCacheTTLSec()))
         , RequestsQueue(Config.GetCompileRequestQueueSize())
         , QueryReplayFactory(std::move(queryReplayFactory))
+        , CredentialsFactory(std::move(credentialsFactory))
         , HttpGateway(std::move(httpGateway))
     {}
 
@@ -731,7 +733,7 @@ private:
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, Config, HttpGateway, ModuleResolverState, Counters,
-            request.Uid, request.Query, request.UserToken, request.DbCounters, request.CompileServiceSpan.GetTraceId());
+            CredentialsFactory, request.Uid, request.Query, request.UserToken, request.DbCounters, request.CompileServiceSpan.GetTraceId());
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
@@ -818,16 +820,18 @@ private:
     TKqpQueryCache QueryCache;
     TKqpRequestsQueue RequestsQueue;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     NYql::IHTTPGateway::TPtr HttpGateway;
 };
 
 IActor* CreateKqpCompileService(const TTableServiceConfig& serviceConfig, const TKqpSettings::TConstPtr& kqpSettings,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NYql::IHTTPGateway::TPtr httpGateway)
 {
     return new TKqpCompileService(serviceConfig, kqpSettings, moduleResolverState, counters,
-            std::move(queryReplayFactory), std::move(httpGateway));
+            std::move(queryReplayFactory), std::move(credentialsFactory), std::move(httpGateway));
 }
 
 } // namespace NKqp

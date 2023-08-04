@@ -943,7 +943,7 @@ private:
                 auto it = secureParams.begin();
                 externalSource.SetSourceName(it->first);
                 auto token = it->second;
-                externalSource.SetAuthInfo(token);
+                externalSource.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
                 CreateStructuredTokenParser(token).ListReferences(SecretNames);
             }
         }

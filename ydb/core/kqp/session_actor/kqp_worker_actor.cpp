@@ -96,13 +96,15 @@ public:
 
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
-        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
         : Owner(owner)
         , SessionId(sessionId)
         , Settings(workerSettings)
         , HttpGateway(std::move(httpGateway))
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
+        , CredentialsFactory(std::move(credentialsFactory))
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CreationTime(TInstant::Now())
         , QueryId(0)
@@ -138,7 +140,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
-            HttpGateway, AppData(ctx)->FunctionRegistry, !Settings.LongSession);
+            HttpGateway, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false, CredentialsFactory);
 
         Become(&TKqpWorkerActor::ReadyState);
     }
@@ -1058,6 +1060,7 @@ private:
     NYql::IHTTPGateway::TPtr HttpGateway;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKikimrConfiguration::TPtr Config;
     TInstant CreationTime;
@@ -1074,9 +1077,10 @@ private:
 IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     NYql::IHTTPGateway::TPtr httpGateway,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
-    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters);
+    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters, std::move(credentialsFactory));
 }
 
 } // namespace NKqp

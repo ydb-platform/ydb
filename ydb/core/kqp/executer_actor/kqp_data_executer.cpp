@@ -292,6 +292,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, HandleRefreshSubscriberData);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -1626,13 +1627,34 @@ private:
         YQL_ENSURE(result.second);
     }
 
+    void ExecuteAfterFetchingSecrets() {
+        bool waitSecretsSnapshot = false;
+        for (const auto& transaction : Request.Transactions) {
+            if (!transaction.Body->GetSecretNames().empty()) {
+                FetchSecrets();
+                waitSecretsSnapshot = true;
+                break;
+            }
+        }
+
+        if (!waitSecretsSnapshot) {
+            Execute();
+        }
+    }
+
+    void OnSecretsFetched() override {
+        Execute();
+    }
+
     void Execute() {
-        NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         size_t readActors = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
+            const auto& secretNames = tx.Body->GetSecretNames();
+            TMap<TString, TString> secureParams;
 
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
@@ -1677,7 +1699,10 @@ private:
                             }
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo, {});
+                            if (!secretNames.empty() && secureParams.empty()) {
+                                ResolveSecretNames(secretNames, secureParams);
+                            }
+                            BuildReadTasksFromSource(stageInfo, secureParams);
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -1824,7 +1849,7 @@ private:
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
-        Execute();
+        ExecuteAfterFetchingSecrets();
     }
 
     void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {

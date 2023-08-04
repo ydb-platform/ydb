@@ -33,7 +33,7 @@ namespace NKikimr {
 
                 DataExecuter = 9,
                     DataExecuterPrepareState = 9,
-                        DataExecuterPrepateTasks = 9,
+                        DataExecuterPrepareTasks = 9,
                     DataExecuterExecuteState = 9,
                         DataExecuterSendTasksAndTxs = 9,
                     DataExecuterWaitSnapshotState = 9,

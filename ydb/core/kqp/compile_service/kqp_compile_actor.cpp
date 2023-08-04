@@ -60,6 +60,7 @@ public:
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& uid, const TKqpQueryId& queryId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
@@ -67,6 +68,7 @@ public:
         , HttpGateway(std::move(httpGateway))
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
+        , CredentialsFactory(std::move(credentialsFactory))
         , Uid(uid)
         , QueryId(queryId)
         , QueryRef(QueryId.Text, QueryId.QueryParameterTypes)
@@ -121,7 +123,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
-            HttpGateway, AppData(ctx)->FunctionRegistry, false);
+            HttpGateway, AppData(ctx)->FunctionRegistry, false, false, CredentialsFactory);
 
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
@@ -367,6 +369,7 @@ private:
     NYql::IHTTPGateway::TPtr HttpGateway;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TString Uid;
     TKqpQueryId QueryId;
     TKqpQueryRef QueryRef;
@@ -413,10 +416,11 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId)
 {
-    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, std::move(httpGateway), moduleResolverState, counters, uid,
+    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, std::move(httpGateway), moduleResolverState, counters, std::move(credentialsFactory), uid,
         query, userToken, dbCounters, std::move(traceId));
 }
 

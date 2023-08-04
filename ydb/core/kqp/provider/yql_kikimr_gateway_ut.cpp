@@ -1,5 +1,6 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/minikql_result_lib/converter.h>
+#include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -299,6 +300,68 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourcePath, externalDataSourceName);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceLocation, "my-bucket");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->Columns.size(), 2);
+    }
+
+    void CreateSecretObject(const TString& secretId, const TString& secretValue, TSession& session, TTestActorRuntime* runtime) {
+        auto createSecretQuery = TStringBuilder() << "CREATE OBJECT " << secretId << " (TYPE SECRET) WITH value = `" << secretValue << "`;";
+        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+
+        TDuration maximalWaitTime = TDuration::Seconds(20);
+        TInstant start = TInstant::Now();
+        bool created = false;
+        while (!created && TInstant::Now() - start <= maximalWaitTime) {
+            auto promise = NThreading::NewPromise<TDescribeObjectResponse>();
+            runtime->Register(new TDescribeObjectActor("", secretId, promise));
+            TDescribeObjectResponse response = promise.GetFuture().GetValueSync();
+
+            if (response.Status == Ydb::StatusIds::SUCCESS) {
+                created = true;
+                break;
+            }
+            
+            Sleep(TDuration::Seconds(2));
+        }
+
+        UNIT_ASSERT_C(created, "Creating secret object timeout.\n");
+    }
+    
+    Y_UNIT_TEST(TestLoadSecretValueFromExternalDataSourceMetadata) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString secretId = "mySaSecretId";
+        TString secretValue = "mySaSecretValue";
+        CreateSecretObject(secretId, secretValue, session, kikimr.GetTestServer().GetRuntime());
+
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        TString externalTableName = "/Root/ExternalTable";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID="",
+                SERVICE_ACCOUNT_SECRET_NAME=")" << secretId << R"("
+            );
+            CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE=")" << externalDataSourceName << R"(",
+                LOCATION="/"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        responseFuture.Wait();
+
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretValue);
     }
 }
 

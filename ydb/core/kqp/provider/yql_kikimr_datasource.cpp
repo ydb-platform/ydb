@@ -203,9 +203,19 @@ public:
             {"installation", metadata.ExternalSource.DataSourceInstallation }
         }};
 
-        if (metadata.ExternalSource.DataSourceAuth.identity_case() == NKikimrSchemeOp::TAuth::kServiceAccount) {
-            properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetId();
-            properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
+        switch (metadata.ExternalSource.DataSourceAuth.identity_case()) {
+            case NKikimrSchemeOp::TAuth::kServiceAccount:
+                properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetId();
+                properties["serviceAccountIdSignature"] = metadata.ExternalSource.ServiceAccountIdSignature;
+                properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
+                break;
+
+            case NKikimrSchemeOp::TAuth::kNone:
+                break;
+
+            case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+                res.AddIssue(TIssue("Identity case is not specified"));
+                return false;
         }
 
         it->second->AddCluster(metadata.ExternalSource.DataSourcePath, properties);

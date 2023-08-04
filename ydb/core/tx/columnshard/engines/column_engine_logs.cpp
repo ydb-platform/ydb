@@ -243,11 +243,9 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>&
         // Do not count the blob as lost since it exists in the index.
         lostBlobs.erase(rec.BlobRange.BlobId);
         // Locate granule and append the record.
-        if (const auto gi = Granules.find(portion.GetGranule()); gi != Granules.end()) {
-            gi->second->AddColumnRecord(indexInfo, portion, rec);
-        } else {
-            Y_VERIFY(false);
-        }
+        const auto gi = Granules.find(portion.GetGranule());
+        Y_VERIFY(gi != Granules.end());
+        gi->second->AddColumnRecord(indexInfo, portion, rec);
     });
 }
 
@@ -478,7 +476,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", info.TierName)("to", tierName);
                         evictionSize += info.BlobsSizes().first;
                         const bool needExport = ttl.NeedExport(tierName);
-                        context.Changes->PortionsToEvict.emplace_back(info, TPortionEvictionFeatures(tierName, pathId, needExport));
+                        context.Changes->AddPortionToEvict(info, TPortionEvictionFeatures(tierName, pathId, needExport));
                         SignalCounters.OnPortionToEvict(info.BlobsBytes());
                     }
                 }
@@ -522,7 +520,7 @@ bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<T
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stop scan")("reason", "too early")("first", evictionsQueue.begin()->first)("now", nowMonotonic);
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "stop scan")("reason", "task_ready")("first", evictionsQueue.begin()->first)("now", nowMonotonic)
-                ("internal", hasChanges)("evict_portions", context.Changes->PortionsToEvict.size())
+                ("internal", hasChanges)("evict_portions", context.Changes->GetPortionsToEvictCount())
                 ("drop_portions", context.Changes->PortionsToDrop.size());
         }
     } else {
@@ -549,8 +547,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
         DrainEvictionQueue(EvictionsController.MutableNextCheckInstantForTierings(), context);
     }
 
-    if (changes->PortionsToDrop.empty() &&
-        changes->PortionsToEvict.empty()) {
+    if (changes->PortionsToDrop.empty() && !changes->GetPortionsToEvictCount()) {
         return nullptr;
     }
 

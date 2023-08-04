@@ -26,31 +26,21 @@ bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyC
     if (!TBase::DoApplyChanges(self, context, dryRun)) {
         return false;
     }
-    // Update evicted portions
-    // There could be race between compaction and eviction. Allow compaction and disallow eviction in this case.
 
-    for (auto& [info, _] : PortionsToEvict) {
-        const auto& portionInfo = info;
-        Y_VERIFY(!portionInfo.Empty());
-        Y_VERIFY(portionInfo.IsActive());
-
+    for (auto& [portionInfo, _] : PortionsToEvict) {
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
         if (!self.IsPortionExists(granule, portion)) {
-            LOG_S_ERROR("Cannot evict unknown portion " << portionInfo << " at tablet " << self.GetTabletId());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot evict unknown portion")("portion", portionInfo.DebugString());
             return false;
         }
 
-        // In case of race with compaction portion could become inactive
         const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
-        if (!oldInfo.IsActive()) {
-            LOG_S_WARN("Cannot evict inactive portion " << oldInfo << " at tablet " << self.GetTabletId());
-            return false;
-        }
+        Y_VERIFY(oldInfo.IsActive());
         Y_VERIFY(portionInfo.TierName != oldInfo.TierName);
 
         if (!self.UpsertPortion(portionInfo, !dryRun, &oldInfo)) {
-            LOG_S_ERROR("Cannot evict portion " << portionInfo << " at tablet " << self.GetTabletId());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot evict portion")("portion", portionInfo.DebugString());
             return false;
         }
 
@@ -139,7 +129,7 @@ void TTTLColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWr
 void TTTLColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     TBase::DoCompile(context);
     for (auto& [portionInfo, _] : PortionsToEvict) {
-        portionInfo.UpdateRecordsMeta(TPortionMeta::EVICTED);
+        portionInfo.UpdateRecordsMeta(TPortionMeta::EProduced::EVICTED);
     }
 }
 
@@ -233,9 +223,6 @@ NKikimr::TConclusion<std::vector<TString>> TTTLColumnEngineChanges::DoConstructB
     evicted.reserve(PortionsToEvict.size());
 
     for (auto& [portionInfo, evictFeatures] : PortionsToEvict) {
-        Y_VERIFY(!portionInfo.Empty());
-        Y_VERIFY(portionInfo.IsActive());
-
         if (UpdateEvictedPortion(portionInfo, evictFeatures, Blobs,
             EvictedRecords, newBlobs, context)) {
             Y_VERIFY(portionInfo.TierName == evictFeatures.TargetTierName);

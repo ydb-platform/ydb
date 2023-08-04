@@ -89,12 +89,7 @@ void TColumnShard::TBackgroundController::StartTtl(const NOlap::TColumnEngineCha
     Y_VERIFY(ttlChanges);
     Y_VERIFY(ActiveTtlGranules.empty());
 
-    for (const auto& portionInfo : ttlChanges->PortionsToDrop) {
-        ActiveTtlGranules.emplace(portionInfo.GetGranule());
-    }
-    for (const auto& [portionInfo, _] : ttlChanges->PortionsToEvict) {
-        ActiveTtlGranules.emplace(portionInfo.GetGranule());
-    }
+    ttlChanges->FillTouchedGranules(ActiveTtlGranules);
 }
 
 bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& schema) const {
@@ -806,7 +801,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         return {};
     }
 
-    bool needWrites = !indexChanges->PortionsToEvict.empty();
+    const bool needWrites = indexChanges->NeedConstruction();
     LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
     indexChanges->Start(*this);

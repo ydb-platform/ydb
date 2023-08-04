@@ -14,6 +14,7 @@ private:
     bool UpdateEvictedPortion(TPortionInfo& portionInfo,
         TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
         std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs, TConstructionContext& context) const;
+    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
 
 protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
@@ -24,15 +25,31 @@ protected:
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
+    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+public:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }
-    virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
-public:
+    virtual void FillTouchedGranules(THashSet<ui64>& granules) const override {
+        TBase::FillTouchedGranules(granules);
+        for (const auto& [portionInfo, _] : PortionsToEvict) {
+            granules.emplace(portionInfo.GetGranule());
+        }
+    }
+
     std::vector<TColumnRecord> EvictedRecords;
     THashMap<ui64, NOlap::TTiering> Tiering;
-    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;
+
+    void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
+        Y_VERIFY(!info.Empty());
+        Y_VERIFY(info.IsActive());
+        PortionsToEvict.emplace_back(info, std::move(features));
+    }
+
+    ui32 GetPortionsToEvictCount() const {
+        return PortionsToEvict.size();
+    }
 
     virtual void UpdateWritePortionInfo(const ui32 index, const TPortionInfo& info) override {
         PortionsToEvict[index].first = info;

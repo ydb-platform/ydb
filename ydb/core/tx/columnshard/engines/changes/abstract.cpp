@@ -1,5 +1,6 @@
 #include "abstract.h"
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <library/cpp/actors/core/actor.h>
@@ -36,7 +37,7 @@ NKikimr::TConclusion<std::vector<TString>> TColumnEngineChanges::ConstructBlobs(
 
 bool TColumnEngineChanges::ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
     Y_VERIFY(Stage == EStage::Compiled);
-
+    NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", self.GetTabletId()));
     if (!DoApplyChanges(self, context, dryRun)) {
         Y_VERIFY(dryRun);
         return false;

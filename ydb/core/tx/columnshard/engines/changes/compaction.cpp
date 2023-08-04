@@ -44,7 +44,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
             portionInfo.SetGranule(it->second);
         }
 
-        TPortionMeta::EProduced produced = TPortionMeta::INSERTED;
+        TPortionMeta::EProduced produced = TPortionMeta::EProduced::INSERTED;
         // If it's a split compaction with moves appended portions are INSERTED (could have overlaps with others)
         if (PortionsToMove.empty()) {
             produced = producedClassResultCompaction;
@@ -251,6 +251,10 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
     Y_VERIFY_DEBUG(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+}
+
+void TCompactColumnEngineChanges::FillTouchedGranules(THashSet<ui64>& granules) const {
+    granules.emplace(GranuleMeta->GetGranuleId());
 }
 
 }

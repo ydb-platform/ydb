@@ -33,9 +33,6 @@ namespace NKikimr::NDataStreams::V1 {
     const i32 DEFAULT_STREAM_DAY_RETENTION = TDuration::Days(1).Hours();
     const i32 DEFAULT_STREAM_WEEK_RETENTION = TDuration::Days(7).Hours();
 
-    const i64 TIMESTAMP_DELTA_ALLOWED_MS = 10'000;
-
-
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 

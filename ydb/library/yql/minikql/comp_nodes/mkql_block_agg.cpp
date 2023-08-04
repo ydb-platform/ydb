@@ -30,7 +30,7 @@ namespace {
 constexpr bool InlineAggState = false;
 
 #ifdef USE_STD_UNORDERED
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = void>
 class TDynamicHashMapImpl {
     using TMapType = std::unordered_map<TKey, std::vector<char>, THash, TEqual>;
     using const_iterator = typename TMapType::const_iterator;
@@ -90,7 +90,7 @@ private:
     TMapType Map_;
 };
 
-template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
+template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = void>
 class TFixedHashMapImpl {
     using TMapType = std::unordered_map<TKey, TPayload, THash, TEqual>;
     using const_iterator = typename TMapType::const_iterator;
@@ -141,7 +141,7 @@ private:
     TMapType Map_;
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = void>
 class THashSetImpl {
     using TSetType = std::unordered_set<TKey, THash, TEqual>;
     using const_iterator = typename TSetType::const_iterator;
@@ -829,10 +829,14 @@ public:
 
 private:
     struct TState : public TComputationValue<TState> {
+        template<typename TKeyType>
+        struct THashSettings {
+            static constexpr bool CacheHash = std::is_same_v<TKeyType, TSSOKey>;
+        };
         using TBase = TComputationValue<TState>;
-        using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
-        using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
-        using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>;
+        using TDynMapImpl = TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
+        using TSetImpl = THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
+        using TFixedMapImpl = TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>;
 
         ui64 BatchNum_ = 0;
         TVector<NUdf::TUnboxedValue> Values_;
@@ -891,12 +895,12 @@ private:
             auto hasher = MakeHash<TKey>(keyLength);
             if constexpr (UseSet) {
                 MKQL_ENSURE(params.empty(), "Only keys are supported");
-                HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>>(hasher, equal);
+                HashSet_ = std::make_unique<THashSetImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
             } else {
                 if (!InlineAggState) {
-                    HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>>(hasher, equal);
+                    HashFixedMap_ = std::make_unique<TFixedHashMapImpl<TKey, TFixedAggState, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(hasher, equal);
                 } else {
-                    HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>>>(TotalStateSize_, hasher, equal);
+                    HashMap_ = std::make_unique<TDynamicHashMapImpl<TKey, std::equal_to<TKey>, std::hash<TKey>, TMKQLAllocator<char>, THashSettings<TKey>>>(TotalStateSize_, hasher, equal);
                 }
             }
         }

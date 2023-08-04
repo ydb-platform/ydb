@@ -44,6 +44,7 @@ RECURSE(
     scheme
     scheme_types
     security
+    statistics
     sys_view
     tablet
     tablet_flat

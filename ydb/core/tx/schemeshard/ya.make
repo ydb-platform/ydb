@@ -252,6 +252,7 @@ PEERDIR(
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/statistics
     ydb/core/sys_view/partition_stats
     ydb/core/tablet
     ydb/core/tablet_flat

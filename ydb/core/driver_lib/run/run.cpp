@@ -1554,6 +1554,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TKafkaProxyServiceInitializer(runConfig));
     }
 
+    sil->AddServiceInitializer(new TStatServiceInitializer(runConfig));
+
     return sil;
 }
 

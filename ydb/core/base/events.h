@@ -164,7 +164,8 @@ struct TKikimrEvents : TEvents {
         ES_KQP_SCAN_EXCHANGE,
         ES_IC_NODE_CACHE,
         ES_DATA_OPERATIONS,
-        ES_KAFKA
+        ES_KAFKA,
+        ES_STATISTICS
     };
 };
 

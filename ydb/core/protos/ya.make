@@ -97,6 +97,7 @@ SRCS(
     follower_group.proto
     ssa.proto
     statestorage.proto
+    statistics.proto
     stream.proto
     subdomains.proto
     table_stats.proto

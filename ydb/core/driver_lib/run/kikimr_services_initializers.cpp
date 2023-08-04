@@ -113,6 +113,7 @@
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/statistics/stat_service.h>
 
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -2452,6 +2453,19 @@ void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* 
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NSysView::MakeSysViewServiceID(NodeId),
+        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
+TStatServiceInitializer::TStatServiceInitializer(const TKikimrRunConfig& runConfig)
+   : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TStatServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto actor = NStat::CreateStatService();
+
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NStat::MakeStatServiceID(),
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 

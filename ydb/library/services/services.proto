@@ -373,6 +373,8 @@ enum EServiceKikimr {
     KAFKA_PROXY = 2200;
 
     OBJECTS_MONITORING = 2300;
+
+    STATISTICS = 2400;
 };
 
 message TActivity {
@@ -997,5 +999,6 @@ message TActivity {
         COLUMNSHARD_CONVEYOR = 615;
         PERSQUEUE_READ_QUOTER = 616;
         KAFKA_PRODUCE_ACTOR = 617;
+        STAT_SERVICE = 618;
     };
 };

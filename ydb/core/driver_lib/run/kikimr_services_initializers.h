@@ -505,6 +505,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TStatServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TStatServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TMeteringWriterInitializer : public IKikimrServicesInitializer {
 public:
     TMeteringWriterInitializer(const TKikimrRunConfig& runConfig);

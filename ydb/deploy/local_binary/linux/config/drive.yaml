@@ -1,0 +1,66 @@
+static_erasure: none
+host_configs:
+- drive:
+  - path: DRIVE_PATH_PLACEHOLDER
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: localhost
+  host_config_id: 1
+  port: 19001
+  walle_location:
+    body: 1
+    data_center: '1'
+    rack: '1'
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: none
+        kind: ssd
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+  state_storage:
+  - ring:
+      node:
+      - 1
+      nto_select: 1
+    ssid: 1
+actor_system_config:
+  use_auto_config: true
+  node_type: HYBRID
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: none
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: 1
+            path: DRIVE_PATH_PLACEHOLDER
+            pdisk_category: SSD
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: none
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: none
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    - erasure_species: none
+      pdisk_category: 0
+      storage_pool_kind: ssd
+    profile_id: 0
+table_service_config:
+  sql_version: 1
+grpc_config:
+  host: 127.0.0.1
+monitoring_config:
+  monitoring_address: 127.0.0.1
+

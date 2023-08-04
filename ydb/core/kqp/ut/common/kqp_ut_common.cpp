@@ -120,6 +120,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
 
+    if (settings.Storage) {
+        ServerSettings->SetCustomDiskParams(*settings.Storage);
+        ServerSettings->SetEnableMockOnSingleNode(false);
+    }
+
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
 
@@ -180,6 +185,10 @@ TKikimrRunner::TKikimrRunner(const TString& authToken, const TString& domainRoot
         .SetAuthToken(authToken)
         .SetDomainRoot(domainRoot)
         .SetNodeCount(nodeCount)) {}
+
+TKikimrRunner::TKikimrRunner(const NFake::TStorage& storage)
+    : TKikimrRunner(TKikimrSettings()
+        .SetStorage(storage)) {}
 
 void TKikimrRunner::CreateSampleTables() {
     Client->CreateTable("/Root", R"(

@@ -82,6 +82,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     bool WithSampleTables = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    TMaybe<NFake::TStorage> Storage = Nothing();
 
     TKikimrSettings()
     {
@@ -103,6 +104,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
+    TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
 };
 
 class TKikimrRunner {
@@ -123,6 +125,8 @@ public:
 
     TKikimrRunner(const TString& authToken = "", const TString& domainRoot = KikimrDefaultUtDomainRoot,
         ui32 nodeCount = 1);
+
+    TKikimrRunner(const NFake::TStorage& storage);
 
     ~TKikimrRunner() {
         Driver->Stop(true);

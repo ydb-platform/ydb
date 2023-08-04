@@ -8,6 +8,9 @@
 
 
 add_executable(ydb-core-kafka_proxy-ut)
+target_compile_options(ydb-core-kafka_proxy-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_include_directories(ydb-core-kafka_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy
 )
@@ -17,10 +20,14 @@ target_link_libraries(ydb-core-kafka_proxy-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-core-kafka_proxy
+  persqueue-ut-common
+  core-testlib-default
+  ydb_persqueue_core-ut-ut_utils
 )
 target_sources(ydb-core-kafka_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_kafka_functions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_serialization.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/metarequest_ut.cpp
 )
 set_property(
   TARGET

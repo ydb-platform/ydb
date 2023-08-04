@@ -36,6 +36,7 @@ PEERDIR(
     library/cpp/digest/md5
     ydb/core/testlib/default
     ydb/library/aclib
+    ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils

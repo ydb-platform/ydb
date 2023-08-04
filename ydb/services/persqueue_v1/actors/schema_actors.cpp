@@ -1428,7 +1428,7 @@ bool TPartitionsLocationActor::ApplyResponse(
         ui64 nodeId = part.GetNodeId();
 
         partLocation.PartitionId = part.GetPartitionId();
-        partLocation.IncGeneration = part.GetGeneration() + 1;
+        partLocation.Generation = part.GetGeneration();
         partLocation.NodeId = nodeId;
         Response->Partitions.emplace_back(std::move(partLocation));
     }

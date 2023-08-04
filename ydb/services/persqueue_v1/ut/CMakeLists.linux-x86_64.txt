@@ -28,6 +28,7 @@ target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   cpp-digest-md5
   core-testlib-default
   ydb-library-aclib
+  library-persqueue-tests
   library-persqueue-topic_parser
   api-grpc
   ydb_persqueue_core-ut-ut_utils

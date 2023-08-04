@@ -453,12 +453,12 @@ struct TEvPQProxy {
 
     struct TPartitionLocationInfo {
         ui64 PartitionId;
-        ui64 IncGeneration;
+        ui64 Generation;
         ui64 NodeId;
         TString Hostname;
     };
 
-    struct TEvPartitionLocationResponse : public NActors::TEventLocal<TEvRequestTablet, EvPartitionLocationResponse>
+    struct TEvPartitionLocationResponse : public NActors::TEventLocal<TEvPartitionLocationResponse, EvPartitionLocationResponse>
                                         , public TLocalResponseBase
                                         
     {
@@ -469,6 +469,8 @@ struct TEvPQProxy {
 };
 
 struct TLocalRequestBase {
+    TLocalRequestBase() = default;
+
     TLocalRequestBase(const TString& topic, const TString& database, const TString& token)
         : Topic(topic)
         , Database(database)

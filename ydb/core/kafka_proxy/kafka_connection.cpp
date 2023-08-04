@@ -6,6 +6,7 @@
 #include "kafka_events.h"
 #include "kafka_messages.h"
 #include "kafka_produce_actor.h"
+#include "kafka_metadata_actor.h"
 #include "kafka_log_impl.h"
 
 #include <strstream>
@@ -239,34 +240,9 @@ protected:
         InflightSize -= messageSize;
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMetadataRequestData* message, size_t messageSize) {
-        TMetadataResponseData response;
-        response.ThrottleTimeMs = 0;
-        response.ClusterId = "cluster-ahjgk";
-        response.ControllerId = 1;
-
-        response.Brokers.resize(1);
-        response.Brokers[0].NodeId = 1;
-        response.Brokers[0].Host = "lbk-dev-02.search.yandex.net";
-        response.Brokers[0].Port = 9092;
-        response.Brokers[0].Rack = "rack-1-1";
-
-        response.Topics.resize(message->Topics.size());
-        for(size_t i = 0; i < message->Topics.size(); ++i) {
-            response.Topics[i].TopicId = TKafkaUuid(0, i + 1);
-            response.Topics[i].Name = message->Topics[i].Name;
-            response.Topics[i].Partitions.resize(1);
-            response.Topics[i].Partitions[0].PartitionIndex = 0;
-            response.Topics[i].Partitions[0].LeaderId = 1; // response.Brokers[0].NodeId
-            response.Topics[i].Partitions[0].ReplicaNodes.resize(1);
-            response.Topics[i].Partitions[0].ReplicaNodes[0] = 1;
-            response.Topics[i].Partitions[0].IsrNodes.resize(1);
-            response.Topics[i].Partitions[0].IsrNodes[0] = 1;
-        }
-
-        Reply(header, &response);
-
-        InflightSize -= messageSize;
+    void HandleMessage(TRequestHeaderData* header, TMetadataRequestData* message, size_t /*messageSize*/) {
+        PendingRequests[header->CorrelationId] = std::move(Request);
+        Register(new TKafkaMetadataActor(header->CorrelationId, message, SelfId()));
     }
 
     void ProcessRequest() {

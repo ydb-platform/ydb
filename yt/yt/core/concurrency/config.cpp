@@ -20,7 +20,8 @@ void TThroughputThrottlerConfig::Register(TRegistrar registrar)
         .Default(TDuration::MilliSeconds(1000));
 }
 
-std::optional<i64> TThroughputThrottlerConfig::GetMaxAvailable() const {
+std::optional<i64> TThroughputThrottlerConfig::GetMaxAvailable() const
+{
     if (Limit.has_value()) {
         return static_cast<i64>(Period.SecondsFloat() * *Limit);
     } else {

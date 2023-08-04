@@ -99,7 +99,7 @@ struct IReconfigurableThroughputThrottler
     //! Returns a future that is set when throttler has become available.
     virtual TFuture<void> GetAvailableFuture() = 0;
 
-    //! Return current throttler config.
+    //! Returns current throttler config.
     virtual TThroughputThrottlerConfigPtr GetConfig() const = 0;
 };
 

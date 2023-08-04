@@ -588,7 +588,6 @@ void THive::BuildCurrentConfig() {
         }
     }
     MakeTabletTypeSet(BalancerIgnoreTabletTypes);
-    WarmUp = CurrentConfig.GetWarmUpEnabled();
 }
 
 void THive::Cleanup() {

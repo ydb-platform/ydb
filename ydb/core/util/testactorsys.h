@@ -194,6 +194,8 @@ public:
         CurrentTestActorSystem = this;
 
         AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
+
+        AppData.HiveConfig.SetWarmUpBootWaitingPeriod(10);
     }
 
     ~TTestActorSystem() {

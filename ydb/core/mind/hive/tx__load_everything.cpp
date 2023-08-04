@@ -175,6 +175,7 @@ public:
         }
 
         Self->BuildCurrentConfig();
+        Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
 
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
         Self->DefaultResourceMetricsAggregates.MaximumMemory.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));

@@ -7,6 +7,7 @@
 #include "logic_redo_entry.h"
 #include "logic_redo_queue.h"
 #include "probes.h"
+#include "util_string.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <util/system/sanitizers.h>
 
@@ -207,6 +208,9 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
         Counters->Cumulative()[TMonCo::LOG_REDO_WRITTEN].Increment(coded.size());
 
         if (embed && coded.size() <= MaxSizeToEmbedInLog) {
+            // Note: Encode reserves MaxCompressedLength bytes
+            NUtil::ShrinkToFit(coded);
+
             commit.Embedded = std::move(coded);
             Queue->Push({ Cookies->Gen, commit.Step }, affects, commit.Embedded);
         } else {

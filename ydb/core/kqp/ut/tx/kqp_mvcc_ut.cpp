@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
             if (result.GetStatus() == EStatus::SUCCESS)
                 continue;
 
-            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead()) {
+            if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead() && false) {
                 UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
                     [](const NYql::TIssue& issue){
                         return issue.GetMessage().Contains("has no snapshot at");

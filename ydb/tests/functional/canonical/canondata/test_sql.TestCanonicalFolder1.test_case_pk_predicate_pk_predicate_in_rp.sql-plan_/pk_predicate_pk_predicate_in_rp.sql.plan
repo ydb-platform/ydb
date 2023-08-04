@@ -14,22 +14,6 @@
                         "Value2"
                     ],
                     "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Key",
-                        "Value1",
-                        "Value2"
-                    ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Key",
-                        "Value1",
-                        "Value2"
-                    ],
-                    "type": "Lookup"
                 }
             ]
         }

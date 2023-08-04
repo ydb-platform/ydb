@@ -381,11 +381,10 @@ Y_UNIT_TEST_TWIN(Negative_BatchUpdate, EnableInplaceUpdate) {
             //     ASSERT_LITERAL_PHASE(stats, 1);
             //     ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 2, 2);
             // } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 4, stats.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
                 ASSERT_LITERAL_PHASE(stats, 0);
-                ASSERT_LITERAL_PHASE(stats, 1);
-                ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 2, 0);
-                ASSERT_PHASE(stats, 3, "/Root/InplaceUpdate", 0, 2);
+                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 2, 0);
+                ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 0, 2);
             // }
         });
 }

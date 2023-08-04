@@ -14,16 +14,11 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
+                    "scan_by": [
+                        "Group [2, 2]",
+                        "Group [4, 4]"
                     ],
-                    "type": "Lookup"
+                    "type": "Scan"
                 }
             ]
         }

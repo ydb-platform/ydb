@@ -278,6 +278,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         YQL_ENSURE(pointsExtractionResult.ComputeNode);
         prefixPointsExpr = BuildPointsList(pointsExtractionResult, pointKeys, ctx);
         YQL_CLOG(DEBUG, ProviderKqp) << "Points extracted: " << KqpExprToPrettyString(*prefixPointsExpr, ctx);
+        YQL_CLOG(DEBUG, ProviderKqp) << "Residual lambda: " << KqpExprToPrettyString(*pointsExtractionResult.PrunedLambda, ctx);
     }
 
     TExprNode::TPtr residualLambda = buildResult.PrunedLambda;
@@ -386,7 +387,10 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         .Done();
                 }
             }
-        } else if (buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size()) {
+        } else if (buildResult.PointPrefixLen == buildResult.UsedPrefixLen &&
+            // readranges is better in case of one range because supports limits and lookupjoin
+            !(buildResult.ExpectedMaxRanges == TMaybe<size_t>(1) && buildResult.PointPrefixLen < tableDesc.Metadata->KeyColumnNames.size()))
+        {
             YQL_ENSURE(prefixPointsExpr);
             residualLambda = pointsExtractionResult.PrunedLambda;
             buildLookup(prefixPointsExpr, input);

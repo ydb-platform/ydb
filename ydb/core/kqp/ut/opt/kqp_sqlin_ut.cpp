@@ -222,10 +222,10 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         };
 
         test(DisableOpt, true /* optionalParam */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 3); // 3 rows have Group == 1
+            AssertTableReads(result, "/Root/Test", 2); // 3 rows have Group == 1
         });
         test(DisableOpt, false /* optionalParam */, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/Test", 3);
+            AssertTableReads(result, "/Root/Test", 2);
         });
 
         test(EnableOpt, true /* optionalParam */, [](const TDataQueryResult& result) {
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         auto result = ExecQueryAndTestResult(session, query, params,
                 R"([[[1u];["Anna"];[3500u];["None"]];
                     [[1u];["Jack"];[100500u];["Just Jack"]]])");
-        AssertTableReads(result, "/Root/Test", 6);
+        AssertTableReads(result, "/Root/Test", 2);
     }
 
     Y_UNIT_TEST(KeyTypeMissmatch_Int) {
@@ -779,8 +779,8 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
         });
 
         test(EnableOpt, [](const TDataQueryResult& result) {
-            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 2);
-            AssertTableReads(result, "/Root/SecondaryComplexKeys", 2);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys/Index/indexImplTable", 1);
+            AssertTableReads(result, "/Root/SecondaryComplexKeys", 1);
             UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
         });
     }

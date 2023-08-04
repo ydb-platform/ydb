@@ -91,9 +91,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
 
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 40);
+        size_t phase = stats.query_phases_size() - 1;
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 40);
     }
 
     Y_UNIT_TEST_TWIN(RangeFullScan, SourceRead) {

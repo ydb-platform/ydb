@@ -1281,9 +1281,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         ])", res.ResultSetYson);
 
         UNIT_ASSERT(res.QueryStats);
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).affected_shards(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).affected_shards(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).affected_shards(), 1);
     }
 
     Y_UNIT_TEST(TooManyComputeActors) {
@@ -2230,7 +2229,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             settings.CollectQueryStats(ECollectQueryStatsMode::Full);
 
             auto it = db.StreamExecuteScanQuery(R"(
-                PRAGMA kikimr.OptEnablePredicateExtract = "false";
                 SELECT * FROM `/Root/TestTable` WHERE Key1 = 1 AND Key2 = 10;
             )", settings).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

@@ -1339,7 +1339,7 @@ message TTableServiceConfig {
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
-    optional bool PredicateExtract20 = 44 [default = false];
+    optional bool PredicateExtract20 = 44 [default = true];
     optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 };
 

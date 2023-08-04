@@ -974,9 +974,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(compile.cpu_time_us() > 0);
         totalCpuTimeUs += compile.cpu_time_us();
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+        totalCpuTimeUs += stats.query_phases(0).cpu_time_us();
 
-        auto& phase0 = stats.query_phases(0);
+        auto& phase0 = stats.query_phases(1);
         UNIT_ASSERT(phase0.duration_us() > 0);
         UNIT_ASSERT(phase0.cpu_time_us() > 0);
         totalCpuTimeUs += phase0.cpu_time_us();
@@ -988,7 +989,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(!phase0.table_access(0).has_updates());
         UNIT_ASSERT(!phase0.table_access(0).has_deletes());
 
-        auto& phase1 = stats.query_phases(1);
+        auto& phase1 = stats.query_phases(2);
         UNIT_ASSERT(phase1.duration_us() > 0);
         UNIT_ASSERT(phase1.cpu_time_us() > 0);
         totalCpuTimeUs += phase1.cpu_time_us();

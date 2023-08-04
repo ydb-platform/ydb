@@ -13,7 +13,7 @@
                         "subkey"
                     ],
                     "scan_by": [
-                        "key (-\u221e, 5)",
+                        "key (0, 5)",
                         "subkey (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"

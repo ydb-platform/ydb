@@ -29,6 +29,7 @@ target_link_libraries(ydb-core-kqp-ut-opt PUBLIC
 )
 target_sources(ydb-core-kqp-ut-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_agg_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_extract_predicate_unpack_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_kv_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_merge_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/opt/kqp_ne_ut.cpp

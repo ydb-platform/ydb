@@ -24,7 +24,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Filter-TableRangesScan",
+                                        "Node Type": "TopSort-Filter-TablePointLookup",
                                         "Operators": [
                                             {
                                                 "Limit": "1001",
@@ -36,15 +36,18 @@
                                                 "Predicate": "item.d < 110 Or item.d > 150"
                                             },
                                             {
-                                                "Name": "TableRangesScan",
+                                                "Name": "TablePointLookup",
                                                 "ReadColumns": [
                                                     "a",
                                                     "b",
                                                     "d"
                                                 ],
-                                                "ReadRangesExpectedSize": 1,
-                                                "ReadRangesKeys": [
-                                                    "a"
+                                                "ReadRange": [
+                                                    "a (0)",
+                                                    "b (-\u221e, +\u221e)",
+                                                    "c (-\u221e, +\u221e)",
+                                                    "d (-\u221e, +\u221e)",
+                                                    "e (-\u221e, +\u221e)"
                                                 ],
                                                 "Table": "sqllogictest_select2-4.test_plan/t1"
                                             }
@@ -80,7 +83,16 @@
                         "b",
                         "d"
                     ],
-                    "type": "Scan"
+                    "lookup_by": [
+                        "a (0)"
+                    ],
+                    "scan_by": [
+                        "b (-\u221e, +\u221e)",
+                        "c (-\u221e, +\u221e)",
+                        "d (-\u221e, +\u221e)",
+                        "e (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

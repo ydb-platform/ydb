@@ -15,8 +15,11 @@ namespace NYT {
 void ToProto(NProto::TGuid* protoGuid, TGuid guid);
 void FromProto(TGuid* guid, const NProto::TGuid& protoGuid);
 
-void ToProto(TProtoStringType* protoGuid, TGuid guid);
-void FromProto(TGuid* guid, const TProtoStringType& protoGuid);
+void ToProto(TString* protoGuid, TGuid guid);
+void FromProto(TGuid* guid, const TString& protoGuid);
+
+void ToProto(std::string* protoGuid, TGuid guid);
+void FromProto(TGuid* guid, const std::string& protoGuid);
 
 ////////////////////////////////////////////////////////////////////////////////
 

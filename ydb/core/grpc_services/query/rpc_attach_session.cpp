@@ -79,8 +79,7 @@ private:
 
         if (CheckSession(sessionId, req)) {
             ev->Record.MutableRequest()->SetSessionId(sessionId);
-            ev->Record.MutableRequest()->SetExtIdleCheck(true);
-            ActorIdToProto(SelfId(), ev->Record.MutableRequest()->MutableRpcActorId());
+            ActorIdToProto(SelfId(), ev->Record.MutableRequest()->MutableExtSessionCtrlActorId());
             SessionId = sessionId;
         } else {
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST);

@@ -684,8 +684,10 @@ public:
         const auto traceId = event.GetTraceId();
         TKqpRequestInfo requestInfo(traceId);
         const auto sessionId = request.GetSessionId();
-        const bool extIdleCheck = request.GetExtIdleCheck();
-        const TActorId rpcActor = ActorIdFromProto(request.GetRpcActorId());
+        // If set rpc layer will controll session lifetime
+        const TActorId ctrlActor = request.HasExtSessionCtrlActorId()
+            ? ActorIdFromProto(request.GetExtSessionCtrlActorId())
+            : TActorId();
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         Counters->ReportPingSession(dbCounters, request.ByteSize());
@@ -694,14 +696,14 @@ public:
         if (sessionInfo) {
             const bool sameNode = ev->Sender.NodeId() == SelfId().NodeId();
             KQP_PROXY_LOG_D("Received ping session request, has local session: " << sessionId
-                << ", extIdleCheck: " << extIdleCheck
+                << ", rpc ctrl: " << ctrlActor
                 << ", sameNode: " << sameNode
                 << ", trace_id: " << traceId);
 
             const bool isIdle = LocalSessions->IsSessionIdle(sessionInfo);
             if (isIdle) {
                 LocalSessions->StopIdleCheck(sessionInfo);
-                if (!extIdleCheck) {
+                if (!ctrlActor) {
                     LocalSessions->StartIdleCheck(sessionInfo, GetSessionIdleDuration());
                 }
             }
@@ -713,20 +715,20 @@ public:
                 ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
                 : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY;
             record.MutableResponse()->SetSessionStatus(sessionStatus);
-            if (extIdleCheck && isIdle) {
+            if (ctrlActor && isIdle) {
                 //TODO: fix
                 ui32 flags = IEventHandle::FlagTrackDelivery;
                 if (sameNode) {
                     KQP_PROXY_LOG_T("Attach local session: " << sessionInfo->WorkerId
-                        << " to rpc: " << rpcActor << " on same node");
+                        << " to rpc: " << ctrlActor << " on same node");
 
-                    LocalSessions->AttachSession(sessionInfo, 0, rpcActor);
+                    LocalSessions->AttachSession(sessionInfo, 0, ctrlActor);
                 } else {
                     const TNodeId nodeId = ev->Sender.NodeId();
                     KQP_PROXY_LOG_T("Subscribe local session: " << sessionInfo->WorkerId
-                        << " to remote: " << ev->Sender << " , nodeId: " << nodeId << ", with rpc: " << rpcActor);
+                        << " to remote: " << ev->Sender << " , nodeId: " << nodeId << ", with rpc: " << ctrlActor);
 
-                    LocalSessions->AttachSession(sessionInfo, nodeId, rpcActor);
+                    LocalSessions->AttachSession(sessionInfo, nodeId, ctrlActor);
 
                     flags |= IEventHandle::FlagSubscribeOnSession;
                 }

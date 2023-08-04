@@ -28,6 +28,7 @@ struct TPatternCacheEntry {
     IComputationPattern::TPtr Pattern;
     size_t SizeForCache = 0; // set only by cache to lock the size, which can slightly vary when pattern is used
     std::atomic<size_t> AccessTimes = 0; // set only by cache
+    std::atomic<bool> IsInCache = false; // set only by cache
 
     void UpdateSizeForCache() {
         Y_VERIFY_DEBUG(!SizeForCache);

@@ -88,6 +88,7 @@ void TComputationPatternLRUCache::EmplacePattern(const TString& serialized, std:
         CurrentSizeBytes += patternWithEnv->SizeForCache;
 
         Cache.Insert(serialized, patternWithEnv);
+        patternWithEnv->IsInCache.store(true);
         auto notifyIt = Notify.find(serialized);
         if (notifyIt != Notify.end()) {
             subscribers.swap(notifyIt->second);
@@ -112,6 +113,10 @@ void TComputationPatternLRUCache::CleanCache() {
     std::lock_guard lock(Mutex);
     CurrentSizeBytes = 0;
     PatternsToCompile.clear();
+    auto CacheEnd = Cache.End();
+    for (auto PatternIt = Cache.Begin(); PatternIt != CacheEnd; ++PatternIt) {
+        const_cast<std::shared_ptr<TPatternCacheEntry> &>(PatternIt.Value())->IsInCache.store(false);
+    }
     Cache.Clear();
 }
 
@@ -119,16 +124,13 @@ void TComputationPatternLRUCache::RemoveOldest() {
     auto oldest = Cache.FindOldest();
     Y_VERIFY_DEBUG(oldest != Cache.End());
     CurrentSizeBytes -= oldest.Value()->SizeForCache;
+    oldest.Value()->IsInCache.store(false);
     PatternsToCompile.erase(oldest.Key());
     Cache.Erase(oldest);
 }
 
 void TComputationPatternLRUCache::AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry) {
-    if (!Configuration.PatternAccessTimesBeforeTryToCompile) {
-        return;
-    }
-
-    if (entry->Pattern->IsCompiled()) {
+    if (!Configuration.PatternAccessTimesBeforeTryToCompile || entry->Pattern->IsCompiled()) {
         return;
     }
 

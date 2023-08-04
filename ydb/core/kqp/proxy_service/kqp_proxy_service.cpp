@@ -240,8 +240,7 @@ public:
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
-        if (TableServiceConfig.enableasynccomputationpatterncompilation())
-        {
+        if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
             CompileComputationPatternService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileComputationPatternService(TableServiceConfig,
                 Counters));
             TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(

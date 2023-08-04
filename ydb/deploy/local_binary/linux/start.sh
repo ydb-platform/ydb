@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # set -v
-# set -v
 YDBD_PATH=${YDBD_PATH:-`pwd`/ydbd/bin/ydbd}
 YDBD_LIB_PATH=${YDBD_LIB_PATH:-`pwd`/ydbd/lib}
 BASE_PATH=$(dirname -- "${BASH_SOURCE[0]}")

@@ -157,7 +157,6 @@ public:
     }
 
     void Bootstrap() {
-
         if (Monitoring) {
             Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
                 "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
@@ -399,13 +398,18 @@ private:
 
         auto runActorId =
             ComputeConfig.GetComputeType(task) == NConfig::EComputeType::YDB
-                ? Register(CreateYdbRunActor(SelfId(), queryCounters, std::move(params), CreateActorFactory(params, queryCounters)))
+                ? Register(CreateYdbRunActor(std::move(params), queryCounters))
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
         if (!task.automatic()) {
             CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
         }
+    }
+
+    NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
+        auto actorFactory = CreateActorFactory(params, queryCounters);
+        return ::NFq::CreateYdbRunActor(SelfId(), queryCounters, std::move(params), actorFactory);
     }
 
     STRICT_STFUNC(StateFunc,

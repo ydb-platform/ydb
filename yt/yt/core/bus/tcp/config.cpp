@@ -32,6 +32,9 @@ void TTcpDispatcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("multiplexing_bands", &TThis::MultiplexingBands)
         .Default();
+
+    registrar.Parameter("bus_certs_dir", &TThis::BusCertsDir)
+        .Default();
 }
 
 TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
@@ -122,6 +125,8 @@ void TBusConfig::Register(TRegistrar registrar)
     registrar.Parameter("cipher_list", &TThis::CipherList)
         .Default();
     registrar.Parameter("use_key_pair_from_ssl_context", &TThis::UseKeyPairFromSslContext)
+        .Default(false);
+    registrar.Parameter("load_from_certs_dir", &TThis::LoadFromCertsDir)
         .Default(false);
 }
 

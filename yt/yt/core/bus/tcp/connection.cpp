@@ -1935,6 +1935,11 @@ void TTcpConnection::TryEstablishSslSession()
 
     YT_LOG_DEBUG("Starting TLS/SSL connection (VerificationMode: %v)", VerificationMode_);
 
+    if (Config_->LoadFromCertsDir && !TTcpDispatcher::TImpl::Get()->GetBusCertsDir()) {
+        Abort(TError(NBus::EErrorCode::SslError, "The bus_certs_dir is not set in static tcp dispatcher config"));
+        return;
+    }
+
     Ssl_.reset(SSL_new(TSslContext::Get()->GetSslCtx()));
     if (!Ssl_) {
         Abort(TError(NBus::EErrorCode::SslError, "Failed to create a new SSL structure: %v", GetLastSslErrorString()));
@@ -1953,6 +1958,9 @@ void TTcpConnection::TryEstablishSslSession()
         }
     }
 
+#define GET_CERT_FILE_PATH(file)    \
+    (Config_->LoadFromCertsDir ? JoinPaths(*TTcpDispatcher::TImpl::Get()->GetBusCertsDir(), (file)) : (file))
+
     if (ConnectionType_ == EConnectionType::Server) {
         SSL_set_accept_state(Ssl_.get());
 
@@ -1962,7 +1970,8 @@ void TTcpConnection::TryEstablishSslSession()
                 return;
             }
 
-            if (SSL_use_certificate_chain_file(Ssl_.get(), Config_->CertificateChainFile->data()) != 1) {
+            const auto& certChainFile = GET_CERT_FILE_PATH(*Config_->CertificateChainFile);
+            if (SSL_use_certificate_chain_file(Ssl_.get(), certChainFile.data()) != 1) {
                 Abort(TError(NBus::EErrorCode::SslError, "Failed to load certificate chain: %v", GetLastSslErrorString()));
                 return;
             }
@@ -1972,7 +1981,8 @@ void TTcpConnection::TryEstablishSslSession()
                 return;
             }
 
-            if (SSL_use_RSAPrivateKey_file(Ssl_.get(), Config_->PrivateKeyFile->data(), SSL_FILETYPE_PEM) != 1) {
+            const auto& privateKeyFile = GET_CERT_FILE_PATH(*Config_->PrivateKeyFile);
+            if (SSL_use_RSAPrivateKey_file(Ssl_.get(), privateKeyFile.data(), SSL_FILETYPE_PEM) != 1) {
                 Abort(TError(NBus::EErrorCode::SslError, "Failed to load private key: %v", GetLastSslErrorString()));
                 return;
             }
@@ -1994,16 +2004,19 @@ void TTcpConnection::TryEstablishSslSession()
                 return;
             }
             [[fallthrough]];
-        case EVerificationMode::Ca:
+        case EVerificationMode::Ca: {
             if (!Config_->CAFile) {
                 Abort(TError(NBus::EErrorCode::SslError, "The CA file is not set in bus config"));
                 return;
             }
-            TSslContext::Get()->LoadCAFileIfNotLoaded(*Config_->CAFile);
+
+            const auto& caFile = GET_CERT_FILE_PATH(*Config_->CAFile);
+            TSslContext::Get()->LoadCAFileIfNotLoaded(caFile);
 
             // Enable verification of the peer's certificate with the CA.
             SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER, /* callback */ nullptr);
             break;
+        }
         case EVerificationMode::None:
             break;
         default:
@@ -2019,6 +2032,8 @@ void TTcpConnection::TryEstablishSslSession()
         NetworkCounters_.Exchange(TTcpDispatcher::TImpl::Get()->GetCounters(NetworkName_, IsEncrypted()));
         UpdateConnectionCount(1);
     }
+
+#undef GET_CERT_FILE_PATH
 }
 
 bool TTcpConnection::OnSslAckPacketReceived()

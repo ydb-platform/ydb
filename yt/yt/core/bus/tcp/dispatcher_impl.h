@@ -53,6 +53,8 @@ public:
 
     NYTree::IYPathServicePtr GetOrchidService();
 
+    std::optional<TString> GetBusCertsDir() const;
+
 private:
     friend class TTcpDispatcher;
 

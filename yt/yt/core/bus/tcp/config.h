@@ -42,6 +42,9 @@ public:
 
     TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
 
+    //! Used to store TLS/SSL certificate files.
+    std::optional<TString> BusCertsDir;
+
     REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
 
     static void Register(TRegistrar registrar);
@@ -94,6 +97,7 @@ public:
     std::optional<TString> CertificateChainFile;
     std::optional<TString> PrivateKeyFile;
     std::optional<TString> CipherList;
+    bool LoadFromCertsDir;
     // For testing purposes.
     bool UseKeyPairFromSslContext;
 

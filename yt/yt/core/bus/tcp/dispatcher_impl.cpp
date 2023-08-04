@@ -321,6 +321,12 @@ void TTcpDispatcher::TImpl::OnPeriodicCheck()
     }
 }
 
+std::optional<TString> TTcpDispatcher::TImpl::GetBusCertsDir() const
+{
+    auto guard = ReaderGuard(PollerLock_);
+    return Config_->BusCertsDir;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NBus

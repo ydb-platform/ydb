@@ -75,14 +75,14 @@ struct TEvControlPlaneProxy {
     struct TBaseControlPlaneRequest : NActors::TEventLocal<TDerived, EventType> {
         using TProxyResponse = typename TResponseSelector<TDerived>::type;
 
-        TBaseControlPlaneRequest(const TString& folderId,
+        TBaseControlPlaneRequest(const TString& scope,
                                  const ProtoMessage& request,
                                  const TString& user,
                                  const TString& token,
                                  const TVector<TString>& permissions,
                                  TMaybe<TQuotaMap> quotas     = Nothing(),
                                  TTenantInfo::TPtr tenantInfo = nullptr)
-            : FolderId(folderId)
+            : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
@@ -92,7 +92,7 @@ struct TEvControlPlaneProxy {
             , ComputeYDBOperationWasPerformed(false)
             , ControlPlaneYDBOperationWasPerformed(false) { }
 
-        TString FolderId;
+        TString Scope;
         TString CloudId;
         ProtoMessage Request;
         TString User;
@@ -106,6 +106,7 @@ struct TEvControlPlaneProxy {
         std::unique_ptr<TProxyResponse> Response;
         std::shared_ptr<NYdb::NTable::TTableClient> YDBClient;
         TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
+        bool RequestValidationPassed = false;
     };
 
     template<typename ProtoMessage, ui32 EventType>

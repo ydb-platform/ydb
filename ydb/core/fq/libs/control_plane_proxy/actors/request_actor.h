@@ -1,6 +1,7 @@
 #pragma once
 
 #include "counters.h"
+#include "utils.h"
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/actors/core/event.h>
@@ -29,23 +30,11 @@ protected:
 
     typename TRequestProxy::TPtr RequestProxy;
     ::NFq::TControlPlaneProxyConfig Config;
-    TRequestProto RequestProto;
-    TString Scope;
-    TString FolderId;
-    TString User;
-    TString Token;
-    TActorId Sender;
-    ui32 Cookie;
     TActorId ServiceId;
     TRequestCounters Counters;
     TInstant StartTime;
     std::function<void(const TDuration&, bool /* isSuccess */, bool /* isTimeout */)> Probe;
     TPermissions Permissions;
-    TString CloudId;
-    TString SubjectType;
-    const TMaybe<TQuotaMap> Quotas;
-    TTenantInfo::TPtr TenantInfo;
-    TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal> ComputeDatabase;
     ui32 RetryCount                 = 0;
     bool ReplyWithResponseOnSuccess = true;
 
@@ -54,41 +43,18 @@ public:
 
     explicit TRequestActor(typename TRequestProxy::TPtr requestProxy,
                            const ::NFq::TControlPlaneProxyConfig& config,
-                           TActorId sender,
-                           ui32 cookie,
-                           const TString& scope,
-                           const TString& folderId,
-                           TRequestProto&& requestProto,
-                           TString&& user,
-                           TString&& token,
                            const TActorId& serviceId,
                            const TRequestCounters& counters,
                            const std::function<void(const TDuration&, bool, bool)>& probe,
-                           TPermissions permissions,
-                           const TString& cloudId,
-                           const TString& subjectType,
-                           TMaybe<TQuotaMap>&& quotas = Nothing(),
-                           TMaybe<FederatedQuery::Internal::ComputeDatabaseInternal>&&
-                               computeDatabase             = Nothing(),
+                           const TPermissions& availablePermissions,
                            bool replyWithResponseOnSuccess = true)
         : RequestProxy(requestProxy)
         , Config(config)
-        , RequestProto(std::forward<TRequestProto>(requestProto))
-        , Scope(scope)
-        , FolderId(folderId)
-        , User(std::move(user))
-        , Token(std::move(token))
-        , Sender(sender)
-        , Cookie(cookie)
         , ServiceId(serviceId)
         , Counters(counters)
         , StartTime(TInstant::Now())
         , Probe(probe)
-        , Permissions(permissions)
-        , CloudId(cloudId)
-        , SubjectType(subjectType)
-        , Quotas(std::move(quotas))
-        , ComputeDatabase(std::move(computeDatabase))
+        , Permissions(ExtractPermissions(RequestProxy, availablePermissions))
         , ReplyWithResponseOnSuccess(replyWithResponseOnSuccess) {
         Counters.IncInFly();
     }
@@ -117,8 +83,8 @@ public:
     }
 
     void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
-        TenantInfo = std::move(ev->Get()->TenantInfo);
-        if (TenantInfo) {
+        RequestProxy->Get()->TenantInfo = std::move(ev->Get()->TenantInfo);
+        if (RequestProxy->Get()->TenantInfo) {
             SendRequestIfCan();
         } else {
             RetryCount++;
@@ -128,7 +94,7 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("Request timeout. " << RequestProto.DebugString());
+        CPP_LOG_D("Request timeout. " << RequestProxy->Get()->Request.DebugString());
         NYql::TIssues issues;
         NYql::TIssue issue =
             MakeErrorIssue(TIssuesIds::TIMEOUT,
@@ -166,7 +132,7 @@ public:
         const TDuration delta = TInstant::Now() - StartTime;
         Counters.IncError();
         Probe(delta, false, isTimeout);
-        Send(Sender, new TResponseProxy(issues, SubjectType), 0, Cookie);
+        Send(RequestProxy->Sender, new TResponseProxy(issues, RequestProxy->Get()->SubjectType), 0, RequestProxy->Cookie);
         PassAway();
     }
 
@@ -176,35 +142,35 @@ public:
         Counters.IncOk();
         Probe(delta, true, false);
         if (ReplyWithResponseOnSuccess) {
-            Send(Sender,
-                 new TResponseProxy(std::forward<TArgs>(args)..., SubjectType),
+            Send(RequestProxy->Sender,
+                 new TResponseProxy(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType),
                  0,
-                 Cookie);
+                 RequestProxy->Cookie);
         } else {
             RequestProxy->Get()->Response =
-                std::make_unique<TResponseProxy>(std::forward<TArgs>(args)..., SubjectType);
+                std::make_unique<TResponseProxy>(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType);
             RequestProxy->Get()->ControlPlaneYDBOperationWasPerformed = true;
             Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
         }
         PassAway();
     }
 
-    virtual bool CanSendRequest() const { return bool(TenantInfo); }
+    virtual bool CanSendRequest() const { return bool(RequestProxy->Get()->TenantInfo); }
 
     void SendRequestIfCan() {
         if (CanSendRequest()) {
             Send(ServiceId,
-                 new TRequest(Scope,
-                              RequestProto,
-                              User,
-                              Token,
-                              CloudId,
+                 new TRequest(RequestProxy->Get()->Scope,
+                              RequestProxy->Get()->Request,
+                              RequestProxy->Get()->User,
+                              RequestProxy->Get()->Token,
+                              RequestProxy->Get()->CloudId,
                               Permissions,
-                              Quotas,
-                              TenantInfo,
-                              ComputeDatabase.GetOrElse({})),
+                              RequestProxy->Get()->Quotas,
+                              RequestProxy->Get()->TenantInfo,
+                              RequestProxy->Get()->ComputeDatabase.GetOrElse({})),
                  0,
-                 Cookie);
+                 RequestProxy->Cookie);
         }
     }
 
@@ -240,7 +206,7 @@ public:
 
     void OnBootstrap() override {
         Become(&TCreateQueryRequestActor::StateFunc);
-        if (Quotas) {
+        if (RequestProxy->Get()->Quotas) {
             SendCreateRateLimiterResourceRequest();
         } else {
             SendRequestIfCan();
@@ -248,21 +214,21 @@ public:
     }
 
     void SendCreateRateLimiterResourceRequest() {
-        if (auto quotaIt = Quotas->find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != Quotas->end()) {
+        if (auto quotaIt = RequestProxy->Get()->Quotas->find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != RequestProxy->Get()->Quotas->end()) {
             const double cloudLimit = static_cast<double>(quotaIt->second.Limit.Value *
                                                           10); // percent -> milliseconds
             CPP_LOG_T("Create rate limiter resource for cloud with limit " << cloudLimit
                                                                            << "ms");
             Send(RateLimiterControlPlaneServiceId(),
-                 new TEvRateLimiter::TEvCreateResource(CloudId, cloudLimit));
+                 new TEvRateLimiter::TEvCreateResource(RequestProxy->Get()->CloudId, cloudLimit));
         } else {
             NYql::TIssues issues;
             NYql::TIssue issue =
                 MakeErrorIssue(TIssuesIds::INTERNAL_ERROR,
-                               TStringBuilder() << "CPU quota for cloud \"" << CloudId
+                               TStringBuilder() << "CPU quota for cloud \"" << RequestProxy->Get()->CloudId
                                                 << "\" was not found");
             issues.AddIssue(issue);
-            CPP_LOG_W("Failed to get cpu quota for cloud " << CloudId);
+            CPP_LOG_W("Failed to get cpu quota for cloud " << RequestProxy->Get()->CloudId);
             ReplyWithError(issues);
         }
     }
@@ -285,7 +251,7 @@ public:
     }
 
     bool CanSendRequest() const override {
-        return (QuoterResourceCreated || !Quotas) && TBaseRequestActor::CanSendRequest();
+        return (QuoterResourceCreated || !RequestProxy->Get()->Quotas) && TBaseRequestActor::CanSendRequest();
     }
 };
 

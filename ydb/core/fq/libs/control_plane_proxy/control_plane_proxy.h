@@ -29,8 +29,10 @@ NActors::TActorId ControlPlaneProxyActorId();
 
 NActors::IActor* CreateControlPlaneProxyActor(
     const NConfig::TControlPlaneProxyConfig& config,
+    const NConfig::TControlPlaneStorageConfig& storageConfig,
     const NConfig::TComputeConfig& computeConfig,
     const NConfig::TCommonConfig& commonConfig,
+    const NYql::TS3GatewayConfig& s3Config,
     const ::NFq::TSigner::TPtr& signer,
     const TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,

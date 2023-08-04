@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_proxy/utils.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -113,7 +114,12 @@ public:
         }
 
         const auto* req = GetProtoRequest();
-        auto ev = MakeHolder<EvRequestType>(FolderId, *req, User, Token, permissions);
+        auto ev         = MakeHolder<EvRequestType>(
+            NYdb::NFq::TScope{NYdb::NFq::TScope::YandexCloudScopeSchema + "://" + FolderId}.ToString(),
+            *req,
+            User,
+            Token,
+            permissions);
         Send(NFq::ControlPlaneProxyActorId(), ev.Release());
         Become(&TFederatedQueryRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }

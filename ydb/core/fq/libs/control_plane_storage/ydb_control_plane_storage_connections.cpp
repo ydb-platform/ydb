@@ -84,13 +84,22 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         "    ($scope, $connection_id, $user, $visibility, $name, $connection_type, $connection, $revision, $internal);"
     );
 
-    auto validatorName = CreateUniqueNameValidator(
+    auto connectionNameUniqueValidator = CreateUniqueNameValidator(
         CONNECTIONS_TABLE_NAME,
         content.acl().visibility(),
         scope,
         content.name(),
         user,
         "Connection with the same name already exists. Please choose another name",
+        YdbConnection->TablePathPrefix);
+
+    auto bindingNameUniqueValidator = CreateUniqueNameValidator(
+        BINDINGS_TABLE_NAME,
+        content.acl().visibility(),
+        scope,
+        content.name(),
+        user,
+        "Binding with the same name already exists. Please choose another name",
         YdbConnection->TablePathPrefix);
 
     auto validatorCountConnections = CreateCountEntitiesValidator(
@@ -104,7 +113,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     if (idempotencyKey) {
         validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix));
     }
-    validators.push_back(validatorName);
+    validators.push_back(connectionNameUniqueValidator);
+    validators.push_back(bindingNameUniqueValidator);
     validators.push_back(validatorCountConnections);
 
     if (content.acl().visibility() == FederatedQuery::Acl::PRIVATE) {
@@ -526,7 +536,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     }
 
     {
-        auto modifyUniqueNameValidator = CreateModifyUniqueNameValidator(
+        auto connectionNameUniqueValidator = CreateModifyUniqueNameValidator(
             CONNECTIONS_TABLE_NAME,
             CONNECTION_ID_COLUMN_NAME,
             request.content().acl().visibility(),
@@ -536,7 +546,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             connectionId,
             "Connection with the same name already exists. Please choose another name",
             YdbConnection->TablePathPrefix);
-        validators.push_back(modifyUniqueNameValidator);
+        validators.push_back(connectionNameUniqueValidator);
+    }
+    {
+        auto bindingNameUniqueValidator = CreateUniqueNameValidator(
+            BINDINGS_TABLE_NAME,
+            request.content().acl().visibility(),
+            scope,
+            request.content().name(),
+            user,
+            "Binding with the same name already exists. Please choose another name",
+            YdbConnection->TablePathPrefix);
+        validators.push_back(bindingNameUniqueValidator);
     }
 
     const auto readQuery = readQueryBuilder.Build();

@@ -82,7 +82,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         "    ($scope, $binding_id, $connection_id, $user, $visibility, $name, $binding, $revision, $internal);"
     );
 
-    auto validatorName = CreateUniqueNameValidator(
+    auto connectionNameUniqueValidator = CreateUniqueNameValidator(
+        CONNECTIONS_TABLE_NAME,
+        content.acl().visibility(),
+        scope,
+        content.name(),
+        user,
+        "Connection with the same name already exists. Please choose another name",
+        YdbConnection->TablePathPrefix);
+
+    auto bindingNameUniqueValidator = CreateUniqueNameValidator(
         BINDINGS_TABLE_NAME,
         content.acl().visibility(),
         scope,
@@ -119,7 +128,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix));
     }
 
-    validators.push_back(validatorName);
+    validators.push_back(connectionNameUniqueValidator);
+    validators.push_back(bindingNameUniqueValidator);
     validators.push_back(validatorCountBindings);
     validators.push_back(validatorConnectionExists);
     validators.push_back(connectionValidator);
@@ -540,7 +550,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     }
 
     {
-        auto modifyUniqueNameValidator = CreateModifyUniqueNameValidator(
+        auto connectionNameUniqueValidator = CreateUniqueNameValidator(
+            CONNECTIONS_TABLE_NAME,
+            request.content().acl().visibility(),
+            scope,
+            request.content().name(),
+            user,
+            "Connection with the same name already exists. Please choose another name",
+            YdbConnection->TablePathPrefix);
+        validators.push_back(connectionNameUniqueValidator);
+    }
+    {
+        auto bindingNameUniqueValidator = CreateModifyUniqueNameValidator(
             BINDINGS_TABLE_NAME,
             BINDING_ID_COLUMN_NAME,
             request.content().acl().visibility(),
@@ -550,7 +571,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
             bindingId,
             "Binding with the same name already exists. Please choose another name",
             YdbConnection->TablePathPrefix);
-        validators.push_back(modifyUniqueNameValidator);
+        validators.push_back(bindingNameUniqueValidator);
     }
 
     const auto readQuery = readQueryBuilder.Build();

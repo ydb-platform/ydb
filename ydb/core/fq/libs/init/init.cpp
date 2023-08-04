@@ -104,8 +104,10 @@ void Init(
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
         auto controlPlaneProxy = NFq::CreateControlPlaneProxyActor(
             protoConfig.GetControlPlaneProxy(),
+            protoConfig.GetControlPlaneStorage(),
             protoConfig.GetCompute(),
             protoConfig.GetCommon(),
+            protoConfig.GetGateways().GetS3(),
             signer,
             yqSharedResources,
             NKikimr::CreateYdbCredentialsProviderFactory,

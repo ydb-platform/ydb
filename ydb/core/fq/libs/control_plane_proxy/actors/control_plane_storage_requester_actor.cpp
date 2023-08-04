@@ -16,7 +16,7 @@ namespace NFq {
 namespace NPrivate {
 
 using namespace NActors;
-using namespace NFq::NConfig;
+using namespace ::NFq::NConfig;
 using namespace NKikimr;
 using namespace NThreading;
 
@@ -76,7 +76,7 @@ public:
     void SendCPSRequest() {
         CPP_LOG_I("TControlPlaneStorageRequesterActor Sending CPS request. Actor id: " << TBase::SelfId());
         const auto& request = Request;
-        auto event = new TCPSEventRequest("yandexcloud://" + request->Get()->FolderId,
+        auto event = new TCPSEventRequest(request->Get()->Scope,
                                           CPSRequestFactory(request),
                                           request->Get()->User,
                                           request->Get()->Token,

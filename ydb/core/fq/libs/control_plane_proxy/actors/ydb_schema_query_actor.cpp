@@ -13,7 +13,7 @@ namespace NFq {
 namespace NPrivate {
 
 using namespace NActors;
-using namespace NFq::NConfig;
+using namespace ::NFq::NConfig;
 using namespace NKikimr;
 using namespace NThreading;
 using namespace NYdb;

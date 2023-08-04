@@ -26,7 +26,7 @@ IBlobConstructor::EStatus TIndexedWriteController::TBlobConstructor::BuildNext()
 
 bool TIndexedWriteController::TBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
     const auto& blobInfo = BlobsSplitted[CurrentIndex - 1];
-    Owner.AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData(blobId, blobInfo.GetData(), blobInfo.GetRowsCount(), blobInfo.GetRawBytes()));
+    Owner.BlobData.emplace_back(blobId, blobInfo.GetData(), blobInfo.GetRowsCount(), blobInfo.GetRawBytes(), AppData()->TimeProvider->Now());
     return true;
 }
 
@@ -78,24 +78,6 @@ NOlap::IBlobConstructor::TPtr TIndexedWriteController::GetBlobConstructor() {
         return nullptr;
     }
     return BlobConstructor;
-}
-
-void TIndexedWriteController::AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data) {
-    ui64 dirtyTime = AppData()->TimeProvider->Now().Seconds();
-    Y_VERIFY(dirtyTime);
-
-    NKikimrTxColumnShard::TLogicalMetadata outMeta;
-    outMeta.SetNumRows(data.GetRowsCount());
-    outMeta.SetRawBytes(data.GetRawBytes());
-    outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
-
-    TString metaString;
-    if (!outMeta.SerializeToString(&metaString)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_metadata");
-        Y_VERIFY(false);
-    }
-    BlobData.push_back(std::move(data));
-    BlobData.back().SetLogicalMeta(metaString);
 }
 
 }

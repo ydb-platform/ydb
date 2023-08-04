@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,6 +16,18 @@ public:
     TInstant DirtyTime;
 
     TInsertedData() = delete; // avoid invalid TInsertedData anywhere
+
+    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
+                  const NKikimrTxColumnShard::TLogicalMetadata& meta, const TInstant& writeTime, const TSnapshot& schemaVersion)
+        : WriteTxId(writeTxId)
+        , PathId(pathId)
+        , DedupId(dedupId)
+        , BlobId(blobId)
+        , DirtyTime(writeTime)
+        , SchemaVersion(schemaVersion)
+    {
+        Y_VERIFY(meta.SerializeToString(&Metadata));
+    }
 
     TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
                   const TString& meta, const TInstant& writeTime, const std::optional<TSnapshot>& schemaVersion)

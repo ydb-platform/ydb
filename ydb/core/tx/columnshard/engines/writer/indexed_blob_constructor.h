@@ -43,9 +43,6 @@ public:
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
 
     NOlap::IBlobConstructor::TPtr GetBlobConstructor() override;
-
-public:
-    void AddBlob(NColumnShard::TEvPrivate::TEvWriteBlobsResult::TPutBlobData&& data);
 };
 
 }

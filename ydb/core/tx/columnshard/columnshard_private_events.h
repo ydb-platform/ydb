@@ -254,18 +254,22 @@ struct TEvPrivate {
         class TPutBlobData {
             YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
             YDB_READONLY_DEF(TString, BlobData);
-            YDB_ACCESSOR_DEF(TString, LogicalMeta);
+            YDB_READONLY_DEF(NKikimrTxColumnShard::TLogicalMetadata, LogicalMeta);
             YDB_ACCESSOR(ui64, RowsCount, 0);
             YDB_ACCESSOR(ui64, RawBytes, 0);
         public:
             TPutBlobData() = default;
 
-            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, ui64 rowsCount, ui64 rawBytes)
+            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
                 : BlobId(blobId)
                 , BlobData(data)
                 , RowsCount(rowsCount)
                 , RawBytes(rawBytes)
-            {}
+            {
+                LogicalMeta.SetNumRows(rowsCount);
+                LogicalMeta.SetRawBytes(rawBytes);
+                LogicalMeta.SetDirtyWriteTimeSeconds(dirtyTime.Seconds());
+            }
         };
 
         TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)

@@ -42,8 +42,7 @@ private:
 bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId) {
     const TString data = blobData.GetBlobData();
 
-    NKikimrTxColumnShard::TLogicalMetadata meta;
-    Y_VERIFY(meta.ParseFromString(blobData.GetLogicalMeta()));
+    const NKikimrTxColumnShard::TLogicalMetadata& meta = blobData.GetLogicalMeta();
 
     const auto& logoBlobId = blobData.GetBlobId();
     Y_VERIFY(logoBlobId.IsValid());
@@ -57,7 +56,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
 
     const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
 
-    NOlap::TInsertedData insertData(0, (ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), logoBlobId, blobData.GetLogicalMeta(), time, PutBlobResult->Get()->GetSnapshot());
+    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), logoBlobId, meta, time, PutBlobResult->Get()->GetSnapshot());
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);

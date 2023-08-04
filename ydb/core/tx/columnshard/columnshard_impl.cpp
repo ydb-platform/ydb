@@ -1058,6 +1058,9 @@ void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering)
     if (!Tiers) {
         Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
             [this](const TActorContext& ctx){
+                if (!TablesManager.HasPrimaryIndex()) {
+                    return;
+                }
                 TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());
                 CleanForgottenBlobs(ctx);
                 Reexport(ctx);

@@ -18,6 +18,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/services/metadata/request/common.h>
+#include <util/generic/noncopyable.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -48,7 +49,7 @@ private:
 
 
 constexpr ui64 INIT_BATCH_ROWS = 1000;
-constexpr i64 DEFAULT_READ_AHEAD_BYTES = 200 * 1024 * 1024;
+constexpr i64 DEFAULT_READ_AHEAD_BYTES = (i64)2 * 1024 * 1024 * 1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
@@ -115,6 +116,7 @@ public:
         Send(ScanComputeActorId, new TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen), IEventHandle::FlagTrackDelivery);
 
         Become(&TColumnShardScan::StateScan);
+        ContinueProcessing();
     }
 
 private:
@@ -145,17 +147,16 @@ private:
 
     bool ReadNextBlob() {
         THashMap<TUnifiedBlobId, std::vector<NBlobCache::TBlobRange>> ranges;
-        while (InFlightReadBytes < MaxReadAheadBytes || !InFlightReads) {
+        while (InFlightGuard.CanTake()) {
             auto blobRange = ScanIterator->GetNextBlobToRead();
             if (!blobRange.BlobId.IsValid()) {
                 break;
             }
+            InFlightGuard.Take(blobRange.Size);
             ++InFlightReads;
-            InFlightReadBytes += blobRange.Size;
             ranges[blobRange.BlobId].emplace_back(blobRange);
         }
-        Y_UNUSED(MaxReadAheadBytes);
-        if (InFlightReadBytes >= MaxReadAheadBytes) {
+        if (!InFlightGuard.CanTake()) {
             ScanCountersPool.OnReadingOverloaded();
         }
         if (!ranges.size()) {
@@ -202,17 +203,18 @@ private:
         auto g = Stats.MakeGuard("ack");
         Y_VERIFY(!AckReceivedInstant);
         AckReceivedInstant = TMonotonic::Now();
-        if (!ComputeActorId) {
-            ComputeActorId = ev->Sender;
-        }
 
         Y_VERIFY(ev->Get()->Generation == ScanGen);
 
         ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
         Y_VERIFY(ev->Get()->MaxChunksCount == 1);
         ACFL_DEBUG("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
-        if (ScanIterator && !!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
-            ScanCountersPool.OnEmptyAck();
+        if (ScanIterator) {
+            if (!!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
+                ScanCountersPool.OnEmptyAck();
+            } else {
+                ScanCountersPool.OnNotEmptyAck();
+            }
         }
         ContinueProcessing();
     }
@@ -223,6 +225,7 @@ private:
         --InFlightReads;
         auto& event = *ev->Get();
         const auto& blobRange = event.BlobRange;
+        InFlightGuard.Return(blobRange.Size);
         ScanCountersPool.OnBlobReceived(blobRange.Size);
         Stats.BlobReceived(blobRange, event.FromCache, event.ConstructTime);
 
@@ -236,8 +239,6 @@ private:
         Y_VERIFY(event.Data.size() == blobRange.Size,
             "Read %s, size %" PRISZT, event.BlobRange.ToString().c_str(), event.Data.size());
 
-        InFlightReadBytes -= blobRange.Size;
-
         ACFL_TRACE("event", "TEvReadBlobRangeResult")("blob", ev->Get()->BlobRange)("chunks_limiter", ChunksLimiter.DebugString());
 
         if (ScanIterator) {
@@ -245,7 +246,8 @@ private:
                 auto g = Stats.MakeGuard("AddData");
                 ScanIterator->AddData(blobRange, event.Data);
                 if (ScanIterator->HasWaitingTasks() && NoTasksStartInstant) {
-                    ScanCountersPool.OnBlobsWaitDuration(Now() - *NoTasksStartInstant);
+                    ScanCountersPool.OnBlobsWaitDuration(Now() - *NoTasksStartInstant, Stats.GetScanDuration());
+                    Stats.OnBlobsWaitDuration(Now() - *NoTasksStartInstant);
                     NoTasksStartInstant.reset();
                 }
             }
@@ -336,13 +338,13 @@ private:
             ACFL_DEBUG("event", "ContinueProcessingStep")("stage", "iterator is not initialized");
             return;
         }
-
+        const bool hasAck = !!AckReceivedInstant;
         // Send new results if there is available capacity
         while (ScanIterator && ProduceResults()) {
         }
 
         // Switch to the next range if the current one is finished
-        if (ScanIterator && ScanIterator->Finished()) {
+        if (ScanIterator && ScanIterator->Finished() && hasAck) {
             NextReadMetadata();
         }
 
@@ -497,7 +499,7 @@ private:
         PageFaults = 0;
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-            "Scan " << ScanActorId << " send ScanData to " << ComputeActorId
+            "Scan " << ScanActorId << " send ScanData to " << ScanComputeActorId
             << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
             << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
             << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
@@ -507,7 +509,7 @@ private:
         if (Finished) {
             Stats.Finish();
             ALS_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN) <<
-                "Scanner finished " << ScanActorId << " and sent to " << ComputeActorId
+                "Scanner finished " << ScanActorId << " and sent to " << ScanComputeActorId
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
                 << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
                 << " finished: " << Result->Finished << " pageFault: " << Result->PageFault
@@ -520,7 +522,7 @@ private:
         }
         AckReceivedInstant.reset();
 
-        Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
+        Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery); // TODO: FlagSubscribeOnSession ?
 
         ReportStats();
 
@@ -538,7 +540,7 @@ private:
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, msg);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
-        Send(ComputeActorId, ev.Release());
+        Send(ScanComputeActorId, ev.Release());
     }
 
     void SendAbortExecution(TString reason = {}) {
@@ -548,7 +550,7 @@ private:
             msg += ", reason: " + reason;
         }
 
-        Send(ComputeActorId, new TEvKqp::TEvAbortExecution(status, msg));
+        Send(ScanComputeActorId, new TEvKqp::TEvAbortExecution(status, msg));
     }
 
     void Finish() {
@@ -566,18 +568,41 @@ private:
         Bytes = 0;
     }
 
+    class TInFlightGuard: NNonCopyable::TNonCopyable {
+    private:
+        static inline TAtomicCounter InFlightGlobal = 0;
+        i64 InFlightGuarded = 0;
+    public:
+        ~TInFlightGuard() {
+            Return(InFlightGuarded);
+        }
+
+        bool CanTake() {
+            return InFlightGlobal.Val() < DEFAULT_READ_AHEAD_BYTES || !InFlightGuarded;
+        }
+
+        void Take(const ui64 bytes) {
+            InFlightGlobal.Add(bytes);
+            InFlightGuarded += bytes;
+        }
+
+        void Return(const ui64 bytes) {
+            Y_VERIFY(InFlightGlobal.Sub(bytes) >= 0);
+            InFlightGuarded -= bytes;
+            Y_VERIFY(InFlightGuarded >= 0);
+        }
+    };
+
 private:
     const TActorId ColumnShardActorId;
     const TActorId ScanComputeActorId;
     std::optional<TMonotonic> AckReceivedInstant;
-    TActorId ComputeActorId;
     TActorId ScanActorId;
     TActorId BlobCacheActorId;
     const ui32 ScanId;
     const ui64 TxId;
     const ui32 ScanGen;
     const ui64 RequestCookie;
-    const i64 MaxReadAheadBytes = DEFAULT_READ_AHEAD_BYTES;
     const NKikimrTxDataShard::EScanDataFormat DataFormat;
     const ui64 TabletId;
 
@@ -597,7 +622,7 @@ private:
     TChunksLimiter ChunksLimiter;
     THolder<TEvKqpCompute::TEvScanData> Result;
     i64 InFlightReads = 0;
-    i64 InFlightReadBytes = 0;
+    TInFlightGuard InFlightGuard;
     bool Finished = false;
 
     class TBlobStats {
@@ -641,6 +666,7 @@ private:
     private:
         THashMap<NBlobCache::TBlobRange, TInstant> StartBlobRequest;
         const TInstant StartInstant = Now();
+        TDuration BlobsWaiting;
         TInstant FinishInstant = TInstant::Zero();
         ui32 RequestsCount = 0;
         ui64 RequestedBytes = 0;
@@ -650,13 +676,28 @@ private:
         THashMap<TString, TInstant> StartGuards;
         THashMap<TString, TInstant> SectionFirst;
         THashMap<TString, TInstant> SectionLast;
+        const TConcreteScanCounters Counters;
     public:
+
+        ~TScanStats() {
+            Counters.OnScanDuration(TInstant::Now() - StartInstant);
+
+        }
+
+        TDuration GetScanDuration() const {
+            return TInstant::Now() - StartInstant;
+        }
 
         TScanStats(const TConcreteScanCounters& counters)
             : CacheBlobs(counters.HistogramCacheBlobsCountDuration, counters.HistogramCacheBlobBytesDuration)
             , MissBlobs(counters.HistogramMissCacheBlobsCountDuration, counters.HistogramMissCacheBlobBytesDuration)
+            , Counters(counters)
         {
 
+        }
+
+        void OnBlobsWaitDuration(const TDuration d) {
+            BlobsWaiting += d;
         }
 
         TString DebugString() const {
@@ -664,7 +705,7 @@ private:
             TStringBuilder sb;
             sb << "SCAN_STATS;";
             sb << "start=" << StartInstant << ";";
-            sb << "d=" << FinishInstant - StartInstant << ";";
+            sb << "d=" << FinishInstant - StartInstant << ";blobs_d=" << BlobsWaiting << ";";
             if (RequestsCount) {
                 sb << "req:{count=" << RequestsCount << ";bytes=" << RequestedBytes << ";bytes_avg=" << RequestedBytes / RequestsCount << "};";
                 sb << "cache:{" << CacheBlobs.DebugString() << "};";

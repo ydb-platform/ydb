@@ -5,17 +5,29 @@
 
 namespace NKikimr::NColumnShard {
 
-class TScanAggregations {
+class TScanAggregations: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     std::shared_ptr<NOlap::TMemoryAggregation> ReadBlobs;
     std::shared_ptr<NOlap::TMemoryAggregation> GranulesProcessing;
     std::shared_ptr<NOlap::TMemoryAggregation> GranulesReady;
     std::shared_ptr<NOlap::TMemoryAggregation> ResultsReady;
+    std::shared_ptr<TValueAggregationClient> ScanDuration;
+    std::shared_ptr<TValueAggregationClient> BlobsWaitingDuration;
 public:
     TScanAggregations(const TString& moduleId)
-        : GranulesProcessing(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Granules/Processing"))
-        , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready")) {
+        : TBase(moduleId)
+        , GranulesProcessing(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Granules/Processing"))
+        , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
+        , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
+        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
+    {
+
+    }
+
+    void OnBlobWaitingDuration(const TDuration d, const TDuration fullScanDuration) const {
+        BlobsWaitingDuration->Add(d.MicroSeconds());
+        ScanDuration->SetValue(fullScanDuration.MicroSeconds());
     }
 
     const std::shared_ptr<NOlap::TMemoryAggregation>& GetGranulesProcessing() const {
@@ -37,8 +49,12 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchBytes;
     NMonitoring::TDynamicCounters::TCounterPtr GeneralFetchCount;
 
+    NMonitoring::TDynamicCounters::TCounterPtr HasResultsAckRequest;
     NMonitoring::TDynamicCounters::TCounterPtr NoResultsAckRequest;
     NMonitoring::TDynamicCounters::TCounterPtr AckWaitingDuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr ScanDuration;
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr PortionBytes;
     NMonitoring::TDynamicCounters::TCounterPtr FilterBytes;
@@ -78,6 +94,10 @@ public:
 
     TScanCounters(const TString& module = "Scan");
 
+    void OnScanDuration(const TDuration d) const {
+        ScanDuration->Add(d.MicroSeconds());
+    }
+
     void AckWaitingInfo(const TDuration d) const {
         AckWaitingDuration->Add(d.MicroSeconds());
     }
@@ -94,6 +114,10 @@ public:
 
     void OnEmptyAck() const {
         NoResultsAckRequest->Add(1);
+    }
+
+    void OnNotEmptyAck() const {
+        HasResultsAckRequest->Add(1);
     }
 
     void OnPriorityFetch(const ui64 size) const {
@@ -121,6 +145,11 @@ private:
     using TBase = TScanCounters;
 public:
     TScanAggregations Aggregations;
+
+    void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
+        TBase::OnBlobsWaitDuration(d);
+        Aggregations.OnBlobWaitingDuration(d, fullScanDuration);
+    }
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)

@@ -1009,14 +1009,14 @@ void TTablet::HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev) {
             <<  ", Type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)Info->TabletType)
             <<  " started in " << (ActivateTime-BoostrapTime).MilliSeconds() << "msec", "TSYS24");
 
-    PipeConnectAcceptor->Activate(SelfId(), UserTablet, true);
+    PipeConnectAcceptor->Activate(SelfId(), UserTablet, true, StateStorageInfo.KnownGeneration);
 }
 
 void TTablet::HandleByFollower(TEvTablet::TEvTabletActive::TPtr &ev) {
     Y_UNUSED(ev);
     BLOG_D("Follower TabletStateActive", "TSYS25");
 
-    PipeConnectAcceptor->Activate(SelfId(), UserTablet, false);
+    PipeConnectAcceptor->Activate(SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration);
 
     Send(FollowerStStGuardian, new TEvTablet::TEvFollowerUpdateState(false, SelfId(), UserTablet));
     ReportTabletStateChange(TTabletStateInfo::Active);
@@ -1505,7 +1505,7 @@ void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
     } else if (PipeConnectAcceptor->IsActive()) {
-        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader, SuggestedGeneration);
+        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader, StateStorageInfo.KnownGeneration);
     } else {
         PipeConnectAcceptor->Enqueue(ev, SelfId());
     }
@@ -1527,7 +1527,7 @@ void TTablet::HandleQueued(TEvTabletPipe::TEvConnect::TPtr& ev) {
 void TTablet::HandleByFollower(TEvTabletPipe::TEvConnect::TPtr &ev) {
     Y_VERIFY_DEBUG(!Leader);
     if (PipeConnectAcceptor->IsActive() && !PipeConnectAcceptor->IsStopped()) {
-        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false);
+        PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, false, StateStorageInfo.KnownGeneration);
     } else {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, false);
     }

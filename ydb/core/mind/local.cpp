@@ -648,12 +648,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 const auto& poolStats(info.GetPoolStats(AppData()->UserPoolId));
                 UserPoolUsage = poolStats.usage() * poolStats.threads() * 1000000; // uS
             }
+
+            // Note: we use allocated memory because MemoryUsed(AnonRSS) has lag
             if (info.HasMemoryUsedInAlloc()) {
                 MemUsage = info.GetMemoryUsedInAlloc();
             }
-            /*if (info.HasMemoryUsed()) {
-                MemUsage = info.GetMemoryUsed();
-            }*/
 
             double usage = 0;
 

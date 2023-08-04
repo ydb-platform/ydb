@@ -62,11 +62,6 @@ static ui64 GetProperty(
     return found != properties.end() ? found->second.value : 0;
 }
 
-static ui64 GetProperty(const char* name) {
-    const auto properties = tcmalloc::MallocExtension::GetProperties();
-    return GetProperty(properties, name);
-}
-
 static ui64 GetCachesSize(
     const std::map<std::string, tcmalloc::MallocExtension::Property>& properties)
 {
@@ -452,7 +447,12 @@ public:
 class TTcMallocState : public IAllocState {
 public:
     ui64 GetAllocatedMemoryEstimate() const override {
-        return GetProperty("generic.physical_memory_used");
+        const auto properties = tcmalloc::MallocExtension::GetProperties();
+
+        ui64 used = GetProperty(properties, "generic.physical_memory_used");
+        ui64 caches = GetCachesSize(properties);
+
+        return used > caches ? used - caches : 0;
     }
 };
 

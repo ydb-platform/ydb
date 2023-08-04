@@ -23,7 +23,6 @@ namespace NYT {
         *original = serialized;                                  \
     }
 
-DEFINE_TRIVIAL_PROTO_CONVERSIONS(TString)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(i8)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui8)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(i16)
@@ -35,6 +34,34 @@ DEFINE_TRIVIAL_PROTO_CONVERSIONS(ui64)
 DEFINE_TRIVIAL_PROTO_CONVERSIONS(bool)
 
 #undef DEFINE_TRIVIAL_PROTO_CONVERSIONS
+
+////////////////////////////////////////////////////////////////////////////////
+
+// These conversions work in case if the patched protobuf that uses
+// TString is used.
+inline void ToProto(TString* serialized, TString original)
+{
+    *serialized = std::move(original);
+}
+
+inline void FromProto(TString* original, TString serialized)
+{
+    *original = std::move(serialized);
+}
+
+// These conversions work in case if the original protobuf that uses
+// std::string is used.
+// NB: ToProto works in O(1) time if TSTRING_IS_STD_STRING is used and
+// may work in O(n) time otherwise due to CoW.
+inline void ToProto(std::string* serialized, TString original)
+{
+    *serialized = std::move(original.MutRef());
+}
+
+inline void FromProto(TString* original, std::string serialized)
+{
+    *original = std::move(serialized);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

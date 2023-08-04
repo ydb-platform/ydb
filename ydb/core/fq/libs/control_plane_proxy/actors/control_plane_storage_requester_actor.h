@@ -12,28 +12,28 @@ using namespace NActors;
 
 /// Discover connection_name
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -42,14 +42,14 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
 /// Discover binding_name
 
 NActors::IActor* MakeDiscoverYDBBindingName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
 NActors::IActor* MakeDiscoverYDBBindingName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,

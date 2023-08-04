@@ -59,6 +59,10 @@ public:
         return ComputeConfig.GetYdb().GetEnable() && ComputeConfig.GetYdb().GetControlPlane().GetEnable();
     }
 
+    const NFq::NConfig::TComputeConfig& GetProto() const {
+        return ComputeConfig;
+    }
+
 private:
     NFq::NConfig::TComputeConfig ComputeConfig;
 };

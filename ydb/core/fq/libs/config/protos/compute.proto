@@ -9,6 +9,10 @@ import "ydb/public/api/protos/draft/fq.proto";
 
 ////////////////////////////////////////////////////////////
 
+message TSynchronizationService {
+    bool Enable = 1;
+}
+
 message TInPlaceCompute {
 }
 
@@ -46,6 +50,7 @@ message TYdbComputeControlPlane {
 message TYdbCompute {
     bool Enable = 1;
     TYdbComputeControlPlane ControlPlane = 2;
+    TSynchronizationService SynchronizationService = 3;
 }
 
 enum EComputeType {

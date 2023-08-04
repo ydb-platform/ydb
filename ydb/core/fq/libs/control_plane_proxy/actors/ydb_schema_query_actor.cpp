@@ -76,27 +76,33 @@ public:
     using TQueryFactoryMethod        = std::function<TString(const TEventRequestPtr& request)>;
     using TErrorMessageFactoryMethod = std::function<TString(const TStatus& status)>;
 
-    TSchemaQueryYDBActor(const TActorId& sender,
+    TSchemaQueryYDBActor(const TActorId& proxyActorId,
                          const TEventRequestPtr request,
                          TDuration requestTimeout,
                          const NPrivate::TRequestCommonCountersPtr& counters,
                          TQueryFactoryMethod queryFactoryMethod,
-                         TErrorMessageFactoryMethod errorMessageFactoryMethod)
+                         TErrorMessageFactoryMethod errorMessageFactoryMethod,
+                         bool successOnAlreadyExists = false)
         : TBaseActor<TSchemaQueryYDBActor<TEventRequest, TEventResponse>>(
-              sender, std::move(request), requestTimeout, counters)
+              proxyActorId, std::move(request), requestTimeout, counters)
         , Tasks{TSchemaQueryTask{.SQL = queryFactoryMethod(Request)}}
-        , ErrorMessageFactoryMethod(errorMessageFactoryMethod) { }
+        , ErrorMessageFactoryMethod(errorMessageFactoryMethod)
+        , SuccessOnAlreadyExists(successOnAlreadyExists)
+    { }
 
-    TSchemaQueryYDBActor(const TActorId& sender,
+    TSchemaQueryYDBActor(const TActorId& proxyActorId,
                          const TEventRequestPtr request,
                          TDuration requestTimeout,
                          const NPrivate::TRequestCommonCountersPtr& counters,
                          TTasksFactoryMethod tasksFactoryMethod,
-                         TErrorMessageFactoryMethod errorMessageFactoryMethod)
+                         TErrorMessageFactoryMethod errorMessageFactoryMethod,
+                         bool successOnAlreadyExists = false)
         : TBaseActor<TSchemaQueryYDBActor<TEventRequest, TEventResponse>>(
-              sender, std::move(request), requestTimeout, counters)
+              proxyActorId, std::move(request), requestTimeout, counters)
         , Tasks(tasksFactoryMethod(Request))
-        , ErrorMessageFactoryMethod(errorMessageFactoryMethod) { }
+        , ErrorMessageFactoryMethod(errorMessageFactoryMethod)
+        , SuccessOnAlreadyExists(successOnAlreadyExists)
+        { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_YDB_SCHEMA_QUERY_ACTOR";
 
@@ -166,6 +172,7 @@ public:
         Request->Get()->ComputeYDBOperationWasPerformed = true;
         TBase::SendRequestToSender();
     }
+
     void SendError(const TStatus& executeSchemeQueryStatus) {
         CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished with issues. Actor id: "
                   << TBase::SelfId());
@@ -176,14 +183,14 @@ public:
                            executeSchemeQueryStatus.GetIssues());
     }
 
+
+
     void Handle(typename TEvPrivate::TEvQueryExecutionResponse::TPtr& event) {
         const auto& executeSchemeQueryStatus = event->Get()->Result;
         auto isRollback                      = event->Get()->Rollback;
-
-        auto successExecutionRunMode = executeSchemeQueryStatus.IsSuccess() && !isRollback;
-        auto successExecutionRollbackMode =
-            executeSchemeQueryStatus.IsSuccess() && isRollback;
-        auto failedExecutionRunMode = !executeSchemeQueryStatus.IsSuccess() && !isRollback;
+        auto successExecutionRunMode = IsSuccess(executeSchemeQueryStatus) && !isRollback;
+        auto successExecutionRollbackMode = IsSuccess(executeSchemeQueryStatus) && isRollback;
+        auto failedExecutionRunMode = !IsSuccess(executeSchemeQueryStatus) && !isRollback;
 
         if (successExecutionRunMode) {
             if (!InitiateSchemaQueryExecution(event->Get()->TaskIndex + 1, false, Nothing())) {
@@ -229,18 +236,25 @@ public:
     }
 
 private:
+    bool IsSuccess(const TStatus& status) const {
+        return status.IsSuccess() || (SuccessOnAlreadyExists && (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS || status.GetIssues().ToOneLineString().Contains("error: path exist")));
+    }
+
+private:
     TTasks Tasks;
     TErrorMessageFactoryMethod ErrorMessageFactoryMethod;
+    bool SuccessOnAlreadyExists = false;
 };
 
 /// Connection actors
 NActors::IActor* MakeCreateConnectionActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     const NConfig::TCommonConfig& commonConfig,
-    TSigner::TPtr signer) {
+    TSigner::TPtr signer,
+    bool successOnAlreadyExists) {
     auto queryFactoryMethod =
         [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
          signer                = std::move(signer)](
@@ -260,16 +274,17 @@ NActors::IActor* MakeCreateConnectionActor(
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvCreateConnectionRequest,
                                     TEvControlPlaneProxy::TEvCreateConnectionResponse>(
-        sender,
+        proxyActorId,
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_CREATE_CONNECTION_IN_YDB),
         queryFactoryMethod,
-        errorMessageFactoryMethod);
+        errorMessageFactoryMethod,
+        successOnAlreadyExists);
 }
 
 NActors::IActor* MakeModifyConnectionActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -344,7 +359,7 @@ NActors::IActor* MakeModifyConnectionActor(
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvModifyConnectionRequest,
                                     TEvControlPlaneProxy::TEvModifyConnectionResponse>(
-        sender,
+        proxyActorId,
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_MODIFY_CONNECTION_IN_YDB),
@@ -353,7 +368,7 @@ NActors::IActor* MakeModifyConnectionActor(
 }
 
 NActors::IActor* MakeDeleteConnectionActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -375,7 +390,7 @@ NActors::IActor* MakeDeleteConnectionActor(
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvDeleteConnectionRequest,
                                     TEvControlPlaneProxy::TEvDeleteConnectionResponse>(
-        sender,
+        proxyActorId,
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_DELETE_CONNECTION_IN_YDB),
@@ -385,10 +400,11 @@ NActors::IActor* MakeDeleteConnectionActor(
 
 /// Bindings actors
 NActors::IActor* MakeCreateBindingActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
-    TCounters& counters) {
+    TCounters& counters,
+    bool successOnAlreadyExists) {
     auto queryFactoryMethod =
         [](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request) -> TString {
         auto externalSourceName = *request->Get()->ConnectionName;
@@ -406,16 +422,17 @@ NActors::IActor* MakeCreateBindingActor(
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvCreateBindingRequest,
                                     TEvControlPlaneProxy::TEvCreateBindingResponse>(
-        sender,
+        proxyActorId,
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_CREATE_BINDING_IN_YDB),
         queryFactoryMethod,
-        errorMessageFactoryMethod);
+        errorMessageFactoryMethod,
+        successOnAlreadyExists);
 }
 
 NActors::IActor* MakeModifyBindingActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters) {
@@ -441,7 +458,7 @@ NActors::IActor* MakeModifyBindingActor(
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvModifyBindingRequest,
                                     TEvControlPlaneProxy::TEvModifyBindingResponse>(
-        sender,
+        proxyActorId,
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_MODIFY_BINDING_IN_YDB),
@@ -450,7 +467,7 @@ NActors::IActor* MakeModifyBindingActor(
 }
 
 NActors::IActor* MakeDeleteBindingActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters) {
@@ -469,7 +486,7 @@ NActors::IActor* MakeDeleteBindingActor(
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvDeleteBindingRequest,
                                     TEvControlPlaneProxy::TEvDeleteBindingResponse>(
-        sender,
+        proxyActorId,
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_DELETE_BINDING_IN_YDB),

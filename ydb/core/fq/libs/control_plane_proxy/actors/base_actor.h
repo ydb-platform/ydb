@@ -38,13 +38,14 @@ public:
     using TEventResponse   = typename TBaseActorTypeTag<TDerived>::TResponse;
 
 public:
-    TBaseActor(const TActorId& sender,
+    TBaseActor(const TActorId& proxyActorId,
                const TEventRequestPtr request,
                TDuration requestTimeout,
                const NPrivate::TRequestCommonCountersPtr& counters)
         : Request(std::move(request))
         , Counters(counters)
-        , Sender(sender)
+        , ProxyActorId(proxyActorId)
+        , ResponseActorId(Request->Sender)
         , RequestTimeout(requestTimeout) { }
 
     void Bootstrap() {
@@ -58,13 +59,13 @@ public:
         Counters->Error->Inc();
         NYql::TIssues issues;
         issues.AddIssue(issue);
-        Send(Sender, new TEventResponse(issues, {}), 0, Request->Cookie);
+        Send(ResponseActorId, new TEventResponse(issues, {}), 0, Request->Cookie);
         PassAway();
     }
 
     void SendRequestToSender() {
         Counters->Ok->Inc();
-        Send(Request->Forward(ControlPlaneProxyActorId()));
+        Send(Request->Forward(ProxyActorId));
         PassAway();
     }
 
@@ -97,7 +98,8 @@ private:
 protected:
     const TEventRequestPtr Request;
     const NPrivate::TRequestCommonCountersPtr Counters;
-    const TActorId Sender;
+    const TActorId ProxyActorId;
+    const TActorId ResponseActorId;
     const TDuration RequestTimeout;
 };
 

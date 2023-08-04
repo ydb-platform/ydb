@@ -1349,7 +1349,7 @@ private:
             }
 
             Register(NPrivate::MakeCreateConnectionActor(
-                sender,
+                ControlPlaneProxyActorId(),
                 std::move(ev),
                 Config.RequestTimeout,
                 Counters,
@@ -1601,19 +1601,19 @@ private:
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && !ev->Get()->OldConnectionContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
             Register(MakeDiscoverYDBConnectionName(
-                sender, ev, Counters, Config.RequestTimeout, permissions));
+                ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && !ev->Get()->OldBindingNamesDiscoveryFinished) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
             Register(MakeListBindingIds(
-                sender, ev, Counters, Config.RequestTimeout, permissions));
+                ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && ev->Get()->OldBindingIds.size() != ev->Get()->OldBindingContents.size()) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
             Register(MakeDescribeListedBinding(
-                sender, ev, Counters, Config.RequestTimeout, permissions));
+                ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
         const bool controlPlaneYDBOperationWasPerformed = ev->Get()->ControlPlaneYDBOperationWasPerformed;
@@ -1643,7 +1643,7 @@ private:
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
                 Register(MakeModifyConnectionActor(
-                    sender,
+                    ControlPlaneProxyActorId(),
                     ev,
                     Config.RequestTimeout,
                     Counters,
@@ -1724,7 +1724,7 @@ private:
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled() && !ev->Get()->ConnectionContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
             Register(MakeDiscoverYDBConnectionName(
-                sender, ev, Counters, Config.RequestTimeout, permissions));
+                ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
 
@@ -1755,7 +1755,7 @@ private:
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
                 Register(MakeDeleteConnectionActor(
-                    sender, ev, Config.RequestTimeout, Counters, Signer));
+                    ControlPlaneProxyActorId(), ev, Config.RequestTimeout, Counters, Signer));
                 return;
             }
 
@@ -1920,7 +1920,7 @@ private:
             if (!ev->Get()->ConnectionName) {
                 auto permissions = ExtractPermissions(ev, availablePermissions);
                 Register(MakeDiscoverYDBConnectionName(
-                    sender, ev, Counters, Config.RequestTimeout, permissions));
+                    ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
                 return;
             }
 
@@ -1932,7 +1932,7 @@ private:
             }
 
             Register(MakeCreateBindingActor(
-                sender, std::move(ev), Config.RequestTimeout, Counters));
+                ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters));
             return;
         }
 
@@ -2174,13 +2174,13 @@ private:
             if (!ev->Get()->OldBindingContent) {
                 auto permissions = ExtractPermissions(ev, availablePermissions);
                 Register(MakeDiscoverYDBBindingName(
-                    sender, ev, Counters, Config.RequestTimeout, permissions));
+                    ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
                 return;
             }
             if (!ev->Get()->ConnectionName) {
                 auto permissions = ExtractPermissions(ev, availablePermissions);
                 Register(MakeDiscoverYDBConnectionName(
-                    sender, ev, Counters, Config.RequestTimeout, permissions));
+                    ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
                 return;
             }
         }
@@ -2212,7 +2212,7 @@ private:
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
                 Register(MakeModifyBindingActor(
-                    sender,
+                    ControlPlaneProxyActorId(),
                     std::move(ev),
                     Config.RequestTimeout,
                     Counters));
@@ -2291,7 +2291,7 @@ private:
             !ev->Get()->OldBindingName) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
             Register(MakeDiscoverYDBBindingName(
-                sender, ev, Counters, Config.RequestTimeout, permissions));
+                ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
 
@@ -2322,7 +2322,7 @@ private:
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
                 Register(MakeDeleteBindingActor(
-                    sender, std::move(ev), Config.RequestTimeout, Counters));
+                    ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters));
                 return;
             }
 

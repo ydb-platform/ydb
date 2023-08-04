@@ -117,7 +117,12 @@ void Init(
     }
 
     if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
-        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), NKikimr::CreateYdbCredentialsProviderFactory);
+        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), 
+                                                                                         NKikimr::CreateYdbCredentialsProviderFactory, 
+                                                                                         protoConfig.GetCommon(), 
+                                                                                         signer, 
+                                                                                         yqSharedResources, 
+                                                                                         yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
         actorRegistrator(NFq::ComputeDatabaseControlPlaneServiceActorId(), computeDatabaseService.release());
     }
 

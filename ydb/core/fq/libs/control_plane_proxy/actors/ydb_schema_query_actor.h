@@ -3,6 +3,7 @@
 #include "counters.h"
 
 #include <library/cpp/actors/core/actor.h>
+#include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/signer/signer.h>
 
@@ -13,15 +14,16 @@ using namespace NActors;
 
 /// Connection manipulation actors
 NActors::IActor* MakeCreateConnectionActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     const NConfig::TCommonConfig& commonConfig,
-    TSigner::TPtr signer);
+    TSigner::TPtr signer,
+    bool successOnAlreadyExists = false);
 
 NActors::IActor* MakeModifyConnectionActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -29,7 +31,7 @@ NActors::IActor* MakeModifyConnectionActor(
     TSigner::TPtr signer);
 
 NActors::IActor* MakeDeleteConnectionActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -37,19 +39,20 @@ NActors::IActor* MakeDeleteConnectionActor(
 
 /// Binding manipulation actors
 NActors::IActor* MakeCreateBindingActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
-    TCounters& counters);
+    TCounters& counters,
+    bool successOnAlreadyExists = false);
 
 NActors::IActor* MakeModifyBindingActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters);
 
 NActors::IActor* MakeDeleteBindingActor(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters);

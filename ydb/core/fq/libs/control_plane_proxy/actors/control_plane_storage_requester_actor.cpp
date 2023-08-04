@@ -51,7 +51,7 @@ public:
         std::function<void(const TEventRequestPtr& request,
                            const typename TCPSEventResponse::TProto& response)>;
 
-    TControlPlaneStorageRequesterActor(const TActorId& sender,
+    TControlPlaneStorageRequesterActor(const TActorId& proxyActorId,
                             const TEventRequestPtr request,
                             TDuration requestTimeout,
                             const NPrivate::TRequestCommonCountersPtr& counters,
@@ -61,7 +61,7 @@ public:
                             TEntityNameExtractorFactoryMethod entityNameExtractorFactoryMethod)
         : TBaseActor<
               TControlPlaneStorageRequesterActor<TEventRequest, TEventResponse, TCPSEventRequest, TCPSEventResponse>>(
-              sender, std::move(request), requestTimeout, counters)
+              proxyActorId, std::move(request), requestTimeout, counters)
         , Permissions(permissions)
         , CPSRequestFactory(cpsRequestFactory)
         , ErrorMessageFactoryMethod(errorMessageFactoryMethod)
@@ -121,7 +121,7 @@ TString DescribeConnectionErrorMessageFactoryMethod(const NYql::TIssues& issues)
     return "Couldn't resolve connection";
 };
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -143,7 +143,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
                                        TEvControlPlaneProxy::TEvCreateBindingResponse,
                                        TEvControlPlaneStorage::TEvDescribeConnectionRequest,
                                        TEvControlPlaneStorage::TEvDescribeConnectionResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
@@ -154,7 +154,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
 }
 
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -176,7 +176,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
                                        TEvControlPlaneProxy::TEvModifyConnectionResponse,
                                        TEvControlPlaneStorage::TEvDescribeConnectionRequest,
                                        TEvControlPlaneStorage::TEvDescribeConnectionResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
@@ -187,7 +187,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
 }
 
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -209,7 +209,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
                                        TEvControlPlaneProxy::TEvDeleteConnectionResponse,
                                        TEvControlPlaneStorage::TEvDescribeConnectionRequest,
                                        TEvControlPlaneStorage::TEvDescribeConnectionResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
@@ -220,7 +220,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
 }
 
 NActors::IActor* MakeDiscoverYDBConnectionName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -242,7 +242,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
                                        TEvControlPlaneProxy::TEvModifyBindingResponse,
                                        TEvControlPlaneStorage::TEvDescribeConnectionRequest,
                                        TEvControlPlaneStorage::TEvDescribeConnectionResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
@@ -255,7 +255,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
 /// Discover binding_name
 
 NActors::IActor* MakeDiscoverYDBBindingName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -281,7 +281,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
                                        TEvControlPlaneProxy::TEvModifyBindingResponse,
                                        TEvControlPlaneStorage::TEvDescribeBindingRequest,
                                        TEvControlPlaneStorage::TEvDescribeBindingResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
@@ -292,7 +292,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
 }
 
 NActors::IActor* MakeDiscoverYDBBindingName(
-    const TActorId& sender,
+    const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -318,7 +318,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
                                        TEvControlPlaneProxy::TEvDeleteBindingResponse,
                                        TEvControlPlaneStorage::TEvDescribeBindingRequest,
                                        TEvControlPlaneStorage::TEvDescribeBindingResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
@@ -329,7 +329,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
 }
 
 NActors::IActor* MakeListBindingIds(
-    const TActorId sender,
+    const TActorId proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -370,7 +370,7 @@ NActors::IActor* MakeListBindingIds(
         TEvControlPlaneProxy::TEvModifyConnectionRequest,
         TEvControlPlaneProxy::TEvModifyConnectionResponse,
         TEvControlPlaneStorage::TEvListBindingsRequest,
-        TEvControlPlaneStorage::TEvListBindingsResponse>(sender,
+        TEvControlPlaneStorage::TEvListBindingsResponse>(proxyActorId,
                                                          request,
                                                          requestTimeout,
                                                          counters.GetCommonCounters(
@@ -382,7 +382,7 @@ NActors::IActor* MakeListBindingIds(
 }
 
 NActors::IActor* MakeDescribeListedBinding(
-    const TActorId sender,
+    const TActorId proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
@@ -411,7 +411,7 @@ NActors::IActor* MakeDescribeListedBinding(
         TEvControlPlaneProxy::TEvModifyConnectionResponse,
         TEvControlPlaneStorage::TEvDescribeBindingRequest,
         TEvControlPlaneStorage::TEvDescribeBindingResponse>(
-        sender,
+        proxyActorId,
         request,
         requestTimeout,
         counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),

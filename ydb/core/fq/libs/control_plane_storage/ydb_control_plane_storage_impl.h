@@ -392,6 +392,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTS_PING_TASK,
         RTS_CREATE_DATABASE,
         RTS_DESCRIBE_DATABASE,
+        RTS_MODIFY_DATABASE,
         RTS_MAX,
     };
 
@@ -418,7 +419,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         "DeleteBinding",
         "PingTask",
         "CreateDatabase",
-        "DescribeDatabase"
+        "DescribeDatabase",
+        "ModifyDatabase"
     };
 
     enum ERequestTypeCommon {
@@ -451,6 +453,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTC_PING_TASK,
         RTC_CREATE_DATABASE,
         RTC_DESCRIBE_DATABASE,
+        RTC_MODIFY_DATABASE,
         RTC_MAX,
     };
 
@@ -503,7 +506,8 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             { MakeIntrusive<TRequestCommonCounters>("DeleteBinding") },
             { MakeIntrusive<TRequestCommonCounters>("PingTask") },
             { MakeIntrusive<TRequestCommonCounters>("CreateDatabase") },
-            { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") }
+            { MakeIntrusive<TRequestCommonCounters>("DescribeDatabase") },
+            { MakeIntrusive<TRequestCommonCounters>("ModifyDatabase") }
         });
 
         TTtlCache<TMetricsScope, TScopeCountersPtr, TMap> ScopeCounters{TTtlCacheSettings{}.SetTtl(TDuration::Days(1))};
@@ -640,6 +644,7 @@ public:
         hFunc(TEvents::TEvSchemaCreated, Handle);
         hFunc(TEvControlPlaneStorage::TEvCreateDatabaseRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDescribeDatabaseRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvModifyDatabaseRequest, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -680,6 +685,7 @@ public:
 
     void Handle(TEvControlPlaneStorage::TEvCreateDatabaseRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDescribeDatabaseRequest::TPtr& ev);
+    void Handle(TEvControlPlaneStorage::TEvModifyDatabaseRequest::TPtr& ev);
 
     template <class TEventPtr, class TRequestActor, ERequestTypeCommon requestType>
     void HandleRateLimiterImpl(TEventPtr& ev);

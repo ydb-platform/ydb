@@ -1,30 +1,16 @@
 #pragma once
 
-#include <ydb/core/fq/libs/compute/common/config.h>
-#include <ydb/core/fq/libs/shared_resources/shared_resources.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
 
 namespace NFq {
 
 template<typename T>
-std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(
-    const T& ev,
-    const ::NFq::TComputeConfig& computeConfig,
-    const TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
-    auto scope = ev->Get()->Scope;
-    ::NFq::NConfig::TYdbStorageConfig computeConnection = computeConfig.GetConnection(scope);
-
-    computeConnection.set_endpoint(ev->Get()->ComputeDatabase->connection().endpoint());
-    computeConnection.set_database(ev->Get()->ComputeDatabase->connection().database());
-    computeConnection.set_usessl(ev->Get()->ComputeDatabase->connection().usessl());
-
-    auto tableSettings =
-        GetClientSettings<NYdb::NTable::TClientSettings>(computeConnection,
-                                                         credentialsProviderFactory);
-    return std::make_shared<NYdb::NTable::TTableClient>(yqSharedResources->UserSpaceYdbDriver,
-                                                        tableSettings);
+std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const T& ev,
+                                                                 const NFq::TComputeConfig& computeConfig,
+                                                                 const TYqSharedResources::TPtr& yqSharedResources,
+                                                                 const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
+    const auto& scope = ev->Get()->Scope;
+    return CreateNewTableClient(scope, computeConfig, ev->Get()->ComputeDatabase->connection(), yqSharedResources, credentialsProviderFactory);
 }
 
 inline static const TMap<TString, TPermissions::TPermission> PermissionsItems = {

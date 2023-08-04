@@ -42,6 +42,9 @@ struct TEvYdbCompute {
         EvFinalizerResponse,
         EvStopperResponse,
 
+        EvSynchronizeRequest,
+        EvSynchronizeResponse,
+
         EvEnd
     };
 
@@ -302,6 +305,35 @@ struct TEvYdbCompute {
         NYql::TIssues Issues;
         NYdb::EStatus Status;
         int64_t RowsCount = 0;
+    };
+
+    struct TEvSynchronizeRequest : public NActors::TEventLocal<TEvSynchronizeRequest, EvSynchronizeRequest> {
+        TEvSynchronizeRequest(const TString& cloudId, const TString& scope, const NFq::NConfig::TYdbStorageConfig& connectionConfig)
+            : CloudId(cloudId)
+            , Scope(scope)
+            , ConnectionConfig(connectionConfig)
+        {}
+
+        TString CloudId;
+        TString Scope;
+        NFq::NConfig::TYdbStorageConfig ConnectionConfig;
+    };
+
+    struct TEvSynchronizeResponse : public NActors::TEventLocal<TEvSynchronizeResponse, EvSynchronizeResponse> {
+        TEvSynchronizeResponse(const TString& scope)
+            : Scope(scope)
+            , Status(NYdb::EStatus::SUCCESS)
+        {}
+
+        TEvSynchronizeResponse(const TString& scope, NYql::TIssues issues, NYdb::EStatus status)
+            : Scope(scope) 
+            , Issues(std::move(issues))
+            , Status(status)
+        {}
+
+        TString Scope;
+        NYql::TIssues Issues;
+        NYdb::EStatus Status;
     };
 };
 

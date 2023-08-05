@@ -233,6 +233,9 @@ void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& ve
     schemaPreset.AddVersion(version, versionInfo);
     if (versionInfo.HasSchema()){
         IndexSchemaVersion(version, versionInfo.GetSchema());
+        for (auto& columnName : Ttl.TtlColumns()) {
+            PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);
+        }
     }
 }
 
@@ -282,10 +285,6 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     }
     PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
     PrimaryIndex->OnTieringModified(nullptr, Ttl);
-
-    for (auto& columnName : Ttl.TtlColumns()) {
-        PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);
-    }
 }
 
 NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {

@@ -237,13 +237,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ReverseRangeLimitOptimized, SourceRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr{serverSettings};
+    Y_UNIT_TEST(ReverseRangeLimitOptimized) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -281,7 +276,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT(limit.IsDefined());
                 UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
-                UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\"") || SourceRead, result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
             }
         }
 
@@ -453,13 +448,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TopSortExprPk, SourceRead) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig);
-
-        TKikimrRunner kikimr{serverSettings};
+    Y_UNIT_TEST(TopSortExprPk) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -479,7 +469,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             auto result = session.ExplainDataQuery(query).GetValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_C(result.GetAst().Contains("ItemsLimit") || SourceRead, result.GetAst());
+            UNIT_ASSERT_C(result.GetAst().Contains("ItemsLimit"), result.GetAst());
         }
 
         {

@@ -1306,13 +1306,10 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy, SourceRead) {
+    Y_UNIT_TEST(SecondaryIndexOrderBy) {
         auto setting = NKikimrKqp::TKqpSetting();
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting})
-            .SetAppConfig(appConfig);
+            .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1511,7 +1508,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\"") || SourceRead, result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
                 UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -1537,7 +1534,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\"") || SourceRead, result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
                 UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -1564,7 +1561,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\"") || SourceRead, result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
                 UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 

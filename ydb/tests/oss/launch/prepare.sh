@@ -1,6 +1,7 @@
 #!/bin/bash
 
-python ${source_root}/ydb/tests/oss/launch/compile_protos.py --source-root ${source_root} 2>/dev/null
+# Python protospecs are now compiled as part of the cmake build stage
+# python ${source_root}/ydb/tests/oss/launch/compile_protos.py --source-root ${source_root} 2>/dev/null
 
 testresults=${source_root}/ydb/tests/functional/test-results
 

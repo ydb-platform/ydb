@@ -97,7 +97,7 @@ struct TSelectInfo {
 class TColumnEngineStats {
 private:
     static constexpr const ui64 NUM_KINDS = 5;
-    static_assert(NUM_KINDS == NOlap::TPortionMeta::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
+    static_assert(NUM_KINDS == NOlap::TPortionMeta::EProduced::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
 public:
     class TPortionsStats {
     private:
@@ -178,7 +178,7 @@ public:
     std::vector<ui32> GetKinds() const {
         std::vector<ui32> result;
         for (auto&& i : GetEnumAllValues<NOlap::TPortionMeta::EProduced>()) {
-            if (i == NOlap::TPortionMeta::UNSPECIFIED) {
+            if (i == NOlap::TPortionMeta::EProduced::UNSPECIFIED) {
                 continue;
             }
             result.emplace_back(i);
@@ -190,7 +190,7 @@ public:
     std::vector<T> GetValues(const TAccessor accessor) const {
         std::vector<T> result;
         for (auto&& i : GetEnumAllValues<NOlap::TPortionMeta::EProduced>()) {
-            if (i == NOlap::TPortionMeta::UNSPECIFIED) {
+            if (i == NOlap::TPortionMeta::EProduced::UNSPECIFIED) {
                 continue;
             }
             result.emplace_back(accessor(GetStats(i)));
@@ -202,7 +202,7 @@ public:
     T GetValuesSum(const TAccessor accessor) const {
         T result = 0;
         for (auto&& i : GetEnumAllValues<NOlap::TPortionMeta::EProduced>()) {
-            if (i == NOlap::TPortionMeta::UNSPECIFIED) {
+            if (i == NOlap::TPortionMeta::EProduced::UNSPECIFIED) {
                 continue;
             }
             result += accessor(GetStats(i));

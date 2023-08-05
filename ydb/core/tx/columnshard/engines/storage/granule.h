@@ -288,6 +288,7 @@ private:
     mutable bool AllowInsertionFlag = false;
     std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
+    NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
 
     void OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter);
     void OnAfterChangePortion();
@@ -374,12 +375,7 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
-        : Owner(owner)
-        , Counters(counters)
-        , Record(rec)
-    {
-    }
+    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters);
 
     ui64 GetGranuleId() const {
         return Record.Granule;

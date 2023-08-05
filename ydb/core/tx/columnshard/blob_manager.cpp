@@ -47,7 +47,7 @@ struct TBlobBatch::TBatchInfo : TNonCopyable {
         InFlight.push_back(true);
         ++InFlightCount;
         TotalSizeBytes += blobSize;
-        return MakeBlobId(BlobSizes.size()-1);
+        return MakeBlobId(BlobSizes.size() - 1);
     }
 
     TUnifiedBlobId MakeBlobId(ui32 i) const {

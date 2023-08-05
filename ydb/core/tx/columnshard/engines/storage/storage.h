@@ -34,6 +34,10 @@ public:
 
     }
 
+    const NColumnShard::TEngineLogsCounters& GetCounters() const {
+        return Counters;
+    }
+
     class TModificationGuard: TNonCopyable {
     private:
         TGranulesStorage& Owner;

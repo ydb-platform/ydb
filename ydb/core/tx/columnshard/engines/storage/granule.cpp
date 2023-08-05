@@ -55,14 +55,19 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
 void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec) {
     auto it = Portions.find(portion.GetPortion());
     if (it == Portions.end()) {
-        it = Portions.emplace(portion.GetPortion(), portion).first;
+        auto portionNew = portion;
+        portionNew.AddRecord(indexInfo, rec);
+        OnBeforeChangePortion(nullptr, &portionNew);
+        Portions.emplace(portion.GetPortion(), std::move(portionNew));
+        OnAfterChangePortion();
+    } else {
+        Y_VERIFY(it->second.IsEqualWithSnapshots(portion));
+        auto portionNew = it->second;
+        portionNew.AddRecord(indexInfo, rec);
+        OnBeforeChangePortion(&it->second, &portionNew);
+        it->second = std::move(portionNew);
+        OnAfterChangePortion();
     }
-    Y_VERIFY(it->second.IsEqualWithSnapshots(portion));
-    auto portionNew = it->second;
-    portionNew.AddRecord(indexInfo, rec);
-    OnBeforeChangePortion(&it->second, &portionNew);
-    it->second = std::move(portionNew);
-    OnAfterChangePortion();
 }
 
 void TGranuleMeta::OnAfterChangePortion() {
@@ -72,6 +77,24 @@ void TGranuleMeta::OnAfterChangePortion() {
 
 void TGranuleMeta::OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter) {
     HardSummaryCache = {};
+    if (portionBefore) {
+        THashMap<TUnifiedBlobId, ui64> blobIdSize;
+        for (auto&& i : portionBefore->Records) {
+            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
+        }
+        for (auto&& i : blobIdSize) {
+            PortionInfoGuard.OnDropBlob(portionBefore->IsActive() ? portionBefore->Meta.Produced : NPortion::EProduced::INACTIVE, i.second);
+        }
+    }
+    if (portionAfter) {
+        THashMap<TUnifiedBlobId, ui64> blobIdSize;
+        for (auto&& i : portionAfter->Records) {
+            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
+        }
+        for (auto&& i : blobIdSize) {
+            PortionInfoGuard.OnNewBlob(portionAfter->IsActive() ? portionAfter->Meta.Produced : NPortion::EProduced::INACTIVE, i.second);
+        }
+    }
     if (!!AdditiveSummaryCache) {
         auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionBefore && portionBefore->IsActive()) {
@@ -167,6 +190,15 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
         RebuildAdditiveMetrics();
     }
     return *AdditiveSummaryCache;
+}
+
+TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
+    : Owner(owner)
+    , Counters(counters)
+    , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
+    , Record(rec)
+{
+
 }
 
 } // namespace NKikimr::NOlap

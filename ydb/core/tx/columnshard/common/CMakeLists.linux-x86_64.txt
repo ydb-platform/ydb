@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(tx-columnshard-common)
 target_link_libraries(tx-columnshard-common PUBLIC
@@ -14,9 +20,16 @@ target_link_libraries(tx-columnshard-common PUBLIC
   yutil
   ydb-core-protos
   libs-apache-arrow
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/reverse_accessor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/scalars.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/snapshot.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.cpp
+)
+generate_enum_serilization(tx-columnshard-common
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/common/portion.h
 )

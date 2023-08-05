@@ -74,7 +74,7 @@ void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std:
             auto column = batch->GetColumnByName(columnName);
             Y_VERIFY(column);
 
-            bool isSorted = (columnId == Meta.FirstPkColumn);
+            const bool isSorted = (columnId == Meta.FirstPkColumn);
             AddMinMax(columnId, column, isSorted);
             Y_VERIFY(Meta.HasMinMax(columnId));
         }
@@ -101,21 +101,21 @@ TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
         auto* portionMeta = meta.MutablePortionMeta();
 
         switch (Meta.Produced) {
-            case TPortionMeta::UNSPECIFIED:
+            case TPortionMeta::EProduced::UNSPECIFIED:
                 Y_VERIFY(false);
-            case TPortionMeta::INSERTED:
+            case TPortionMeta::EProduced::INSERTED:
                 portionMeta->SetIsInserted(true);
                 break;
-            case TPortionMeta::COMPACTED:
+            case TPortionMeta::EProduced::COMPACTED:
                 portionMeta->SetIsCompacted(true);
                 break;
-            case TPortionMeta::SPLIT_COMPACTED:
+            case TPortionMeta::EProduced::SPLIT_COMPACTED:
                 portionMeta->SetIsSplitCompacted(true);
                 break;
-            case TPortionMeta::EVICTED:
+            case TPortionMeta::EProduced::EVICTED:
                 portionMeta->SetIsEvicted(true);
                 break;
-            case TPortionMeta::INACTIVE:
+            case TPortionMeta::EProduced::INACTIVE:
                 Y_FAIL("Unexpected inactive case");
                 //portionMeta->SetInactive(true);
                 break;
@@ -158,13 +158,13 @@ void TPortionInfo::LoadMetadata(const TIndexInfo& indexInfo, const TColumnRecord
         TierName = portionMeta.GetTierName();
 
         if (portionMeta.GetIsInserted()) {
-            Meta.Produced = TPortionMeta::INSERTED;
+            Meta.Produced = TPortionMeta::EProduced::INSERTED;
         } else if (portionMeta.GetIsCompacted()) {
-            Meta.Produced = TPortionMeta::COMPACTED;
+            Meta.Produced = TPortionMeta::EProduced::COMPACTED;
         } else if (portionMeta.GetIsSplitCompacted()) {
-            Meta.Produced = TPortionMeta::SPLIT_COMPACTED;
+            Meta.Produced = TPortionMeta::EProduced::SPLIT_COMPACTED;
         } else if (portionMeta.GetIsEvicted()) {
-            Meta.Produced = TPortionMeta::EVICTED;
+            Meta.Produced = TPortionMeta::EProduced::EVICTED;
         }
 
         if (portionMeta.HasPrimaryKeyBorders()) {

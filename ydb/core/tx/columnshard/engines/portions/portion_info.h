@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
+#include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
@@ -12,15 +13,7 @@
 namespace NKikimr::NOlap {
 
 struct TPortionMeta {
-    // NOTE: These values are persisted in LocalDB so they must be stable
-    enum EProduced : ui32 {
-        UNSPECIFIED = 0,
-        INSERTED = 1,
-        COMPACTED = 2,
-        SPLIT_COMPACTED = 3,
-        INACTIVE = 4,
-        EVICTED = 5,
-    };
+    using EProduced = NPortion::EProduced;
 
     struct TColumnMeta {
         ui32 NumRows{0};
@@ -33,7 +26,11 @@ struct TPortionMeta {
         }
     };
 
-    EProduced Produced{UNSPECIFIED};
+    EProduced GetProduced() const {
+        return Produced;
+    }
+
+    EProduced Produced{EProduced::UNSPECIFIED};
     THashMap<ui32, TColumnMeta> ColumnMeta;
     ui32 FirstPkColumn = 0;
     std::shared_ptr<arrow::RecordBatch> ReplaceKeyEdges; // first and last PK rows
@@ -113,11 +110,11 @@ public:
     TString TierName;
 
     bool Empty() const { return Records.empty(); }
-    bool Produced() const { return Meta.Produced != TPortionMeta::UNSPECIFIED; }
+    bool Produced() const { return Meta.GetProduced() != TPortionMeta::EProduced::UNSPECIFIED; }
     bool Valid() const { return MinSnapshot.Valid() && Granule && Portion && !Empty() && Produced() && Meta.HasPkMinMax() && Meta.IndexKeyStart && Meta.IndexKeyEnd; }
     bool ValidSnapshotInfo() const { return MinSnapshot.Valid() && Granule && Portion; }
-    bool IsInserted() const { return Meta.Produced == TPortionMeta::INSERTED; }
-    bool IsEvicted() const { return Meta.Produced == TPortionMeta::EVICTED; }
+    bool IsInserted() const { return Meta.GetProduced() == TPortionMeta::EProduced::INSERTED; }
+    bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
     size_t NumRecords() const { return Records.size(); }
@@ -163,15 +160,15 @@ public:
     }
 
     bool AllowEarlyFilter() const {
-        return Meta.Produced == TPortionMeta::COMPACTED
-            || Meta.Produced == TPortionMeta::SPLIT_COMPACTED;
+        return Meta.GetProduced() == TPortionMeta::EProduced::COMPACTED
+            || Meta.GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED;
     }
 
     bool EvictReady(size_t hotSize) const {
-        return Meta.Produced == TPortionMeta::COMPACTED
-            || Meta.Produced == TPortionMeta::SPLIT_COMPACTED
-            || Meta.Produced == TPortionMeta::EVICTED
-            || (Meta.Produced == TPortionMeta::INSERTED && BlobsSizes().first >= hotSize);
+        return Meta.GetProduced() == TPortionMeta::EProduced::COMPACTED
+            || Meta.GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED
+            || Meta.GetProduced() == TPortionMeta::EProduced::EVICTED
+            || (Meta.GetProduced() == TPortionMeta::EProduced::INSERTED && BlobsSizes().first >= hotSize);
     }
 
     ui64 GetPortion() const {

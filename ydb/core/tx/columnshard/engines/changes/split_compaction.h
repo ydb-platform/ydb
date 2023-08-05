@@ -22,7 +22,7 @@ private:
 protected:
     virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
-        return TPortionMeta::SPLIT_COMPACTED;
+        return TPortionMeta::EProduced::SPLIT_COMPACTED;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;

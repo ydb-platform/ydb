@@ -19,21 +19,21 @@ void TChangesWithAppend::DoDebugString(TStringOutput& out) const {
 void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
     for (auto& portionInfo : AppendedPortions) {
         switch (portionInfo.Meta.Produced) {
-            case NOlap::TPortionMeta::UNSPECIFIED:
+            case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                 Y_VERIFY(false); // unexpected
-            case NOlap::TPortionMeta::INSERTED:
+            case NOlap::TPortionMeta::EProduced::INSERTED:
                 self.IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                 break;
-            case NOlap::TPortionMeta::COMPACTED:
+            case NOlap::TPortionMeta::EProduced::COMPACTED:
                 self.IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
                 break;
-            case NOlap::TPortionMeta::SPLIT_COMPACTED:
+            case NOlap::TPortionMeta::EProduced::SPLIT_COMPACTED:
                 self.IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                 break;
-            case NOlap::TPortionMeta::EVICTED:
+            case NOlap::TPortionMeta::EProduced::EVICTED:
                 Y_FAIL("Unexpected evicted case");
                 break;
-            case NOlap::TPortionMeta::INACTIVE:
+            case NOlap::TPortionMeta::EProduced::INACTIVE:
                 Y_FAIL("Unexpected inactive case");
                 break;
         }
@@ -98,7 +98,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
         i.SetPortion(context.NextPortionId());
-        i.UpdateRecordsMeta(TPortionMeta::INSERTED);
+        i.UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
 }
 

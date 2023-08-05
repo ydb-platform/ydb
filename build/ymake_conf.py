@@ -1389,6 +1389,10 @@ class GnuCompiler(Compiler):
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
             '-fno-common',
+
+            # Split all functions and data into separate sections for DCE and ICF linker passes
+            '-ffunction-sections',
+            '-fdata-sections'
         ]
 
         if self.tc.is_clang and self.target.is_linux:
@@ -1511,11 +1515,6 @@ class GnuCompiler(Compiler):
             else:
                 self.c_foptions.append('-fno-delete-null-pointer-checks')
                 self.c_foptions.append('-fabi-version=8')
-
-        # Split all functions and data into separate sections for DCE and ICF linker passes
-        # NOTE: iOS build uses -fembed-bitcode which conflicts with -ffunction-sections (only relevant for ELF targets)
-        if not self.target.is_ios:
-            self.c_foptions.extend(['-ffunction-sections', '-fdata-sections'])
 
     def configure_build_type(self):
         if self.build.is_valgrind:

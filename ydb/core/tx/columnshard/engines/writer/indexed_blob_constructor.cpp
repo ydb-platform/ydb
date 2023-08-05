@@ -6,9 +6,8 @@
 
 namespace NKikimr::NOlap {
 
-TIndexedWriteController::TBlobConstructor::TBlobConstructor(NOlap::ISnapshotSchema::TPtr snapshotSchema, TIndexedWriteController& owner)
+TIndexedWriteController::TBlobConstructor::TBlobConstructor(TIndexedWriteController& owner)
     : Owner(owner)
-    , SnapshotSchema(snapshotSchema)
 {}
 
 const TString& TIndexedWriteController::TBlobConstructor::GetBlob() const {
@@ -55,9 +54,9 @@ bool TIndexedWriteController::TBlobConstructor::Init() {
     return true;
 }
 
-TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData, NOlap::ISnapshotSchema::TPtr snapshotSchema)
+TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData)
     : WriteData(writeData)
-    , BlobConstructor(std::make_shared<TBlobConstructor>(snapshotSchema, *this))
+    , BlobConstructor(std::make_shared<TBlobConstructor>(*this))
     , DstActor(dstActor)
 {
     ResourceUsage.SourceMemorySize = WriteData.GetSize();
@@ -65,10 +64,10 @@ TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const
 
 void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
     if (putResult->GetPutStatus() == NKikimrProto::OK) {
-        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData), WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData), WriteData.GetWriteMeta(), WriteData.GetData().GetSchemaVersion());
         ctx.Send(DstActor, result.release());
     } else {
-        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, WriteData.GetWriteMeta(), BlobConstructor->GetSnapshot());
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, WriteData.GetWriteMeta());
         ctx.Send(DstActor, result.release());
     }
 }

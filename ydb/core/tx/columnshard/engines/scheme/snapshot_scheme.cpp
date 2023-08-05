@@ -46,4 +46,8 @@ ui32 TSnapshotSchema::GetColumnsCount() const {
     return Schema->num_fields();
 }
 
+ui64 TSnapshotSchema::GetVersion() const {
+    return IndexInfo.GetVersion();
+}
+
 }

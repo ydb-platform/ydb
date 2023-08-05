@@ -305,7 +305,19 @@ public:
 class TVersionedIndex {
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> IndexKey;
+    std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
 public:
+    ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
+        auto it = SnapshotByVersion.find(version);
+        return it == SnapshotByVersion.end() ? nullptr : it->second;
+    }
+
+    ISnapshotSchema::TPtr GetSchemaUnsafe(const ui64 version) const {
+        auto it = SnapshotByVersion.find(version);
+        Y_VERIFY(it != SnapshotByVersion.end());
+        return it->second;
+    }
+
     ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
         for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
             if (it->first <= version) {
@@ -332,7 +344,10 @@ public:
         } else {
             Y_VERIFY(IndexKey->Equals(indexInfo.GetIndexKey()));
         }
-        Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
+        auto it = Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
+        if (!SnapshotByVersion.emplace(it.first->second->GetVersion(), it.first->second).second) {
+            Y_VERIFY(GetLastSchema()->GetVersion() == it.first->second->GetVersion());
+        }
     }
 };
 

@@ -63,4 +63,8 @@ ui32 TFilteredSnapshotSchema::GetColumnsCount() const {
     return Schema->num_fields();
 }
 
+ui64 TFilteredSnapshotSchema::GetVersion() const {
+    return OriginalSnapshot->GetIndexInfo().GetVersion();
+}
+
 }

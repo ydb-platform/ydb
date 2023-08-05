@@ -1860,6 +1860,10 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             }
             proto.MutableArrowData()->SetPayloadIndex(Index);
         }
+
+        ui64 GetSchemaVersion() const override {
+            return 1;
+        }
     };
 
     void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<std::pair<TString, TTypeInfo>>& schema) {

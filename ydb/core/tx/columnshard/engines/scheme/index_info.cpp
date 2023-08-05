@@ -374,6 +374,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
         DefaultCompression = *result;
     }
 
+    Version = schema.GetVersion();
     CompositeMarks = schema.GetCompositeMarks();
     CompositeIndexKey = AppData()->FeatureFlags.GetForceColumnTablesCompositeMarks() ? true : CompositeMarks;
     return true;

@@ -20,6 +20,10 @@ std::shared_ptr<arrow::RecordBatch> TArrowData::GetArrowBatch() const {
     return IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema());
 }
 
+ui64 TArrowData::GetSchemaVersion() const {
+    return IndexSchema->GetVersion();
+}
+
 bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto) {
     IncomingData = proto.GetData();
     if (proto.HasMeta()) {
@@ -38,6 +42,10 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
 
 std::shared_ptr<arrow::RecordBatch> TProtoArrowData::GetArrowBatch() const {
     return IndexSchema->PrepareForInsert(IncomingData, ArrowSchema);
+}
+
+ui64 TProtoArrowData::GetSchemaVersion() const {
+    return IndexSchema->GetVersion();
 }
 
 }

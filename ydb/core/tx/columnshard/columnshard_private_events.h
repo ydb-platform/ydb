@@ -272,18 +272,18 @@ struct TEvPrivate {
             }
         };
 
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta)
             : PutResult(putResult)
             , WriteMeta(writeMeta)
-            , Snapshot(snapshot)
         {
             Y_VERIFY(PutResult);
         }
 
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const NEvWrite::TWriteMeta& writeMeta, const NOlap::TSnapshot& snapshot)
-            : TEvWriteBlobsResult(putResult, writeMeta, snapshot)
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
+            : TEvWriteBlobsResult(putResult, writeMeta)
         {
             BlobData = std::move(blobData);
+            SchemaVersion = schemaVersion;
         }
 
         const TVector<TPutBlobData>& GetBlobData() const {
@@ -302,15 +302,15 @@ struct TEvPrivate {
             return WriteMeta;
         }
 
-        const NOlap::TSnapshot& GetSnapshot() const {
-            return Snapshot;
+        ui64 GetSchemaVersion() const {
+            return SchemaVersion;
         }
 
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         TVector<TPutBlobData> BlobData;
         NEvWrite::TWriteMeta WriteMeta;
-        NOlap::TSnapshot Snapshot;
+        ui64 SchemaVersion = 0;
     };
 };
 

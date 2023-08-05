@@ -13,6 +13,7 @@ public:
     virtual ~IDataContainer() {}
     virtual std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const = 0;
     virtual const TString& GetData() const = 0;
+    virtual ui64 GetSchemaVersion() const = 0;
 };
 
 class TWriteMeta {

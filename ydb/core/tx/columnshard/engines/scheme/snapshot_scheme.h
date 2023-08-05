@@ -23,6 +23,7 @@ public:
     const TIndexInfo& GetIndexInfo() const override;
     const TSnapshot& GetSnapshot() const override;
     ui32 GetColumnsCount() const override;
+    ui64 GetVersion() const override;
 };
 
 }

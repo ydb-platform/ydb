@@ -17,6 +17,7 @@ public:
     using TPtr = std::shared_ptr<IDataConstructor>;
     virtual ~IDataConstructor() {}
     virtual void Serialize(NKikimrDataEvents::TOperationData& proto) const = 0;
+    virtual ui64 GetSchemaVersion() const = 0;
 };
 
 struct TDataEvents {
@@ -53,6 +54,7 @@ struct TDataEvents {
         void AddReplaceOp(const ui64 tableId, const IDataConstructor::TPtr& data) {
             Record.MutableTableId()->SetTableId(tableId);
             Y_VERIFY(data);
+            Record.MutableTableId()->SetSchemaVersion(data->GetSchemaVersion());
             data->Serialize(*Record.MutableReplace());
         }
 

@@ -16,19 +16,15 @@ class TIndexedWriteController : public NColumnShard::IWriteController {
 private:
     class TBlobConstructor : public IBlobConstructor {
         TIndexedWriteController& Owner;
-        NOlap::ISnapshotSchema::TPtr SnapshotSchema;
         std::vector<NArrow::TSerializedBatch> BlobsSplitted;
 
         ui64 CurrentIndex = 0;
     public:
-        TBlobConstructor(NOlap::ISnapshotSchema::TPtr snapshotSchema, TIndexedWriteController& owner);
+        TBlobConstructor(TIndexedWriteController& owner);
 
         const TString& GetBlob() const override;
         EStatus BuildNext() override;
         bool RegisterBlobId(const TUnifiedBlobId& blobId) override;
-        const NOlap::TSnapshot& GetSnapshot() const {
-            return SnapshotSchema->GetSnapshot();
-        }
         bool Init();
     };
 
@@ -38,7 +34,7 @@ private:
     TActorId DstActor;
 
 public:
-    TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData, NOlap::ISnapshotSchema::TPtr snapshotSchema);
+    TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData);
 
     void DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) override;
 

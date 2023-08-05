@@ -50,6 +50,7 @@ public:
 
     bool Parse(const NKikimrDataEvents::TOperationData& proto, const IPayloadData& payload);
     std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override;
+    ui64 GetSchemaVersion() const override;
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
@@ -69,6 +70,7 @@ public:
 
     bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);
     std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override;
+    ui64 GetSchemaVersion() const override;
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;

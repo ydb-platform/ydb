@@ -179,8 +179,13 @@ public:
         return result;
     }
 
+    ui64 GetVersion() const {
+        return Version;
+    }
+
 private:
     ui32 Id;
+    ui64 Version = 0;
     TString Name;
     bool CompositeIndexKey = false;
     mutable std::shared_ptr<arrow::Schema> Schema;

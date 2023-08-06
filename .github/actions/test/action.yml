@@ -249,6 +249,7 @@ runs:
         --source-root $source_root \
         --build-root $build_root \
         --output-dir $ARTIFACTS_DIR/pytest/ \
+        --artifacts-dir $ARTIFACTS_DIR/artifacts/ \
         . | tee $WORKDIR/pytest-short.log
             
 #      echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \

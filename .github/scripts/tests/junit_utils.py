@@ -1,5 +1,6 @@
 import os
 import glob
+import sys
 from xml.etree import ElementTree as ET
 
 
@@ -77,7 +78,7 @@ def iter_xml_files(folder_or_file):
         try:
             tree = ET.parse(fn)
         except ET.ParseError as e:
-            print(f"Unable to parse {fn}: {e}")
+            print(f"Unable to parse {fn}: {e}", file=sys.stderr)
             continue
 
         root = tree.getroot()

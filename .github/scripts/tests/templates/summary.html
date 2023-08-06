@@ -1,0 +1,54 @@
+<html>
+<head>
+    <style>
+        th {
+            text-transform: uppercase;
+        }
+        
+        th, td {
+            padding: 5px;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        span.test_status {
+            font-weight: bold;
+        }
+
+        span.test_fail {
+            color: red;
+        }
+
+        span.test_pass {
+            color: green;
+        }
+
+        span.test_mute {
+            color: blue;
+        }
+    </style>
+</head>
+<body>
+{% for status, rows in test_results %}
+<h1 id="{{ status.name}}">{{ status.name }}</h1>
+<table style="width:90%;" border="1">
+    <thead>
+    <tr>
+        <th>test name</th>
+        <th>status</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for t in rows %}
+    <tr>
+        <td>{{ t.full_name }}</td>
+        <td><span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endfor %}
+</body>
+</html>

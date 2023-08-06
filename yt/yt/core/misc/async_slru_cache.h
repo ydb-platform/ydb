@@ -151,7 +151,7 @@ public:
     class TInsertCookie
     {
     public:
-        TInsertCookie();
+        TInsertCookie() = default;
         explicit TInsertCookie(const TKey& key);
         TInsertCookie(TInsertCookie&& other);
         TInsertCookie(const TInsertCookie& other) = delete;
@@ -173,7 +173,7 @@ public:
         TKey Key_;
         TIntrusivePtr<TAsyncSlruCacheBase> Cache_;
         TValueFuture ValueFuture_;
-        std::atomic<bool> Active_;
+        std::atomic<bool> Active_ = false;
         bool InsertedIntoSmallGhost_ = false;
         bool InsertedIntoLargeGhost_ = false;
 

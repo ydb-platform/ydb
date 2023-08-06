@@ -26,6 +26,15 @@ void BM_GetCpuApproximateInstant(benchmark::State& state)
 
 BENCHMARK(BM_GetCpuApproximateInstant);
 
+void BM_GetInstant(benchmark::State& state)
+{
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(GetInstant());
+    }
+}
+
+BENCHMARK(BM_GetInstant);
+
 void BM_InstantNow(benchmark::State& state)
 {
     for (auto _ : state) {

@@ -1262,14 +1262,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::NotifyOnTrim(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TKey, class TValue, class THash>
-TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::TInsertCookie()
-    : Active_(false)
-{ }
-
-template <class TKey, class TValue, class THash>
 TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::TInsertCookie(const TKey& key)
     : Key_(key)
-    , Active_(false)
 { }
 
 template <class TKey, class TValue, class THash>
@@ -1326,23 +1320,17 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::IsActive() const
 template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::Cancel(const TError& error)
 {
-    auto expected = true;
-    if (!Active_.compare_exchange_strong(expected, false)) {
-        return;
+    if (Active_.exchange(false)) {
+        Cache_->CancelInsert(*this, error);
     }
-
-    Cache_->CancelInsert(*this, error);
 }
 
 template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::EndInsert(TValuePtr value)
 {
-    auto expected = true;
-    if (!Active_.compare_exchange_strong(expected, false)) {
-        return;
+    if (Active_.exchange(false)) {
+        Cache_->EndInsert(*this, value);
     }
-
-    Cache_->EndInsert(*this, value);
 }
 
 template <class TKey, class TValue, class THash>
@@ -1360,7 +1348,9 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::TInsertCookie(
 template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::Abort()
 {
-    Cancel(TError(NYT::EErrorCode::Canceled, "Cache item insertion aborted"));
+    if (Active_.load()) {
+        Cancel(TError(NYT::EErrorCode::Canceled, "Cache item insertion aborted"));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

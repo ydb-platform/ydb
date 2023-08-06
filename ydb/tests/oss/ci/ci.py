@@ -29,9 +29,10 @@ def patch_project_path(item):
 
     ctx["project_path"] = project_path
 
-    yield
-
-    ctx["project_path"] = old_path
+    try:
+        yield
+    finally:
+        ctx["project_path"] = old_path
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -53,18 +54,23 @@ def make_github_link(repo, ref, filepath, lineno):
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     from ya import pytest_config
+    import library.python.pytest.yatest_tools as tools
 
-    if 'PYTEST_XDIST_WORKER' in os.environ:
-        out_path = os.path.join(pytest_config.option.output_dir, os.environ['PYTEST_XDIST_WORKER'])
+    if "PYTEST_XDIST_WORKER" in os.environ:
+        out_path = os.path.join(pytest_config.option.output_dir, os.environ["PYTEST_XDIST_WORKER"])
     else:
         out_path = pytest_config.option.output_dir
+
+    rel_filepath = os.path.relpath(item.path, pytest_config.ya._source_root)
+
+    test_dir = tools.normalize_filename(rel_filepath)
+
+    out_path = os.path.join(out_path, test_dir)
 
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
     pytest_config.ya._output_dir = out_path
-
-    rel_filepath = os.path.relpath(item.path, pytest_config.ya._source_root)
 
     junit_props = {
         "filename": rel_filepath,
@@ -85,30 +91,31 @@ def pytest_runtest_setup(item):
         item.user_properties.append((k, v))
 
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_teardown(item, nextitem):
-    from ya import pytest_config
-    import library.python.pytest.yatest_tools as tools
-
-    artifacts_dir = pytest_config.option.artifacts_dir
-
-    if not artifacts_dir:
-        return
-
-    if not os.path.exists(artifacts_dir):
-        os.makedirs(artifacts_dir)
-
-
-    class_name, test_name = tools.split_node_id(item.nodeid)
-    basename = f'{tools.normalize_filename(class_name)}_{tools.normalize_filename(test_name)}'
-    fn = f"{basename}.tar.gz"
-
-    tar_fn = os.path.join(artifacts_dir, fn)
-
-    print(f"\n!!!!!!!!!!!!pytest_runtest_teardown {tar_fn=} {basename=}\n")
-
-    with tarfile.open(tar_fn, "w:gz") as tar:
-        tar.add(pytest_config.ya._output_dir, basename)
+# @pytest.hookimpl(tryfirst=True)
+# def pytest_runtest_teardown(item, nextitem):
+#     from ya import pytest_config
+#     import library.python.pytest.yatest_tools as tools
+#
+#     artifacts_dir = pytest_config.option.artifacts_dir
+#     artifacts_url = pytest_config.option.artifacts_url
+#
+#     if not artifacts_dir:
+#         return
+#
+#     if not os.path.exists(artifacts_dir):
+#         os.makedirs(artifacts_dir)
+#
+#     class_name, test_name = tools.split_node_id(item.nodeid)
+#     basename = f"{tools.normalize_filename(class_name)}_{tools.normalize_filename(test_name)}"
+#     fn = f"{basename}.tar.gz"
+#
+#     tar_fn = os.path.join(artifacts_dir, fn)
+#
+#     with tarfile.open(tar_fn, "w:gz") as tar:
+#         tar.add(pytest_config.ya._output_dir, basename)
+#
+#     if artifacts_url:
+#         item.user_properties.append(("url:artifacts", f"{artifacts_url}{fn}"))
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -118,6 +125,7 @@ def pytest_runtest_call(item):
 
 
 def pytest_addoption(parser):
-    parser.addoption("--artifacts-dir", help="path to store test artifacts")
+    # parser.addoption("--artifacts-dir", help="path to store test artifacts")
+    # parser.addoption("--artifacts-url", help="url prefix for artifacts")
     parser.addoption("--github-repo", help="junit: link files to specific github repo")
     parser.addoption("--github-ref", help="junit: link files to specific changeset")

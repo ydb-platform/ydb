@@ -42,11 +42,12 @@ runs:
     id: init
     shell: bash
     run: |
-      mkdir -p artifacts tmp test_reports
-      rm -rf artifacts/* tmp/* test_reports/*
+      rm -rf artifacts tmp test_reports
+      mkdir -p artifacts tmp/pytest test_reports/pytest
       echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
-      echo "PYTESTREPDIR=$(pwd)/ydb/tests/functional/test-results/xml" >> $GITHUB_ENV
+      echo "TMPDIR=$(pwd)/tmp" >> $GITHUB_ENV
+      echo "PYTESTREPDIR=$(pwd)/test_reports/pytest/" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "ARTIFACTS_DIR=$(pwd)/artifacts" >> $GITHUB_ENV
@@ -60,7 +61,7 @@ runs:
   - name: configure s3cmd
     shell: bash
     run: |
-      cat <<EOF > $WORKDIR/tmp/s3cfg
+      cat <<EOF > $TMPDIR/s3cfg
       [default]
       access_key = ${aws_key_id}
       secret_key = ${aws_secret_access_key}
@@ -68,7 +69,7 @@ runs:
       host_base = storage.yandexcloud.net
       host_bucket = %(bucket)s.storage.yandexcloud.net
       EOF
-      echo "S3CMD_CONFIG=$WORKDIR/tmp/s3cfg" >> $GITHUB_ENV
+      echo "S3CMD_CONFIG=$TPMDIR/s3cfg" >> $GITHUB_ENV
       echo "S3_BUCKET_PATH=s3://${{ inputs.aws_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/" >> $GITHUB_ENV
     env:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
@@ -134,7 +135,7 @@ runs:
 
       # Sed removes coloring from the output
       
-      TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
+      GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
               --output-junit $TESTREPDIR/suites/ctest_report.xml \
               -L '${{inputs.test_label_regexp}}' -E "${CTEST_SKIP_SHARDS:-}" | \
@@ -248,7 +249,7 @@ runs:
         --github-repo $GITHUB_REPOSITORY --github-ref $GITHUB_SHA \
         --source-root $source_root \
         --build-root $build_root \
-        --output-dir $ARTIFACTS_DIR/pytest/ \
+        --output-dir $TMPDIR/pytest/ \
         --artifacts-dir $ARTIFACTS_DIR/artifacts/ \
         . | tee $WORKDIR/pytest-short.log
             

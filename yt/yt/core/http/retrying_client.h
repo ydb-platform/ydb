@@ -29,7 +29,7 @@ IResponseCheckerPtr CreateJsonResponseChecker(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IRetriableClient
+struct IRetryingClient
     : public virtual TRefCounted
 {
     virtual TFuture<IResponsePtr> Get(
@@ -61,12 +61,12 @@ struct IRetriableClient
         const THeadersPtr& headers = nullptr) = 0;
 };
 
-DEFINE_REFCOUNTED_TYPE(IRetriableClient)
+DEFINE_REFCOUNTED_TYPE(IRetryingClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IRetriableClientPtr CreateRetriableClient(
-    TRetrialbeClientConfigPtr config,
+IRetryingClientPtr CreateRetryingClient(
+    TRetryingClientConfigPtr config,
     IClientPtr client,
     IInvokerPtr invoker);
 

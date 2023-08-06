@@ -86,7 +86,7 @@ DEFINE_REFCOUNTED_TYPE(TClientConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetrialbeClientConfig
+class TRetryingClientConfig
     : public NYTree::TYsonStruct
 {
 public:
@@ -95,12 +95,12 @@ public:
     TDuration BackoffTimeout;
     int MaxAttemptCount;
 
-    REGISTER_YSON_STRUCT(TRetrialbeClientConfig);
+    REGISTER_YSON_STRUCT(TRetryingClientConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TRetrialbeClientConfig);
+DEFINE_REFCOUNTED_TYPE(TRetryingClientConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

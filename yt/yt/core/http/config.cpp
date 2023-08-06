@@ -66,7 +66,7 @@ void TClientConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TRetrialbeClientConfig::Register(TRegistrar registrar)
+void TRetryingClientConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("request_timeout", &TThis::RequestTimeout)
         .Default(TDuration::Seconds(15));

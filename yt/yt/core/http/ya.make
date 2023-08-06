@@ -8,7 +8,7 @@ SRCS(
     connection_pool.cpp
     connection_reuse_helpers.cpp
     http.cpp
-    retriable_client.cpp
+    retrying_client.cpp
     server.cpp
     stream.cpp
     helpers.cpp

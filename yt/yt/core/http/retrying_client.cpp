@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include "retriable_client.h"
+#include "retrying_client.h"
 #include "private.h"
 
 #include <yt/yt/core/http/client.h>
@@ -48,10 +48,9 @@ public:
         }
 
         try {
-            auto result = ErrorChecker_(response, Json_);
-            return result;
-        } catch (const std::exception& err) {
-            return err;
+            return ErrorChecker_(response, Json_);
+        } catch (const std::exception& ex) {
+            return ex;
         }
     }
 
@@ -60,11 +59,11 @@ public:
         return Json_;
     }
 
-
 private:
     const NJson::TJsonFormatConfigPtr JsonFormatConfig_;
+    const TJsonErrorChecker ErrorChecker_;
+
     INodePtr Json_;
-    TJsonErrorChecker ErrorChecker_;
     TError Error_;
 };
 
@@ -79,12 +78,12 @@ IResponseCheckerPtr CreateJsonResponseChecker(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetrialbeClient
-    : public IRetriableClient
+class TRetryingClient
+    : public IRetryingClient
 {
 public:
-    TRetrialbeClient(
-        TRetrialbeClientConfigPtr config,
+    TRetryingClient(
+        TRetryingClientConfigPtr config,
         IClientPtr client,
         IInvokerPtr invoker)
         : Config_(std::move(config))
@@ -136,7 +135,7 @@ public:
     }
 
 private:
-    const TRetrialbeClientConfigPtr Config_;
+    const TRetryingClientConfigPtr Config_;
     const IInvokerPtr Invoker_;
     const IClientPtr UnderlyingClient_;
 
@@ -217,17 +216,16 @@ private:
             << TErrorAttribute("attempt_count", attempt)
             << TErrorAttribute("max_attempt_count", Config_->MaxAttemptCount);
     }
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IRetriableClientPtr CreateRetriableClient(
-    TRetrialbeClientConfigPtr config,
+IRetryingClientPtr CreateRetryingClient(
+    TRetryingClientConfigPtr config,
     IClientPtr client,
     IInvokerPtr invoker)
 {
-    return New<TRetrialbeClient>(std::move(config), std::move(client), std::move(invoker));
+    return New<TRetryingClient>(std::move(config), std::move(client), std::move(invoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

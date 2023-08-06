@@ -30,10 +30,10 @@ set_property(TARGET client-yc_public-common PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
 target_link_libraries(client-yc_public-common PUBLIC
+  contrib-libs-googleapis-common-protos
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
-  contrib-libs-googleapis-common-protos
   contrib-libs-protobuf
 )
 target_proto_messages(client-yc_public-common PRIVATE

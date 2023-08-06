@@ -54,10 +54,10 @@ set_property(TARGET client-yc_public-logging PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
 target_link_libraries(client-yc_public-logging PUBLIC
+  contrib-libs-googleapis-common-protos
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
-  contrib-libs-googleapis-common-protos
   client-yc_public-common
   contrib-libs-protobuf
 )

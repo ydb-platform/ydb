@@ -977,9 +977,8 @@ private:
     TPublicIds::TPtr GetPublicIds(const TExprNode::TPtr& root) const {
         TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
         VisitExpr(root, [&](const TExprNode::TPtr& node) {
-            if (TResTransientBase::Match(node.Get())) {
-                return false;
-            } else if (TDqReadWrapBase::Match(node.Get())) {
+            if (TResTransientBase::Match(node.Get()) || TDqReadWrapBase::Match(node.Get())
+                || TCoLeft::Match(node.Get()) || TCoRight::Match(node.Get())) {
                 return false;
             } else if (TDqConnection::Match(node.Get())) {
                 if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
@@ -989,9 +988,8 @@ private:
                 if (node->HasResult()) {
                     return false;
                 }
-            } else if (TDqStage::Match(node.Get())) {
-                const auto& stage = TDqStage(node);
-                if (!(stage.Ref().StartsExecution() || stage.Ref().HasResult())) {
+            } else if (const auto& maybeStage = TMaybeNode<TDqStage>(node.Get())) {
+                if (const auto& stage = maybeStage.Cast(); !(stage.Ref().StartsExecution() || stage.Ref().HasResult())) {
                     if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
                         if (const auto settings = NDq::TDqStageSettings::Parse(stage); settings.LogicalId) {
                             publicIds->Stage2publicId[settings.LogicalId] = *publicId;

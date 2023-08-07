@@ -5,8 +5,6 @@
 #include "kafka_connection.h"
 #include "kafka_events.h"
 #include "kafka_messages.h"
-#include "kafka_produce_actor.h"
-#include "kafka_metadata_actor.h"
 #include "kafka_log_impl.h"
 
 #include <strstream>
@@ -17,6 +15,11 @@ namespace NKafka {
 
 using namespace NActors;
 using namespace NKikimr;
+
+NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 correlationId, const TApiVersionsRequestData* message);
+NActors::IActor* CreateKafkaInitProducerIdActor(const TActorId parent, const ui64 correlationId, const TInitProducerIdRequestData* message);
+NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const ui64 correlationId, const TMetadataRequestData* message);
+NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const TString& clientDC);
 
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;
@@ -34,41 +37,21 @@ void Print(const TString& marker, TBuffer& buffer, ssize_t length) {
     KAFKA_LOG_ERROR("Packet " << marker << ": " << sb);
 }
 
-TApiVersionsResponseData GetApiVersions() {
-    TApiVersionsResponseData response;
-    response.ApiKeys.resize(4);
-
-    response.ApiKeys[0].ApiKey = PRODUCE;
-    response.ApiKeys[0].MinVersion = 3; // From version 3 record batch format is 2. Supported only 2 batch format.
-    response.ApiKeys[0].MaxVersion = TProduceRequestData::MessageMeta::PresentVersions.Max;
-
-    response.ApiKeys[1].ApiKey = API_VERSIONS;
-    response.ApiKeys[1].MinVersion = TApiVersionsRequestData::MessageMeta::PresentVersions.Min;
-    response.ApiKeys[1].MaxVersion = TApiVersionsRequestData::MessageMeta::PresentVersions.Max;
-
-    response.ApiKeys[2].ApiKey = METADATA;
-    response.ApiKeys[2].MinVersion = TMetadataRequestData::MessageMeta::PresentVersions.Min;
-    response.ApiKeys[2].MaxVersion = TMetadataRequestData::MessageMeta::PresentVersions.Max;
-
-    response.ApiKeys[3].ApiKey = INIT_PRODUCER_ID;
-    response.ApiKeys[3].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;
-    response.ApiKeys[3].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
-
-    return response;
-}
-
-static const TApiVersionsResponseData KAFKA_API_VERSIONS = GetApiVersions();
-
 class TKafkaConnection: public TActorBootstrapped<TKafkaConnection>, public TNetworkConfig {
 public:
     using TBase = TActorBootstrapped<TKafkaConnection>;
 
     struct Msg {
+        using TPtr=std::shared_ptr<Msg>;
+
         size_t Size = 0;
         TKafkaInt32 ExpectedSize = 0;
         TBuffer Buffer;
+
         TRequestHeaderData Header;
-        std::unique_ptr<TMessage> Message;
+        std::unique_ptr<TApiMessage> Message;
+
+        TApiMessage::TPtr Response;
     };
 
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
@@ -90,7 +73,10 @@ public:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
     TString ClientDC;
 
-    Msg Request;
+    i32 CorrelationId = 0;
+    std::shared_ptr<Msg> Request;
+    std::unordered_map<ui64, Msg::TPtr> PendingRequests;
+    std::deque<Msg::TPtr> PendingRequestsQueue;
 
     enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGTH_CHECK, MESSAGE_READ, MESSAGE_PROCESS };
     EReadSteps Step;
@@ -101,7 +87,6 @@ public:
 
     TActorId ProduceActorId;
 
-    std::unordered_map<ui64, Msg> PendingRequests;
 
     TKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
                      const NKikimrConfig::TKafkaProxyConfig& config)
@@ -120,7 +105,7 @@ public:
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
         KAFKA_LOG_I("incoming connection opened " << Address);
 
-        ProduceActorId = ctx.RegisterWithSameMailbox(new TKafkaProduceActor(SelfId(), ClientDC));
+        ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(SelfId(), ClientDC));
 
         OnAccept();
     }
@@ -212,79 +197,90 @@ protected:
         }
     }
 
-    void HandleMessage(TRequestHeaderData* header, TApiVersionsRequestData* /*message*/, size_t messageSize) {
-        Reply(header, &KAFKA_API_VERSIONS);
-
-        InflightSize -= messageSize;
+    void HandleMessage(TRequestHeaderData* header, const TApiVersionsRequestData* message) {
+        Register(CreateKafkaApiVersionsActor(SelfId(), header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message, size_t /*messageSize*/) {
-        PendingRequests[header->CorrelationId] = std::move(Request);
+    void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message) {
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TInitProducerIdRequestData* message) {
+        Register(CreateKafkaInitProducerIdActor(SelfId(), header->CorrelationId, message));
+    }
+
+    void HandleMessage(TRequestHeaderData* header, const TMetadataRequestData* message) {
+        Register(CreateKafkaMetadataActor(SelfId(), header->CorrelationId, message));
+    }
+
+    void ProcessRequest() {
+        KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
+                                               << ", Size=" << Request->Size);
+
+        Msg::TPtr r = Request;
+        PendingRequestsQueue.push_back(r);
+        PendingRequests[r->Header.CorrelationId] = r;
+
+        TApiMessage* message = Request->Message.get();
+
+        switch (Request->Header.RequestApiKey) {
+            case PRODUCE:
+                HandleMessage(&Request->Header, dynamic_cast<TProduceRequestData*>(message));
+                return;
+
+            case API_VERSIONS:
+                HandleMessage(&Request->Header, dynamic_cast<TApiVersionsRequestData*>(message));
+                return;
+
+            case INIT_PRODUCER_ID:
+                HandleMessage(&Request->Header, dynamic_cast<TInitProducerIdRequestData*>(message));
+                return;
+
+            case METADATA:
+                HandleMessage(&Request->Header, dynamic_cast<TMetadataRequestData*>(message));
+                return;
+
+            default:
+                KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
+                PassAway();
+        }
     }
 
     void Handle(TEvKafka::TEvResponse::TPtr response) {
         auto r = response->Get();
-        Reply(r->Cookie, r->Response.get());
+        Reply(r->CorrelationId, r->Response);
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TInitProducerIdRequestData* /*message*/, size_t messageSize) {
-        TInitProducerIdResponseData response;
-        response.ProducerEpoch = 1;
-        response.ProducerId = 1;
-        response.ErrorCode = 0;
-        response.ThrottleTimeMs = 0;
-
-        Reply(header, &response);
-
-        InflightSize -= messageSize;
-    }
-
-    void HandleMessage(TRequestHeaderData* header, TMetadataRequestData* message, size_t /*messageSize*/) {
-        PendingRequests[header->CorrelationId] = std::move(Request);
-        Register(new TKafkaMetadataActor(header->CorrelationId, message, SelfId()));
-    }
-
-    void ProcessRequest() {
-        KAFKA_LOG_D("process message: ApiKey=" << Request.Header.RequestApiKey << ", ExpectedSize=" << Request.ExpectedSize
-                                               << ", Size=" << Request.Size);
-        switch (Request.Header.RequestApiKey) {
-            case PRODUCE:
-                HandleMessage(&Request.Header, dynamic_cast<TProduceRequestData*>(Request.Message.get()), Request.ExpectedSize);
-                return;
-
-            case API_VERSIONS:
-                HandleMessage(&Request.Header, dynamic_cast<TApiVersionsRequestData*>(Request.Message.get()), Request.ExpectedSize);
-                return;
-
-            case INIT_PRODUCER_ID:
-                HandleMessage(&Request.Header, dynamic_cast<TInitProducerIdRequestData*>(Request.Message.get()), Request.ExpectedSize);
-                return;
-
-            case METADATA:
-                HandleMessage(&Request.Header, dynamic_cast<TMetadataRequestData*>(Request.Message.get()), Request.ExpectedSize);
-                return;
-
-            default:
-                KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request.Header.RequestApiKey);
-        }
-    }
-
-    void Reply(const ui64 cookie, const TApiMessage* response) {
-        auto it = PendingRequests.find(cookie);
+    void Reply(const ui64 correlationId, TApiMessage::TPtr response) {
+        auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
-            KAFKA_LOG_ERROR("Unexpected cookie " << cookie);
+            KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
             return;
         }
 
-        auto& request = it->second;
-        Reply(&request.Header, response);
+        auto request = it->second;
+        request->Response = response;
+        request->Buffer.Clear();
 
-        InflightSize -= request.ExpectedSize;
-
-        PendingRequests.erase(it);
+        ProcessReplyQueue();
 
         DoRead();
+    }
+
+    void ProcessReplyQueue() {
+        while(!PendingRequestsQueue.empty()) {
+            auto& request = PendingRequestsQueue.front();
+            if (request->Response.get() == nullptr) {
+                break;
+            }
+
+            Reply(&request->Header, request->Response.get());
+
+            InflightSize -= request->ExpectedSize;
+
+            PendingRequests.erase(request->Header.CorrelationId);
+            PendingRequestsQueue.pop_front();
+        }
     }
 
     void Reply(const TRequestHeaderData* header, const TApiMessage* reply) {
@@ -328,69 +324,76 @@ protected:
                 }
                 received = res;
 
-                Request.Size += received;
+                Request->Size += received;
                 Demand.Buffer += received;
                 Demand.Length -= received;
             }
             if (!Demand) {
                 switch (Step) {
                     case SIZE_READ:
-                        Demand = TReadDemand((char*)&(Request.ExpectedSize), sizeof(Request.ExpectedSize));
+                        Request = std::make_unique<Msg>();
+                        Demand = TReadDemand((char*)&(Request->ExpectedSize), sizeof(Request->ExpectedSize));
                         Step = SIZE_PREPARE;
                         break;
 
                     case SIZE_PREPARE:
-                        NormalizeNumber(Request.ExpectedSize);
-                        if ((ui64)Request.ExpectedSize > Config.GetMaxMessageSize()) {
-                            KAFKA_LOG_ERROR("message is big. Size: " << Request.ExpectedSize);
+                        NormalizeNumber(Request->ExpectedSize);
+                        if ((ui64)Request->ExpectedSize > Config.GetMaxMessageSize()) {
+                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize);
                             return PassAway();
                         }
                         Step = INFLIGTH_CHECK;
 
                     case INFLIGTH_CHECK:
-                        if (InflightSize + Request.ExpectedSize > Config.GetMaxInflightSize()) {
+                        if (InflightSize + Request->ExpectedSize > Config.GetMaxInflightSize()) {
                             return;
                         }
-                        InflightSize += Request.ExpectedSize;
+                        InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
 
                     case MESSAGE_READ:
-                        KAFKA_LOG_T("start read new message. ExpectedSize=" << Request.ExpectedSize);
+                        KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);
 
-                        Request.Buffer.Resize(Request.ExpectedSize);
-                        Demand = TReadDemand(Request.Buffer.Data(), Request.ExpectedSize);
+                        Request->Buffer.Resize(Request->ExpectedSize);
+                        Demand = TReadDemand(Request->Buffer.Data(), Request->ExpectedSize);
 
                         Step = MESSAGE_PROCESS;
                         break;
 
                     case MESSAGE_PROCESS:
-                        TKafkaInt16 apiKey = *(TKafkaInt16*)Request.Buffer.Data();
-                        TKafkaVersion apiVersion = *(TKafkaVersion*)(Request.Buffer.Data() + sizeof(TKafkaInt16));
+                        TKafkaInt16 apiKey = *(TKafkaInt16*)Request->Buffer.Data();
+                        TKafkaVersion apiVersion = *(TKafkaVersion*)(Request->Buffer.Data() + sizeof(TKafkaInt16));
 
                         NormalizeNumber(apiKey);
                         NormalizeNumber(apiVersion);
 
-                        KAFKA_LOG_D("received message. ApiKey=" << Request.Header.RequestApiKey
-                                                                << ", Version=" << Request.Header.RequestApiVersion);
+                        KAFKA_LOG_D("received message. ApiKey=" << apiKey << ", Version=" << apiVersion);
 
-                        // Print("received", Request.Buffer, Request.ExpectedSize);
+                        // Print("received", Request->Buffer, Request->ExpectedSize);
 
-                        TKafkaReadable readable(Request.Buffer);
+                        TKafkaReadable readable(Request->Buffer);
 
-                        Request.Message = CreateRequest(apiKey);
+                        Request->Message = CreateRequest(apiKey);
                         try {
-                            Request.Header.Read(readable, RequestHeaderVersion(apiKey, apiVersion));
-                            Request.Message->Read(readable, apiVersion);
+                            Request->Header.Read(readable, RequestHeaderVersion(apiKey, apiVersion));
+                            if (Request->Header.CorrelationId != CorrelationId) {
+                                KAFKA_LOG_ERROR("Unexpected correlationId. Expected=" << CorrelationId << ", Received=" << Request->Header.CorrelationId);
+                                return PassAway();
+                            }
+                            Request->Message->Read(readable, apiVersion);
+
+                            ++CorrelationId;
                         } catch(const yexception& e) {
-                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request.Header.RequestApiKey
-                                                                << ", Version=" << Request.Header.RequestApiVersion 
+                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->Header.RequestApiKey
+                                                                << ", Version=" << Request->Header.RequestApiVersion 
                                                                 << ", Error=" <<  e.what());
-                            return PassAway();                     
+                            return PassAway();
                         }
+
+                        Step = SIZE_READ;
 
                         ProcessRequest();
 
-                        Step = SIZE_READ;
                         break;
                 }
             }

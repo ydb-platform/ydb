@@ -1,4 +1,4 @@
-#include "kafka_events.h"
+#include "../kafka_events.h"
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
@@ -6,9 +6,9 @@ namespace NKafka {
 
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
-    TKafkaMetadataActor(ui64 cookie, TMetadataRequestData* message, const TActorId& parent)
-        : Cookie(cookie)
-        , Parent(parent)
+    TKafkaMetadataActor(const TActorId& parent, const ui64 correlationId, const TMetadataRequestData* message)
+        : Parent(parent)
+        , CorrelationId(correlationId)
         , Message(message)
         , Response(new TMetadataResponseData())
     {}
@@ -29,9 +29,10 @@ private:
             HFunc(TEvLocationResponse, HandleResponse);
         }
     }
-    ui64 Cookie;
-    TActorId Parent;
-    TMetadataRequestData* Message;
+    const TActorId Parent;
+    const ui64 CorrelationId;
+    const TMetadataRequestData* Message;
+
     ui64 PendingResponses = 0;
 
     TMetadataResponseData::TPtr Response;

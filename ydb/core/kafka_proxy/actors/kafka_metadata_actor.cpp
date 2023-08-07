@@ -4,6 +4,10 @@
 namespace NKafka {
 using namespace NKikimr::NGRpcProxy::V1;
 
+NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const ui64 correlationId, const TMetadataRequestData* message) {
+    return new TKafkaMetadataActor(parent, correlationId, message);
+}
+
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
     THashMap<TString, TActorId> partitionActors;
@@ -112,7 +116,7 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     if (PendingResponses == 0) {
-        Send(Parent, new TEvKafka::TEvResponse(Cookie, Response));
+        Send(Parent, new TEvKafka::TEvResponse(CorrelationId, Response));
         Die(ctx);
     }
 }

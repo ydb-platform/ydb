@@ -12,6 +12,10 @@ static constexpr TDuration TOPIC_NOT_FOUND_EXPIRATION_INTERVAL = TDuration::Seco
 static constexpr TDuration REQUEST_EXPIRATION_INTERVAL = TDuration::Seconds(30);
 static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
+NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const TString& clientDC) {
+    return new TKafkaProduceActor(parent, clientDC);;
+}
+
 TString TKafkaProduceActor::LogPrefix() {
     TStringBuilder sb;
     sb << "TKafkaProduceActor " << SelfId() << " State: ";
@@ -398,9 +402,9 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         }
 
         auto* r = pendingRequest.Request->Get()->Request;
-        auto cookie = pendingRequest.Request->Get()->Cookie;
+        auto correlationId = pendingRequest.Request->Get()->CorrelationId;
 
-        KAFKA_LOG_D("Send result for cookie " << cookie << ". Expired=" << expired);
+        KAFKA_LOG_D("Send result for correlationId " << correlationId << ". Expired=" << expired);
 
         const auto topicsCount = r->TopicData.size();
         auto response = std::make_shared<TProduceResponseData>();
@@ -445,7 +449,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
             }
         }
 
-        Send(Client, new TEvKafka::TEvResponse(cookie, response));
+        Send(Client, new TEvKafka::TEvResponse(correlationId, response));
 
         if (!pendingRequest.WaitAcceptingCookies.empty()) {
             if (!expired) {

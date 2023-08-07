@@ -25,22 +25,22 @@ struct TEvKafka {
 
 
     struct TEvProduceRequest : public TEventLocal<TEvProduceRequest, EvProduceRequest> {
-        TEvProduceRequest(const ui64 cookie, const TProduceRequestData* request)
-        : Cookie(cookie)
+        TEvProduceRequest(const ui64 correlationId, const TProduceRequestData* request)
+        : CorrelationId(correlationId)
         , Request(request)
         {}
 
-        ui64 Cookie;
+        ui64 CorrelationId;
         const TProduceRequestData* Request;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
-        TEvResponse(const ui64 cookie, const TApiMessage::TPtr response)
-            : Cookie(cookie)
+        TEvResponse(const ui64 correlationId, const TApiMessage::TPtr response)
+            : CorrelationId(correlationId)
             , Response(std::move(response)) {
         }
 
-        ui64 Cookie;
+        const ui64 CorrelationId;
         const TApiMessage::TPtr Response;
     };
 

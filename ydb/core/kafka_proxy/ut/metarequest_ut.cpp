@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
-#include <ydb/core/kafka_proxy/kafka_metadata_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
 
 namespace NKafka::NTests {
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
     auto GetEvent(NPersQueue::TTestServer& server, const TActorId& edgeActor, const TVector<TString>& topics) {
         auto* runtime = server.CleverServer->GetRuntime();
         auto request = GetMetadataRequest(topics);
-        auto actorId = runtime->Register(new TKafkaMetadataActor(1, request.Get(), edgeActor));
+        auto actorId = runtime->Register(new TKafkaMetadataActor(edgeActor, 1, request.Get()));
         runtime->EnableScheduleForActor(actorId);
         runtime->DispatchEvents();
         Cerr << "Wait for response for topics: '";

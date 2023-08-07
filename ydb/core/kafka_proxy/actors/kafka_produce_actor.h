@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include "kafka_events.h"
+#include "../kafka_events.h"
 
 namespace NKafka {
 

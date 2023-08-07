@@ -1,6 +1,10 @@
 LIBRARY()
 
 SRCS(
+    actors/kafka_api_versions_actor.cpp
+    actors/kafka_init_producer_id_actor.cpp
+    actors/kafka_metadata_actor.cpp
+    actors/kafka_produce_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_listener.h
@@ -11,9 +15,6 @@ SRCS(
     kafka_messages.h
     kafka_messages_int.cpp
     kafka_messages_int.h
-    kafka_produce_actor.cpp
-    kafka_metadata_actor.cpp
-    kafka_produce_actor.h
     kafka_proxy.h
     kafka_records.cpp
 )

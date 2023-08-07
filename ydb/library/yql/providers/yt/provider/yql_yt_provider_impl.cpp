@@ -18,12 +18,18 @@ void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& ch
             children.push_back(node);
             return false;
         }
-        if (auto maybeOutput = TMaybeNode<TYtOutput>(node)) {
-            children.push_back(GetOutputOp(maybeOutput.Cast()).Ptr());
+        if (const auto maybeOutput = TMaybeNode<TYtOutput>(node)) {
+            const auto& output = maybeOutput.Cast();
+            if (const auto& maybeTryFirst = output.Operation().Maybe<TYtTryFirst>()) {
+                const auto& tryFirst = maybeTryFirst.Cast();
+                children.emplace_back(tryFirst.Second().Ptr());
+                children.emplace_back(tryFirst.First().Ptr());
+            } else
+                children.emplace_back(GetOutputOp(output).Ptr());
             return false;
         }
         if (node->IsCallable("DqCnResult")) { // For TYtDqProcessWrite.
-            children.push_back(node->Child(0));
+            children.emplace_back(node->HeadPtr());
             return false;
         }
         return true;

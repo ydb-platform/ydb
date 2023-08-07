@@ -630,11 +630,13 @@ private:
             << ", status: " << compileResult->Status
             << ", compileActor: " << ev->Sender);
 
+        bool keepInCache = compileRequest.KeepInCache && compileResult->AllowCache;
+
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (QueryCache.FindByUid(compileResult->Uid, false)) {
                     QueryCache.Replace(compileResult);
-                } else if (compileRequest.KeepInCache) {
+                } else if (keepInCache) {
                     if (QueryCache.Insert(compileResult)) {
                         Counters->CompileQueryCacheEvicted->Inc();
                     }

@@ -45,6 +45,7 @@ struct TKqpCompileResult {
     TString Uid;
 
     ETableReadType MaxReadType;
+    bool AllowCache = true;
 
     std::shared_ptr<const TPreparedQueryHolder> PreparedQuery;
 };

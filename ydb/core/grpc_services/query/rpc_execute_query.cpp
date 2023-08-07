@@ -246,6 +246,10 @@ private:
             ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
             : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY;
 
+
+        auto cachePolicy = google::protobuf::Arena::CreateMessage<Ydb::Table::QueryCachePolicy>(Request_->GetArena());
+        cachePolicy->set_keep_in_cache(true);
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             queryAction,
             queryType,
@@ -257,7 +261,7 @@ private:
             txControl,
             &req->parameters(),
             GetCollectStatsMode(req->stats_mode()),
-            nullptr, // queryCachePolicy
+            cachePolicy,
             nullptr, // operationParams
             false, // keepSession
             false, // useCancelAfter

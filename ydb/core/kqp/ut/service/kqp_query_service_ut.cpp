@@ -392,6 +392,54 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(QueryDdlCache) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = TExecuteQuerySettings()
+            .StatsMode(EStatsMode::Basic);
+
+        auto result = db.ExecuteQuery(R"(
+            CREATE TABLE TestDdl (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+        {
+            // TODO: Switch to query service.
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+                DROP TABLE TestDdl;
+            )").GetValueSync().IsSuccess());
+        }
+
+        result = db.ExecuteQuery(R"(
+            CREATE TABLE TestDdl (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", TTxControl::NoTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+    }
+
     Y_UNIT_TEST(MaterializeTxResults) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

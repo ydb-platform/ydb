@@ -250,8 +250,8 @@ class ProcessContext:
         self.frameworks = frameworks
         self.file_paths = file_paths
         self.is_dart = unit.enabled("MAPKIT_DART_IDL")
-        self.is_ios = unit.enabled("OS_IOS") and not self.is_dart
-        self.is_android = unit.enabled("OS_ANDROID") and not self.is_dart
+        self.is_ios = unit.enabled("OS_IOS")
+        self.is_android = unit.enabled("OS_ANDROID")
         self.output_name_generator = None
         self.add_generated_output_includes = unit.enabled("H_CPP_IDL")
 
@@ -345,7 +345,6 @@ class DefaultRule(BaseRule):
             result.add(OutputType.DART_CPP_SOURCE)
             result.add(OutputType.DART_CPP_HEADER)
             result.add(OutputType.DART_SOURCE_PRIVATE)
-            return result
 
         if self.context.is_ios:
             result.add(OutputType.IOS_HEADER)
@@ -357,8 +356,6 @@ class DefaultRule(BaseRule):
         result = set()
 
         if self.context.is_dart:
-            result.add(self.context.runtime_include('bindings/traits.h'))
-            result.add(self.context.runtime_include('assert.h'))
             result.add(self.context.runtime_include('bindings/flutter/base_types.h'))
             result.add(self.context.runtime_include('bindings/flutter/exception.h'))
             result.add(self.context.runtime_include('bindings/flutter/export.h'))

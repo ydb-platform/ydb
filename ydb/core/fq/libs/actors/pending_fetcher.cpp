@@ -393,7 +393,8 @@ private:
             resources,
             task.execution_id(),
             task.operation_id(),
-            computeConnection
+            computeConnection,
+            NProtoInterop::CastFromProto(task.result_ttl())
             );
 
         auto runActorId =

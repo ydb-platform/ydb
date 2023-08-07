@@ -53,7 +53,8 @@ TRunActorParams::TRunActorParams(
     const Fq::Private::TaskResources& resources,
     const TString& executionId,
     const TString& operationId,
-    const NFq::NConfig::TYdbStorageConfig& computeConnection
+    const NFq::NConfig::TYdbStorageConfig& computeConnection,
+    TDuration resultTtl
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -104,6 +105,7 @@ TRunActorParams::TRunActorParams(
     , ExecutionId(executionId)
     , OperationId(operationId, true)
     , ComputeConnection(computeConnection)
+    , ResultTtl(resultTtl)
     {
     }
 
@@ -128,6 +130,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " ExecutionId: " << params.ExecutionId
                 << " OperationId: " << (params.OperationId.GetKind() != Ydb::TOperationId::UNUSED ? ProtoToString(params.OperationId) : "<empty>")
                 << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
+                << " ResultTtl: " << params.ResultTtl
                 << " }";
 }
 

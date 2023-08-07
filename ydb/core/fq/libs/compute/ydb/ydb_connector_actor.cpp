@@ -43,8 +43,14 @@ public:
     )
 
     void Handle(const TEvYdbCompute::TEvExecuteScriptRequest::TPtr& ev) {
+        const auto& event = *ev->Get();
+        NYdb::NQuery::TExecuteScriptSettings settings;
+        settings.ResultsTtl(event.ResultTtl);
+        settings.OperationTimeout(event.OperationTimeout);
+        settings.Syntax(event.Syntax);
+        settings.ExecMode(event.ExecMode);
         QueryClient
-            ->ExecuteScript(ev->Get()->Sql)
+            ->ExecuteScript(event.Sql, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();

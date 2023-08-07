@@ -199,6 +199,8 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
                     throw TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
                 }
 
+                *task.Internal.mutable_result_ttl() = NProtoInterop::CastToProto(resultSetsTtl);
+
                 if (disableCurrentIam) {
                     task.Internal.clear_token();
                 }
@@ -500,6 +502,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             newTask->set_execution_id(task.Internal.execution_id());
             newTask->set_operation_id(task.Internal.operation_id());
             *newTask->mutable_compute_connection() = task.Internal.compute_connection();
+            *newTask->mutable_result_ttl() = task.Internal.result_ttl();
         }
 
         return result;

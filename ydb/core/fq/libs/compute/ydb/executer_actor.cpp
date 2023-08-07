@@ -114,7 +114,39 @@ public:
     }
 
     void SendExecuteScript() {
-        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId));
+        Register(new TRetryActor<TEvYdbCompute::TEvExecuteScriptRequest, TEvYdbCompute::TEvExecuteScriptResponse, TString, TString, TDuration, TDuration, Ydb::Query::Syntax, Ydb::Query::ExecMode>(Counters.GetCounters(ERequestType::RT_EXECUTE_SCRIPT), SelfId(), Connector, Params.Sql, Params.JobId, Params.ResultTtl, Params.ExecutionTtl, GetSyntax(), GetExecuteMode()));
+    }
+
+    Ydb::Query::Syntax GetSyntax() const {
+        switch (Params.QuerySyntax) {
+            case FederatedQuery::QueryContent::PG:
+                return Ydb::Query::SYNTAX_PG;
+            case FederatedQuery::QueryContent::YQL_V1:
+                return Ydb::Query::SYNTAX_YQL_V1;
+            case FederatedQuery::QueryContent::QUERY_SYNTAX_UNSPECIFIED:
+            case FederatedQuery::QueryContent_QuerySyntax_QueryContent_QuerySyntax_INT_MAX_SENTINEL_DO_NOT_USE_:
+            case FederatedQuery::QueryContent_QuerySyntax_QueryContent_QuerySyntax_INT_MIN_SENTINEL_DO_NOT_USE_:
+                return Ydb::Query::SYNTAX_UNSPECIFIED;
+        }
+    }
+
+    Ydb::Query::ExecMode GetExecuteMode() const {
+        switch (Params.ExecuteMode) {
+            case FederatedQuery::RUN:
+                return Ydb::Query::ExecMode::EXEC_MODE_EXECUTE;
+            case FederatedQuery::PARSE:
+                return Ydb::Query::ExecMode::EXEC_MODE_PARSE;
+            case FederatedQuery::VALIDATE:
+                return Ydb::Query::ExecMode::EXEC_MODE_VALIDATE;
+            case FederatedQuery::EXPLAIN:
+                return Ydb::Query::ExecMode::EXEC_MODE_EXPLAIN;
+            case FederatedQuery::EXECUTE_MODE_UNSPECIFIED:
+            case FederatedQuery::COMPILE:
+            case FederatedQuery::SAVE:
+            case FederatedQuery::ExecuteMode_INT_MAX_SENTINEL_DO_NOT_USE_:
+            case FederatedQuery::ExecuteMode_INT_MIN_SENTINEL_DO_NOT_USE_:
+                return Ydb::Query::ExecMode::EXEC_MODE_UNSPECIFIED;
+        }
     }
 
     void SendPingTask() {

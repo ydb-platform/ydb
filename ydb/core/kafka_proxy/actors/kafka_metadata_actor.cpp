@@ -52,6 +52,7 @@ void TKafkaMetadataActor::AddTopicError(
 
 void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response) {
     topic.ErrorCode = NONE_ERROR;
+    topic.TopicId = response->BalancerTabletId;
     topic.Partitions.reserve(response->Partitions.size());
     for (const auto& part : response->Partitions) {
         TMetadataResponseData::TMetadataResponseTopic::PartitionsMeta::ItemType responsePartition;

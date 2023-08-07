@@ -1415,7 +1415,9 @@ void TPartitionsLocationActor::HandleCacheNavigateResponse(
     if (!TBase::HandleCacheNavigateResponseBase(ev)) {
         return;
     }
-    ProcessTablets(PQGroupInfo->Description, this->ActorContext());
+    if (ProcessTablets(PQGroupInfo->Description, this->ActorContext())) {
+        Response->BalancerTabletId = BalancerTabletId;
+    }
 }
 
 bool TPartitionsLocationActor::ApplyResponse(

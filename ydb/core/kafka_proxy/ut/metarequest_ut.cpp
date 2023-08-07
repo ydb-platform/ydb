@@ -48,6 +48,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(response->Topics[0].Partitions.size(), 5);
         UNIT_ASSERT_VALUES_EQUAL(response->Topics[0].Partitions[0].ReplicaNodes.size(), 1);
+        UNIT_ASSERT(response->Topics[0].TopicId > 0);
 
         event = GetEvent(server, edgeId, {topicPath, topicPath2});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());

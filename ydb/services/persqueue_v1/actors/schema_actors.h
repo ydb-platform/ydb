@@ -172,10 +172,10 @@ private:
     bool PendingLocation = false;
     bool GotLocation = false;
 
-    ui64 BalancerTabletId = 0;
     TActorId* BalancerPipe = nullptr;
 
 protected:
+    ui64 BalancerTabletId = 0;
     ui32 TotalPartitions = 0;
     TDescribeTopicActorSettings Settings;
 };

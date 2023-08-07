@@ -1,6 +1,7 @@
 RECURSE(
     log_backend
     core
+    cppcoro
     dnsresolver
     examples
     interconnect

@@ -255,13 +255,6 @@ runs:
 #        --artifacts-dir $ARTIFACTS_DIR/pytest/ \
 #        --artifacts-url $S3_URL_PREFIX/pytest/ \
 
-#      echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
-#        -v --junit-xml=$PYTESTREPDIR/{}.xml {}" | \
-#        sed -e 's/\x1b\[[0-9;]*m//g' | \
-#        tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
-#        grep -E '(FAILED|ERROR)\s*\[.*\]' | \
-#        tee $WORKDIR/pytest-short.log
-
   - name: postprocess functional test reports
     if: always() && inputs.run_functional_tests == 'true'
     shell: bash
@@ -270,6 +263,7 @@ runs:
       
       .github/scripts/tests/junit-postprocess.py \
         --filter-file ${{ steps.init.outputs.functestfilterfile }} \
+        --no-attach-filename \
         $PYTESTREPDIR/
 
       echo "::endgroup::"

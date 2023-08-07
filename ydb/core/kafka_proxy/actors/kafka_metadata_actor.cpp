@@ -70,47 +70,50 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
     }
 }
 
+EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
+    switch (status) {
+        case Ydb::StatusIds::BAD_REQUEST:
+            return EKafkaErrors::INVALID_REQUEST;
+        case Ydb::StatusIds::SCHEME_ERROR:
+            return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        default:
+            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+    }
+}
+
 void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TActorContext& ctx) {
     --PendingResponses;
-    
+
+    auto* r = ev->Get();
     auto actorIter = TopicIndexes.find(ev->Sender);
 
     Y_VERIFY_DEBUG(!actorIter.IsEnd()); 
     Y_VERIFY_DEBUG(!actorIter->second.empty());
 
     if (actorIter.IsEnd()) {
-        LOG_CRIT_S(ctx, NKikimrServices::KAFKA_PROXY,
-                   "Metadata actor: got unexpected location response, ignoring. Expect malformed/incompled reply");
+        KAFKA_LOG_CRIT("Metadata actor: got unexpected location response, ignoring. Expect malformed/incompled reply");
         return RespondIfRequired(ctx);
-
-
     }
+
     if (actorIter->second.empty()) {
-        LOG_CRIT_S(ctx, NKikimrServices::KAFKA_PROXY,
-                   "Metadata actor: corrupted state (empty actorId in mapping). Ignored location response, expect incomplete reply");
+        KAFKA_LOG_CRIT("Metadata actor: corrupted state (empty actorId in mapping). Ignored location response, expect incomplete reply");
 
         return RespondIfRequired(ctx);
     }
     
     //ToDo: Log and proceed on bad iter
     for (auto index : actorIter->second) {
-        switch (ev->Get()->Status) {
-            case Ydb::StatusIds::BAD_REQUEST:
-                AddTopicError(Response->Topics[index], EKafkaErrors::INVALID_REQUEST);
-                break;
-            case Ydb::StatusIds::SCHEME_ERROR:
-                AddTopicError(Response->Topics[index], EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
-                break;
-            case Ydb::StatusIds::SUCCESS:
-                AddTopicResponse(Response->Topics[index], ev->Get());
-                break;
-            case Ydb::StatusIds::INTERNAL_ERROR:
-            default:
-                AddTopicError(Response->Topics[index], EKafkaErrors::UNKNOWN_SERVER_ERROR);
-                break;
-            
+        auto& topic = Response->Topics[index];
+        if (r->Status == Ydb::StatusIds::SUCCESS) {
+            AddTopicResponse(topic, r);
+        } else {
+            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code=" << r->Status << ", Issues=" << r->Issues.ToOneLineString());
+            AddTopicError(topic, ConvertErrorCode(r->Status));
         }
     }
+
     RespondIfRequired(ActorContext());
 }
 
@@ -120,4 +123,9 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
         Die(ctx);
     }
 }
+
+TString TKafkaMetadataActor::LogPrefix() const {
+    return TStringBuilder() << "TKafkaMetadataActor " << SelfId() << " ";
+}
+
 } // namespace NKafka

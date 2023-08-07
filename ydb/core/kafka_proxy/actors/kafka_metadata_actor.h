@@ -29,6 +29,10 @@ private:
             HFunc(TEvLocationResponse, HandleResponse);
         }
     }
+
+    TString LogPrefix() const;
+
+private:
     const TActorId Parent;
     const ui64 CorrelationId;
     const TMetadataRequestData* Message;

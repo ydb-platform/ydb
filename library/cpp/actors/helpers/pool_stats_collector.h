@@ -57,6 +57,7 @@ private:
             ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
             ScheduledEventsByActivityBuckets.resize(GetActivityTypeCount());
             StuckActorsByActivityBuckets.resize(GetActivityTypeCount());
+            UsageByActivityBuckets.resize(GetActivityTypeCount());
         }
 
         void Set(const TExecutorThreadStats& stats) {
@@ -81,6 +82,10 @@ private:
                 *ActorsAliveByActivityBuckets[i] = actors;
                 *ScheduledEventsByActivityBuckets[i] = scheduled;
                 *StuckActorsByActivityBuckets[i] = stuck;
+
+                for (ui32 j = 0; j < 10; ++j) {
+                    *UsageByActivityBuckets[i][j] = stats.UsageByActivity[i][j];
+                }
             }
         }
 
@@ -100,6 +105,10 @@ private:
                 Group->GetSubgroup("sensor", "ScheduledEventsByActivity")->GetNamedCounter("activity", bucketName, true);
             StuckActorsByActivityBuckets[activityType] =
                 Group->GetSubgroup("sensor", "StuckActorsByActivity")->GetNamedCounter("activity", bucketName, false);
+
+            for (ui32 i = 0; i < 10; ++i) {
+                UsageByActivityBuckets[activityType][i] = Group->GetSubgroup("sensor", "UsageByActivity")->GetSubgroup("bin", ToString(i))->GetNamedCounter("activity", bucketName, false);
+            }
         }
 
     private:
@@ -110,6 +119,7 @@ private:
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ScheduledEventsByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> StuckActorsByActivityBuckets;
+        TVector<std::array<NMonitoring::TDynamicCounters::TCounterPtr, 10>> UsageByActivityBuckets;
     };
 
     struct TExecutorPoolCounters {

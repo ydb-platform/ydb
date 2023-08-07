@@ -93,6 +93,7 @@ namespace NActors {
                         actorPtr = pool->Actors.back();
                         actorPtr->StuckIndex = i;
                         pool->Actors.pop_back();
+                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
                     }
                 }
             }
@@ -171,6 +172,7 @@ namespace NActors {
         bool preempted = false;
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
+                mailbox->ProcessEvents(mailbox);
                 NHPTimer::STime hpnow;
                 recipient = evExt->GetRecipientRewrite();
                 TActorContext ctx(*mailbox, *this, hpprev, recipient);
@@ -178,7 +180,6 @@ namespace NActors {
                 // move for destruct before ctx;
                 auto ev = std::move(evExt);
                 if (actor = mailbox->FindActor(recipient.LocalId())) {
-
                     // Since actor is not null there should be no exceptions
                     actorType = &typeid(*actor);
 
@@ -212,11 +213,14 @@ namespace NActors {
                     }
 
                     actor->Receive(ev);
+                    mailbox->ProcessEvents(mailbox);
+                    actor->OnDequeueEvent();
 
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
                     if (dyingActorsCnt) {
                         DropUnregistered();
+                        mailbox->ProcessEvents(mailbox);
                         actor = nullptr;
                     }
 

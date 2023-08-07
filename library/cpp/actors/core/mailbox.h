@@ -25,7 +25,30 @@ namespace NActors {
     // 17 bits: line
     // 12 bits: index of mailbox inside of line
 
-    struct TMailboxHeader {
+    struct TMailboxHeader;
+
+    template<bool>
+    struct TMailboxUsageImpl {
+        void Push(ui64 /*localId*/) {}
+        void ProcessEvents(TMailboxHeader* /*mailbox*/) {}
+    };
+
+    template<>
+    struct TMailboxUsageImpl<true> {
+        struct TPendingEvent {
+            ui64 LocalId;
+            ui64 Timestamp;
+        };
+        NThreading::TReadAsFilledQueue<TPendingEvent> PendingEventQueue;
+
+        ~TMailboxUsageImpl();
+        void Push(ui64 localId);
+        void ProcessEvents(TMailboxHeader *mailbox);
+    };
+
+    struct TMailboxHeader
+        : TMailboxUsageImpl<ActorLibCollectUsageStats>
+    {
         struct TMailboxActorPack {
             enum EType {
                 Simple = 0,
@@ -351,7 +374,7 @@ namespace NActors {
             }
 
             static TSimpleMailbox* Get(ui32 hint, void* line) {
-                return (TSimpleMailbox*)((ui8*)line + hint * 64); //
+                return (TSimpleMailbox*)((ui8*)line + 64 + (hint - 1) * AlignedSize()); //
             }
             static const TMailboxType::EType MailboxType = TMailboxType::Simple;
             constexpr static ui32 AlignedSize() {
@@ -361,8 +384,6 @@ namespace NActors {
             std::pair<ui32, ui32> CountSimpleMailboxEvents(ui64 localActorId, ui32 maxTraverse);
             bool CleanupEvents();
         };
-
-        static_assert(sizeof(TSimpleMailbox) == 64, "expect sizeof(TSimpleMailbox) == 64");
 
         struct TRevolvingMailbox: public TMailboxHeader {
             // 4 bytes - state
@@ -387,7 +408,7 @@ namespace NActors {
             }
 
             static TRevolvingMailbox* Get(ui32 hint, void* line) {
-                return (TRevolvingMailbox*)((ui8*)line + 64 + (hint - 1) * 128);
+                return (TRevolvingMailbox*)((ui8*)line + 64 + (hint - 1) * AlignedSize());
             }
 
             constexpr static ui64 MaxMailboxesInLine() {
@@ -401,8 +422,6 @@ namespace NActors {
             std::pair<ui32, ui32> CountRevolvingMailboxEvents(ui64 localActorId, ui32 maxTraverse);
             bool CleanupEvents();
         };
-
-        static_assert(sizeof(TRevolvingMailbox) == 128, "expect sizeof(TRevolvingMailbox) == 128");
 
         struct THTSwapMailbox: public TMailboxHeader {
             using TQueueType = NThreading::THTSwapQueue<IEventHandle*>;
@@ -430,7 +449,7 @@ namespace NActors {
             }
 
             static THTSwapMailbox* Get(ui32 hint, void* line) {
-                return (THTSwapMailbox*)((ui8*)line + 64 + (hint - 1) * 64);
+                return (THTSwapMailbox*)((ui8*)line + 64 + (hint - 1) * AlignedSize());
             }
 
             constexpr static ui64 MaxMailboxesInLine() {
@@ -450,9 +469,6 @@ namespace NActors {
                 return done;
             }
         };
-
-        static_assert(sizeof(THTSwapMailbox) == 64,
-                      "expect sizeof(THTSwapMailbox) == 64");
 
         struct TReadAsFilledMailbox: public TMailboxHeader {
             using TQueueType = NThreading::TReadAsFilledQueue<IEventHandle>;
@@ -480,7 +496,7 @@ namespace NActors {
             }
 
             static TReadAsFilledMailbox* Get(ui32 hint, void* line) {
-                return (TReadAsFilledMailbox*)((ui8*)line + 64 + (hint - 1) * 192);
+                return (TReadAsFilledMailbox*)((ui8*)line + 64 + (hint - 1) * AlignedSize());
             }
 
             constexpr static ui64 MaxMailboxesInLine() {
@@ -501,9 +517,6 @@ namespace NActors {
                 return done;
             }
         };
-
-        static_assert(sizeof(TReadAsFilledMailbox) == 192,
-                      "expect sizeof(TReadAsFilledMailbox) == 192");
 
         struct TTinyReadAsFilledMailbox: public TMailboxHeader {
             using TQueueType = NThreading::TReadAsFilledQueue<
@@ -533,7 +546,7 @@ namespace NActors {
             }
 
             static TTinyReadAsFilledMailbox* Get(ui32 hint, void* line) {
-                return (TTinyReadAsFilledMailbox*)((ui8*)line + 64 + (hint - 1) * 192);
+                return (TTinyReadAsFilledMailbox*)((ui8*)line + 64 + (hint - 1) * AlignedSize());
             }
 
             constexpr static ui64 MaxMailboxesInLine() {
@@ -554,8 +567,5 @@ namespace NActors {
                 return done;
             }
         };
-
-        static_assert(sizeof(TTinyReadAsFilledMailbox) == 192,
-                      "expect sizeof(TTinyReadAsFilledMailbox) == 192");
     };
 }

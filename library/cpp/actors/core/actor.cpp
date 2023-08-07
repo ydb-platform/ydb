@@ -8,6 +8,62 @@ namespace NActors {
     Y_POD_THREAD(TThreadContext*) TlsThreadContext(nullptr);
     Y_POD_THREAD(TActivationContext*) TlsActivationContext(nullptr);
 
+    template<i64 Increment>
+    static void UpdateQueueSizeAndTimestamp(TActorUsageImpl<true>& impl, ui64 time) {
+        ui64 usedTimeIncrement = 0;
+        using T = TActorUsageImpl<true>;
+
+        for (;;) {
+            uint64_t value = impl.QueueSizeAndTimestamp.load();
+            ui64 count = value >> T::TimestampBits;
+
+            count += Increment;
+            Y_VERIFY((count & ~T::CountMask) == 0);
+
+            ui64 timestamp = value;
+            if (Increment == 1 && count == 1) {
+                timestamp = time;
+            } else if (Increment == -1 && count == 0) {
+                usedTimeIncrement = (static_cast<ui64>(time) - timestamp) & T::TimestampMask;
+                timestamp = 0; // reset timestamp to some zero value
+            }
+
+            const ui64 updated = (timestamp & T::TimestampMask) | (count << T::TimestampBits);
+            if (impl.QueueSizeAndTimestamp.compare_exchange_weak(value, updated)) {
+                break;
+            }
+        }
+
+        if (usedTimeIncrement && impl.LastUsageTimestamp <= time) {
+            impl.UsedTime += usedTimeIncrement;
+        }
+    }
+
+    void TActorUsageImpl<true>::OnEnqueueEvent(ui64 time) {
+        UpdateQueueSizeAndTimestamp<+1>(*this, time);
+    }
+
+    void TActorUsageImpl<true>::OnDequeueEvent() {
+        UpdateQueueSizeAndTimestamp<-1>(*this, GetCycleCountFast());
+    }
+
+    double TActorUsageImpl<true>::GetUsage(ui64 time) {
+        ui64 used = UsedTime.exchange(0);
+        if (const ui64 value = QueueSizeAndTimestamp.load(); value >> TimestampBits) {
+            used += (static_cast<ui64>(time) - value) & TimestampMask;
+        }
+
+        Y_VERIFY(LastUsageTimestamp <= time);
+        ui64 passed = time - LastUsageTimestamp;
+        LastUsageTimestamp = time;
+
+        if (!passed) {
+            return 0;
+        }
+
+        return (double)Min(passed, used) / passed;
+    }
+
     void IActor::Describe(IOutputStream &out) const noexcept {
         SelfActorId.Out(out);
     }

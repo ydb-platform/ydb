@@ -22,6 +22,7 @@ namespace NActors {
         // Stuck actor monitoring
         TMutex StuckObserverMutex;
         std::vector<IActor*> Actors;
+        mutable std::vector<std::tuple<ui32, double>> DeadActorsUsage;
         friend class TExecutorThread;
         void RecalculateStuckActors(TExecutorThreadStats& stats) const;
 #endif

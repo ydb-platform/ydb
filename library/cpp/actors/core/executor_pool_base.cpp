@@ -11,6 +11,7 @@ namespace NActors {
 
     void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) {
         actor->SelfActorId = self;
+        actor->DoActorInit();
         actor->Registered(sys, owner);
     }
 
@@ -32,21 +33,33 @@ namespace NActors {
 
         const TMonotonic now = ActorSystem->Monotonic();
 
-        std::vector<ui32> stuckActors;
-        stuckActors.reserve(Actors.size());
-
-        with_lock (StuckObserverMutex) {
-            for (IActor *actor : Actors) {
-                const TDuration delta = now - actor->LastReceiveTimestamp;
-                if (delta > TDuration::Seconds(30)) {
-                    stuckActors.push_back(actor->GetActivityType());
-                }
-            }
+        for (auto& u : stats.UsageByActivity) {
+            u.fill(0);
         }
 
+        auto accountUsage = [&](ui32 activityType, double usage) {
+            Y_VERIFY(0 <= usage);
+            Y_VERIFY(usage <= 1);
+            int bin = Min<int>(9, usage * 10);
+            ++stats.UsageByActivity[activityType][bin];
+        };
+
         std::fill(stats.StuckActorsByActivity.begin(), stats.StuckActorsByActivity.end(), 0);
-        for (ui32 activity : stuckActors) {
-            ++stats.StuckActorsByActivity[activity];
+
+        with_lock (StuckObserverMutex) {
+            for (size_t i = 0; i < Actors.size(); ++i) {
+                IActor *actor = Actors[i];
+                Y_VERIFY(actor->StuckIndex == i);
+                const TDuration delta = now - actor->LastReceiveTimestamp;
+                if (delta > TDuration::Seconds(30)) {
+                    ++stats.StuckActorsByActivity[actor->GetActivityType()];
+                }
+                accountUsage(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
+            }
+            for (const auto& [activityType, usage] : DeadActorsUsage) {
+                accountUsage(activityType, usage);
+            }
+            DeadActorsUsage.clear();
         }
     }
 #endif
@@ -122,13 +135,6 @@ namespace NActors {
             Y_VERIFY(at < Stats.ActorsAliveByActivity.size());
         }
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
-        if (ActorSystem->MonitorStuckActors()) {
-            with_lock (StuckObserverMutex) {
-                Y_VERIFY(actor->StuckIndex == Max<size_t>());
-                actor->StuckIndex = Actors.size();
-                Actors.push_back(actor);
-            }
-        }
 #endif
         AtomicIncrement(ActorRegistrations);
 
@@ -164,6 +170,16 @@ namespace NActors {
         // do init
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
+
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
+        if (ActorSystem->MonitorStuckActors()) {
+            with_lock (StuckObserverMutex) {
+                Y_VERIFY(actor->StuckIndex == Max<size_t>());
+                actor->StuckIndex = Actors.size();
+                Actors.push_back(actor);
+            }
+        }
+#endif
 
         // Once we unlock the mailbox the actor starts running and we cannot use the pointer any more
         actor = nullptr;
@@ -203,13 +219,6 @@ namespace NActors {
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);
-        if (ActorSystem->MonitorStuckActors()) {
-            with_lock (StuckObserverMutex) {
-                Y_VERIFY(actor->StuckIndex == Max<size_t>());
-                actor->StuckIndex = Actors.size();
-                Actors.push_back(actor);
-            }
-        }
 #endif
         AtomicIncrement(ActorRegistrations);
 
@@ -218,6 +227,17 @@ namespace NActors {
 
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
+
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS
+        if (ActorSystem->MonitorStuckActors()) {
+            with_lock (StuckObserverMutex) {
+                Y_VERIFY(actor->StuckIndex == Max<size_t>());
+                actor->StuckIndex = Actors.size();
+                Actors.push_back(actor);
+            }
+        }
+#endif
+
         NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;
         if (elapsed > 1000000) {
             LWPROBE(SlowRegisterAdd, PoolId, NHPTimer::GetSeconds(elapsed) * 1000.0);

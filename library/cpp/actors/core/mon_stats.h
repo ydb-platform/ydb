@@ -101,6 +101,7 @@ namespace NActors {
         TVector<i64> ActorsAliveByActivity; // the sum should be positive, but per-thread might be negative
         TVector<ui64> ScheduledEventsByActivity;
         TVector<ui64> StuckActorsByActivity;
+        TVector<std::array<ui64, 10>> UsageByActivity;
         ui64 PoolActorRegistrations = 0;
         ui64 PoolDestroyedActors = 0;
         ui64 PoolAllocatedMailboxes = 0;
@@ -116,6 +117,7 @@ namespace NActors {
             , ActorsAliveByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
             , ScheduledEventsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
             , StuckActorsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
+            , UsageByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
         {}
 
         template <typename T>
@@ -158,6 +160,15 @@ namespace NActors {
             AggregateOne(ActorsAliveByActivity, other.ActorsAliveByActivity);
             AggregateOne(ScheduledEventsByActivity, other.ScheduledEventsByActivity);
             AggregateOne(StuckActorsByActivity, other.StuckActorsByActivity);
+
+            if (UsageByActivity.size() < other.UsageByActivity.size()) {
+                UsageByActivity.resize(other.UsageByActivity.size());
+            }
+            for (size_t i = 0; i < UsageByActivity.size(); ++i) {
+                for (size_t j = 0; j < 10; ++j) {
+                    UsageByActivity[i][j] += RelaxedLoad(&other.UsageByActivity[i][j]);
+                }
+            }
 
             RelaxedStore(
                 &PoolActorRegistrations,

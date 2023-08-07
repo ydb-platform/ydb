@@ -170,10 +170,10 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
         Y_VERIFY_DEBUG(ArgsValuesDescr[i] == argDatums.back().descr());
     }
 
-    auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-    ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, Options }));
-
     if (ScalarOutput) {
+        auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, Options }));
+
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
         ARROW_OK(executor->Execute(argDatums, listener.get()));
         auto output = executor->WrapResults(argDatums, listener->values());
@@ -185,6 +185,9 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     TVector<std::shared_ptr<arrow::ArrayData>> arrays;
 
     while (dechunker.Next(chunk)) {
+        auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+        ARROW_OK(executor->Init(&state.KernelContext, { &Kernel, ArgsValuesDescr, Options }));
+
         arrow::compute::detail::DatumAccumulator listener;
         ARROW_OK(executor->Execute(chunk, &listener));
         auto output = executor->WrapResults(chunk, listener.values());

@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -17,123 +18,106 @@ namespace NMiniKQL {
 
 namespace {
 
-class TCoalesceBlockWrapper : public TMutableComputationNode<TCoalesceBlockWrapper> {
+class TCoalesceBlockExec {
 public:
-    TCoalesceBlockWrapper(TComputationMutables& mutables, IComputationNode* first, IComputationNode* second, TType* firstType, TType* secondType, bool unwrapFirst)
-        : TMutableComputationNode(mutables)
-        , First(first)
-        , Second(second)
-        , FirstType(firstType)
-        , SecondType(secondType)
-        , UnwrapFirst(unwrapFirst)
-    {
-    }
+    TCoalesceBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType, TType* firstItemType, TType* secondItemType, bool needUnwrapFirst)
+        : ReturnArrowType_(returnArrowType)
+        , FirstItemType_(firstItemType)
+        , SecondItemType_(secondItemType)
+        , NeedUnwrapFirst_(needUnwrapFirst)
+    {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto first = First->GetValue(ctx);
-        auto second = Second->GetValue(ctx);
-
-        const auto& firstDatum = TArrowBlock::From(first).GetDatum();
-        const auto& secondDatum = TArrowBlock::From(second).GetDatum();
-
-        if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
-            if (!firstDatum.scalar()->is_valid) {
-                return second.Release();
-            } else if (!UnwrapFirst) {
-                return first.Release();
+    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+        const auto& first = batch.values[0];
+        const auto& second = batch.values[1];
+        MKQL_ENSURE(!first.is_scalar() || !second.is_scalar(), "Expected at least one array");
+        size_t length = Max(first.length(), second.length());
+        auto firstReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), FirstItemType_);
+        auto secondReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), SecondItemType_);
+        if (first.is_scalar()) {
+            auto firstValue = firstReader->GetScalarItem(*first.scalar());
+            const auto& secondArray = *second.array();
+            if (firstValue) {
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                builder->Add(NeedUnwrapFirst_ ? firstValue.GetOptionalValue() : firstValue, length);
+                *res = builder->Build(true);
+            } else {
+                *res = second;
             }
-            auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), FirstType);
-            auto builder = NYql::NUdf::MakeScalarBuilder(TTypeInfoHelper(), SecondType);
-            auto firstItem = reader->GetScalarItem(*firstDatum.scalar());
-            return ctx.HolderFactory.CreateArrowBlock(builder->Build(firstItem.GetOptionalValue()));
+        } else if (second.is_scalar()) {
+            const auto& firstArray = *first.array();
+            if (firstArray.GetNullCount() == 0) {
+                *res = NeedUnwrapFirst_ ? Unwrap(firstArray, FirstItemType_) : first;
+            } else if (firstArray.GetNullCount() == length) {
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto secondValue = secondReader->GetScalarItem(*second.scalar());
+                builder->Add(secondValue, length);
+                *res = builder->Build(true);
+            } else {
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto secondValue = secondReader->GetScalarItem(*second.scalar());
+                for (size_t i = 0; i < length; ++i) {
+                    auto firstItem = firstReader->GetItem(firstArray, i);
+                    if (firstItem) {
+                        builder->Add(NeedUnwrapFirst_ ? firstItem.GetOptionalValue() : firstItem);
+                    } else {
+                        builder->Add(secondValue);
+                    }
+                }
+
+                *res = builder->Build(true);
+            }
+        } else {
+            const auto& firstArray = *first.array();
+            const auto& secondArray = *second.array();
+            if (firstArray.GetNullCount() == 0) {
+                *res = NeedUnwrapFirst_ ? Unwrap(firstArray, FirstItemType_) : first;
+            } else if (firstArray.GetNullCount() == length) {
+                *res = second;
+            } else {
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                for (size_t i = 0; i < length; ++i) {
+                    auto firstItem = firstReader->GetItem(firstArray, i);
+                    if (firstItem) {
+                        builder->Add(NeedUnwrapFirst_ ? firstItem.GetOptionalValue() : firstItem);
+                    } else {
+                        auto secondItem = secondReader->GetItem(secondArray, i);
+                        builder->Add(secondItem);
+                    }
+                }
+
+                *res = builder->Build(true);
+            }
         }
 
-        size_t len = firstDatum.is_scalar() ? (size_t)secondDatum.length() : (size_t)firstDatum.length();
-        if (firstDatum.null_count() == firstDatum.length()) {
-            return secondDatum.is_scalar() ? CopyAsArray(ctx, secondDatum, SecondType, false, len) : second.Release();
-        } else if (firstDatum.null_count() == 0 || secondDatum.null_count() == secondDatum.length()) {
-            if (firstDatum.is_scalar()) {
-                return CopyAsArray(ctx, firstDatum, FirstType, UnwrapFirst, len);
-            } else if (!UnwrapFirst) {
-                return first.Release();
-            }
-            bool isNestedOptional = static_cast<TOptionalType*>(FirstType)->GetItemType()->IsOptional();
-            return ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Unwrap(*firstDatum.array(), isNestedOptional));
-        }
-
-        Y_VERIFY(firstDatum.is_array());
-        return secondDatum.is_scalar() ?
-            Coalesce(ctx, *firstDatum.array(), secondDatum) :
-            Coalesce(ctx, *firstDatum.array(), *secondDatum.array());
+        return arrow::Status::OK();
     }
 
 private:
-    NUdf::TUnboxedValuePod CopyAsArray(TComputationContext& ctx, const arrow::Datum& scalar, TType* type, bool unwrap, size_t len) const {
-        Y_VERIFY(scalar.is_scalar());
-        auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), type);
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), type, ctx.ArrowMemoryPool, len, &ctx.Builder->GetPgBuilder());
-        auto item = reader->GetScalarItem(*scalar.scalar());
-        if (unwrap) {
-            item = item.GetOptionalValue();
-        }
-        builder->Add(item, len);
-        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
-    }
-
-    NUdf::TUnboxedValuePod Coalesce(TComputationContext& ctx, const arrow::ArrayData& arr, const arrow::Datum& scalar) const {
-        Y_VERIFY(scalar.is_scalar());
-        Y_VERIFY(scalar.scalar()->is_valid);
-
-        auto firstReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), FirstType);
-        auto secondReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), SecondType);
-
-        auto secondItem = secondReader->GetScalarItem(*scalar.scalar());
-
-        const size_t len = arr.length;
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondType, ctx.ArrowMemoryPool, len, &ctx.Builder->GetPgBuilder());
-
-        for (size_t i = 0; i < len; ++i) {
-            auto result = firstReader->GetItem(arr, i);
-            if (!result) {
-                result = secondItem;
-            } else if (UnwrapFirst) {
-                result = result.GetOptionalValue();
-            }
-            builder->Add(result);
-        }
-        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
-    }
-
-    NUdf::TUnboxedValuePod Coalesce(TComputationContext& ctx, const arrow::ArrayData& arr1, const arrow::ArrayData& arr2) const {
-        Y_VERIFY(arr1.length == arr2.length);
-        const size_t len = (size_t)arr1.length;
-        auto firstReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), FirstType);
-        auto secondReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), SecondType);
-        auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondType, ctx.ArrowMemoryPool, len, &ctx.Builder->GetPgBuilder());
-
-        for (size_t i = 0; i < len; ++i) {
-            auto result = firstReader->GetItem(arr1, i);
-            if (!result) {
-                result = secondReader->GetItem(arr2, i);
-            } else if (UnwrapFirst) {
-                result = result.GetOptionalValue();
-            }
-            builder->Add(result);
-        }
-        return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
-    }
-
-    void RegisterDependencies() const final {
-        DependsOn(First);
-        DependsOn(Second);
-    }
-
-    IComputationNode* const First;
-    IComputationNode* const Second;
-    TType* const FirstType;
-    TType* const SecondType;
-    const bool UnwrapFirst;
+    const std::shared_ptr<arrow::DataType> ReturnArrowType_;
+    TType* const FirstItemType_;
+    TType* const SecondItemType_;
+    const bool NeedUnwrapFirst_;
 };
+
+std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVector<TType*>& argTypes, TType* resultType, bool needUnwrapFirst) {
+    using TExec = TCoalesceBlockExec;
+
+    std::shared_ptr<arrow::DataType> returnArrowType;
+    MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
+    auto exec = std::make_shared<TExec>(
+        returnArrowType,
+        AS_TYPE(TBlockType, argTypes[0])->GetItemType(),
+        AS_TYPE(TBlockType, argTypes[1])->GetItemType(),
+        needUnwrapFirst);
+    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        return exec->Exec(ctx, batch, res);
+    });
+
+    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    return kernel;
+}
 
 } // namespace
 
@@ -160,7 +144,11 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
     auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    return new TCoalesceBlockWrapper(ctx.Mutables, firstCompute, secondCompute, firstType->GetItemType(), secondType->GetItemType(), needUnwrapFirst);
+    TVector<IComputationNode*> argsNodes = { firstCompute, secondCompute };
+    TVector<TType*> argsTypes = { firstType, secondType };
+
+    auto kernel = MakeBlockCoalesceKernel(argsTypes, secondType, needUnwrapFirst);
+    return new TBlockFuncNode(ctx.Mutables, "Coalesce", std::move(argsNodes), argsTypes, *kernel, kernel);
 }
 
 }

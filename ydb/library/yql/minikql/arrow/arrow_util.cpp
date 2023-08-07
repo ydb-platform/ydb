@@ -11,10 +11,21 @@
 namespace NKikimr::NMiniKQL {
 
 std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType) {
-    bool isOptional;
-    auto unpacked = UnpackOptional(itemType, isOptional);
-    MKQL_ENSURE(isOptional, "Expected optional");
-    if (unpacked->IsOptional() || unpacked->IsVariant() || unpacked->IsPg()) {
+    bool nested;
+    if (itemType->IsPg()) {
+        nested = false;
+    } else {
+        bool isOptional;
+        auto unpacked = UnpackOptional(itemType, isOptional);
+        MKQL_ENSURE(isOptional, "Expected optional");
+        if (unpacked->IsOptional() || unpacked->IsVariant() || unpacked->IsPg()) {
+            nested = true;
+        } else {
+            nested = false;
+        }
+    }
+
+    if (nested) {
         MKQL_ENSURE(data.child_data.size() == 1, "Expected struct with one element");
         return data.child_data[0];
     } else {

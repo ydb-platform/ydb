@@ -151,11 +151,11 @@ public:
             arrow::compute::KernelContext kernelContext(&execContext);
             kernelContext.SetState(&kernelState);
 
-            auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-            ARROW_OK(executor->Init(&kernelContext, { &Kernel_, ArgsValuesDescr_, nullptr }));
-
             arrow::Datum res;
             if (OnlyScalars_) {
+                auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+                ARROW_OK(executor->Init(&kernelContext, { &Kernel_, ArgsValuesDescr_, nullptr }));
+
                 auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
                 ARROW_OK(executor->Execute(argDatums, listener.get()));
                 res = executor->WrapResults(argDatums, listener->values());
@@ -165,6 +165,9 @@ public:
                 TVector<std::shared_ptr<arrow::ArrayData>> arrays;
 
                 while (dechunker.Next(chunk)) {
+                    auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+                    ARROW_OK(executor->Init(&kernelContext, { &Kernel_, ArgsValuesDescr_, nullptr }));
+
                     arrow::compute::detail::DatumAccumulator listener;
                     ARROW_OK(executor->Execute(chunk, &listener));
                     auto output = executor->WrapResults(chunk, listener.values());

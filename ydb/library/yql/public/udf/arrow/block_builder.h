@@ -769,8 +769,7 @@ private:
         std::shared_ptr<arrow::Buffer> offsets = OffsetsBuilder->Finish();
         std::shared_ptr<arrow::Buffer> data = DataBuilder->Finish();
 
-        auto arrowType = std::make_shared<TStringType>();
-        Chunks.push_back(arrow::ArrayData::Make(arrowType, length, { nullBitmap, offsets, data }));
+        Chunks.push_back(arrow::ArrayData::Make(ArrowType, length, { nullBitmap, offsets, data }));
         if (!finish) {
             Reserve();
         }

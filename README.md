@@ -7,9 +7,9 @@
 ## YDB
 
 [Website](https://ydb.tech) |
-[Documentation](https://ydb.tech/docs) |
+[Documentation](https://ydb.tech/en/docs) |
 [Official Repository](https://github.com/ydb-platform/ydb) |
-[Blog](https://medium.com/ydbtech) |
+[Blog](https://blog-redirect.ydb.tech) |
 [YouTube](https://www.youtube.com/c/YDBPlatform) |
 [Twitter](https://twitter.com/YDBPlatform) |
 [LinkedIn](https://www.linkedin.com/company/ydb-platform)

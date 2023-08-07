@@ -111,7 +111,7 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
 }
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
-    if (--PendingResponses == 0) {
+    if (PendingResponses == 0) {
         Send(Parent, new TEvKafka::TEvResponse(Cookie, Response));
         Die(ctx);
     }

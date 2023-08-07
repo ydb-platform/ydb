@@ -53,7 +53,7 @@ private:
         i64 compilationIntervalMs = std::max(static_cast<i64>(WakeupInterval.MilliSeconds()) / 10, MaxCompilationIntervalMs);
 
         size_t patternsToCompileSize = PatternsToCompile.size();
-        for (; PatternToCompileIndex < patternsToCompileSize; ++PatternToCompileIndex) {
+        for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
             auto & entry = PatternsToCompile[PatternToCompileIndex];
             if (!entry->IsInCache.load()) {
                 continue;
@@ -67,9 +67,6 @@ private:
             entry = nullptr;
 
             compilationIntervalMs -= static_cast<i64>(timer.Get().MilliSeconds());
-            if (compilationIntervalMs <= 0) {
-                break;
-            }
         }
 
         if (PatternToCompileIndex == patternsToCompileSize) {

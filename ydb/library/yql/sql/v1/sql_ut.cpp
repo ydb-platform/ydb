@@ -1,4 +1,4 @@
-
+#include "format/sql_format.h"
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
@@ -198,8 +198,32 @@ Y_UNIT_TEST_SUITE(AnsiMode) {
 }
 
 Y_UNIT_TEST_SUITE(SqlParsingOnly) {
-    Y_UNIT_TEST(CoverColumnName) {
-        UNIT_ASSERT(SqlToYql("SELECT cover FROM plato.Input").IsOk());
+    Y_UNIT_TEST(TokensAsColumnName) {
+        const auto& forbidden = THashSet<TString>{
+                "ALL", "ANY", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "SELECT", "SET", "STREAM", "STRUCT", "TAGGED", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
+                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+            };
+
+        THashMap<TString, bool> tokens;
+        for (const auto& t: NSQLFormat::GetKeywords()) {
+            tokens[t] = !forbidden.contains((t));
+        }
+        for (const auto& f: forbidden) {
+            UNIT_ASSERT(tokens.contains(f)); //check that forbidden list contains tokens only(self check)
+        }
+        TStringBuilder failed;
+        for (const auto& [token, allowed]: tokens) {
+            TStringBuilder req;
+            req << "SELECT " << token << " FROM plato.Input";
+            if (SqlToYql(req).IsOk() != allowed)
+                failed << token << " ";
+        }
+        UNIT_ASSERT_EQUAL_C(TString{}, failed, failed);
     }
 
     Y_UNIT_TEST(TableHints) {
@@ -2836,15 +2860,11 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithCollisionConflict1) {
-        NYql::TAstParseResult res = SqlToYql("select LENGTH(Value), key as column0 from plato.Input;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column0\n");
+        UNIT_ASSERT(SqlToYql("select LENGTH(Value), key as column0 from plato.Input;").IsOk());
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithCollisionConflict2) {
-        NYql::TAstParseResult res = SqlToYql("select key as column1, LENGTH(Value) from plato.Input;");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column1\n");
+        UNIT_ASSERT(SqlToYql("select key as column1, LENGTH(Value) from plato.Input;").IsOk());
     }
 
     Y_UNIT_TEST(MissedSourceTableForQualifiedAsteriskOnSimpleSelect) {
@@ -5066,6 +5086,32 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceWithServiceAccount) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_ID="sa",
+                    SERVICE_ACCOUNT_SECRET_NAME="secret_name"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"SERVICE_ACCOUNT") '('"location" '"my-bucket") '('"service_account_id" '"sa") '('"service_account_secret_name" '"secret_name") '('"source_type" '"ObjectStorage"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithTablePrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
@@ -5113,7 +5159,6 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                 );
             )" , "<main>:5:33: Error: INSTALLATION or LOCATION must be specified\n");
 
-
         ExpectFailWithError(R"(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
@@ -5131,6 +5176,44 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     OTHER="VALUE"
                 );
             )" , "<main>:7:21: Error: Unknown external data source setting: OTHER\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE1"
+                );
+            )" , "<main>:6:33: Error: Unknown AUTH_METHOD = NONE1\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT"
+                );
+            )" , "<main>:6:33: Error: SERVICE_ACCOUNT_ID requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_ID="s1"
+                );
+            )" , "<main>:7:40: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_SECRET_NAME="s1"
+                );
+            )" , "<main>:7:49: Error: SERVICE_ACCOUNT_ID requires key\n");
     }
 
     Y_UNIT_TEST(DropExternalDataSourceWithTablePrefix) {

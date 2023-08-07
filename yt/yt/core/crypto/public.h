@@ -1,0 +1,16 @@
+#pragma once
+
+#include <yt/yt/core/misc/public.h>
+
+#include <yt/yt/core/misc/intrusive_ptr.h>
+
+namespace NYT::NCrypto {
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_CLASS(TPemBlobConfig)
+DECLARE_REFCOUNTED_CLASS(TSslContext)
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NCrypto

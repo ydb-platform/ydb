@@ -31,12 +31,23 @@ public:
         return {};
     }
 
+    TVector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) override {
+        return GetEvents(settings.Block_,
+                         settings.MaxEventsCount_,
+                         settings.MaxByteSize_);
+    }
+
     inline TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
         Y_VERIFY(false);
 
         (void)block;
         (void)maxByteSize;
         return {};
+    }
+
+    TMaybe<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) override {
+        return GetEvent(settings.Block_,
+                        settings.MaxByteSize_);
     }
 
     inline bool Close(TDuration timeout) override {
@@ -72,8 +83,13 @@ public:
     void Start();
 
     NThreading::TFuture<void> WaitEvent() override;
-    TVector<TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override;
-    TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override;
+    TVector<TReadSessionEvent::TEvent> GetEvents(bool block,
+                                                 TMaybe<size_t> maxEventsCount,
+                                                 size_t maxByteSize) override;
+    TVector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) override;
+    TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block,
+                                               size_t maxByteSize) override;
+    TMaybe<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) override;
 
     bool Close(TDuration timeout) override;
 
@@ -113,6 +129,19 @@ private:
     void AbortImpl(EStatus statusCode, const TString& message, NPersQueue::TDeferredActions<false>& deferred);
 
 private:
+    using TOffsetRanges = THashMap<TString, THashMap<ui64, TDisjointIntervalTree<ui64>>>;
+
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TReadSessionEvent::TDataReceivedEvent& event);
+    void CollectOffsets(NTable::TTransaction& tx,
+                        const TString& topicPath, ui32 partitionId, ui64 offset);
+    void UpdateOffsets(const NTable::TTransaction& tx);
+
+    //
+    // (session, tx) -> topic -> partition -> (begin, end)
+    //
+    THashMap<std::pair<TString, TString>, TOffsetRanges> OffsetRanges;
+
     TReadSessionSettings Settings;
     const TString SessionId;
     const TInstant StartSessionTime = TInstant::Now();

@@ -59,10 +59,10 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "i (Asc)",
-                                    "j (Asc)",
-                                    "t (Asc)",
-                                    "k (Asc)"
+                                    "J1_TBL.i (Asc)",
+                                    "J1_TBL.j (Asc)",
+                                    "J1_TBL.t (Asc)",
+                                    "J2_TBL.k (Asc)"
                                 ]
                             }
                         ]

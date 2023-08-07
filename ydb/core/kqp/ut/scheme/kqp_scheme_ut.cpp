@@ -3451,6 +3451,136 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(SerialTypeNegative1) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableNeg1` (
+                    Key SerialUnknown,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }        
+    }
+
+    Y_UNIT_TEST(SerialTypeNegative2) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTableNeg2` (
+                    Key Uint32,
+                    Value Serial,
+                    PRIMARY KEY (Key)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
+                                       result.GetIssues().ToString());
+        }        
+    }
+
+    void TestSerialType(TString serialType) {
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SerialTable%s` (
+                    Key %s,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )", serialType.c_str(), serialType.c_str());
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        {
+            TString query = Sprintf(R"(
+                UPSERT INTO `/Root/SerialTable%s` (Value) VALUES ("New");
+            )", serialType.c_str());
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+        {
+            TString query = Sprintf(R"(
+                SELECT * FROM `/Root/SerialTable%s`;
+            )", serialType.c_str());
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+            CompareYson(R"(
+                    [
+                        [[1];["New"]]
+                    ]
+                )",
+                NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(SerialTypeSmallSerial) {
+        TestSerialType("SmallSerial");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial2) {
+        TestSerialType("serial2");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial) {
+        TestSerialType("Serial");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial4) {
+        TestSerialType("Serial4");
+    }
+
+    Y_UNIT_TEST(SerialTypeBigSerial) {
+        TestSerialType("BigSerial");
+    }
+
+    Y_UNIT_TEST(SerialTypeSerial8) {
+        TestSerialType("serial8");
+    }
+
     Y_UNIT_TEST(ChangefeedRetentionPeriod) {
         using namespace NTopic;
 
@@ -4303,6 +4433,37 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasNone());
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceWithSa) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID="mysa",
+                SERVICE_ACCOUNT_SECRET_NAME="mysasignature"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(0);
+        UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
+        UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetSourceType(), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetInstallation(), "");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "my-bucket");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(externalDataSourceName).back());
+        UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasServiceAccount());
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetId(), "mysa");
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetSecretName(), "mysasignature");
+    }
+
     Y_UNIT_TEST(DisableCreateExternalDataSource) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -4315,7 +4476,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it");
     }
 
@@ -4333,7 +4494,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Authorization method not specified");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown AUTH_METHOD = UNKNOWN");
     }
 
     Y_UNIT_TEST(DropExternalDataSource) {
@@ -4874,11 +5035,8 @@ namespace {
 
         void ReadData(const TString& query, const TString& expected, const EStatus opStatus = EStatus::SUCCESS) {
             auto it = TableClient.StreamExecuteScanQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), opStatus, it.GetIssues().ToString());
-            const TString result = StreamResultToYson(it, false, opStatus);
-            Cerr << "STATUS: " << opStatus << Endl <<
-                "QUERY: " << query << Endl <<
-                result << " vs " << expected << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
+            TString result = StreamResultToYson(it, false, opStatus);
             if (opStatus == EStatus::SUCCESS) {
                 UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
             }
@@ -4906,7 +5064,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddColumnLongPk) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.FeatureFlags.SetForceColumnTablesCompositeMarks(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -5021,6 +5178,58 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             const auto& description = describeResult.GetTableDescription();
             UNIT_ASSERT(!description.GetTiering());
             UNIT_ASSERT(!description.GetTtlSettings());
+        }
+    }
+
+    Y_UNIT_TEST(TtlRunInterval) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().ExtractValueSync().GetSession();
+
+        const auto ttl = TTtlSettings("Ts", TDuration::Zero())
+            .SetRunInterval(TDuration::Minutes(30));
+
+        // create with ttl
+        {
+            auto result = session.CreateTable("/Root/table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Ts", EPrimitiveType::Timestamp)
+                .SetPrimaryKeyColumn("Key")
+                .SetTtlSettings(ttl)
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.DescribeTable("/Root/table").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetTtlSettings()->GetRunInterval(), ttl.GetRunInterval());
+        }
+
+        {
+            auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .BeginAlterTtlSettings()
+                    .Drop()
+                .EndAlterTtlSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // alter table set ttl
+        {
+            auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .BeginAlterTtlSettings()
+                    .Set(ttl)
+                .EndAlterTtlSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.DescribeTable("/Root/table").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetTtlSettings()->GetRunInterval(), ttl.GetRunInterval());
         }
     }
 

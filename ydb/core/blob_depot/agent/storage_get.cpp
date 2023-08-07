@@ -102,17 +102,28 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString buffer) override {
+            void OnRead(ui64 tag, TReadOutcome&& outcome) override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA35, "OnRead", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (Tag, tag), (Status, status), (Buffer.size, status == NKikimrProto::OK ? buffer.size() : 0),
-                    (ErrorReason, status != NKikimrProto::OK ? buffer : ""));
+                    (Tag, tag), (Outcome, outcome));
 
                 auto& resp = Response->Responses[tag];
                 Y_VERIFY(resp.Status == NKikimrProto::UNKNOWN);
-                resp.Status = status;
-                if (status == NKikimrProto::OK) {
-                    resp.Buffer = std::move(buffer);
-                }
+                std::visit(TOverloaded{
+                    [&](TReadOutcome::TOk& ok) {
+                        resp.Status = NKikimrProto::OK;
+                        resp.Buffer = std::move(ok.Data);
+                    },
+                    [&](TReadOutcome::TNodata& /*nodata*/) {
+                        resp.Status = NKikimrProto::NODATA;
+                    },
+                    [&](TReadOutcome::TError& error) {
+                        resp.Status = error.Status;
+                        if (Response->ErrorReason) {
+                            Response->ErrorReason += ", ";
+                        }
+                        Response->ErrorReason += error.ErrorReason;
+                    }
+                }, outcome.Value);
                 --AnswersRemain;
                 CheckAndFinish();
             }

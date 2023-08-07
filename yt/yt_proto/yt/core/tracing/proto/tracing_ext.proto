@@ -1,0 +1,22 @@
+package NYT.NTracing.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+
+option java_package = "tech.ytsaurus.tracing";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/tracing";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TTracingExt
+{
+    reserved 1, 2, 3;
+
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional fixed64 span_id = 5;
+    optional bool sampled = 6;
+    optional bool debug = 7;
+    optional string target_endpoint = 9;
+    optional bytes baggage = 8;
+}

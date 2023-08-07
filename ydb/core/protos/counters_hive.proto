@@ -23,6 +23,8 @@ enum ESimpleCounters {
     COUNTER_SEQUENCE_FREE = 13 [(CounterOpts) = {Name: "SequenceFree"}];
     COUNTER_SEQUENCE_ALLOCATED = 14 [(CounterOpts) = {Name: "SequenceAllocated"}];
     COUNTER_EVENTQUEUE_SIZE = 15 [(CounterOpts) = {Name: "EventQueueSize"}];
+    COUNTER_NODES_TOTAL = 16 [(CounterOpts) = {Name: "NodesTotal"}];
+    COUNTER_NODES_CONNECTED = 17 [(CounterOpts) = {Name: "NodesConnected"}];
 }
 
 enum ECumulativeCounters {
@@ -112,4 +114,5 @@ enum ETxTypes {
     TXTYPE_REQUEST_TABLET_OWNERS = 59                     [(TxTypeOpts) = {Name: "TxRequestTabletOwners"}];
     TXTYPE_REASSIGN_GROUPS_ON_DECOMMIT = 60               [(TxTypeOpts) = {Name: "TxReassignGroupsOnDecommit"}];
     TXTYPE_UPDATE_TABLETS_OBJECT = 61                     [(TxTypeOpts) = {Name: "TxUpdateTabletsObject"}];
+    TXTYPE_MON_REBALANCE_FROM_SCRATCH = 62                [(TxTypeOpts) = {Name: "TxMonRebalanceFromScratch"}];
 }

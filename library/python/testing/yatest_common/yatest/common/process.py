@@ -106,7 +106,6 @@ class _Execution(object):
         user_stderr=False,
         core_pattern=None,
     ):
-
         self._command = command
         self._process = process
         self._out_file = out_file
@@ -355,7 +354,6 @@ class _Execution(object):
                             if hasattr(rusage, field):
                                 self._metrics[field.replace("ru_", "")] = getattr(rusage, field)
                     except OSError as exc:
-
                         if exc.errno == errno.ECHILD:
                             yatest_logger.debug(
                                 "Process resource usage is not available as process finished before wait4 was called"
@@ -695,6 +693,7 @@ def py_execute(
     wait=True,
     process_progress_listener=None,
     close_fds=False,
+    text=False,
 ):
     """
     Executes a command with the arcadia python
@@ -710,6 +709,7 @@ def py_execute(
     :param creationflags: command creation flags
     :param wait: should wait until the command finishes
     :param process_progress_listener=object that is polled while execution is in progress
+    :param text: Return original str
     :return _Execution: Execution object
     """
     if isinstance(command, six.string_types):

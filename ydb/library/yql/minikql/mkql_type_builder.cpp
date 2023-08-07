@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 #include <ydb/library/yql/public/udf/arrow/block_item_comparator.h>
+#include <ydb/library/yql/public/udf/arrow/block_item_hasher.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
@@ -671,6 +672,8 @@ public:
     {}
 
     ui64 Hash(NUdf::TUnboxedValuePod value) const override {
+        // keep hash computation in sync with
+        // ydb/library/yql/public/udf/arrow/block_item_hasher.h: TBlockItemHasherBase::Hash()
         if (!value) {
             return 0;
         }
@@ -753,6 +756,8 @@ private:
 class TVectorHash : public NUdf::IHash {
 public:
     ui64 Hash(NUdf::TUnboxedValuePod value) const override {
+        // keep hash computation in sync with
+        // ydb/library/yql/public/udf/arrow/block_item_hasher.h: TTupleBlockItemHasher::DoHash()
         ui64 result = 0ULL;
         auto elements = value.GetElements();
         if (elements) {
@@ -2422,8 +2427,28 @@ struct TComparatorTraits {
     }
 };
 
+struct THasherTraits {
+    using TResult = NUdf::IBlockItemHasher;
+    template <bool Nullable>
+    using TTuple = NUdf::TTupleBlockItemHasher<Nullable>;
+    template <typename T, bool Nullable>
+    using TFixedSize = NUdf::TFixedSizeBlockItemHasher<T, Nullable>;
+    template <typename TStringType, bool Nullable>
+    using TStrings = NUdf::TStringBlockItemHasher<TStringType, Nullable>;
+    using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
+
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+        Y_UNUSED(pgBuilder);
+        return std::unique_ptr<TResult>(MakePgItemHasher(desc.TypeId).Release());
+    }
+};
+
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {
     return NUdf::MakeBlockReaderImpl<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
+}
+
+NUdf::IBlockItemHasher::TPtr TBlockTypeHelper::MakeHasher(NUdf::TType* type) const {
+    return NUdf::MakeBlockReaderImpl<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 } // namespace NMiniKQL

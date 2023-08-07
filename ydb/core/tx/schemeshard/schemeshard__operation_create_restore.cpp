@@ -9,6 +9,10 @@ struct TRestore {
         return "TRestore";
     }
 
+    static constexpr bool NeedSnapshotTime() {
+        return false;
+    }
+
     static bool HasTask(const TTxTransaction& tx) {
         return tx.HasRestore();
     }

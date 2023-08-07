@@ -55,22 +55,30 @@ namespace NKikimr::NTestShard {
             Y_VERIFY(self.WritesInFlight.empty());
             Y_VERIFY(self.DeletesInFlight.empty());
             Y_VERIFY(self.TransitionInFlight.empty());
-            for (const auto& [key, info] : KeysBefore) {
+            for (auto& [key, info] : KeysBefore) {
                 Y_VERIFY(info.ConfirmedState == info.PendingState);
+                info.ConfirmedKeyIndex = Max<size_t>();
             }
+            self.ConfirmedKeys.clear();
         }
 
         void Bootstrap(const TActorId& parentId) {
             ParentId = parentId;
-            Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
-                Settings.GetStorageServerPort()));
+            if (Settings.HasStorageServerHost()) {
+                Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
+                    Settings.GetStorageServerPort()));
+            } else {
+                StateReadComplete = true;
+            }
             IssueNextReadRangeQuery();
             STLOG(PRI_INFO, TEST_SHARD, TS07, "starting read&validate", (TabletId, TabletId));
             Become(&TThis::StateFunc);
         }
 
         void PassAway() override {
-            Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+            if (Settings.HasStorageServerHost()) {
+                Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+            }
             TActorBootstrapped::PassAway();
         }
 
@@ -441,6 +449,15 @@ namespace NKikimr::NTestShard {
         }
 
         void RegisterTransition(TString key, ::NTestShard::TStateServer::EEntityState from, ::NTestShard::TStateServer::EEntityState to) {
+            const auto it = Keys.find(key);
+            Y_VERIFY(it != Keys.end());
+            it->second.PendingState = to;
+
+            if (!Settings.HasStorageServerHost()) {
+                it->second.ConfirmedState = to;
+                return;
+            }
+
             auto request = std::make_unique<TEvStateServerRequest>();
             auto& r = request->Record;
             auto *write = r.MutableWrite();
@@ -451,9 +468,6 @@ namespace NKikimr::NTestShard {
             write->SetTargetState(to);
             Send(MakeStateServerInterfaceActorId(), request.release());
 
-            const auto it = Keys.find(key);
-            Y_VERIFY(it != Keys.end());
-            it->second.PendingState = to;
             TransitionInFlight.push_back(&*it);
         }
 
@@ -614,10 +628,16 @@ namespace NKikimr::NTestShard {
         Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::WRITE));
         ValidationActorId = {};
         BytesProcessed = 0;
+        ClearKeys();
         Keys = std::move(ev->Get()->Keys);
         BytesOfData = 0;
-        for (const auto& [key, info] : Keys) {
+        for (auto& [key, info] : Keys) {
             BytesOfData += info.Len;
+            Y_VERIFY(info.ConfirmedKeyIndex == Max<size_t>());
+            if (info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
+                info.ConfirmedKeyIndex = ConfirmedKeys.size();
+                ConfirmedKeys.push_back(key);
+            }
         }
         Action();
 
@@ -628,69 +648,120 @@ namespace NKikimr::NTestShard {
     }
 
     bool TLoadActor::IssueRead() {
-        std::vector<TString> options;
-        for (const auto& [key, info] : Keys) {
-            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
-                options.push_back(key);
-            }
-        }
-        if (options.empty()) {
+        if (ConfirmedKeys.empty()) {
             return false;
         }
-        const size_t index = RandomNumber(options.size());
-        const TString& key = options[index];
+
+        const size_t index = RandomNumber(ConfirmedKeys.size());
+        const TString& key = ConfirmedKeys[index];
         ui64 len, seed, id;
         StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
-        const ui32 offset = RandomNumber(len);
-        const ui32 size = 1 + RandomNumber(len - offset);
 
         auto request = CreateRequest();
-        auto *cmdRead = request->Record.AddCmdRead();
-        cmdRead->SetKey(key);
-        cmdRead->SetOffset(offset);
-        cmdRead->SetSize(size);
+        if (RandomNumber(2u)) {
+            request->Record.SetUsePayloadInResponse(true);
+        }
 
-        STLOG(PRI_INFO, TEST_SHARD, TS16, "reading key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size));
+        std::vector<std::tuple<ui32, ui32>> items;
+        auto addQuery = [&](ui32 offset, ui32 size) {
+            auto *cmdRead = request->Record.AddCmdRead();
+            cmdRead->SetKey(key);
+            cmdRead->SetOffset(offset);
+            cmdRead->SetSize(size);
+            items.emplace_back(offset, size);
+            STLOG(PRI_INFO, TEST_SHARD, TS16, "reading key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size));
+        };
 
-        ReadsInFlight.try_emplace(request->Record.GetCookie(), key, offset, size, TActivationContext::Monotonic());
+        if (len) {
+            const ui32 temp = RandomNumber(100u);
+            if (temp >= 99) {
+                const ui32 numQueries = 2 + RandomNumber(1000u);
+                for (ui32 i = 0; i < numQueries; ++i) {
+                    const ui32 offset = RandomNumber(len);
+                    const ui32 size = 1 + RandomNumber(len - offset);
+                    addQuery(offset, size);
+                }
+            } else if (temp >= 98) {
+                ui32 offset = 0;
+                while (offset < len) {
+                    const ui32 size = Min<ui32>(RandomNumber(3073u) + 1024u, len - offset);
+                    addQuery(offset, size);
+                    offset += size;
+                }
+            } else {
+                const ui32 offset = RandomNumber(len);
+                const ui32 size = 1 + RandomNumber(len - offset);
+                addQuery(offset, size);
+            }
+        } else {
+            addQuery(0, 0);
+        }
+
+        ReadsInFlight.try_emplace(request->Record.GetCookie(), key, TActivationContext::Monotonic(),
+            request->Record.GetUsePayloadInResponse(), std::move(items));
         ++KeysBeingRead[key];
         Send(TabletActorId, request.release());
 
         return true;
     }
 
-    void TLoadActor::ProcessReadResult(ui64 cookie, const NProtoBuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TReadResult>& results) {
+    void TLoadActor::ProcessReadResult(ui64 cookie, const NProtoBuf::RepeatedPtrField<NKikimrClient::TKeyValueResponse::TReadResult>& results,
+            TEvKeyValue::TEvResponse& event) {
+        auto node = ReadsInFlight.extract(cookie);
+        if (!node) { // wasn't a read request
+            return;
+        }
+
+        auto& [key, timestamp, payloadInResponse, items] = node.mapped();
+        size_t index = 0;
+        bool ok = true;
+        ui64 sizeRead = 0;
+
+        auto it = KeysBeingRead.find(key);
+        Y_VERIFY(it != KeysBeingRead.end() && it->second);
+        if (!--it->second) {
+            KeysBeingRead.erase(key);
+        }
+
+        ui64 len, seed, id;
+        StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
+        TString data = FastGenDataForLZ4(len, seed);
+
         for (const auto& result : results) {
-            auto node = ReadsInFlight.extract(cookie);
-            Y_VERIFY(node);
-            auto& [key, offset, size, timestamp] = node.mapped();
-            const TMonotonic now = TActivationContext::Monotonic();
-
-            auto it = KeysBeingRead.find(key);
-            Y_VERIFY(it != KeysBeingRead.end() && it->second);
-            if (!--it->second) {
-                KeysBeingRead.erase(key);
-            }
-
-            ui64 len, seed, id;
-            StringSplitter(key).Split(',').CollectInto(&len, &seed, &id);
-            TString data = FastGenDataForLZ4(len, seed);
+            Y_VERIFY(index < items.size());
+            auto& [offset, size] = items[index++];
 
             STLOG(PRI_INFO, TEST_SHARD, TS18, "read key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size),
                 (Status, NKikimrProto::EReplyStatus_Name(result.GetStatus())));
 
-            Y_VERIFY(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR);
+            Y_VERIFY(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR ||
+                result.GetStatus() == NKikimrProto::OVERRUN);
 
             if (result.GetStatus() == NKikimrProto::OK) {
-                const TString value = result.GetValue();
+                TRope value;
+                if (payloadInResponse) {
+                    Y_VERIFY(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kPayloadId);
+                    value = event.GetPayload(result.GetPayloadId());
+                } else {
+                    Y_VERIFY(result.GetDataCase() == NKikimrClient::TKeyValueResponse::TReadResult::kValue);
+                    value = TRope(result.GetValue());
+                }
 
-                Y_VERIFY_S(offset < len && size <= len - offset && value.size() == size && data.substr(offset, size) == value,
+                Y_VERIFY_S((offset < len || !len) && size <= len - offset && value.size() == size &&
+                        TContiguousSpan(data).SubSpan(offset, size) == value,
                     "TabletId# " << TabletId << " Key# " << key << " value mismatch"
                     << " value.size# " << value.size() << " offset# " << offset << " size# " << size);
 
-                ReadLatency.Add(now - timestamp);
-                ReadSpeed.Add(TActivationContext::Now(), size);
+                sizeRead += size;
+            } else {
+                ok = false;
             }
+        }
+
+        if (ok) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            ReadLatency.Add(TActivationContext::Monotonic(), now - timestamp);
+            ReadSpeed.Add(TActivationContext::Now(), sizeRead);
         }
     }
 

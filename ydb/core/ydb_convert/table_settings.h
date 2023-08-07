@@ -60,7 +60,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return unsupported("Unsupported ttl settings");
     }
 
-    if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings>) {
+    if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
         if (in.run_interval_seconds()) {
             out.MutableSysSettings()->SetRunInterval(TDuration::Seconds(in.run_interval_seconds()).GetValue());
         }

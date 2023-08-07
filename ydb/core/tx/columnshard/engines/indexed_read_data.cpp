@@ -2,6 +2,7 @@
 #include "indexed_read_data.h"
 #include "filter.h"
 #include "column_engine_logs.h"
+#include "changes/mark_granules.h"
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 #include <ydb/core/formats/arrow/one_batch_input_stream.h>
@@ -34,77 +35,6 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SliceBatch(const std::shared_pt
     }
     return result;
 };
-
-std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>>
-GroupInKeyRanges(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, const TIndexInfo& indexInfo) {
-    std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> rangesSlices; // rangesSlices[rangeNo][sliceNo]
-    rangesSlices.reserve(batches.size());
-    {
-        TMap<NArrow::TReplaceKey, std::vector<std::shared_ptr<arrow::RecordBatch>>> points;
-
-        for (auto& batch : batches) {
-            auto compositeKey = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
-            Y_VERIFY(compositeKey && compositeKey->num_rows() > 0);
-            auto keyColumns = std::make_shared<NArrow::TArrayVec>(compositeKey->columns());
-
-            NArrow::TReplaceKey min(keyColumns, 0);
-            NArrow::TReplaceKey max(keyColumns, compositeKey->num_rows() - 1);
-
-            points[min].push_back(batch); // insert start
-            points[max].push_back({}); // insert end
-        }
-
-        int sum = 0;
-        for (auto& [key, vec] : points) {
-            if (!sum) { // count(start) == count(end), start new range
-                rangesSlices.push_back({});
-                rangesSlices.back().reserve(batches.size());
-            }
-
-            for (auto& batch : vec) {
-                if (batch) {
-                    ++sum;
-                    rangesSlices.back().push_back(batch);
-                } else {
-                    --sum;
-                }
-            }
-        }
-    }
-    return rangesSlices;
-}
-
-std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches,
-                                                                    const TIndexInfo& indexInfo,
-                                                                    const std::shared_ptr<NArrow::TSortDescription>& description,
-                                                                    const THashSet<const void*>& batchesToDedup) {
-    auto rangesSlices = GroupInKeyRanges(batches, indexInfo);
-
-    // Merge slices in ranges
-    std::vector<std::shared_ptr<arrow::RecordBatch>> out;
-    out.reserve(rangesSlices.size());
-    for (auto& slices : rangesSlices) {
-        if (slices.empty()) {
-            continue;
-        }
-
-        // Do not merge slice if it's alone in its key range
-        if (slices.size() == 1) {
-            auto batch = slices[0];
-            if (batchesToDedup.count(batch.get())) {
-                NArrow::DedupSortedBatch(batch, description->ReplaceKey, out);
-            } else {
-                Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, description->ReplaceKey));
-                out.push_back(batch);
-            }
-            continue;
-        }
-        auto batch = NArrow::CombineSortedBatches(slices, description);
-        out.push_back(batch);
-    }
-
-    return out;
-}
 
 }
 
@@ -153,11 +83,11 @@ void TIndexedReadData::InitRead() {
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
-        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.Granule());
+        NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.GetGranule());
         granule->RegisterBatchForFetching(portionInfo);
-        if (prevGranule != portionInfo.Granule()) {
-            Y_VERIFY(granulesReady.emplace(portionInfo.Granule()).second);
-            prevGranule = portionInfo.Granule();
+        if (prevGranule != portionInfo.GetGranule()) {
+            Y_VERIFY(granulesReady.emplace(portionInfo.GetGranule()).second);
+            prevGranule = portionInfo.GetGranule();
         }
     }
     GranulesContext->PrepareForStart();
@@ -233,7 +163,7 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
         if (mergedBatch) {
             // Init split by granules structures
             Y_VERIFY(ReadMetadata->SelectInfo);
-            TColumnEngineForLogs::TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
+            TMarksGranules marksGranules(*ReadMetadata->SelectInfo);
 
             // committed data before the first granule would be placed in fake preceding granule
             // committed data after the last granule would be placed into the last granule
@@ -273,7 +203,6 @@ std::vector<TPartialReadResult> TIndexedReadData::ReadyToOut(const i64 maxRowsIn
     Y_VERIFY(SortReplaceDescription);
     Y_VERIFY(GranulesContext);
 
-    auto& indexInfo = ReadMetadata->GetIndexInfo();
     std::vector<NIndexedReader::TGranule::TPtr> ready = GranulesContext->DetachReadyInOrder();
     std::vector<std::vector<std::shared_ptr<arrow::RecordBatch>>> out;
     out.reserve(ready.size() + 1);
@@ -291,17 +220,7 @@ std::vector<TPartialReadResult> TIndexedReadData::ReadyToOut(const i64 maxRowsIn
         if (inGranule.empty()) {
             continue;
         }
-
-        if (granule->IsDuplicationsAvailable()) {
-            for (auto& batch : inGranule) {
-                Y_VERIFY(batch->num_rows());
-                Y_VERIFY_DEBUG(NArrow::IsSorted(batch, SortReplaceDescription->ReplaceKey));
-            }
-            auto deduped = SpecialMergeSorted(inGranule, indexInfo, SortReplaceDescription, granule->GetBatchesToDedup());
-            out.emplace_back(std::move(deduped));
-        } else {
-            out.emplace_back(std::move(inGranule));
-        }
+        out.emplace_back(std::move(inGranule));
     }
 
     // Append not indexed data (less then first granule) after granules for DESC sorting
@@ -397,7 +316,8 @@ std::vector<TPartialReadResult> TIndexedReadData::MakeResult(std::vector<std::ve
                 auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
                 batch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
             }
-            std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard = std::make_shared<TScanMemoryLimiter::TGuard>(GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady());
+            std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard = std::make_shared<TScanMemoryLimiter::TGuard>(
+                GetMemoryAccessor(), Context.GetCounters().Aggregations.GetResultsReady());
             memGuard->Take(NArrow::GetBatchMemorySize(batch));
 
             std::vector<std::shared_ptr<arrow::RecordBatch>> splitted = SliceBatch(batch, maxRowsInBatch);

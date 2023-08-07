@@ -221,7 +221,7 @@ TInitDiskStatusStep::TInitDiskStatusStep(TInitializer* initializer)
 void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
 
-    AddCheckDiskRequest(request.Get(), Partition()->Config.GetPartitionConfig().GetNumChannels());
+    AddCheckDiskRequest(request.Get(), Partition()->NumChannels);
 
     ctx.Send(Partition()->Tablet, request.Release());
 }
@@ -658,11 +658,27 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
+    if (Config.GetPartitionConfig().HasMirrorFrom()) {
+        ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
+    } else {
+        ManageWriteTimestampEstimate = IsLocalDC;
+    }
+
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
     WriteQuota.ConstructInPlace(Config.GetPartitionConfig().GetBurstSize(),
                                 Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
                                 ctx.Now());
+    ReadQuotaTrackerActor = Register(new TReadQuoter(
+        ctx,
+        SelfId(),
+        TopicConverter,
+        Config,
+        Partition,
+        Tablet,
+        TabletID,
+        Counters
+    ));
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
@@ -681,23 +697,15 @@ void TPartition::Initialize(const TActorContext& ctx) {
                               TopicWriteQuotaResourcePath);
 
     UsersInfoStorage.ConstructInPlace(DCId,
-                                      TabletID,
                                       TopicConverter,
                                       Partition,
-                                      Counters,
                                       Config,
                                       CloudId,
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
                                       FolderId);
-    TotalChannelWritesByHead.resize(Config.GetPartitionConfig().GetNumChannels());
-
-    if (Config.GetPartitionConfig().HasMirrorFrom()) {
-        ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
-    } else {
-        ManageWriteTimestampEstimate = IsLocalDC;
-    }
+    TotalChannelWritesByHead.resize(NumChannels);
 
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
@@ -728,11 +736,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     for (ui32 i = 0; i < TotalLevels; ++i) {
         DataKeysHead.push_back(TKeyLevel(CompactLevelBorder[i]));
-    }
-
-    for (const auto& readQuota : Config.GetPartitionConfig().GetReadQuota()) {
-        auto &userInfo = UsersInfoStorage->GetOrCreate(readQuota.GetClientId(), ctx);
-        userInfo.ReadQuota.UpdateConfig(readQuota.GetBurstSize(), readQuota.GetSpeedInBytesPerSecond());
     }
 
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "bootstrapping " << Partition << " " << ctx.SelfID);

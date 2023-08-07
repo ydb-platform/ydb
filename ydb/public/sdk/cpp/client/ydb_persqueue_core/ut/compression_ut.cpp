@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(Compression) {
         props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP);
         props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD);
         auto rr = props->add_read_rules();
-        rr->set_consumer_name(setup.GetTestClient());
+        rr->set_consumer_name(setup.GetTestConsumer());
         rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
         rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
         rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP);

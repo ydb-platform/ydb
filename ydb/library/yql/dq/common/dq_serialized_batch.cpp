@@ -1,5 +1,6 @@
 #include "dq_serialized_batch.h"
 
+#include <ydb/library/yql/utils/rope_over_buffer.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/system/unaligned_mem.h>
@@ -23,38 +24,20 @@ T ReadNumber(TStringBuf& src) {
     return result;
 }
 
-class TContigousChunkOverBuf : public IContiguousChunk {
-public:
-    TContigousChunkOverBuf(const std::shared_ptr<TBuffer>& owner, TContiguousSpan span)
-        : Owner_(owner)
-        , Span_(span)
-    {
-    }
-private:
-    TContiguousSpan GetData() const override {
-        return Span_;
-    }
-
-    TMutableContiguousSpan GetDataMut() override {
-        YQL_ENSURE(false, "Payload mutation is not supported");
-    }
-
-    size_t GetOccupiedMemorySize() const override {
-        return Span_.GetSize();
-    }
-
-    const std::shared_ptr<TBuffer> Owner_;
-    const TContiguousSpan Span_;
-};
-
 }
 
-void TDqSerializedBatch::SetPayload(const NKikimr::NMiniKQL::TPagedBuffer::TPtr& buffer) {
+void TDqSerializedBatch::SetPayload(TRope&& payload) {
+    Proto.ClearRaw();
     if (IsOOBTransport((NDqProto::EDataTransportVersion)Proto.GetTransportVersion())) {
-        Payload = NKikimr::NMiniKQL::TPagedBuffer::AsRope(std::move(buffer));
+        Payload = std::move(payload);
     } else {
-        Proto.MutableRaw()->reserve(buffer->Size());
-        buffer->CopyTo(*Proto.MutableRaw());
+        Payload.clear();
+        Proto.MutableRaw()->reserve(payload.size());
+        while (!payload.IsEmpty()) {
+            auto it = payload.Begin();
+            Proto.MutableRaw()->append(it.ContiguousData(), it.ContiguousSize());
+            payload.Erase(it, it + it.ContiguousSize());
+        }
     }
  }
 
@@ -92,10 +75,7 @@ TDqSerializedBatch LoadSpilled(TBuffer&& blob) {
 
     size_t ropeSize = ReadNumber<size_t>(source);
     YQL_ENSURE(ropeSize == source.size(), "Spilled data is corrupted");
-    if (ropeSize) {
-        result.Payload = TRope(new TContigousChunkOverBuf(sharedBuf, source));
-    }
-
+    result.Payload = MakeReadOnlyRope(sharedBuf, source.data(), source.size());
     return result;
 }
 

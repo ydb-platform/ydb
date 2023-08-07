@@ -330,6 +330,8 @@ message ColumnMeta {
     Type type = 2;
     // Column family name of the column
     string family = 3;
+    // Column nullability
+    optional bool not_null = 4;
 }
 
 message DateTypeColumnModeSettings {
@@ -1134,4 +1136,3 @@ message ExecuteScanQueryPartialResult {
     reserved 5; // query_plan
     Ydb.TableStats.QueryStats query_stats = 6;
 }
-

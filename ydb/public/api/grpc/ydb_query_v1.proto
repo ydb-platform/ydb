@@ -54,13 +54,4 @@ service QueryService {
     // For persistent scripts, you can fetch results in specific position of specific result set using
     // position instead of fetch_token.
     rpc FetchScriptResults(Query.FetchScriptResultsRequest) returns (Query.FetchScriptResultsResponse);
-
-    // Persistently save script content in DB.
-    rpc SaveScript(Query.SaveScriptRequest) returns (Query.SaveScriptResponse);
-
-    // List saved scripts in DB.
-    rpc ListScripts(Query.ListScriptsRequest) returns (Query.ListScriptsResponse);
-
-    // Delete saved script by id.
-    rpc DeleteScript(Query.DeleteScriptRequest) returns (Query.DeleteScriptResponse);
 }

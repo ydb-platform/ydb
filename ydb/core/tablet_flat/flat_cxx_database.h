@@ -1989,20 +1989,9 @@ struct Schema {
     };
 
     template <typename... Settings>
-    struct SchemaSettings;
-
-    template <typename Setting>
-    struct SchemaSettings<Setting> {
+    struct SchemaSettings {
         static void Materialize(TToughDb& database) {
-            Setting::Materialize(database);
-        }
-    };
-
-    template <typename Setting, typename... Settings>
-    struct SchemaSettings<Setting, Settings...> : SchemaSettings<Settings...> {
-        static void Materialize(TToughDb& database) {
-            Setting::Materialize(database);
-            SchemaSettings<Settings...>::Materialize(database);
+            (Settings::Materialize(database), ...);
         }
     };
 
@@ -2105,7 +2094,7 @@ struct Schema {
         }
     };
 
-    using TSettings = SchemaSettings<ExecutorLogBatching<false>>;
+    using TSettings = SchemaSettings<>;
 };
 
 template <>

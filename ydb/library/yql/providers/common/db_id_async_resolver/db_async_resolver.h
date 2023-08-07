@@ -2,18 +2,40 @@
 
 #include <library/cpp/threading/future/future.h>
 #include <util/string/builder.h>
+#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NYql {
 
-enum class DatabaseType {
+enum class EDatabaseType {
     Ydb,
     ClickHouse,
     DataStreams,
     ObjectStorage,
-    Generic
+    PostgreSQL
 };
 
+inline EDatabaseType DataSourceKindToDatabaseType(NConnector::NApi::EDataSourceKind dataSourceKind) {
+    switch (dataSourceKind) {
+        case NConnector::NApi::EDataSourceKind::POSTGRESQL:
+            return EDatabaseType::PostgreSQL;
+        case NConnector::NApi::EDataSourceKind::CLICKHOUSE:
+            return EDatabaseType::ClickHouse;
+        default:
+            ythrow yexception() << TStringBuf() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
+    }
+}
+
+inline TString DatabaseTypeToString(EDatabaseType databaseType) {
+    switch (databaseType) {
+        case EDatabaseType::ClickHouse:
+            return "clickhouse";
+        case EDatabaseType::PostgreSQL:
+            return "postgresql";
+        default:
+            ythrow yexception() << TStringBuf() << "Unknown database type: " << int(databaseType);
+    }
+}
 
 struct TDatabaseAuth {
     TString StructuredToken;
@@ -27,7 +49,7 @@ struct TDatabaseAuth {
     }
 };
 
-struct TDbResolverResponse {
+struct TDatabaseResolverResponse {
 
     struct TEndpoint {
         std::tuple<TString, ui32> ParseHostPort() const {
@@ -47,11 +69,11 @@ struct TDbResolverResponse {
         bool Secure = false;
     };
 
-    using TDatabaseEndpointsMap = THashMap<std::pair<TString, DatabaseType>, TEndpoint>;
+    using TDatabaseEndpointsMap = THashMap<std::pair<TString, EDatabaseType>, TEndpoint>;
 
-    TDbResolverResponse() = default;
+    TDatabaseResolverResponse() = default;
 
-    TDbResolverResponse(
+    TDatabaseResolverResponse(
         TDatabaseEndpointsMap&& databaseId2Endpoint,
         bool success = false,
         const NYql::TIssues& issues = {})
@@ -66,9 +88,9 @@ struct TDbResolverResponse {
 
 class IDatabaseAsyncResolver {
 public:
-    using TDatabaseAuthMap = THashMap<std::pair<TString, DatabaseType>, NYql::TDatabaseAuth>;
+    using TDatabaseAuthMap = THashMap<std::pair<TString, EDatabaseType>, NYql::TDatabaseAuth>;
 
-    virtual NThreading::TFuture<NYql::TDbResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const = 0;
+    virtual NThreading::TFuture<NYql::TDatabaseResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const = 0;
 
     virtual ~IDatabaseAsyncResolver() = default;
 };

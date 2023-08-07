@@ -124,7 +124,9 @@ bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& type, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);
 bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);
+bool EnsureWideStreamBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureType(const TExprNode& node, TExprContext& ctx);
@@ -135,6 +137,8 @@ bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TE
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+
+bool IsVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVoidLiteral(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallableType(const TExprNode& node, TExprContext& ctx);
@@ -294,7 +298,7 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 
 bool IsSystemMember(const TStringBuf& memberName);
 
-template<bool Deduplicte = true, bool OrListsOfAtoms = false>
+template<bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
@@ -321,7 +325,7 @@ bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& 
 IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
     bool& needRetype, TExprContext& ctx);
 
-TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow, 
+TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
     const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx);
 
 const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);

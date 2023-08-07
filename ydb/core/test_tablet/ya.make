@@ -27,7 +27,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/t1ha
-    library/cpp/digest/md5
+    library/cpp/json
     ydb/core/keyvalue
     ydb/core/protos
     ydb/core/util

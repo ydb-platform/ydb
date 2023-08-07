@@ -2,6 +2,7 @@
 #include "util.h"
 
 #include <library/cpp/json/json_value.h>
+#include <library/cpp/protobuf/json/proto/enum_options.pb.h>
 
 #include <google/protobuf/util/time_util.h>
 #include <google/protobuf/message.h>
@@ -187,6 +188,18 @@ FindEnumValue(const NProtoBuf::EnumDescriptor* enumField,
     return nullptr;
 }
 
+static const NProtoBuf::EnumValueDescriptor*
+FindEnumValueByJsonName(const NProtoBuf::EnumDescriptor* enumField, TStringBuf target) {
+    for (int i = 0; i < enumField->value_count(); i++) {
+        auto* valueDescriptor = enumField->value(i);
+        if (valueDescriptor->options().GetExtension(json_enum_value) == target) {
+            return valueDescriptor;
+        }
+    }
+    return nullptr;
+}
+
+
 static void
 JsonEnum2Field(const NJson::TJsonValue& json,
                google::protobuf::Message& proto,
@@ -211,12 +224,16 @@ JsonEnum2Field(const NJson::TJsonValue& json,
         }
     } else if (json.IsString()) {
         const auto& value = json.GetString();
-        if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) {
-            enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase);
-        } else if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumSnakeCaseInsensitive) {
-            enumFieldValue = FindEnumValue(enumField, value, NProtobufJson::EqualsIgnoringCaseAndUnderscores);
+        if (config.UseJsonEnumValue) {
+            enumFieldValue = FindEnumValueByJsonName(enumField, value);
         } else {
-            enumFieldValue = enumField->FindValueByName(value);
+            if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) {
+                enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase);
+            } else if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumSnakeCaseInsensitive) {
+                enumFieldValue = FindEnumValue(enumField, value, NProtobufJson::EqualsIgnoringCaseAndUnderscores);
+            } else {
+                enumFieldValue = enumField->FindValueByName(value);
+            }
         }
         if (!enumFieldValue) {
             ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << ".";

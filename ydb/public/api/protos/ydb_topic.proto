@@ -49,6 +49,18 @@ message UpdateTokenRequest {
 message UpdateTokenResponse {
 }
 
+message PartitionWithGeneration {
+    // Partition identifier.
+    int64 partition_id = 1;
+
+    // Partition generation.
+    int64 generation = 2;
+};
+
+message MetadataItem {
+    string key = 1;
+    bytes value = 2;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // StreamWrite
@@ -103,10 +115,14 @@ message StreamWriteMessage {
             string message_group_id = 4;
             // Explicit partition id to write to.
             int64 partition_id = 5;
+            // Explicit partition location to write to.
+            PartitionWithGeneration partition_with_generation = 7;
         }
         // Explicitly request for last sequential number
         // It may be expensive, if producer wrote to many partitions before.
         bool get_last_seq_no = 6;
+
+
     }
 
     // Response for handshake.
@@ -150,9 +166,11 @@ message StreamWriteMessage {
                 string message_group_id = 5;
                 // Explicit partition id to write to.
                 int64 partition_id = 6;
+                // Explicit partition location to write to.
+                PartitionWithGeneration partition_with_generation = 8;                
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
-            map<string, string> message_meta = 7;
+            repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
         }
     }
 
@@ -360,7 +378,7 @@ message StreamReadMessage {
 
             // Filled if message_group_id was set on message write.
             string message_group_id = 7;
-            map<string, string> message_meta = 8;
+            repeated MetadataItem metadata_items = 8;
 
         }
 
@@ -736,6 +754,14 @@ message CreateTopicResponse {
 message CreateTopicResult {
 }
 
+// Topic partition location
+message PartitionLocation {
+    // Node identificator.
+    int32 node_id = 1;
+
+    // Partition generation.
+    int64 generation = 2;
+}
 
 // Describe topic request sent from client to server.
 message DescribeTopicRequest {
@@ -746,6 +772,9 @@ message DescribeTopicRequest {
 
     // Include topic statistics.
     bool include_stats = 3;
+
+    // Include partition location.
+    bool include_location = 4;
 }
 
 // Describe topic response sent from server to client.
@@ -789,6 +818,9 @@ message DescribeTopicResult {
     // Zero value means default limit: 1 MB per second.
     int64 partition_write_speed_bytes_per_second = 8;
 
+    int64 partition_total_read_speed_bytes_per_second = 14;
+    int64 partition_consumer_read_speed_bytes_per_second = 15;
+
     // Burst size for write in partition, in bytes.
     // Zero value means default limit: 1 MB.
     int64 partition_write_burst_bytes = 9;
@@ -817,6 +849,9 @@ message DescribeTopicResult {
 
         // Stats for partition, filled only when include_stats in request is true.
         PartitionStats partition_stats = 5;
+
+        // Partition location, filled only when include_location in request is true.
+        PartitionLocation partition_location = 6;
     }
 
     message TopicStats {
@@ -832,6 +867,35 @@ message DescribeTopicResult {
     }
 }
 
+// Describe partition request sent from client to server.
+message DescribePartitionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Topic path.
+    string path = 2;
+
+    // Partition identifier.
+    int64 partition_id = 3;
+
+    // Include partition statistics.
+    bool include_stats = 4;
+
+    // Include partition location.
+    bool include_location = 5;
+}
+
+// Describe partition response sent from server to client.
+// If topic is not existed then response status will be "SCHEME_ERROR".
+message DescribePartitionResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Describe partition result message that will be inside DescribeTopicResponse.operation.
+message DescribePartitionResult {
+    // Partitions description.
+    DescribeTopicResult.PartitionInfo partition = 1;
+}
 
 // Describe topic's consumer request sent from client to server.
 message DescribeConsumerRequest {
@@ -843,6 +907,8 @@ message DescribeConsumerRequest {
     string consumer = 3;
     // Include consumer statistics.
     bool include_stats = 4;
+    // Include partition location.
+    bool include_location = 5;
 }
 
 // Describe topic's consumer response sent from server to client.
@@ -875,6 +941,9 @@ message DescribeConsumerResult {
         PartitionStats partition_stats = 5;
         // Stats for consumer of this partition, filled only when include_stats in request is true.
         PartitionConsumerStats partition_consumer_stats = 6;
+
+        // Partition location, filled only when include_location in request is true.
+        PartitionLocation partition_location = 7;
     }
 
     message PartitionConsumerStats {
@@ -917,8 +986,8 @@ message PartitionStats {
     // How much bytes were written during several windows in this partition.
     MultipleWindowsStat bytes_written = 5;
 
-    // Host where tablet for this partition works. Useful for debugging purposes.
-    int32 partition_node_id = 8;
+    // Partition host. Useful for debugging purposes.
+    int32 partition_node_id = 8 [deprecated=true]; //Use PartitionLocation
 }
 
 

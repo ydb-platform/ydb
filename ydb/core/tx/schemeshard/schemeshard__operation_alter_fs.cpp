@@ -26,7 +26,9 @@ public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType
+        });
     }
 
     bool HandleReply(
@@ -132,7 +134,9 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType
+        });
     }
 
     bool HandleReply(

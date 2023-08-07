@@ -31,6 +31,7 @@ target_link_options(yql-providers-common-structured_token-ut PRIVATE
 )
 target_sources(yql-providers-common-structured_token-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/ut/yql_structured_token_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/ut/yql_token_builder_ut.cpp
 )
 set_property(
   TARGET

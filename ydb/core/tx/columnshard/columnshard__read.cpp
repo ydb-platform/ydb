@@ -92,7 +92,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        metadata = PrepareReadMetadata(read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(), Self->BatchCache,
+        metadata = PrepareReadMetadata(read, Self->InsertTable, Self->TablesManager.GetPrimaryIndex(),
                                        ErrorDescription, false);
     }
 

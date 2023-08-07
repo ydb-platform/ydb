@@ -26,7 +26,7 @@
 #define ARROW_FULL_SO_VERSION "500.0.0"
 
 #define ARROW_CXX_COMPILER_ID "GNU"
-#define ARROW_CXX_COMPILER_VERSION "10.2.0"
+#define ARROW_CXX_COMPILER_VERSION "12.2.0"
 #define ARROW_CXX_COMPILER_FLAGS " -fdiagnostics-color=always -O3 -DNDEBUG"
 
 #define ARROW_GIT_ID ""

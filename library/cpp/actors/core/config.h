@@ -44,6 +44,8 @@ namespace NActors {
         i16 MaxThreadCount = 0;
         i16 DefaultThreadCount = 0;
         i16 Priority = 0;
+        i16 SharedExecutorsCount = 0;
+        i16 SoftProcessingDurationTs = 0;
     };
 
     struct TIOExecutorPoolConfig {

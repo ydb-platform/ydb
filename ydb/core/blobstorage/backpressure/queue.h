@@ -184,6 +184,7 @@ public:
             const TBlobStorageGroupType& type);
     void InvalidateCosts();
     bool SetMaxWindowSize(ui64 maxWindowSize);
+    ui32 GetMinREALHugeBlobInBytes() const;
 
     void SetItemQueue(TItem& item, EItemQueue newQueue);
 

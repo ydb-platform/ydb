@@ -42,7 +42,7 @@ public:
     }
 };
 
-THolder<IActor> CreateVSlotsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateVSlotsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     return MakeHolder<TVSlotsScan>(ownerId, scanId, tableId, tableRange, columns);

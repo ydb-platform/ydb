@@ -2,53 +2,41 @@
 
 namespace NKikimr::NTestShard {
 
-    std::optional<TString> TLoadActor::FindKeyToDelete() {
-        std::vector<std::tuple<ui64, TString>> options; // (accumLen, key)
-        options.reserve(Keys.size());
-        ui64 accumLen = 0;
-        for (const auto& [key, info] : Keys) {
-            if (info.ConfirmedState == info.PendingState && info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED &&
-                    !KeysBeingRead.contains(key)) {
-                accumLen += info.Len;
-                options.emplace_back(accumLen, key);
-            }
-        }
-        if (options.empty()) {
-            return std::nullopt;
-        }
-
-        const size_t num = std::upper_bound(options.begin(), options.end(), std::make_tuple(
-            TAppData::RandomProvider->Uniform(accumLen), TString())) - options.begin();
-        Y_VERIFY(num < options.size());
-        return std::get<1>(options[num]);
-    }
-
     void TLoadActor::IssueDelete() {
-        const ui64 barrier = TAppData::RandomProvider->Uniform(Settings.GetMinDataBytes(), Settings.GetMaxDataBytes());
-        while (BytesOfData > barrier) {
-            const auto& key = FindKeyToDelete();
-            if (!key) {
-                break;
+        std::vector<TString> options;
+        options.reserve(ConfirmedKeys.size());
+        for (const TString& key : ConfirmedKeys) {
+            if (!KeysBeingRead.contains(key)) {
+                options.emplace_back(key);
             }
+        }
+
+        const ui64 barrier = Settings.GetMinDataBytes() + RandomNumber<ui64>(Settings.GetMaxDataBytes() - Settings.GetMinDataBytes() + 1);
+        while (!options.empty() && BytesOfData > barrier) {
+            const size_t index = RandomNumber(options.size());
+            std::swap(options[index], options.back());
+            TString key = std::move(options.back());
+            options.pop_back();
 
             auto ev = CreateRequest();
             auto& record = ev->Record;
+            const ui64 cookie = record.GetCookie();
             auto *del = record.AddCmdDeleteRange();
             auto *r = del->MutableRange();
-            r->SetFrom(*key);
+            r->SetFrom(key);
             r->SetIncludeFrom(true);
-            r->SetTo(*key);
+            r->SetTo(key);
             r->SetIncludeTo(true);
 
             STLOG(PRI_INFO, TEST_SHARD, TS09, "deleting data", (TabletId, TabletId), (Key, key));
 
-            const auto [difIt, difInserted] = DeletesInFlight.try_emplace(record.GetCookie(), *key);
-            Y_VERIFY(difInserted);
-            Y_VERIFY(difIt->second.KeysInQuery.size() == 1);
-
-            const auto it = Keys.find(*key);
+            const auto it = Keys.find(key);
             Y_VERIFY(it != Keys.end());
             RegisterTransition(*it, ::NTestShard::TStateServer::CONFIRMED, ::NTestShard::TStateServer::DELETE_PENDING, std::move(ev));
+
+            const auto [difIt, difInserted] = DeletesInFlight.try_emplace(cookie, std::move(key));
+            Y_VERIFY(difInserted);
+            Y_VERIFY(difIt->second.KeysInQuery.size() == 1);
 
             BytesOfData -= it->second.Len;
             BytesProcessed += it->second.Len;

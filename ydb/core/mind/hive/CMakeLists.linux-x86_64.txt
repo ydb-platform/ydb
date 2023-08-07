@@ -15,6 +15,7 @@ target_link_libraries(core-mind-hive PUBLIC
   yutil
   cpp-actors-core
   cpp-actors-interconnect
+  cpp-containers-ring_buffer
   library-cpp-json
   cpp-monlib-dynamic_counters
   ydb-core-base

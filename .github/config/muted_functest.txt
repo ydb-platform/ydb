@@ -1,0 +1,17 @@
+open_source.test_yatest_common.TestYaTestContext::test_source_path
+::suite_tests.test_postgres
+sqs.common.test_queues_managing.TestQueuesManagingWithTenant
+sqs.common.test_queues_managing.TestQueuesManagingWithPathTestQueuesManagingWithPath
+sqs.common.test_queue_attributes_validation.TestQueueAttributesValidation
+sqs.common.test_queues_managing.TestQueuesManagingWithTenant
+sqs.common.test_queues_managing.TestQueuesManagingWithPathTestQueuesManagingWithPath
+sqs.large.test_leader_start_inflight.TestSqsMultinodeCluster
+sqs.messaging.test_fifo_messaging.TestSqsFifoMessagingWithTenant
+sqs.messaging.test_fifo_messaging.TestSqsFifoMessagingWithPath
+::sqs.cloud.test_yandex_cloud_mode
+::suite_tests.test_sql_logic
+::suite_tests.test_stream_query
+tenants.test_tenants.TestTenants
+tenants.test_tenants
+tenants.test_dynamic_tenants
+tenants.test_storage_config.TestStorageConfig

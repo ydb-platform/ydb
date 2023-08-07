@@ -1,0 +1,30 @@
+package NYT.NYson.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/yson";
+
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions
+{
+    optional string field_name = 3000;
+    repeated string field_name_alias = 3003;
+    optional bool yson_string = 3001;
+    optional bool yson_map = 3002;
+    optional bool required = 3004;
+}
+
+extend google.protobuf.EnumValueOptions
+{
+    optional string enum_value_name = 3001;
+}
+
+extend google.protobuf.MessageOptions
+{
+    optional bool attribute_dictionary = 3000;
+}
+
+extend google.protobuf.FileOptions
+{
+    optional bool derive_underscore_case_names = 3000;
+}

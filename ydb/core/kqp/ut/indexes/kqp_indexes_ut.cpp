@@ -1310,6 +1310,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting});
+
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

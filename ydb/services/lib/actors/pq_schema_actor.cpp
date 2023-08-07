@@ -15,6 +15,7 @@
 namespace NKikimr::NGRpcProxy::V1 {
 
     constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
+    constexpr TStringBuf GRPC_ENDPOINT_PREFIX = "grpc://";
     constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS =
         TDuration::Days(16).MilliSeconds();
     constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
@@ -671,7 +672,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         const auto& channelProfiles = pqConfig.GetChannelProfiles();
         if (channelProfiles.size() > 2) {
-            partConfig->SetNumChannels(channelProfiles.size() - 2); // channels 0,1 are reserved in tablet
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (settings.max_partition_storage_size() < 0) {
@@ -813,10 +813,12 @@ namespace NKikimr::NGRpcProxy::V1 {
                 if (endpoint.StartsWith(GRPCS_ENDPOINT_PREFIX)) {
                     mirrorFrom->SetUseSecureConnection(true);
                     endpoint = TString(endpoint.begin() + GRPCS_ENDPOINT_PREFIX.size(), endpoint.end());
+                } else if (endpoint.StartsWith(GRPC_ENDPOINT_PREFIX)) {
+                    endpoint = TString(endpoint.begin() + GRPC_ENDPOINT_PREFIX.size(), endpoint.end());
                 }
                 auto parts = SplitString(endpoint, ":");
                 if (parts.size() != 2) {
-                    error = TStringBuilder() << "endpoint in remote mirror rule must be in format [grpcs://]server:port, but got '"
+                    error = TStringBuilder() << "endpoint in remote mirror rule must be in format [grpcs://]server:port or [grpc://]server:port, but got '"
                                              << settings.remote_mirror_rule().endpoint() << "'";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
@@ -993,7 +995,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         const auto& channelProfiles = pqConfig.GetChannelProfiles();
         if (channelProfiles.size() > 2) {
-            partConfig->SetNumChannels(channelProfiles.size() - 2); // channels 0,1 are reserved in tablet
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (request.has_retention_period()) {

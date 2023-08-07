@@ -36,6 +36,11 @@ TStructuredToken& TStructuredToken::SetField(const TString& name, const TString&
     return *this;
 }
 
+TStructuredToken& TStructuredToken::ClearField(const TString& name) {
+    Data.erase(name);
+    return *this;
+}
+
 TString TStructuredToken::ToJson() const {
     TStringStream output;
     // set "format output" to false, no need for extra indents

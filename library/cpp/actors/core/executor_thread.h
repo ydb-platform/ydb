@@ -40,6 +40,14 @@ namespace NActors {
             : TExecutorThread(workerId, 0, actorSystem, executorPool, mailboxTable, threadName, timePerMailbox, eventsPerMailbox)
         {}
 
+        TExecutorThread(TWorkerId workerId,
+                    TActorSystem* actorSystem,
+                    TVector<IExecutorPool*> executorPools,
+                    const TString& threadName,
+                    ui64 softProcessingDurationTs,
+                    TDuration timePerMailbox,
+                    ui32 eventsPerMailbox);
+
         virtual ~TExecutorThread();
 
         template <ESendingType SendingType = ESendingType::Common>
@@ -66,15 +74,19 @@ namespace NActors {
     private:
         void* ThreadProc();
 
+        void ProcessExecutorPool(IExecutorPool *pool, bool isSharedThread);
+
         template <typename TMailbox, bool IsTailExecution = false>
         bool Execute(TMailbox* mailbox, ui32 hint);
 
     public:
         TActorSystem* const ActorSystem;
+        TAtomic StopFlag = false;
 
     private:
         // Pool-specific
-        IExecutorPool* const ExecutorPool;
+        IExecutorPool* ExecutorPool;
+        TVector<IExecutorPool*> AvailableExecutorPools;
 
         // Event-specific (currently executing)
         TVector<THolder<IActor>> DyingActors;
@@ -88,6 +100,10 @@ namespace NActors {
         const TString ThreadName;
         volatile TThreadId ThreadId = UnknownThreadId;
         bool IsUnitedWorker = false;
+
+        TDuration TimePerMailbox;
+        ui32 EventsPerMailbox;
+        ui64 SoftProcessingDurationTs;
     };
 
     template <typename TMailbox>

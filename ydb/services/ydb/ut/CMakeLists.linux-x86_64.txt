@@ -42,6 +42,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   cpp-client-ydb_operation
   cpp-client-ydb_scheme
   cpp-client-ydb_monitoring
+  services-ydb-ut_helpers
 )
 target_link_options(ydb-services-ydb-ut PRIVATE
   -ldl

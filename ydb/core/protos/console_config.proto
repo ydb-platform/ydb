@@ -121,9 +121,11 @@ message TConfigItem {
         BackgroundTasksConfigItem = 60;
         ExternalIndexConfigItem = 63;
         YamlConfigEnabledItem = 64;
-        ConveyorConfigItem = 65;
+        ScanConveyorConfigItem = 65;
         ColumnShardConfigItem = 66;
         AwsCompatibilityConfigItem = 70;
+        KafkaProxyConfig = 71;
+        CompConveyorConfigItem = 72;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

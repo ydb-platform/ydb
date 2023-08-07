@@ -21,7 +21,7 @@ void TYdbConfiguration::Init(
     const TYdbGatewayConfig& config,
     TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds)
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds)
 {
     TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
     for (auto& cluster: config.GetClusterMapping()) {
@@ -43,7 +43,7 @@ void TYdbConfiguration::Init(
 
         if (dbResolver) {
             if (cluster.GetId()) {
-                databaseIds[std::make_pair(cluster.GetId(), NYql::DatabaseType::Ydb)] =
+                databaseIds[std::make_pair(cluster.GetId(), NYql::EDatabaseType::Ydb)] =
                     NYql::TDatabaseAuth{structuredTokenJson, cluster.GetAddBearerToToken()};
                 DbId2Clusters[cluster.GetId()].emplace_back(cluster.GetName());
             }

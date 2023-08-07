@@ -12,6 +12,11 @@
 
 namespace NKikimr::NConsole {
 
+void TConsole::DefaultSignalTabletActive(const TActorContext &)
+{
+    // must be empty
+}
+
 void TConsole::OnActivateExecutor(const TActorContext &ctx)
 {
     auto domains = AppData(ctx)->DomainsInfo;
@@ -172,13 +177,6 @@ void TConsole::Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorCon
 void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
-}
-
-void TConsole::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                      const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)

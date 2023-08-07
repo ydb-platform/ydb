@@ -118,6 +118,7 @@ public:
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
 
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
+        AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
 #undef HNDL
 
         SetGlobal(1u);
@@ -164,6 +165,12 @@ protected:
     TMaybeNode<TExprBase> RewriteKqpReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteReadTable(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteKqpReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteKqpLookupTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteLookupTable(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteKqpLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

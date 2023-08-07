@@ -75,23 +75,11 @@ namespace NSequenceShard {
     }
 
     STFUNC(TSequenceShard::StateInit) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvPoison, Handle);
-
-            default:
-                StateInitImpl(ev, SelfId());
-                break;
-        }
-    }
-
-    STFUNC(TSequenceShard::StateZombie) {
         StateInitImpl(ev, SelfId());
     }
 
     STFUNC(TSequenceShard::StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvPoison, Handle);
-
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 
@@ -115,11 +103,6 @@ namespace NSequenceShard {
     void TSequenceShard::SwitchToWork(const TActorContext& ctx) {
         SignalTabletActive(ctx);
         Become(&TThis::StateWork);
-    }
-
-    void TSequenceShard::Handle(TEvents::TEvPoison::TPtr&) {
-        Send(Tablet(), new TEvents::TEvPoison());
-        Become(&TThis::StateZombie);
     }
 
     void TSequenceShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {

@@ -1,5 +1,5 @@
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/type_info.proto";
+import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
@@ -967,6 +967,9 @@ message TBackupTask {
     }
 
     optional TCompressionOptions Compression = 13; // currently available for s3
+
+    optional uint64 SnapshotStep = 14;
+    optional uint64 SnapshotTxId = 15;
 }
 
 message TRestoreTask {
@@ -1729,9 +1732,15 @@ message TExternalTableDescription {
 message NoneAuth {
 }
 
+message ServiceAccountAuth {
+    optional string Id = 1;
+    optional string SecretName = 2;
+}
+
 message TAuth {
     oneof identity {
         NoneAuth None = 3;
+        ServiceAccountAuth ServiceAccount = 4;
     }
 }
 

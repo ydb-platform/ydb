@@ -696,7 +696,7 @@ namespace NTable {
                     TCellDefaults object for expanding defaults.
                  */
 
-                Y_VERIFY(dataPage->Records, "Invalid EPage::DataPage blob");
+                Y_VERIFY(dataPage->Count, "Invalid EPage::DataPage blob");
 
                 if (groupId.IsMain()) {
                     Y_VERIFY_DEBUG(NextSliceFirstRowId != Max<TRowId>());
@@ -729,8 +729,8 @@ namespace NTable {
                 if (groupId.IsMain() && (NextSliceForce || Phase == 1 || Current.Bytes - LastSliceBytes >= SliceSize)) {
                     NextSliceForce = false;
 
-                    TRowId lastRowId = dataPage.BaseRow() + dataPage->Records - 1;
-                    InitKey(dataPage->Record(dataPage->Records - 1), groupId);
+                    TRowId lastRowId = dataPage.BaseRow() + dataPage->Count - 1;
+                    InitKey(dataPage->Record(dataPage->Count - 1), groupId);
 
                     SaveSlice(lastRowId, TSerializedCellVec(Key));
 

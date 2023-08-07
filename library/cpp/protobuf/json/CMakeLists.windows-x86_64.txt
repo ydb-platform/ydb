@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(proto)
 
 add_library(cpp-protobuf-json)
 target_link_libraries(cpp-protobuf-json PUBLIC
@@ -14,6 +15,7 @@ target_link_libraries(cpp-protobuf-json PUBLIC
   contrib-libs-protobuf
   library-cpp-json
   cpp-protobuf-util
+  protobuf-json-proto
   cpp-string_utils-relaxed_escaper
 )
 target_sources(cpp-protobuf-json PRIVATE

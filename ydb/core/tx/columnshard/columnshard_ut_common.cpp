@@ -75,40 +75,78 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
     UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
 }
 
-bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
-               const TString& data, std::shared_ptr<arrow::Schema> schema, bool waitResult) {
-    const TString dedupId = ToString(writeId);
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, metaShard, writeId, tableId, dedupId, data, 1);
-    if (schema) {
-        write->SetArrowSchema(NArrow::SerializeSchema(*schema));
-    }
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
+void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
+    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
+    auto tx = plan->Record.AddTransactions();
+    tx->SetTxId(snap.GetTxId());
+    ActorIdToProto(sender, tx->MutableAckTo());
 
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
+    UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
     if (waitResult) {
-        return WaitWriteResult(runtime, metaShard) == NKikimrTxColumnShard::EResultStatus::SUCCESS;
+        auto ev = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(sender);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::COMPLETED);
     }
-    return true;
 }
 
-ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 metaShard) {
+ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds) {
     TAutoPtr<IEventHandle> handle;
     auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvWriteResult>(handle);
     UNIT_ASSERT(event);
 
     auto& resWrite = Proto(event);
-    UNIT_ASSERT_EQUAL(resWrite.GetOrigin(), TTestTxConfig::TxTablet0);
-    UNIT_ASSERT_EQUAL(resWrite.GetTxInitiator(), metaShard);
+    UNIT_ASSERT_EQUAL(resWrite.GetOrigin(), shardId);
+    UNIT_ASSERT_EQUAL(resWrite.GetTxInitiator(), 0);
+    if (writeIds && resWrite.GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
+        writeIds->push_back(resWrite.GetWriteId());
+    }
     return resWrite.GetStatus();
 }
 
-std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
-                              ui64 tableId, const TString& dedupId, const TString& data,
-                              std::shared_ptr<arrow::Schema> schema)
-{
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data, 1);
-    if (schema) {
-        write->SetArrowSchema(NArrow::SerializeSchema(*schema));
+bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 tableId,
+                    const NLongTxService::TLongTxId& longTxId, const ui64 writeId,
+                    const TString& data, const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds) {
+    const TString dedupId = ToString(writeId);
+
+    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, dedupId, data, writeId);
+    Y_VERIFY(schema);
+    write->SetArrowSchema(NArrow::SerializeSchema(*schema));
+    ForwardToTablet(runtime, shardId, sender, write.release());
+
+    if (writeIds) {
+        return WaitWriteResult(runtime, shardId, writeIds) == NKikimrTxColumnShard::EResultStatus::SUCCESS;
     }
+    return true;
+}
+
+bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>* writeIds) {
+    NLongTxService::TLongTxId longTxId;
+    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+    return WriteDataImpl(runtime, sender, shardId, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds);
+
+}
+
+bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, bool waitResult, std::vector<ui64>* writeIds) {
+    NLongTxService::TLongTxId longTxId;
+    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+    if (writeIds) {
+        return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds);
+    }
+    std::vector<ui64> ids;
+    return WriteDataImpl(runtime, sender, TTestTxConfig::TxTablet0, tableId, longTxId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), waitResult ? &ids : nullptr);
+}
+
+std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
+                              ui64 tableId, const ui64 writePartId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema)
+{
+    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, tableId, "0", data, writePartId);
+    write->SetArrowSchema(NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema)));
+
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
     TAutoPtr<IEventHandle> handle;
     auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvWriteResult>(handle);
@@ -161,11 +199,11 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, scan.release());
 }
 
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const std::vector<ui64>& writeIds) {
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds) {
     NKikimrTxColumnShard::ETransactionKind txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
-    TString txBody = TTestSchema::CommitTxBody(metaShard, writeIds);
+    TString txBody = TTestSchema::CommitTxBody(0, writeIds);
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+    ForwardToTablet(runtime, shardId, sender,
                 new TEvColumnShard::TEvProposeTransaction(txKind, sender, txId, txBody));
     TAutoPtr<IEventHandle> handle;
     auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
@@ -178,18 +216,22 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard,
 }
 
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
-    ProposeCommit(runtime, sender, 0, txId, writeIds);
+    ProposeCommit(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds);
 }
 
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds) {
-    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep, 0, TTestTxConfig::TxTablet0);
+    PlanCommit(runtime, sender, TTestTxConfig::TxTablet0, planStep, txIds);
+}
+
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds) {
+    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep, 0, shardId);
     for (ui64 txId : txIds) {
         auto tx = plan->Record.AddTransactions();
         tx->SetTxId(txId);
         ActorIdToProto(sender, tx->MutableAckTo());
     }
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
+    ForwardToTablet(runtime, shardId, sender, plan.release());
     TAutoPtr<IEventHandle> handle;
 
     for (ui32 i = 0; i < txIds.size(); ++i) {

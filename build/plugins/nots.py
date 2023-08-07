@@ -427,7 +427,7 @@ def _select_matching_version(erm_json, resource_name, range_str):
                 resource_name,
                 range_str,
                 map(str, toolchain_versions),
-                "https://docs.yandex-team.ru/ya-make/tutorials/typescript#nodejs",
+                "https://docs.yandex-team.ru/ya-make/manual/typescript/toolchain",
                 str(error),
             )
         )

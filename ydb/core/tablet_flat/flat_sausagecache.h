@@ -48,12 +48,12 @@ public:
             LoadStateRequestedAsync,
         };
 
-        ui64 LoadState : 2;
-        ui64 Sticky : 1;
-        ui64 SharedPending : 1;
-        ui64 : 4; // padding
-        const ui64 Size : 24;
-        const ui64 Id : 32;
+        ui32 LoadState : 2;
+        ui32 Sticky : 1;
+        ui32 SharedPending : 1;
+        
+        const ui32 Id;
+        const size_t Size;
 
         TInfo* const Info;
         TIntrusivePtr<TPrivatePageCachePinPad> PinPad;
@@ -61,7 +61,7 @@ public:
         TSharedPageRef SharedBody;
         TSharedData PinnedBody;
 
-        TPage(ui32 size, ui32 pageId, TInfo* info);
+        TPage(size_t size, ui32 pageId, TInfo* info);
 
         TPage(const TPage&) = delete;
         TPage(TPage&&) = delete;

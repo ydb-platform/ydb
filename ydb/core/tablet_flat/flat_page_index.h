@@ -64,19 +64,18 @@ namespace NPage {
         TIndex(TSharedData raw)
             : Raw(std::move(raw))
         {
-            const auto got = NPage::TLabelWrapper().Read(Raw, EPage::Index);
+            const auto data = NPage::TLabelWrapper().Read(Raw, EPage::Index);
+            Y_VERIFY(data == ECodec::Plain && (data.Version == 2 || data.Version == 3));
 
-            Y_VERIFY(got == ECodec::Plain && (got.Version == 2 || got.Version == 3));
-
-            auto *hdr = TDeref<const TRecordsHeader>::At(got.Page.data(), 0);
-            auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
-
-            Y_VERIFY(hdr->Records >= 1u + (got.Version < 3 ? 0u : 1u));
+            auto *recordsHeader = TDeref<const TRecordsHeader>::At(data.Page.data(), 0);
+            auto count = recordsHeader->Count;
+            Y_VERIFY(count >= 1u + (data.Version == 3 ? 1 : 0));
 
             Page.Base = Raw.data();
-            Page.Array = TDeref<const TRecordsEntry>::At(hdr, skip);
-            Page.Records = hdr->Records - (got.Version == 3 ? 1 : 0);
-            LastKey = (got.Version == 3) ? Page.Record(Page.Records) : nullptr;
+            auto offsetsOffset = data.Page.size() - count * sizeof(TPgSize);
+            Page.Offsets = TDeref<const TRecordsEntry>::At(recordsHeader, offsetsOffset);
+            Page.Count = count - (data.Version == 3 ? 1 : 0);
+            LastKey = (data.Version == 3) ? Page.Record(Page.Count) : nullptr;
             EndRowId = LastKey ? LastKey->GetRowId() + 1 : Max<TRowId>();
         }
 
@@ -88,32 +87,6 @@ namespace NPage {
         NPage::TLabel Label() const noexcept
         {
             return ReadUnaligned<NPage::TLabel>(Raw.data());
-        }
-
-        TIter Rewind(TRowId to, TIter on, int dir) const
-        {
-            Y_VERIFY(dir == +1, "Only forward lookups supported");
-
-            if (to >= EndRowId || !on) {
-                return Page.End();
-            } else {
-                /* This branch have to never return End() since the real
-                    upper RowId value isn't known. Only Max<TRowId>() and
-                    invalid on iterator may be safetly mapped to End().
-                 */
-
-                for (size_t it = 0; ++it < 4 && ++on;) {
-                    if (on->GetRowId() > to) return --on;
-                }
-
-                auto less = [](TRowId rowId, const TRecord &rec) {
-                    return rowId < rec.GetRowId();
-                };
-
-                auto it = std::upper_bound(on, Page.End(), to, less);
-
-                return (it && it == on) ? on : --it;
-            }
         }
 
         /**

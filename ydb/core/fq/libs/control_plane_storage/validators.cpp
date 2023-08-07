@@ -90,8 +90,13 @@ TValidationQuery CreateModifyUniqueNameValidator(const TString& tableName,
                 ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
             }
 
-            FederatedQuery::Acl::Visibility oldVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
-            TString oldName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
+            FederatedQuery::Acl::Visibility oldVisibility =
+                static_cast<FederatedQuery::Acl::Visibility>(
+                    parser.ColumnParser(VISIBILITY_COLUMN_NAME)
+                        .GetOptionalInt64()
+                        .GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+            TString oldName =
+                parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
 
             if (oldVisibility == visibility && oldName == name) {
                 return false;

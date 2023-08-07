@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT(getResult->ResponseSz == 1);
         UNIT_ASSERT(getResult->Responses.Get());
         UNIT_ASSERT_EQUAL((getResult->Responses)[0].Buffer.size(), data.size());
-        UNIT_ASSERT_EQUAL((getResult->Responses)[0].Buffer, data);
+        UNIT_ASSERT_EQUAL((getResult->Responses)[0].Buffer.ConvertToString(), data);
     }
 
     void VGet(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, ui32 nodeId, TLogoBlobID logoBlobId,

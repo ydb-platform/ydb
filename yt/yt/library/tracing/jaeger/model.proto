@@ -1,0 +1,79 @@
+syntax="proto3";
+
+package NYT.NTracing.NProto;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+enum ValueType {
+  STRING  = 0;
+  BOOL    = 1;
+  INT64   = 2;
+  FLOAT64 = 3;
+  BINARY  = 4;
+};
+
+message KeyValue {
+  string    key      = 1;
+  ValueType v_type    = 2;
+  string    v_str     = 3;
+  bool      v_bool    = 4;
+  int64     v_int64   = 5;
+  double    v_float64 = 6;
+  bytes     v_binary  = 7;
+}
+
+message Log {
+  google.protobuf.Timestamp timestamp = 1;
+  repeated KeyValue fields = 2;
+}
+
+enum SpanRefType {
+  CHILD_OF = 0;
+  FOLLOWS_FROM = 1;
+};
+
+message SpanRef {
+  bytes trace_id = 1;
+  bytes span_id = 2;
+  SpanRefType ref_type = 3;
+}
+
+message Process {
+  string service_name = 1;
+  repeated KeyValue tags = 2;
+}
+
+message Span {
+  bytes trace_id = 1;
+  bytes span_id = 2;
+  string operation_name = 3;
+  repeated SpanRef references = 4;
+  uint32 flags = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Duration duration = 7;
+  repeated KeyValue tags = 8;
+  repeated Log logs = 9;
+  Process process = 10;
+  string process_id = 11;
+  repeated string warnings = 12;
+}
+
+message Batch {
+  repeated Span spans = 1;
+  Process process = 2;
+}
+
+message DependencyLink {
+  string parent = 1;
+  string child = 2;
+  uint64 call_count = 3;
+  string source = 4;
+}
+
+message TReqPostSpans {
+  bytes batch = 1;
+}
+
+message TRspPostSpans {
+}

@@ -611,7 +611,7 @@ public:
             case NKikimrProto::OK:
                 // okay response -- blob is read and stored in all replicas
                 Y_VERIFY(resp.Id == ResultBlobId);
-                Buffer = resp.Buffer;
+                Buffer = resp.Buffer.ConvertToString();
                 GetFinished = true;
                 TryToSatisfyRequest();
                 break;

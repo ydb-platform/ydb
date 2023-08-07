@@ -310,16 +310,24 @@ TCoNameValueTupleList TKqpReadTableExplainPrompt::BuildNode(TExprContext& ctx, T
             .Done()
     );
 
-    if (!ExpectedMaxRanges.empty()) {
+    if (ExpectedMaxRanges) {
         prompt.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
                     .Build(ExpectedMaxRangesName)
                 .Value<TCoAtom>()
-                    .Build(ExpectedMaxRanges)
+                    .Build(ToString(*ExpectedMaxRanges))
                 .Done()
         );
     }
+
+    prompt.emplace_back(
+        Build<TCoNameValueTuple>(ctx, pos)
+            .Name()
+                .Build(PointPrefixLenName)
+            .Value<TCoAtom>()
+                .Build(ToString(PointPrefixLen))
+            .Done());
 
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(prompt)
@@ -345,8 +353,13 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
         }
 
         if (name == TKqpReadTableExplainPrompt::ExpectedMaxRangesName) {
-            prompt.ExpectedMaxRanges = TString(tuple.Value().template Cast<TCoAtom>());
-             continue;
+            prompt.ExpectedMaxRanges = FromString<ui64>(TString(tuple.Value().template Cast<TCoAtom>()));
+            continue;
+        }
+
+        if (name == TKqpReadTableExplainPrompt::PointPrefixLenName) {
+            prompt.PointPrefixLen = FromString<ui64>(TString(tuple.Value().template Cast<TCoAtom>()));
+            continue;
         }
 
         YQL_ENSURE(false, "Unknown KqpReadTableRanges explain prompt name '" << name << "'");

@@ -5,6 +5,8 @@
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/Aws.h>
 #include <aws/s3/model/CreateBucketRequest.h>
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/ListObjectsRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/S3Client.h>
 
@@ -39,21 +41,31 @@ bool EnsureAwsApiInited() {
     return inited;
 }
 
-void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content) {
+Aws::S3::S3Client MakeS3Client() {
     EnsureAwsApiInited();
 
     Aws::Client::ClientConfiguration s3ClientConfig;
     s3ClientConfig.endpointOverride = GetEnv("S3_ENDPOINT");
     s3ClientConfig.scheme = Aws::Http::Scheme::HTTP;
-    Aws::S3::S3Client s3Client(std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>(), s3ClientConfig);
+    return Aws::S3::S3Client(std::make_shared<Aws::Auth::AnonymousAWSCredentialsProvider>(), s3ClientConfig);
+}
 
-    {
-        Aws::S3::Model::CreateBucketRequest req;
-        req.SetBucket(bucket);
-        req.SetACL(Aws::S3::Model::BucketCannedACL::public_read_write);
-        const Aws::S3::Model::CreateBucketOutcome result = s3Client.CreateBucket(req);
-        UNIT_ASSERT_C(result.IsSuccess(), "Error creating bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
-    }
+void CreateBucket(const TString& bucket, Aws::S3::S3Client& s3Client) {
+    Aws::S3::Model::CreateBucketRequest req;
+    req.SetBucket(bucket);
+    req.SetACL(Aws::S3::Model::BucketCannedACL::public_read_write);
+    const Aws::S3::Model::CreateBucketOutcome result = s3Client.CreateBucket(req);
+    UNIT_ASSERT_C(result.IsSuccess(), "Error creating bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
+}
+
+void CreateBucket(const TString& bucket) {
+    Aws::S3::S3Client s3Client = MakeS3Client();
+
+    CreateBucket(bucket, s3Client);
+}
+
+void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content, Aws::S3::S3Client& s3Client) {
+    CreateBucket(bucket, s3Client);
 
     {
         Aws::S3::Model::PutObjectRequest req;
@@ -67,11 +79,81 @@ void CreateBucketWithObject(const TString& bucket, const TString& object, const 
     }
 }
 
+void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content) {
+    Aws::S3::S3Client s3Client = MakeS3Client();
+
+    CreateBucketWithObject(bucket, object, content, s3Client);
+}
+
+TString GetObject(const TString& bucket, const TString& object, Aws::S3::S3Client& s3Client) {
+    Aws::S3::Model::GetObjectRequest req;
+    req.WithBucket(bucket).WithKey(object);
+
+    Aws::S3::Model::GetObjectOutcome outcome = s3Client.GetObject(req);
+    UNIT_ASSERT(outcome.IsSuccess());
+    Aws::S3::Model::GetObjectResult& result = outcome.GetResult();
+    std::istreambuf_iterator<char> eos;
+    std::string objContent(std::istreambuf_iterator<char>(result.GetBody()), eos);
+    Cerr << "Got object content from \"" << bucket << "." << object << "\"\n" << objContent << Endl;
+    return objContent;
+}
+
+TString GetObject(const TString& bucket, const TString& object) {
+    Aws::S3::S3Client s3Client = MakeS3Client();
+
+    return GetObject(bucket, object, s3Client);
+}
+
+std::vector<TString> GetObjectKeys(const TString& bucket, Aws::S3::S3Client& s3Client) {
+    Aws::S3::Model::ListObjectsRequest listReq;
+    listReq.WithBucket(bucket);
+
+    Aws::S3::Model::ListObjectsOutcome outcome = s3Client.ListObjects(listReq);
+    UNIT_ASSERT(outcome.IsSuccess());
+
+    std::vector<TString> keys;
+    for (auto& obj : outcome.GetResult().GetContents()) {
+        keys.push_back(TString(obj.GetKey()));
+        Cerr << "Found S3 object: \"" << obj.GetKey() << "\"" << Endl;
+    }
+    return keys;
+}
+
+std::vector<TString> GetObjectKeys(const TString& bucket) {
+    Aws::S3::S3Client s3Client = MakeS3Client();
+
+    return GetObjectKeys(bucket, s3Client);
+}
+
+TString GetAllObjects(const TString& bucket, TStringBuf separator, Aws::S3::S3Client& s3Client) {
+    std::vector<TString> keys = GetObjectKeys(bucket, s3Client);
+    TString result;
+    bool firstObject = true;
+    for (const TString& key : keys) {
+        result += GetObject(bucket, key, s3Client);
+        if (!firstObject) {
+            result += separator;
+        }
+        firstObject = false;
+    }
+    return result;
+}
+
+TString GetAllObjects(const TString& bucket, TStringBuf separator = "") {
+    Aws::S3::S3Client s3Client = MakeS3Client();
+
+    return GetAllObjects(bucket, separator, s3Client);
+}
+
+TString GetBucketLocation(const TStringBuf bucket) {
+    return TStringBuilder() << GetEnv("S3_ENDPOINT") << '/' << bucket << '/';
+}
+
 NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
     NYdb::NOperation::TOperationClient client(ydbDriver);
     NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
     do {
-        if (!op.Initialized()) {
+        if (op.Initialized()) {
             Sleep(TDuration::MilliSeconds(10));
         }
         op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId);
@@ -111,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             );)",
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
-            "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+            "location"_a = GetBucketLocation(bucket),
             "object"_a = object
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -129,7 +211,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
@@ -175,7 +257,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             );)",
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
-            "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+            "location"_a = GetBucketLocation(bucket),
             "object"_a = object
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -235,7 +317,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 AUTH_METHOD="NONE"
             );)",
             "external_source"_a = externalDataSourceName,
-            "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/"
+            "location"_a = GetBucketLocation(bucket)
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -254,7 +336,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
@@ -294,7 +376,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 );
                 )",
                 "external_source"_a = externalDataSourceName,
-                "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+                "location"_a = GetBucketLocation(bucket),
                 "ydb_table"_a = ydbTable
                 );
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -328,7 +410,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
@@ -374,7 +456,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             );)",
             "external_source"_a = externalDataSourceName,
             "external_table"_a = externalTableName,
-            "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+            "location"_a = GetBucketLocation(bucket),
             "object"_a = object
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -392,7 +474,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
@@ -434,7 +516,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 );
                 )",
                 "external_source"_a = externalDataSourceName,
-                "location"_a = GetEnv("S3_ENDPOINT") + "/" + bucket + "/",
+                "location"_a = GetBucketLocation(bucket),
                 "ydb_table"_a = ydbTable
                 );
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -471,7 +553,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
@@ -524,7 +606,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
-        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
         UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
 
         TResultSetParser resultSet(results.ExtractResultSet());
@@ -596,7 +678,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
         TFetchScriptResultsResult results(TStatus(EStatus::SUCCESS, {}));
         if (readyOp.Metadata().ExecStatus == EExecStatus::Completed) {
-            results = db.FetchScriptResults(scriptExecutionOperation.Metadata().ExecutionId, 0).ExtractValueSync();
+            results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
             UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
         }
         return {readyOp, results};
@@ -653,6 +735,86 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
+    Y_UNIT_TEST(InsertIntoBucket) {
+        using namespace fmt::literals;
+        const TString readDataSourceName = "/Root/read_data_source";
+        const TString readTableName = "/Root/read_binding";
+        const TString readBucket = "test_bucket_read";
+        const TString readObject = "test_object_read";
+        const TString writeDataSourceName = "/Root/write_data_source";
+        const TString writeTableName = "/Root/write_binding";
+        const TString writeBucket = "test_bucket_write";
+        const TString writeObject = "test_object_write/";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucketWithObject(readBucket, readObject, TEST_CONTENT, s3Client);
+            CreateBucket(writeBucket, s3Client);
+        }
+
+        auto kikimr = DefaultKikimrRunner();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{read_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{read_location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{read_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{read_source}",
+                LOCATION="{read_object}",
+                FORMAT="json_each_row"
+            );
+
+            CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{write_location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{write_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{write_source}",
+                LOCATION="{write_object}",
+                FORMAT="tsv_with_names"
+            );
+            )",
+            "read_source"_a = readDataSourceName,
+            "read_table"_a = readTableName,
+            "read_location"_a = GetBucketLocation(readBucket),
+            "read_object"_a = readObject,
+            "write_source"_a = writeDataSourceName,
+            "write_table"_a = writeTableName,
+            "write_location"_a = GetBucketLocation(writeBucket),
+            "write_object"_a = writeObject
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                INSERT INTO `{write_table}`
+                SELECT * FROM `{read_table}`
+            )",
+            "read_table"_a=readTableName,
+            "write_table"_a = writeTableName);
+
+        auto db = kikimr.GetQueryClient();
+        auto resultFuture = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        UNIT_ASSERT_C(resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
+
+        TString content = GetAllObjects(writeBucket);
+        UNIT_ASSERT_STRING_CONTAINS(content, "key\tvalue\n"); // tsv header
+        UNIT_ASSERT_STRING_CONTAINS(content, "1\ttrololo\n");
+        UNIT_ASSERT_STRING_CONTAINS(content, "2\thello world\n");
+    }
 }
 
 } // namespace NKqp

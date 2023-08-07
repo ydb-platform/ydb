@@ -229,16 +229,23 @@ private:
             req->Record.MutableRequest()->SetQuery(VersionQuery);
         } else {
             req->Record.MutableRequest()->SetQuery(TopicsQuery);
-            NClient::TParameters params;
-            params["$Path"] = LastTopicKey.Path;
-            params["$Cluster"] = LastTopicKey.Cluster;
-            req->Record.MutableRequest()->MutableParameters()->Swap(&params);
+
+            NYdb::TParams params = NYdb::TParamsBuilder()
+                .AddParam("$Path")
+                    .Utf8(LastTopicKey.Path)
+                    .Build()
+                .AddParam("$Cluster")
+                    .Utf8(LastTopicKey.Cluster)
+                    .Build()
+                .Build();
+
+            req->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params)));
         }
         Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), req.Release(), 0, Generation->Val());
     }
 
     void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "HandleQueryResponse TEvQueryResponse");
+        LOG_TRACE_S(ctx, NKikimrServices::PQ_METACACHE, "HandleQueryResponse TEvQueryResponse");
 
         if (ev->Cookie != (ui64)Generation->Val()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "stale response with generation " << ev->Cookie << ", actual is " << Generation->Val());

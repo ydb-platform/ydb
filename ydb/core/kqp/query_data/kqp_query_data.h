@@ -79,14 +79,14 @@ struct TKqpExecuterTxResult {
     bool IsStream = true;
     NKikimr::NMiniKQL::TType* MkqlItemType;
     const TVector<ui32>* ColumnOrder = nullptr;
-    ui32 QueryResultIndex = 0;
+    TMaybe<ui32> QueryResultIndex = 0;
     NKikimr::NMiniKQL::TUnboxedValueBatch Rows;
 
     explicit TKqpExecuterTxResult(
         bool isStream,
         NKikimr::NMiniKQL::TType* mkqlItemType,
         const TVector<ui32>* сolumnOrder,
-        ui32 queryResultIndex)
+        const TMaybe<ui32>& queryResultIndex)
         : IsStream(isStream)
         , MkqlItemType(mkqlItemType)
         , ColumnOrder(сolumnOrder)
@@ -183,17 +183,23 @@ private:
         NKikimrMiniKQL::TParams
     >;
 
+    using TParamProtobufMap = ::google::protobuf::Map<
+        TString,
+        Ydb::TypedValue
+    >;
+
     using TParamProvider = std::function<
         bool(std::string_view name, NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::TUnboxedValue& value)
     >;
 
     TParamMap Params;
+    TParamProtobufMap ParamsProtobuf;
     TUnboxedParamsMap UnboxedData;
     THashMap<ui32, TVector<TKqpExecuterTxResult>> TxResults;
     TVector<TVector<TKqpPhyTxHolder::TConstPtr>> TxHolders;
     TTxAllocatorState::TPtr AllocState;
-    mutable TPartitionedParamMap PartitionedParams; 
+    mutable TPartitionedParamMap PartitionedParams;
 
 public:
     using TPtr = std::shared_ptr<TQueryData>;
@@ -204,6 +210,8 @@ public:
     ~TQueryData();
 
     const TParamMap& GetParams();
+
+    const TParamProtobufMap& GetParamsProtobuf();
 
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv();
 
@@ -243,6 +251,8 @@ public:
     TTypedUnboxedValue& GetParameterUnboxedValue(const TString& name);
     TTypedUnboxedValue* GetParameterUnboxedValuePtr(const TString& name);
     const NKikimrMiniKQL::TParams* GetParameterMiniKqlValue(const TString& name);
+    const Ydb::TypedValue* GetParameterTypedValue(const TString& name);
+
     NYql::NDqProto::TData SerializeParamValue(const TString& name);
     void Clear();
 
@@ -258,7 +268,7 @@ public:
                 std::tie(type, value) = *param;
                 return true;
             }
-            
+
 
             return false;
         };

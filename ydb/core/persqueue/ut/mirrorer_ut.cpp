@@ -91,10 +91,18 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             msg->set_seq_no(1);
             msg->set_data("data");
             msg->mutable_created_at()->set_seconds(1000);
-            auto* meta = msg->mutable_message_meta();
-            (*meta)["meta-key"] = "meta-value";
-            (*meta)["meta-key2"] = "meta-value2";
-            if (!writeSession->Write(req)) {
+            {
+                auto* meta = msg->add_metadata_items();
+                meta->set_key("meta-key");
+       	        meta->set_value("meta-value");
+            };
+            {
+                auto* meta = msg->add_metadata_items();
+                meta->set_key("meta-key2");
+       	        meta->set_value("meta-value2");
+            };
+
+	    if (!writeSession->Write(req)) {
                 UNIT_FAIL("Grpc write fail");
             }
             UNIT_ASSERT(writeSession->Read(&resp));

@@ -1,6 +1,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 
+#include <library/cpp/actors/core/actorid.h>
 #include <util/string/escape.h>
 
 namespace NKikimr {
@@ -97,7 +98,7 @@ namespace {
             size += sizeof(TCellHeader) + cell.Size();
         }
 
-        resultBuffer.resize(size);
+        resultBuffer.ReserveAndResize(size);
         char* resultBufferData = resultBuffer.Detach();
 
         ui16 cellsSize = cells.size();
@@ -115,7 +116,7 @@ namespace {
 
             const auto & cell = cells[i];
             if (cell.Size() > 0) {
-                memcpy(resultBufferData, cell.Data(), cell.Size());
+                cell.CopyDataInto(resultBufferData);
             }
 
             if (resultCells) {
@@ -197,6 +198,54 @@ bool TSerializedCellVec::DoTryParse(const TString& data) {
     return TryDeserializeCellVec(data, Buf, Cells);
 }
 
+TOwnedCellVecBatch::TOwnedCellVecBatch()
+    : Pool(std::make_unique<TMemoryPool>(InitialPoolSize)) {
+}
+
+size_t TOwnedCellVecBatch::Append(TConstArrayRef<TCell> cells) {
+    size_t cellsSize = cells.size();
+    if (cellsSize == 0) {
+        CellVectors.emplace_back();
+        return 0;
+    }
+
+    size_t size = sizeof(TCell) * cellsSize;
+    for (auto& cell : cells) {
+        if (!cell.IsNull() && !cell.IsInline()) {
+            const size_t cellSize = cell.Size();
+            size += AlignUp(cellSize);
+        }
+    }
+
+    char * allocatedBuffer = reinterpret_cast<char *>(Pool->Allocate(size));
+
+    TCell* ptrCell = reinterpret_cast<TCell*>(allocatedBuffer);
+    char* ptrData = reinterpret_cast<char*>(ptrCell + cellsSize);
+
+    TConstArrayRef<TCell> cellvec(ptrCell, ptrCell + cellsSize);
+
+    for (auto& cell : cells) {
+        if (cell.IsNull()) {
+            new (ptrCell) TCell();
+        } else if (cell.IsInline()) {
+            new (ptrCell) TCell(cell);
+        } else {
+            const size_t cellSize = cell.Size();
+            if (Y_LIKELY(cellSize > 0)) {
+                ::memcpy(ptrData, cell.Data(), cellSize);
+            }
+            new (ptrCell) TCell(ptrData, cellSize);
+            ptrData += AlignUp(cellSize);
+        }
+
+        ++ptrCell;
+    }
+
+    CellVectors.push_back(cellvec);
+    return size;
+}
+
+
 TString DbgPrintCell(const TCell& r, NScheme::TTypeInfo typeInfo, const NScheme::TTypeRegistry &reg) {
     auto typeId = typeInfo.GetTypeId();
     TString res;
@@ -248,7 +297,7 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
             res += ToString(r.AsValue<double>());
             break;
         case NScheme::NTypeIds::ActorId:
-            res += ToString(r.AsValue<TActorId>());
+            res += ToString(r.AsValue<NActors::TActorId>());
             break;
         case NScheme::NTypeIds::Pg:
             // TODO: support pg types

@@ -34,7 +34,7 @@ struct TYdbConfiguration : public TYdbSettings, public NCommon::TSettingDispatch
         const TYdbGatewayConfig& config,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds
+        THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds
     );
 
     bool HasCluster(TStringBuf cluster) const;

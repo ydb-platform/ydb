@@ -102,6 +102,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
+    ydb/core/statistics
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -145,6 +146,7 @@ PEERDIR(
     ydb/services/discovery
     ydb/services/fq
     ydb/services/kesus
+    ydb/services/keyvalue
     ydb/services/local_discovery
     ydb/services/maintenance
     ydb/services/metadata/ds_table

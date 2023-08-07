@@ -59,6 +59,8 @@ public:
         return GranuleId;
     }
 
+    void OnGranuleDataPrepared(std::vector<std::shared_ptr<arrow::RecordBatch>>&& data);
+
     const THashSet<const void*>& GetBatchesToDedup() const noexcept {
         return BatchesToDedup;
     }

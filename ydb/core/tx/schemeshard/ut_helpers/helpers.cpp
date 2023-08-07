@@ -971,6 +971,19 @@ namespace NSchemeShardUT_Private {
         CheckExpectedResult(expectedResults, event->Record.GetStatus(), event->Record.GetResult());
     }
 
+    TVector<TString> GetExportTargetPaths(const TString& requestStr) {
+        NKikimrExport::TCreateExportRequest request;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
+
+        TVector<TString> result;
+
+        for (auto &item : request.GetExportToS3Settings().items()) {
+            result.push_back(item.destination_prefix());
+        }
+
+        return result;
+    }
+
     void AsyncExport(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& requestStr, const TString& userSID) {
         NKikimrExport::TCreateExportRequest request;
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));

@@ -37,6 +37,16 @@ const TConsumerDescription& TDescribeConsumerResult::GetConsumerDescription() co
     return ConsumerDescription_;
 }
 
+TDescribePartitionResult::TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result)
+    : TStatus(std::move(status))
+    , PartitionDescription_(std::move(result))
+{
+}
+
+const TPartitionDescription& TDescribePartitionResult::GetPartitionDescription() const {
+    return PartitionDescription_;
+}
+
 TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     : Proto_(std::move(result))
     , PartitioningSettings_(Proto_.partitioning_settings())
@@ -74,6 +84,11 @@ TConsumerDescription::TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& 
     }
 }
 
+TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult&& result)
+    : Proto_(std::move(result))
+    , Partition_(Proto_.partition())
+{
+}
 
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
@@ -124,6 +139,10 @@ const TVector<TPartitionInfo>& TConsumerDescription::GetPartitions() const {
     return Partitions_;
 }
 
+const TPartitionInfo& TPartitionDescription::GetPartition() const {
+    return Partition_;
+}
+
 const TConsumer& TConsumerDescription::GetConsumer() const {
     return Consumer_;
 }
@@ -170,6 +189,10 @@ const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
 }
 
 const Ydb::Topic::DescribeConsumerResult& TConsumerDescription::GetProto() const {
+    return Proto_;
+}
+
+const Ydb::Topic::DescribePartitionResult& TPartitionDescription::GetProto() const {
     return Proto_;
 }
 
@@ -305,6 +328,19 @@ TString TPartitionConsumerStats::GetReadSessionId() const {
     return ReadSessionId_;
 }
 
+TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)
+    : NodeId_(partitionLocation.node_id())
+    , Generation_(partitionLocation.generation())
+{
+}
+
+i32 TPartitionLocation::GetNodeId() const {
+    return NodeId_;
+}
+
+i64 TPartitionLocation::GetGeneration() const {
+    return Generation_;
+}
 
 TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)
     : PartitionId_(partitionInfo.partition_id())
@@ -320,6 +356,10 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     }
     if (partitionInfo.has_partition_stats()) {
         PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
+    }
+
+    if (partitionInfo.has_partition_location()) {
+        PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
     }
 }
 
@@ -339,6 +379,9 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeConsumerResult::Partiti
         PartitionStats_ = TPartitionStats{partitionInfo.partition_stats()};
         PartitionConsumerStats_ = TPartitionConsumerStats{partitionInfo.partition_consumer_stats()};
     }
+    if (partitionInfo.has_partition_location()) {
+        PartitionLocation_ = TPartitionLocation{partitionInfo.partition_location()};
+    }
 }
 
 const TMaybe<TPartitionStats>& TPartitionInfo::GetPartitionStats() const {
@@ -347,6 +390,10 @@ const TMaybe<TPartitionStats>& TPartitionInfo::GetPartitionStats() const {
 
 const TMaybe<TPartitionConsumerStats>& TPartitionInfo::GetPartitionConsumerStats() const {
     return PartitionConsumerStats_;
+}
+
+const TMaybe<TPartitionLocation>& TPartitionInfo::GetPartitionLocation() const {
+    return PartitionLocation_;
 }
 
 bool TPartitionInfo::GetActive() const {
@@ -377,6 +424,10 @@ TAsyncDescribeTopicResult TTopicClient::DescribeTopic(const TString& path, const
 
 TAsyncDescribeConsumerResult TTopicClient::DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings) {
     return Impl_->DescribeConsumer(path, consumer, settings);
+}
+
+TAsyncDescribePartitionResult TTopicClient::DescribePartition(const TString& path, i64 partitionId, const TDescribePartitionSettings& settings) {
+    return Impl_->DescribePartition(path, partitionId, settings);
 }
 
 IRetryPolicy::TPtr IRetryPolicy::GetDefaultPolicy() {

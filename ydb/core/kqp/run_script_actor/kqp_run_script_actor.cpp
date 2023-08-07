@@ -167,6 +167,7 @@ private:
             FinalStatusIsSaved = true;
             Register(CreateScriptExecutionFinisher(ExecutionId, Database, LeaseGeneration, Status, GetExecStatusFromStatusCode(Status),
                                                      Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst)));
+            return;
         }
         
         if (RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
@@ -216,18 +217,17 @@ private:
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
 
-        if (resultSetIndex > ExpireAt.size()) {
-            Issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Unexpected result set index"));
-            Finish(Ydb::StatusIds::INTERNAL_ERROR);
-            return;
-        }
-
-        if (resultSetIndex == ExpireAt.size()) {
-            // next ResultSet arrived
+        if (resultSetIndex >= ExpireAt.size()) {
+            // we don't know result set count, so just accept all of them
+            // it's possible to have several result sets per script
+            // they can arrive in any order and may be missed for some indices 
             ResultSetRowCount.resize(resultSetIndex + 1);
             ResultSetByteCount.resize(resultSetIndex + 1);
             Truncated.resize(resultSetIndex + 1);
             ExpireAt.resize(resultSetIndex + 1);
+        }
+
+        if (ExpireAt[resultSetIndex] == TInstant::Zero()) {
             ExpireAt[resultSetIndex] = TInstant::Now() + TDuration::Days(1);
         }
 

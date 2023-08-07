@@ -1,45 +1,39 @@
+#include "metadata_initializers.h"
 #include "source_id_encoding.h"
 
-#include "metadata_initializers.h"
+#include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/digest/city.h>
+#include <util/digest/murmur.h>
 #include <util/generic/yexception.h>
-#include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
-#include <util/digest/murmur.h>
-#include <util/digest/city.h>
 #include <util/string/join.h>
+#include <util/string/strip.h>
 
-#include <library/cpp/digest/md5/md5.h>
-
-namespace NKikimr {
-namespace NPQ {
-
+namespace NKikimr::NPQ {
 
 TString GetSourceIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
-    TStringBuilder res;
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            res << "--!syntax_v1\n"
+            return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint32; "
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $SourceId AS Utf8; "
                    "SELECT Partition, CreateTime, AccessTime FROM `" << path << "` "
                    "WHERE Hash == $Hash AND Topic == $Topic AND SourceId == $SourceId;";
-            break;
         case ESourceIdTableGeneration::PartitionMapping:
-            res << "--!syntax_v1\n"
+            return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $Hash AS Uint64; "
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $SourceId AS Utf8; "
                    "SELECT Partition, CreateTime, AccessTime FROM `"
                    << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
-                    << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
-            break;
+                   << "` WHERE Hash == $Hash AND Topic == $Topic AND ProducerId == $SourceId;";
         default:
             Y_FAIL();
     }
-    return res;
 }
 
 TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
@@ -57,10 +51,9 @@ TString GetSourceIdSelectQuery(const TString& root, ESourceIdTableGeneration gen
 }
 
 TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGeneration generation) {
-    TStringBuilder res;
     switch (generation) {
         case ESourceIdTableGeneration::SrcIdMeta2:
-            res << "--!syntax_v1\n"
+            return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $Hash AS Uint32; "
@@ -69,9 +62,8 @@ TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGenera
                    "DECLARE $AccessTime AS Uint64;\n"
                    "UPSERT INTO `" << path << "` (Hash, Topic, SourceId, CreateTime, AccessTime, Partition) VALUES "
                                               "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
-            break;
         case ESourceIdTableGeneration::PartitionMapping:
-            res << "--!syntax_v1\n"
+            return TStringBuilder() << "--!syntax_v1\n"
                    "DECLARE $SourceId AS Utf8; "
                    "DECLARE $Topic AS Utf8; "
                    "DECLARE $Hash AS Uint64; "
@@ -81,13 +73,9 @@ TString GetUpdateIdSelectQueryFromPath(const TString& path, ESourceIdTableGenera
                    "UPSERT INTO `" << NGRpcProxy::V1::TSrcIdMetaInitManager::GetInstant()->GetStorageTablePath()
                     << "` (Hash, Topic, ProducerId, CreateTime, AccessTime, Partition) VALUES "
                                               "($Hash, $Topic, $SourceId, $CreateTime, $AccessTime, $Partition);";
-            break;
-
         default:
             Y_FAIL();
     }
-
-    return res;
 }
 
 TString GetUpdateIdSelectQuery(const TString& root, ESourceIdTableGeneration generation) {
@@ -102,7 +90,6 @@ TString GetUpdateIdSelectQuery(const TString& root, ESourceIdTableGeneration gen
             Y_FAIL();
     }
 }
-
 
 namespace NSourceIdEncoding {
 
@@ -183,7 +170,6 @@ bool IsValidEncoded(const TString& sourceId) {
     }
 }
 
-
 template <class... TArgs>
 ui64 GetKeysHash(TArgs&&... args) {
     return CityHash64(Join("#", args...));
@@ -208,7 +194,6 @@ TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId, 
     return res;
 }
 
-
 void SetHashToTxParams(NClient::TParameters& parameters, const TEncodedSourceId& encodedSrcId) {
     switch (encodedSrcId.Generation) {
         case ESourceIdTableGeneration::PartitionMapping:
@@ -221,7 +206,17 @@ void SetHashToTxParams(NClient::TParameters& parameters, const TEncodedSourceId&
     }
 }
 
+void SetHashToTParamsBuilder(NYdb::TParamsBuilder& builder, const TEncodedSourceId& encodedSrcId) {
+    switch (encodedSrcId.Generation) {
+        case ESourceIdTableGeneration::PartitionMapping:
+            builder.AddParam("$Hash").Uint64(encodedSrcId.KeysHash).Build();
+            return;
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            builder.AddParam("$Hash").Uint32(encodedSrcId.Hash).Build();
+            return;
+    }
+}
 
 } // NSourceIdEncoding
-} // NPQ
-} // NKikimr
+
+} // NKikimr::NPQ

@@ -91,11 +91,11 @@ def do(args):
         group_stat['SeenOperational'] = group.SeenOperational
 
         if group.VirtualGroupInfo:
-            group_stat['VirtualGroupState'] = kikimr_bsconfig.EVirtualGroupState.Name(group.VirtualGroupInfo.State)
+            group_stat['VirtualGroupState'] = common.EVirtualGroupState.Name(group.VirtualGroupInfo.State)
             group_stat['VirtualGroupName'] = group.VirtualGroupInfo.Name
             group_stat['BlobDepotId'] = group.VirtualGroupInfo.BlobDepotId
             group_stat['ErrorReason'] = group.VirtualGroupInfo.ErrorReason
-            group_stat['DecommitStatus'] = kikimr_bsconfig.TGroupDecommitStatus.E.Name(group.VirtualGroupInfo.DecommitStatus)
+            group_stat['DecommitStatus'] = common.TGroupDecommitStatus.E.Name(group.VirtualGroupInfo.DecommitStatus)
 
         group_stat['UsedSize'] = 0
         group_stat['TotalSize'] = 0

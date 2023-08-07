@@ -19,12 +19,40 @@ using namespace NNodes;
 
 namespace {
 
-template<class TConstraint>
-TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
-    if (const auto constraint = src.GetConstraint<TConstraint>()) {
+template<bool Distinct>
+TExprNode::TPtr KeepUniqueConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {
         const auto pos = node->Pos();
         TExprNode::TListType children(1U, std::move(node));
-        for (const auto& set : constraint->GetAllSets()) {
+        for (const auto& sets : constraint->GetContent()) {
+            TExprNode::TListType lists;
+            lists.reserve(sets.size());
+            for (const auto& set : sets) {
+                TExprNode::TListType columns;
+                columns.reserve(set.size());
+                for (const auto& path : set) {
+                    if (1U == path.size())
+                        columns.emplace_back(ctx.NewAtom(pos, path.front()));
+                    else {
+                        TExprNode::TListType atoms(path.size());
+                        std::transform(path.cbegin(), path.cend(), atoms.begin(), [&](const std::string_view& name) { return ctx.NewAtom(pos, name); });
+                        columns.emplace_back(ctx.NewList(pos, std::move(atoms)));
+                    }
+                }
+                lists.emplace_back(ctx.NewList(pos, std::move(columns)));
+            }
+            children.emplace_back(ctx.NewList(pos, std::move(lists)));
+        }
+        return ctx.NewCallable(pos, TString("Assume") += TUniqueConstraintNodeBase<Distinct>::Name(), std::move(children));
+    }
+    return node;
+}
+
+TExprNode::TPtr KeepChoppedConstraint(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    if (const auto constraint = src.GetConstraint<TChoppedConstraintNode>()) {
+        const auto pos = node->Pos();
+        TExprNode::TListType children(1U, std::move(node));
+        for (const auto& set : constraint->GetContent()) {
             TExprNode::TListType columns;
             columns.reserve(set.size());
             for (const auto& path : set) {
@@ -38,7 +66,7 @@ TExprNode::TPtr KeepConstraint(TExprNode::TPtr node, const TExprNode& src, TExpr
             }
             children.emplace_back(ctx.NewList(pos, std::move(columns)));
         }
-        return ctx.NewCallable(pos, TString("Assume") += TConstraint::Name(), std::move(children));
+        return ctx.NewCallable(pos, TString("Assume") += TChoppedConstraintNode::Name(), std::move(children));
     }
     return node;
 }
@@ -129,21 +157,68 @@ bool IsListReorder(const TExprNode& node) {
     return node.IsCallable({"Sort", "Reverse"});
 }
 
+// Check if the flat map is a simple rename flat map
 bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode) {
+        
     auto lambda = node.Lambda();
     if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
         return false;
     }
 
     structNode = lambda.Body().Ref().Child(0);
-    if (!structNode->IsCallable("AsStruct")) {
+
+    auto asStruct = TExprBase(structNode);
+    if (!asStruct.Maybe<TCoAsStruct>()) {
         return false;
     }
 
-    for (auto& child : structNode->Children()) {
-        auto item = child->Child(1);
-        if (!item->IsCallable("Member") || item->Child(0) != lambda.Args().Arg(0).Raw()) {
+    for (auto child : asStruct.Cast<TCoAsStruct>()) {
+        
+        if (!child.Item(1).Maybe<TCoMember>()) {
             return false;
+        }
+
+        auto member = child.Item(1).Cast<TCoMember>();
+        if(member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Check if the flat map is a simple rename flat map and compute the mapping from new names to original ones
+bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode, 
+    THashMap<TString, TString> & mapping) {
+        
+    auto lambda = node.Lambda();
+    if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
+        return false;
+    }
+
+    structNode = lambda.Body().Ref().Child(0);
+
+    auto asStruct = TExprBase(structNode);
+    if (!asStruct.Maybe<TCoAsStruct>()) {
+        return false;
+    }
+
+    for (auto child : asStruct.Cast<TCoAsStruct>()) {
+
+        if (!child.Item(1).Maybe<TCoMember>()) {
+            return false;
+        }
+
+        auto member = child.Item(1).Cast<TCoMember>();
+        if(member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto to = child.Item(0).Cast<TCoAtom>();
+        auto from = member.Name();
+
+        if (to != from){
+            mapping[to.StringValue()] = from.StringValue();
         }
     }
 
@@ -360,25 +435,31 @@ template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNod
 template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TSet<TString>& subsetFields, TExprContext& ctx, bool singleValue);
 
 
-bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeSet& visited) {
+bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeMap<bool>& deps) {
     if (from == to)
         return true;
 
-    if (!visited.emplace(from).second) {
-        return false;
+    auto [it, inserted] = deps.emplace(from, false);
+    if (!inserted) {
+        return it->second;
     }
 
     for (const auto& child : from->Children()) {
-        if (IsDependedImpl(child.Get(), to, visited))
-            return true;
+        if (IsDependedImpl(child.Get(), to, deps)) {
+            return it->second = true;
+        }
     }
 
     return false;
 }
 
 bool IsDepended(const TExprNode& from, const TExprNode& to) {
-    TNodeSet visited;
-    return IsDependedImpl(&from, &to, visited);
+    TNodeMap<bool> deps;
+    return IsDependedImpl(&from, &to, deps);
+}
+
+bool MarkDepended(const TExprNode& from, const TExprNode& to, TNodeMap<bool>& deps) {
+    return IsDependedImpl(&from, &to, deps);
 }
 
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx) {
@@ -1743,12 +1824,10 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (auto c : constent) {
+                    for (const auto& c : constent) {
                         parent.Callable(index++, "Bool")
                             .Atom(0, ToString(c.second), TNodeFlags::Default)
                         .Seal();
-                        if (1U < c.first.front().size())
-                            break;
                     }
                     return parent;
                 })
@@ -1770,10 +1849,23 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
 
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
     auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
-    res = KeepConstraint<TChoppedConstraintNode>(std::move(res), src, ctx);
-    res = KeepConstraint<TDistinctConstraintNode>(std::move(res), src, ctx);
-    res = KeepConstraint<TUniqueConstraintNode>(std::move(res), src, ctx);
+    res = KeepChoppedConstraint(std::move(res), src, ctx);
+    res = KeepUniqueConstraint<true>(std::move(res), src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
     return res;
+}
+
+bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
+    if (joinTree.IsAtom()) {
+        return true;
+    }
+
+    YQL_ENSURE(joinTree.Child(0)->IsAtom());
+    if (joinTree.Child(0)->Content() != joinType) {
+        return false;
+    }
+
+    return HasOnlyOneJoinType(*joinTree.Child(1), joinType) && HasOnlyOneJoinType(*joinTree.Child(2), joinType);
 }
 
 }

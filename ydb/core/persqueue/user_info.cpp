@@ -39,10 +39,8 @@ namespace NDeprecatedUserData {
 
 TUsersInfoStorage::TUsersInfoStorage(
     TString dcId,
-    ui64 tabletId,
     const NPersQueue::TTopicConverterPtr& topicConverter,
     ui32 partition,
-    const TTabletCountersBase& counters,
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& cloudId,
     const TString& dbId,
@@ -51,7 +49,6 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& folderId
 )
     : DCId(std::move(dcId))
-    , TabletId(tabletId)
     , TopicConverter(topicConverter)
     , Partition(partition)
     , Config(config)
@@ -62,7 +59,6 @@ TUsersInfoStorage::TUsersInfoStorage(
     , FolderId(folderId)
     , CurReadRuleGeneration(0)
 {
-    Counters.Populate(counters);
 }
 
 void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx) {
@@ -141,10 +137,9 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     userInfo->Parsed = true;
 }
 
-void TUsersInfoStorage::Remove(const TString& user, const TActorContext& ctx) {
+void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     auto it = UsersInfo.find(user);
     Y_VERIFY(it != UsersInfo.end());
-    it->second.Clear(ctx);
     UsersInfo.erase(it);
 }
 
@@ -174,12 +169,6 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
                                             ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
                                             TInstant readFromTimestamp) const
 {
-    ui64 burst = 1'000'000'000, speed = 1'000'000'000;
-    if (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
-        burst = Config.GetPartitionConfig().GetBurstSize() * 2;
-        speed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2;
-    }
-
     TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
     TString userServiceType = "";
     for (ui32 i = 0; i < Config.ReadRulesSize(); ++i) {
@@ -193,9 +182,10 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
 
 
     return { 
-        ctx, StreamCountersSubgroup, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
+        ctx, StreamCountersSubgroup,
+        user, readRuleGeneration, important, TopicConverter, Partition,
         session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
-        meterRead, burst, speed
+        meterRead
     };
 }
 
@@ -216,37 +206,8 @@ TUserInfo& TUsersInfoStorage::Create(
     return result.first->second;
 }
 
-void TUsersInfoStorage::Clear(const TActorContext& ctx) {
-    for (auto& userInfoPair : UsersInfo) {
-        userInfoPair.second.Clear(ctx);
-    }
+void TUsersInfoStorage::Clear(const TActorContext&) {
     UsersInfo.clear();
-}
-
-void TUserInfo::Clear(const TActorContext& ctx) {
-    if (ReadSpeedLimiter) {
-        ctx.Send(ReadSpeedLimiter->Actor, new TEvents::TEvPoisonPill());
-    }
-}
-
-THolder<TReadSpeedLimiterHolder> TUsersInfoStorage::CreateReadSpeedLimiter(const TString& user) const {
-    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (TabletActor && quotingConfig.GetEnableQuoting() && quotingConfig.GetEnableReadQuoting()) {
-        TActorId actorId = TActivationContext::Register(
-            new TReadSpeedLimiter(
-                TabletActor.GetRef(),
-                PartitionActor.GetRef(),
-                TabletId,
-                TopicConverter,
-                Partition,
-                user,
-                Counters
-            ),
-            PartitionActor.GetRef()
-        );
-        return MakeHolder<TReadSpeedLimiterHolder>(actorId, Counters);
-    }
-    return nullptr;
 }
 
 } //NPQ

@@ -166,7 +166,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(msg->ResponseSz, 1);
         const TEvBlobStorage::TEvGetResult::TResponse& item = msg->Responses[0];
         if (data) {
-            *data = item.Buffer;
+            *data = item.Buffer.ConvertToString();
         }
         return item.Status;
     }

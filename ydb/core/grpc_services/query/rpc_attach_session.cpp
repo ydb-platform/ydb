@@ -78,6 +78,7 @@ private:
 
         if (CheckSession(sessionId, req)) {
             ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetExtIdleCheck(true);
             SessionId = sessionId;
         } else {
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST);
@@ -98,6 +99,10 @@ private:
         const bool sessionExpired = record.GetWorkerIsClosing();
         if (sessionExpired) {
             return ReplyFinishStream(Ydb::StatusIds::NOT_FOUND);
+        }
+
+        if (record.GetResponse().GetSessionStatus() != Ydb::Table::KeepAliveResult::SESSION_STATUS_READY) {
+            return ReplyFinishStream(Ydb::StatusIds::SESSION_BUSY);
         }
 
         SubscribeClientLost();

@@ -25,6 +25,7 @@ public:
     bool PasswordWasSupplied = false;
     TPollerToken::TPtr PollerToken;
     TSocketBuffer BufferInput;
+    std::size_t MAX_BUFFER_SIZE = 2 * 1024 * 1024;
     std::unordered_map<TString, TString> ServerParams = {
         {"client_encoding", "UTF8"},
         {"server_encoding", "UTF8"},
@@ -435,7 +436,13 @@ protected:
         for (const auto& item : dataIn) {
             if (item.Value) {
                 const auto& value(item.Value.value());
-                dataOut << uint32_t(value.size()) << value;
+                if (std::holds_alternative<TString>(value)) {
+                    const auto& valueText(std::get<TString>(value));
+                    dataOut << uint32_t(valueText.size()) << valueText;
+                } else {
+                    const auto& valueBinary(std::get<std::vector<uint8_t>>(value));
+                    dataOut << uint32_t(valueBinary.size()) << valueBinary;
+                }
             } else {
                 dataOut << uint32_t(-1);
             }
@@ -452,9 +459,22 @@ protected:
                 << uint32_t(field.DataType)
                 << uint16_t(field.DataTypeSize)
                 << uint32_t(field.DataTypeModifier)
-                << uint16_t(0)          // format text
+                << uint16_t(field.Format)
                 ;
         }
+    }
+
+    static void FillErrorResponse(TPGStreamOutput<TPGErrorResponse>& dataOut, const std::vector<std::pair<char, TString>>& dataIn) {
+        for (const auto& field : dataIn) {
+            dataOut << field.first << field.second << '\0';
+        }
+        dataOut << '\0';
+    }
+
+    void SendErrorResponse(const std::vector<std::pair<char, TString>>& errorFields) {
+        TPGStreamOutput<TPGErrorResponse> errorResponse;
+        FillErrorResponse(errorResponse, errorFields);
+        SendStream(errorResponse);
     }
 
     bool FlushAndPoll() {
@@ -543,15 +563,9 @@ protected:
                     }
                 }
             } else {
-                // error response
-                TPGStreamOutput<TPGErrorResponse> errorResponse;
-                for (const auto& field : ev->Get()->ErrorFields) {
-                    errorResponse << field.first << field.second << '\0';
-                }
-                errorResponse << '\0';
-                SendStream(errorResponse);
+                SendErrorResponse(ev->Get()->ErrorFields);
             }
-            if (ev->Get()->CommandCompleted) {
+            if (ev->Get()->ReadyForQuery) {
                 BecomeReadyForQuery();
             }
         } else {
@@ -579,13 +593,7 @@ protected:
                     SendMessage(TPGNoData());
                 }
             } else {
-                // error response
-                TPGStreamOutput<TPGErrorResponse> errorResponse;
-                for (const auto& field : ev->Get()->ErrorFields) {
-                    errorResponse << field.first << field.second << '\0';
-                }
-                errorResponse << '\0';
-                SendStream(errorResponse);
+                SendErrorResponse(ev->Get()->ErrorFields);
             }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();
@@ -620,15 +628,9 @@ protected:
                     }
                 }
             } else {
-                // error response
-                TPGStreamOutput<TPGErrorResponse> errorResponse;
-                for (const auto& field : ev->Get()->ErrorFields) {
-                    errorResponse << field.first << field.second << '\0';
-                }
-                errorResponse << '\0';
-                SendStream(errorResponse);
+                SendErrorResponse(ev->Get()->ErrorFields);
             }
-            if (ev->Get()->CommandCompleted) {
+            if (ev->Get()->ReadyForQuery) {
                 ++OutgoingSequenceNumber;
                 BecomeReadyForQuery();
             }
@@ -639,8 +641,12 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvParseResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
-            TPGStreamOutput<TPGParseComplete> parseComplete;
-            SendStream(parseComplete);
+            if (ev->Get()->ErrorFields.empty()) {
+                TPGStreamOutput<TPGParseComplete> parseComplete;
+                SendStream(parseComplete);
+            } else {
+                SendErrorResponse(ev->Get()->ErrorFields);
+            }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();
         } else {
@@ -697,6 +703,15 @@ protected:
         if (event->Get()->Read) {
             for (;;) {
                 ssize_t need = BufferInput.Avail();
+                if (need == 0) {
+                    size_t capacity = BufferInput.Capacity() * 2;
+                    if (capacity > MAX_BUFFER_SIZE) {
+                        BLOG_ERROR("connection closed - not enough buffer size (" << capacity << " > " << MAX_BUFFER_SIZE << ")");
+                        return PassAway();
+                    }
+                    BufferInput.Reserve(capacity);
+                    need = BufferInput.Avail();
+                }
                 ssize_t res = SocketReceive(BufferInput.Pos(), need);
                 if (res > 0) {
                     InactivityTimer.Reset();
@@ -754,17 +769,17 @@ protected:
                     continue;
                 } else if (!res) {
                     // connection closed
-                    BLOG_D("connection closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
+                    BLOG_ERROR("connection closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
                     return PassAway();
                 } else {
-                    BLOG_D("connection closed - error in recv: " << strerror(-res));
+                    BLOG_ERROR("connection closed - error in recv: " << strerror(-res));
                     return PassAway();
                 }
             }
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
                 if (passed >= InactivityTimeout) {
-                    BLOG_D("connection closed by inactivity timeout");
+                    BLOG_ERROR("connection closed by inactivity timeout");
                     return PassAway(); // timeout
                 } else {
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));

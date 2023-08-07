@@ -17,13 +17,15 @@ namespace NKikimr {
         NKikimrBlobStorage::EVDiskQueueId QueueId;
         bool IsConnected;
         bool ExtraBlockChecksSupport;
+        ui32 MinREALHugeBlobInBytes;
 
         TEvProxyQueueState(const TVDiskID &vDiskId, NKikimrBlobStorage::EVDiskQueueId queueId, bool isConnected,
-                bool extraBlockChecksSupport)
+                bool extraBlockChecksSupport, ui32 minREALHugeBlobInBytes)
             : VDiskId(vDiskId)
             , QueueId(queueId)
             , IsConnected(isConnected)
             , ExtraBlockChecksSupport(extraBlockChecksSupport)
+            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
         {}
 
         TString ToString() const {
@@ -32,6 +34,7 @@ namespace NKikimr {
             str << " QueueId# " << static_cast<ui32>(QueueId);
             str << " IsConnected# " << (IsConnected ? "true" : "false");
             str << " ExtraBlockChecksSupport# " << (ExtraBlockChecksSupport ? "true" : "false");
+            str << " MinREALHugeBlobInBytes# " << MinREALHugeBlobInBytes;
             str << "}";
             return str.Str();
         }

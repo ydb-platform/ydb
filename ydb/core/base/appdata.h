@@ -120,7 +120,6 @@ struct TAppData {
 
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TBusNgMonPage* BusMonPage;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 
@@ -177,6 +176,9 @@ struct TAppData {
     // Used to disable object deletion in schemeshard for cleanup tests
     bool DisableSchemeShardCleanupOnDropForTest = false;
 
+    // Used to exclude indexes, cdc streams & sequences from table description on DataShards
+    bool DisableRichTableDescriptionForTest = false;
+
     TMaybe<ui32> ZstdBlockSizeForTest;
 
     // Used to disable checking nodes with sys tablets only in cms
@@ -187,6 +189,8 @@ struct TAppData {
     TMap<TString, TString> Labels;
 
     TString ClusterName;
+
+    bool YamlConfigEnabled = false;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

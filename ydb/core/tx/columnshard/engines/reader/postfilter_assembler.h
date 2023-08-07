@@ -25,6 +25,10 @@ protected:
     virtual bool DoApply(TGranulesFillingContext& owner) const override;
     virtual bool DoExecuteImpl() override;
 public:
+    virtual TString GetTaskClassIdentifier() const override {
+        return "Reading::TAssembleBatch";
+    }
+
     TAssembleBatch(TPortionInfo::TPreparedBatchData&& batchConstructor,
         TBatch& currentBatch, const std::vector<std::string>& fullColumnsOrder, NColumnShard::IDataTasksProcessor::TPtr processor);
 };

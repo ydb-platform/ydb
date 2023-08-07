@@ -13,12 +13,12 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template <class TKey>
-struct TRobinHoodCacheHashUsageDetector {
-    static constexpr bool UseCache = !std::is_arithmetic<TKey>::value;
+struct TRobinHoodDefaultSettings {
+    static constexpr bool CacheHash = !std::is_arithmetic<TKey>::value;
 };
 
 //TODO: only POD key & payloads are now supported
-template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash = TRobinHoodCacheHashUsageDetector<TKey>::UseCache>
+template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash>
 class TRobinHoodHashBase {
 public:
     using iterator = char*;
@@ -301,11 +301,11 @@ private:
     char* DataEnd = nullptr;
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
-class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator>> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
+class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
 public:
-    using TSelf = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
+    using TSelf = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
     explicit TRobinHoodHashMap(ui32 payloadSize, ui64 initialCapacity = 1u << 8)
@@ -368,11 +368,11 @@ private:
     TVec TmpPayload, TmpPayload2;
 };
 
-template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
-class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator>> {
+template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
+class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
 public:
-    using TSelf = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
+    using TSelf = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = TPayload;
 
     explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1u << 8)
@@ -417,11 +417,11 @@ public:
     }
 };
 
-template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>>
-class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator>> {
+template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
+class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
 public:
-    using TSelf = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator>;
-    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf>;
+    using TSelf = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>;
+    using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
     explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)

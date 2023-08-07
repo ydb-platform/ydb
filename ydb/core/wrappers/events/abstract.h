@@ -28,6 +28,7 @@ public:
         EV_REQUEST_RESPONSE(AbortMultipartUpload),
         EV_REQUEST_RESPONSE(ListObjects),
         EV_REQUEST_RESPONSE(CheckObjectExists),
+        EV_REQUEST_RESPONSE(UploadPartCopy),
         EvEnd,
     };
 

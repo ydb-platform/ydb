@@ -32,6 +32,8 @@ struct TEvExternalStorage {
     using TEvAbortMultipartUploadResponse = NExternalStorage::TEvAbortMultipartUploadResponse;
     using TEvCheckObjectExistsRequest = NExternalStorage::TEvCheckObjectExistsRequest;
     using TEvCheckObjectExistsResponse = NExternalStorage::TEvCheckObjectExistsResponse;
+    using TEvUploadPartCopyRequest = NExternalStorage::TEvUploadPartCopyRequest;
+    using TEvUploadPartCopyResponse = NExternalStorage::TEvUploadPartCopyResponse;
 };
 
 namespace NExternalStorage {
@@ -52,6 +54,7 @@ public:
     virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const = 0;
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const = 0;
+    virtual void Execute(TEvUploadPartCopyRequest::TPtr& ev) const = 0;
 };
 
 class IExternalStorageConfig {

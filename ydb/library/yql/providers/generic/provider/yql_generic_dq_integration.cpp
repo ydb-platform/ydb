@@ -39,18 +39,18 @@ namespace NYql {
 
             TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
-                    const auto clReadTable = maybeGenReadTable.Cast();
-                    const auto token = TString("cluster:default_") += clReadTable.DataSource().Cluster().StringValue();
+                    const auto genReadTable = maybeGenReadTable.Cast();
+                    const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     YQL_CLOG(INFO, ProviderGeneric) << "Wrap " << read->Content() << " with token: " << token;
 
-                    const auto rowType = clReadTable.Ref()
+                    const auto rowType = genReadTable.Ref()
                                              .GetTypeAnn()
                                              ->Cast<TTupleExprType>()
                                              ->GetItems()
                                              .back()
                                              ->Cast<TListExprType>()
                                              ->GetItemType();
-                    auto columns = clReadTable.Columns().Ptr();
+                    auto columns = genReadTable.Columns().Ptr();
                     if (!columns->IsList()) {
                         const auto pos = columns->Pos();
                         const auto& items = rowType->Cast<TStructExprType>()->GetItems();
@@ -64,14 +64,15 @@ namespace NYql {
                     // clang-format off
                     return Build<TDqSourceWrap>(ctx, read->Pos())
                         .Input<TGenSourceSettings>()
-                            .Table(clReadTable.Table())
+                            .Cluster(genReadTable.DataSource().Cluster())
+                            .Table(genReadTable.Table())
                             .Token<TCoSecureParam>()
                                 .Name().Build(token)
                                 .Build()
                             .Columns(std::move(columns))
                             .Build()
-                        .RowType(ExpandType(clReadTable.Pos(), *rowType, ctx))
-                        .DataSource(clReadTable.DataSource().Cast<TCoDataSource>())
+                        .RowType(ExpandType(genReadTable.Pos(), *rowType, ctx))
+                        .DataSource(genReadTable.DataSource().Cast<TCoDataSource>())
                         .Done().Ptr();
                     // clang-format on
                 }
@@ -122,7 +123,10 @@ namespace NYql {
 
                     auto items = select->mutable_what()->mutable_items();
 
-                    const auto& tableMeta = State_->GetTable(cluster, table);
+                    auto [tableMeta, issue] = State_->GetTable(cluster, table);
+                    if (issue.has_value()) {
+                        ythrow yexception() << "Get table metadata: " << issue.value();
+                    }
 
                     for (size_t i = 0; i < columns.Size(); i++) {
                         // assign column name
@@ -131,12 +135,12 @@ namespace NYql {
                         column->mutable_name()->assign(column_name);
 
                         // assign column type
-                        auto type = NConnector::GetColumnTypeByName(tableMeta.Schema, column_name);
+                        auto type = NConnector::GetColumnTypeByName(tableMeta.value()->Schema, column_name);
                         column->mutable_type()->CopyFrom(type);
                     }
 
                     // store data source instance
-                    srcDesc.mutable_data_source_instance()->CopyFrom(tableMeta.DataSourceInstance);
+                    srcDesc.mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
 
                     // preserve source description for read actor
                     protoSettings.PackFrom(srcDesc);

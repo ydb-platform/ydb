@@ -50,12 +50,27 @@ public:
         return Raw.Halfs[1];
     }
 
+    // TODO: deprecate As<T>() in favor of Get<T>()
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T As() const;
 
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    inline T Get() const;
+
+    // TODO: deprecate AsTuple() in favor of GetElements()
     inline const TBlockItem* AsTuple() const {
         Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
         return Raw.Tuple.Value;
+    }
+
+    inline const TBlockItem* GetElements() const {
+        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
+        return Raw.Tuple.Value;
+    }
+
+    inline TBlockItem GetElement(ui32 index) const {
+        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present);
+        return Raw.Tuple.Value[index];
     }
 
     inline TStringRef AsStringRef() const {
@@ -125,9 +140,17 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
 
-#define VALUE_GET(xType) \
+#define VALUE_AS(xType) \
     template <> \
     inline xType TBlockItem::As<xType>() const \
+    { \
+        Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present); \
+        return Raw.Simple.xType##_; \
+    }
+
+#define VALUE_GET(xType) \
+    template <> \
+    inline xType TBlockItem::Get<xType>() const \
     { \
         Y_VERIFY_DEBUG(Raw.GetMarkers() == EMarkers::Present); \
         return Raw.Simple.xType##_; \
@@ -141,9 +164,11 @@ UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Present); \
     }
 
+PRIMITIVE_VALUE_TYPES(VALUE_AS)
 PRIMITIVE_VALUE_TYPES(VALUE_GET)
 PRIMITIVE_VALUE_TYPES(VALUE_CONSTR)
 
+#undef VALUE_AS
 #undef VALUE_GET
 #undef VALUE_CONSTR
 

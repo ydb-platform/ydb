@@ -34,7 +34,11 @@ public:
 
     }
 
-    class TModificationGuard {
+    const NColumnShard::TEngineLogsCounters& GetCounters() const {
+        return Counters;
+    }
+
+    class TModificationGuard: TNonCopyable {
     private:
         TGranulesStorage& Owner;
     public:
@@ -75,8 +79,12 @@ public:
         std::optional<ui64> reserve;
         TInstant reserveInstant;
         for (auto it = GranuleCompactionPrioritySorting.rbegin(); it != GranuleCompactionPrioritySorting.rend(); ++it) {
+            if (it->first.GetPriorityClass() == TGranuleAdditiveSummary::ECompactionClass::NoCompaction) {
+                break;
+            }
             Y_VERIFY(it->second.size());
             for (auto&& i : it->second) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "test_granule")("granule_stats", it->first.DebugString())("granule_id", i);
                 if (filter(i)) {
                     if (it->first.GetNextAttemptInstant() > now) {
                         if (!reserve || reserveInstant > it->first.GetNextAttemptInstant()) {

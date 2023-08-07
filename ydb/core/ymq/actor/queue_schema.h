@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include "schema.h"
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/lib/value/value.h>

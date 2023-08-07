@@ -2449,15 +2449,16 @@ extern "C" void WriteSkiffPgValue(TPgType* type, const NUdf::TUnboxedValuePod& v
 
 } // namespace NCommon
 
-arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
-    const auto& desc = NPg::LookupType(type->GetTypeId());
+namespace {
+
+template<typename TScalarGetter, typename TPointerGetter>
+arrow::Datum DoMakePgScalar(const NPg::TTypeDesc& desc, arrow::MemoryPool& pool, const TScalarGetter& getScalar, const TPointerGetter& getPtr) {
     if (desc.PassByValue) {
-        return arrow::MakeScalar((uint64_t)ScalarDatumFromPod(value));
+        return arrow::MakeScalar(getScalar());
     } else {
-        auto ptr = (const char*)PointerDatumFromPod(value);
+        const char* ptr = getPtr();
         ui32 size;
         if (desc.TypeLen == -1) {
-            auto ptr = (const text*)PointerDatumFromPod(value);
             size = GetCleanVarSize((const text*)ptr) + VARHDRSZ;
         } else {
             size = strlen(ptr) + 1;
@@ -2468,6 +2469,24 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
         std::memcpy(buffer->mutable_data() + sizeof(void*), ptr, size);
         return arrow::Datum(std::make_shared<arrow::BinaryScalar>(buffer));
     }
+}
+
+} // namespace
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    return DoMakePgScalar(
+        NPg::LookupType(type->GetTypeId()), pool,
+        [&value]() { return (uint64_t)ScalarDatumFromPod(value); },
+        [&value]() { return (const char*)PointerDatumFromPod(value); }
+    );
+}
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
+    return DoMakePgScalar(
+        NPg::LookupType(type->GetTypeId()), pool,
+        [&value]() { return (uint64_t)ScalarDatumFromItem(value); },
+        [&value]() { return (const char*)PointerDatumFromItem(value); }
+    );
 }
 
 TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
@@ -2844,7 +2863,7 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
 }
 
 template <bool PassByValue, bool IsArray>
-class TPgHash : public NUdf::IHash {
+class TPgHash : public NUdf::IHash, public NUdf::TBlockItemHasherBase<TPgHash<PassByValue, IsArray>, true> {
 public:
     TPgHash(const NYql::NPg::TTypeDesc& typeDesc)
         : TypeDesc(typeDesc)
@@ -2885,6 +2904,21 @@ public:
         return DatumGetUInt32(x);
     }
 
+    ui64 DoHash(NUdf::TBlockItem value) const {
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash); // don't copy becase of IHash isn't threadsafe
+        callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { PassByValue ?
+            ScalarDatumFromItem(value) :
+            PointerDatumFromItem(value), false };
+
+        auto x = FInfoHash.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetUInt32(x);
+    }
 private:
     const NYql::NPg::TTypeDesc TypeDesc;
 
@@ -2893,6 +2927,17 @@ private:
 
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
     const auto& typeDesc = NYql::NPg::LookupType(type->GetTypeId());
+    if (typeDesc.PassByValue) {
+        return new TPgHash<true, false>(typeDesc);
+    } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {
+        return new TPgHash<false, true>(typeDesc);
+    } else {
+        return new TPgHash<false, false>(typeDesc);
+    }
+}
+
+NUdf::IBlockItemHasher::TPtr MakePgItemHasher(ui32 typeId) {
+    const auto& typeDesc = NYql::NPg::LookupType(typeId);
     if (typeDesc.PassByValue) {
         return new TPgHash<true, false>(typeDesc);
     } else if (typeDesc.TypeId == typeDesc.ArrayTypeId) {

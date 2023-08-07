@@ -4,10 +4,12 @@ SRCS(
     kqp_proxy_service.cpp
     kqp_proxy_peer_stats_calculator.cpp
     kqp_script_executions.cpp
+    kqp_table_creator.cpp
 )
 
 PEERDIR(
     library/cpp/actors/core
+    library/cpp/actors/http
     library/cpp/protobuf/json
     ydb/core/actorlib_impl
     ydb/core/base

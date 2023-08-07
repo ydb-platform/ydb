@@ -181,11 +181,6 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
         Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);
     }
 
-    if (Server) {
-        if (auto *busMonPage = AppData(ctx)->BusMonPage)
-            Server->RegisterMonPage(busMonPage);
-    }
-
     Become(&TThis::StateFunc);
 }
 

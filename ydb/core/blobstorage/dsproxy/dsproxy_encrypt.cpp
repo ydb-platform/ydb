@@ -70,12 +70,13 @@ namespace NKikimr {
         Encrypt(destination, source, shift, sizeBytes, id, info);
     }
 
-    void DecryptInplace(TRope& rope, const TLogoBlobID& id, const TBlobStorageGroupInfo& info) {
+    void DecryptInplace(TRope& rope, ui32 offset, ui32 shift, ui32 size, const TLogoBlobID& id, const TBlobStorageGroupInfo& info) {
         if (info.GetEncryptionMode() == TBlobStorageGroupInfo::EEM_NONE) {
             return;
         }
         auto span = rope.GetContiguousSpanMut();
-        Decrypt(span.data(), span.data(), 0, span.size(), id, info);
+        Y_VERIFY(offset < span.size() && size <= span.size() - offset);
+        Decrypt(span.data() + offset, span.data() + offset, shift, size, id, info);
     }
 
 } // NKikimr

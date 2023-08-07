@@ -8,13 +8,19 @@ namespace NKikimr::NTestShard {
             const TActorId ValidationActorId;
             TString Html;
             TString ValidationHtml;
+            TString Json;
 
         public:
             TQueryProcessorActor(NMon::TEvRemoteHttpInfo::TPtr ev, TLoadActor *self)
                 : Ev(ev)
                 , ValidationActorId(self->ValidationActorId)
             {
-                Html = RenderHtml(self);
+                const TCgiParameters params = Ev->Get()->Cgi();
+                if (params.Has("json", "1")) {
+                    Json = WriteJson(RenderJson(self), false);
+                } else {
+                    Html = RenderHtml(self);
+                }
             }
 
             void Bootstrap() {
@@ -29,6 +35,40 @@ namespace NKikimr::NTestShard {
             void Handle(NMon::TEvRemoteHttpInfoRes::TPtr ev) {
                 ValidationHtml = ev->Get()->Html;
                 PassAway();
+            }
+
+            NJson::TJsonValue RenderJson(TLoadActor *self) {
+                NJson::TJsonValue root(NJson::JSON_MAP);
+
+                std::vector<TDuration> intervals;
+                constexpr size_t orders = 4;
+                constexpr size_t stepsPerOrder = 20;
+                intervals.reserve(orders * stepsPerOrder + 2);
+                for (ui32 i = 0; i < orders * stepsPerOrder + 1; ++i) {
+                    const double seconds = 1e-5 * round(100 * pow(10, (double)i / stepsPerOrder));
+                    intervals.push_back(TDuration::Seconds(seconds));
+                }
+                intervals.push_back(TDuration::Max());
+
+                NJson::TJsonValue jIntervals(NJson::JSON_ARRAY);
+                for (const TDuration& i : intervals) {
+                    jIntervals.AppendValue(i.GetValue());
+                }
+                root["intervals"] = jIntervals;
+
+                NJson::TJsonValue w(NJson::JSON_ARRAY);
+                for (const auto& n : self->WriteLatency.Intervals(intervals)) {
+                    w.AppendValue(n);
+                }
+                root["writeLatencies"] = w;
+
+                NJson::TJsonValue r(NJson::JSON_ARRAY);
+                for (const auto& n : self->ReadLatency.Intervals(intervals)) {
+                    r.AppendValue(n);
+                }
+                root["readLatencies"] = r;
+
+                return root;
             }
 
             TString RenderHtml(TLoadActor *self) {
@@ -163,7 +203,11 @@ namespace NKikimr::NTestShard {
             }
 
             void PassAway() override {
-                Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Html + ValidationHtml), 0, Ev->Cookie);
+                if (Json) {
+                    Send(Ev->Sender, new NMon::TEvRemoteJsonInfoRes(Json), 0, Ev->Cookie);
+                } else {
+                    Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Html + ValidationHtml), 0, Ev->Cookie);
+                }
                 TActorBootstrapped::PassAway();
             }
 

@@ -13,6 +13,8 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -140,6 +142,10 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
         SetupNodeWhiteboard(runtime, nodeIndex);
         SetupTabletResolver(runtime, nodeIndex);
+        SetupResourceBroker(runtime, nodeIndex);
+        SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
+            .Shared = 1,
+        });
     }
 
     runtime.Initialize(app.Unwrap());
@@ -1058,6 +1064,147 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 
         CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
                           1, 2, 3, 7, TStatus::ERROR_TEMP);
+    }
+
+    Y_UNIT_TEST(ExtendLeaseRestartRace) {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially.
+        auto epoch = GetEpoch(runtime, sender);
+        // Register node 1024.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, 1024, epoch.GetNextEnd());
+
+        // Compact node broker tables to have page faults on reboot
+        runtime.SendToPipe(MakeNodeBrokerID(0), sender, new TEvNodeBroker::TEvCompactTables(), 0, GetPipeConfigWithRetries());
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Wait until epoch expiration.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = CheckNodesList(runtime, sender, {1024}, {}, 2);
+
+        class THooks : public INodeBrokerHooks {
+        public:
+            THooks(TTestActorRuntime& runtime)
+                : Runtime(runtime)
+            { }
+
+            virtual void OnActivateExecutor(ui64 tabletId) override {
+                Cerr << "... OnActivateExecutor tabletId# " << tabletId << Endl;
+                Y_UNUSED(tabletId);
+                Activated = true;
+            }
+
+            void Install() {
+                if (!Installed) {
+                    PrevObserverFunc = Runtime.SetObserverFunc([this](auto&, auto& event) {
+                        return this->OnEvent(event);
+                    });
+                    INodeBrokerHooks::Set(this);
+                    Installed = true;
+                }
+            }
+
+            void Uninstall() {
+                if (Installed) {
+                    INodeBrokerHooks::Set(nullptr);
+                    Runtime.SetObserverFunc(PrevObserverFunc);
+                    Installed = false;
+                }
+            }
+
+            bool HasCacheRequests() const {
+                return !CacheRequests.empty();
+            }
+
+            void WaitCacheRequests() {
+                while (!HasCacheRequests()) {
+                    Y_VERIFY(Installed);
+                    TDispatchOptions options;
+                    options.CustomFinalCondition = [this]() {
+                        return HasCacheRequests();
+                    };
+                    Runtime.DispatchEvents(options);
+                }
+            }
+
+            void ResendCacheRequests() {
+                for (auto& ev : CacheRequests) {
+                    Runtime.Send(ev.Release(), 0, true);
+                }
+                CacheRequests.clear();
+            }
+
+        private:
+            TTestActorRuntime::EEventAction OnEvent(TAutoPtr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case NSharedCache::EvRequest: {
+                        if (Activated) {
+                            Cerr << "... captured cache request" << Endl;
+                            CacheRequests.emplace_back(ev.Release());
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        break;
+                    }
+                }
+
+                return PrevObserverFunc(Runtime, ev);
+            }
+
+        private:
+            TTestActorRuntime& Runtime;
+            TTestActorRuntime::TEventObserver PrevObserverFunc;
+            bool Installed = false;
+            bool Activated = false;
+            TVector<THolder<IEventHandle>> CacheRequests;
+        } hooks(runtime);
+
+        hooks.Install();
+        Y_DEFER {
+            hooks.Uninstall();
+        };
+
+        Cerr << "... rebooting node broker" << Endl;
+        // runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE);
+        // runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+        runtime.Register(CreateTabletKiller(MakeNodeBrokerID(0)));
+        hooks.WaitCacheRequests();
+
+        // Open a new pipe
+        auto pipe = runtime.ConnectToPipe(MakeNodeBrokerID(0), sender, 0, GetPipeConfigWithRetries());
+
+        // Send an extend lease request while node broker is loading its state
+        Cerr << "... sending extend lease request" << Endl;
+        {
+            TAutoPtr<TEvNodeBroker::TEvExtendLeaseRequest> event = new TEvNodeBroker::TEvExtendLeaseRequest;
+            event->Record.SetNodeId(1024);
+            runtime.SendToPipe(pipe, sender, event.Release(), 0);
+        }
+
+        // Simulate some sleep, enough for buggy code to handle the request
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Unblock state loading transaction
+        hooks.Uninstall();
+        hooks.ResendCacheRequests();
+
+        Cerr << "... waiting for response" << Endl;
+        {
+            auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvExtendLeaseResponse>(sender);
+            UNIT_ASSERT(reply);
+            const auto &rec = reply->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNodeId(), 1024);
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetEpoch().DebugString(), epoch.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetExpire(), epoch.GetNextEnd());
+        }
+
+        // Wait until epoch expiration.
+        Cerr << "... waiting for epoch update" << Endl;
+        WaitForEpochUpdate(runtime, sender);
+        epoch = CheckNodesList(runtime, sender, {1024}, {}, 3);
     }
 }
 

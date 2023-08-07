@@ -196,6 +196,20 @@ TString GetConditionalRedString(const TString& str, bool condition) {
     }
 }
 
+TString GetColoredValue(double val, double maxVal) {
+    double ratio = val / maxVal;
+    TString color;
+    if (ratio < 0.9) {
+        color = "green";
+    } else if (ratio < 1.0) {
+        color = "yellow";
+    } else {
+        color = "red";
+    }
+
+    return Sprintf("<span style='color:%s'>%.2f</span>", color.c_str(), val);
+}
+
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values) {
     ui64 acc = 0;
     for (const auto& throughput : values.GetGroupReadThroughput()) {
@@ -349,6 +363,14 @@ bool IsValidTabletType(TTabletTypes::EType type) {
     return (type > TTabletTypes::Unknown
             && type < TTabletTypes::Reserved40
             );
+}
+
+TString GetBalancerProgressText(i32 balancerProgress, EBalancerType balancerType) {
+    TStringBuilder str;
+    if (balancerProgress >= 0) {
+        str << balancerProgress << "% (" << EBalancerTypeName(balancerType) << ")";
+    }
+    return str;
 }
 
 } // NHive

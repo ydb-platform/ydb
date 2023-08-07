@@ -1,84 +1,231 @@
 {
-    "test_ydb_impex.TestImpex.test_format_csv": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_csv-additional_args0-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_csv-additional_args0-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_delimeter_at_end_of_lines_newline_delimited/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_csv-additional_args1-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_from_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_from_stdin/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_csv-additional_args1-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_json-additional_args4-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files_and_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_and_stdin/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_json-additional_args4-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_big_data/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_tsv-additional_args2-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_columns/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_tsv-additional_args2-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_tsv-additional_args3-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_and_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_and_columns/result.output"
+    "test_ydb_impex.TestImpex.test_big_dataset[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_big_dataset_tsv-additional_args3-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_csv_multiple_files_newline_delimited_big_data/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_csv-additional_args0-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_json": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_csv-additional_args0-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_json_from_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_from_stdin/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_csv-additional_args1-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_json_multiple_files": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_csv-additional_args1-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_json_multiple_files_and_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files_and_stdin/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_tsv-additional_args2-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_json_multiple_files_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_json_multiple_files_big_data/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_tsv-additional_args2-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_tsv-additional_args3-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines/result.output"
+    "test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_delimeter_at_end_of_lines_tsv-additional_args3-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_delimeter_at_end_of_lines_newline_delimited/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_csv-additional_args0-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_from_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_from_stdin/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_csv-additional_args0-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_csv-additional_args1-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_and_stdin": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_and_stdin/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_csv-additional_args1-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_big_data/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_json-additional_args4-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_columns/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_json-additional_args4-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_tsv-additional_args2-column_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_and_columns": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_and_columns/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_tsv-additional_args2-row_/result.output"
     },
-    "test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_big_data": {
-        "uri": "file://test_ydb_impex.TestImpex.test_format_tsv_multiple_files_newline_delimited_big_data/result.output"
+    "test_ydb_impex.TestImpex.test_excess_columns[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_excess_columns[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_tsv-additional_args3-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_json-additional_args4-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_json-additional_args4-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_tsv-additional_args3-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_columns_opt_tsv-additional_args3-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_json-additional_args4-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_json-additional_args4-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_multiple_files_and_stdin[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_and_stdin_tsv-additional_args3-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_json-additional_args4-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_json-additional_args4-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_simple[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_simple_tsv-additional_args3-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_json-additional_args4-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_json-additional_args4-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args3-row_/result.output"
     },
     "test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptWithFormats.test_stream_yql_script_json_base64/result.output"

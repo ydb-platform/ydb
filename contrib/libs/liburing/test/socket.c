@@ -273,7 +273,6 @@ static int do_send(int socket_direct, int alloc)
 	}
 	if (cqe->res < 0) {
 		if (cqe->res == -EINVAL) {
-			fprintf(stdout, "No socket support, skipping\n");
 			no_socket = 1;
 			io_uring_cqe_seen(&ring, cqe);
 			return fallback_send(&ring, &saddr);

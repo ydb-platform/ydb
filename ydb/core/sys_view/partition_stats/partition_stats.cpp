@@ -447,7 +447,7 @@ private:
     bool ProcessInFly = false;
 };
 
-THolder<IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
+THolder<NActors::IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
 {
     return MakeHolder<TPartitionStatsCollector>(batchSize, pendingRequestsLimit);
 }
@@ -461,7 +461,7 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TPartitionStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TPartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : TBase(ownerId, scanId, tableId, tableRange, columns)
     {
@@ -689,7 +689,7 @@ private:
     bool IncludePathColumn = false;
 };
 
-THolder<IActor> CreatePartitionStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     return MakeHolder<TPartitionStatsScan>(ownerId, scanId, tableId, tableRange, columns);

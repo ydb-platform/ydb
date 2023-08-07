@@ -380,26 +380,35 @@ private:
 
     template<bool Distinct>
     TStatus AssumeUniqueWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        typename TUniqueConstraintNodeBase<Distinct>::TFullSetType sets;
+        typename TUniqueConstraintNodeBase<Distinct>::TContentType content;
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
-            TConstraintNode::TSetType columns;
-            columns.reserve(input->Child(i)->ChildrenSize());
-            for (const auto& column: input->Child(i)->Children()) {
-                if (column->IsAtom())
-                    columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
-                else if (column->IsList()) {
-                    TConstraintNode::TPathType path(column->ChildrenSize());
-                    std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
-                    columns.insert_unique(std::move(path));
+            TConstraintNode::TSetOfSetsType sets;
+            sets.reserve(input->Child(i)->ChildrenSize());
+            for (const auto& list : input->Child(i)->Children()) {
+                if (list->IsAtom())
+                    sets.insert_unique(TConstraintNode::TSetType{TConstraintNode::TPathType(1U, list->Content())});
+                else if (list->IsList()) {
+                    TConstraintNode::TSetType columns;
+                    columns.reserve(list->ChildrenSize());
+                    for (const auto& column: list->Children()) {
+                        if (column->IsAtom())
+                            columns.insert_unique(TConstraintNode::TPathType(1U, column->Content()));
+                        else if (column->IsList()) {
+                            TConstraintNode::TPathType path(column->ChildrenSize());
+                            std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
+                            columns.insert_unique(std::move(path));
+                        }
+                    }
+                    sets.insert_unique(std::move(columns));
                 }
             }
-            sets.insert_unique(std::move(columns));
+            content.insert_unique(std::move(sets));
         }
 
-        if (sets.empty())
-            sets.insert_unique(TConstraintNode::TSetType{TConstraintNode::TPathType()});
+        if (content.empty())
+            content.insert_unique(TConstraintNode::TSetOfSetsType{TConstraintNode::TSetType{TConstraintNode::TPathType()}});
 
-        auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets));
+        auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(content));
         if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
                 << " is not applicable to " << *input->GetTypeAnn()));
@@ -419,7 +428,7 @@ private:
     }
 
     TStatus AssumeChoppedWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        TChoppedConstraintNode::TFullSetType sets;
+        TConstraintNode::TSetOfSetsType sets;
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
             TConstraintNode::TSetType columns;
             columns.reserve(input->Child(i)->ChildrenSize());
@@ -489,11 +498,14 @@ private:
         }
     }
 
-    template<class TConstraint>
+    template<class TConstraint, bool Simplify = false>
     static void FilterFromHead(const TExprNode::TPtr& input, const TConstraintNode::TPathFilter& filter, TExprContext& ctx) {
         if (const auto source = input->Head().GetConstraint<TConstraint>()) {
             if (const auto filtered = source->FilterFields(ctx, filter)) {
-                input->AddConstraint(filtered);
+                if constexpr (Simplify)
+                    input->AddConstraint(filtered->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+                else
+                    input->AddConstraint(filtered);
             }
         }
     }
@@ -2761,8 +2773,12 @@ private:
         if (sorted || chopped) {
             if (const auto& keys = GetSimpleKeys<Wide>(*FuseInitLambda(*initLambda, *switchLambda, ctx), ctx); !keys.empty()) {
                 if (sorted && sorted->StartsWith(keys) || chopped && chopped->Equals(keys)) {
-                    unique = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TFullSetType{keys});
-                    distinct = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TFullSetType{keys});
+                    TConstraintNode::TSetOfSetsType sets;
+                    sets.reserve(keys.size());
+                    for (const auto& key : keys)
+                        sets.insert_unique(TConstraintNode::TSetType{key});
+                    unique = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{sets});
+                    distinct = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{sets});
                     if constexpr (Wide) {
                         if (const auto& mapping = TPartOfUniqueConstraintNode::GetCommonMapping(unique); !mapping.empty()) {
                             for (ui32 i = 0U; i < argsConstraints.size(); ++i) {
@@ -2849,15 +2865,15 @@ private:
 
     template<bool Distinct>
     static void GetUniquesForPayloads(const TExprNode::TPtr& input, TExprContext& ctx) {
-        typename TUniqueConstraintNodeBase<Distinct>::TFullSetType sets{TConstraintNode::TSetType{TConstraintNode::TPathType{ctx.GetIndexAsString(0U)}}};
+        typename TUniqueConstraintNodeBase<Distinct>::TContentType content{TConstraintNode::TSetOfSetsType{TConstraintNode::TSetType{TConstraintNode::TPathType{ctx.GetIndexAsString(0U)}}}};
         if (const auto lambda = GetConstraintFromLambda<TPartOfConstraintNode<TUniqueConstraintNodeBase<Distinct>>, false>(*input->Child(2), ctx)) {
             if (const auto original = GetDetailed(input->Head().GetConstraint<TUniqueConstraintNodeBase<Distinct>>(), *input->Head().GetTypeAnn(), ctx)) {
                 if (const auto complete = TPartOfConstraintNode<TUniqueConstraintNodeBase<Distinct>>::MakeComplete(ctx, lambda->GetColumnMapping(), original, ctx.GetIndexAsString(1U))) {
-                    sets.insert_unique(complete->GetAllSets().cbegin(), complete->GetAllSets().cend());
+                    content.insert_unique(complete->GetContent().cbegin(), complete->GetContent().cend());
                 }
             }
         }
-        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(sets)));
+        input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(content)));
     }
 
     TStatus ToDictWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {

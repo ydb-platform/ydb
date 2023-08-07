@@ -77,6 +77,7 @@ public:
     THashMap<TString, TString> AllowedServiceTokens = {{"service1", "root1/folder1"}};
 
     bool ShouldGenerateRetryableError = false;
+    bool ShouldGenerateOneRetryableError = false;
 
     grpc::Status Authenticate(
             grpc::ServerContext*,
@@ -86,6 +87,10 @@ public:
         ++AuthenticateCount;
         if (request->has_signature()) {
             if (ShouldGenerateRetryableError) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            if (ShouldGenerateOneRetryableError) {
+                ShouldGenerateOneRetryableError = false;
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
             }
             response->mutable_subject()->mutable_user_account()->set_id("user1");
@@ -123,6 +128,10 @@ public:
         ++AuthorizeCount;
         if (request->has_signature()) {
             if (ShouldGenerateRetryableError) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            if (ShouldGenerateOneRetryableError) {
+                ShouldGenerateOneRetryableError = false;
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
             }
             response->mutable_subject()->mutable_user_account()->set_id("user1");

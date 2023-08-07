@@ -142,7 +142,7 @@ protected:
 
 void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where, TExprContext& ctx) {
     ctx.AddError(TIssue(ctx.GetPosition(pos),
-                        TStringBuilder() << "YQL: Internal core error! " << where << " take too much iteration: "
+                        TStringBuilder() << "YQL: Internal core error! " << where << " takes too much iterations: "
                                          << ctx.RepeatTransformLimit
                                          << ". You may set RepeatTransformLimit as flags for config provider."));
 }

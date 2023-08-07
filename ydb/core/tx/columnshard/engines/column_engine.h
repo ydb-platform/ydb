@@ -1,237 +1,22 @@
 #pragma once
-#include "defs.h"
-#include "tier_info.h"
-#include "index_info.h"
-#include "portion_info.h"
-#include "db_wrapper.h"
-#include "columns_table.h"
-#include "compaction_info.h"
+#include "changes/abstract.h"
 #include "granules_table.h"
+#include "portions/portion_info.h"
+#include "scheme/snapshot_scheme.h"
 #include "predicate/filter.h"
-#include "insert_table/data.h"
-
-#include <ydb/core/formats/arrow/replace_key.h>
-#include <ydb/core/tx/columnshard/blob.h>
+#include "changes/compaction_info.h"
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/snapshot_scheme.h>
+
+namespace NKikimr::NColumnShard {
+class TTiersManager;
+class TTtl;
+}
 
 namespace NKikimr::NOlap {
-
-struct TPredicate;
-
-struct TCompactionLimits {
-    static constexpr const ui64 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
-    static constexpr const ui64 MAX_BLOB_SIZE = 8 * 1024 * 1024; // some BlobStorage constant
-    static constexpr const ui64 EVICT_HOT_PORTION_BYTES = 1 * 1024 * 1024;
-    static constexpr const ui64 DEFAULT_EVICTION_BYTES = 64 * 1024 * 1024;
-    static constexpr const ui64 MAX_BLOBS_TO_DELETE = 10000;
-    static constexpr const ui64 OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID = 1024 * MAX_BLOB_SIZE;
-
-    ui32 GoodBlobSize{MIN_GOOD_BLOB_SIZE};
-    ui32 GranuleBlobSplitSize{MAX_BLOB_SIZE};
-    ui32 GranuleExpectedSize{5 * MAX_BLOB_SIZE};
-    ui32 GranuleOverloadSize{20 * MAX_BLOB_SIZE};
-    ui32 InGranuleCompactInserts{100}; // Trigger in-granule compaction to reduce count of portions' records
-    ui32 InGranuleCompactSeconds{2 * 60}; // Trigger in-granule comcation to guarantee no PK intersections
-};
-
-class TMark {
-public:
-    struct TCompare {
-        using is_transparent = void;
-
-        bool operator() (const TMark& a, const TMark& b) const {
-            return a < b;
-        }
-
-        bool operator() (const arrow::Scalar& a, const TMark& b) const {
-            return a < b;
-        }
-
-        bool operator() (const TMark& a, const arrow::Scalar& b) const {
-            return a < b;
-        }
-    };
-
-    explicit TMark(const NArrow::TReplaceKey& key)
-        : Border(key)
-    {}
-
-    TMark(const TMark& m) = default;
-    TMark& operator = (const TMark& m) = default;
-
-    bool operator == (const TMark& m) const {
-        return Border == m.Border;
-    }
-
-    std::partial_ordering operator <=> (const TMark& m) const {
-        return Border <=> m.Border;
-    }
-
-    bool operator == (const arrow::Scalar& firstKey) const {
-        // TODO: avoid ToScalar()
-        return NArrow::ScalarCompare(*NArrow::TReplaceKey::ToScalar(Border, 0), firstKey) == 0;
-    }
-
-    std::partial_ordering operator <=> (const arrow::Scalar& firstKey) const {
-        // TODO: avoid ToScalar()
-        const int cmp = NArrow::ScalarCompare(*NArrow::TReplaceKey::ToScalar(Border, 0), firstKey);
-        if (cmp < 0) {
-            return std::partial_ordering::less;
-        } else if (cmp > 0) {
-            return std::partial_ordering::greater;
-        } else {
-            return std::partial_ordering::equivalent;
-        }
-    }
-
-    const NArrow::TReplaceKey& GetBorder() const noexcept {
-        return Border;
-    }
-
-    ui64 Hash() const {
-        return Border.Hash();
-    }
-
-    operator size_t () const {
-        return Hash();
-    }
-
-    operator bool () const = delete;
-
-    static TString SerializeScalar(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
-    static NArrow::TReplaceKey DeserializeScalar(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
-
-    static TString SerializeComposite(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
-    static NArrow::TReplaceKey DeserializeComposite(const TString& key, const std::shared_ptr<arrow::Schema>& schema);
-
-    static NArrow::TReplaceKey MinBorder(const std::shared_ptr<arrow::Schema>& schema);
-    static NArrow::TReplaceKey ExtendBorder(const NArrow::TReplaceKey& key, const std::shared_ptr<arrow::Schema>& schema);
-
-    std::string ToString() const;
-
-private:
-    /// @note It's possible to share columns in TReplaceKey between multiple marks:
-    /// read all marks as a batch; create TMark for each row
-    NArrow::TReplaceKey Border;
-
-    static std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
-};
-
-struct TPortionEvictionFeatures {
-    const TString TargetTierName;
-    const ui64 PathId;      // portion path id for cold-storage-key construct
-    bool NeedExport = false;
-    bool DataChanges = true;
-
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, bool needExport)
-        : TargetTierName(targetTierName)
-        , PathId(pathId)
-        , NeedExport(needExport)
-    {}
-};
-
-class TColumnEngineChanges {
-public:
-    enum EType {
-        UNSPECIFIED,
-        INSERT,
-        COMPACTION,
-        CLEANUP,
-        TTL,
-    };
-
-    virtual ~TColumnEngineChanges() = default;
-
-    TColumnEngineChanges(const EType type, const TCompactionLimits& limits)
-        : Type(type)
-        , Limits(limits)
-    {}
-
-    void SetBlobs(THashMap<TBlobRange, TString>&& blobs) {
-        Y_VERIFY(!blobs.empty());
-        Blobs = std::move(blobs);
-    }
-
-    EType Type;
-    TCompactionLimits Limits;
-    TSnapshot InitSnapshot = TSnapshot::Zero();
-    std::unique_ptr<TCompactionInfo> CompactionInfo;
-    std::vector<NOlap::TInsertedData> DataToIndex;
-    std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
-    std::vector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
-    std::vector<TPortionInfo> PortionsToDrop;
-    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
-    std::vector<TColumnRecord> EvictedRecords;
-    std::vector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
-    THashMap<TBlobRange, TString> Blobs;
-    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
-    bool NeedRepeat{false};
-
-    bool IsInsert() const noexcept { return Type == INSERT; }
-    bool IsCompaction() const noexcept { return Type == COMPACTION; }
-    bool IsCleanup() const noexcept { return Type == CLEANUP; }
-    bool IsTtl() const noexcept { return Type == TTL; }
-
-    const char * TypeString() const {
-        switch (Type) {
-            case UNSPECIFIED:
-                break;
-            case INSERT:
-                return "insert";
-            case COMPACTION:
-                return CompactionInfo
-                    ? (CompactionInfo->InGranule() ? "compaction in granule" : "compaction split granule" )
-                    : "compaction";
-            case CLEANUP:
-                return "cleanup";
-            case TTL:
-                return "ttl";
-        }
-        return "";
-    }
-
-    ui64 TotalBlobsSize() const {
-        ui64 size = 0;
-        for (const auto& [_, blob] : Blobs) {
-            size += blob.size();
-        }
-        return size;
-    }
-
-    /// Returns blob-ranges grouped by blob-id.
-    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
-    GroupedBlobRanges(const std::vector<TPortionInfo>& portions) {
-        Y_VERIFY(portions.size());
-
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-        for (const auto& portionInfo : portions) {
-            Y_VERIFY(!portionInfo.Empty());
-
-            for (const auto& rec : portionInfo.Records) {
-                sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
-            }
-        }
-        return sameBlobRanges;
-    }
-
-    /// Returns blob-ranges grouped by blob-id.
-    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
-    GroupedBlobRanges(const std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>>& portions) {
-        Y_VERIFY(portions.size());
-
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-        for (const auto& [portionInfo, _] : portions) {
-            Y_VERIFY(!portionInfo.Empty());
-
-            for (const auto& rec : portionInfo.Records) {
-                sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
-            }
-        }
-        return sameBlobRanges;
-    }
-};
-
+class TInsertColumnEngineChanges;
+class TCompactColumnEngineChanges;
+class TTTLColumnEngineChanges;
+class TCleanupColumnEngineChanges;
 struct TSelectInfo {
     struct TStats {
         size_t Granules{};
@@ -312,7 +97,7 @@ struct TSelectInfo {
 class TColumnEngineStats {
 private:
     static constexpr const ui64 NUM_KINDS = 5;
-    static_assert(NUM_KINDS == NOlap::TPortionMeta::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
+    static_assert(NUM_KINDS == NOlap::TPortionMeta::EProduced::EVICTED, "NUM_KINDS must match NOlap::TPortionMeta::EProduced enum");
 public:
     class TPortionsStats {
     private:
@@ -393,7 +178,7 @@ public:
     std::vector<ui32> GetKinds() const {
         std::vector<ui32> result;
         for (auto&& i : GetEnumAllValues<NOlap::TPortionMeta::EProduced>()) {
-            if (i == NOlap::TPortionMeta::UNSPECIFIED) {
+            if (i == NOlap::TPortionMeta::EProduced::UNSPECIFIED) {
                 continue;
             }
             result.emplace_back(i);
@@ -405,7 +190,7 @@ public:
     std::vector<T> GetValues(const TAccessor accessor) const {
         std::vector<T> result;
         for (auto&& i : GetEnumAllValues<NOlap::TPortionMeta::EProduced>()) {
-            if (i == NOlap::TPortionMeta::UNSPECIFIED) {
+            if (i == NOlap::TPortionMeta::EProduced::UNSPECIFIED) {
                 continue;
             }
             result.emplace_back(accessor(GetStats(i)));
@@ -417,7 +202,7 @@ public:
     T GetValuesSum(const TAccessor accessor) const {
         T result = 0;
         for (auto&& i : GetEnumAllValues<NOlap::TPortionMeta::EProduced>()) {
-            if (i == NOlap::TPortionMeta::UNSPECIFIED) {
+            if (i == NOlap::TPortionMeta::EProduced::UNSPECIFIED) {
                 continue;
             }
             result += accessor(GetStats(i));
@@ -520,7 +305,19 @@ public:
 class TVersionedIndex {
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> IndexKey;
+    std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
 public:
+    ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
+        auto it = SnapshotByVersion.find(version);
+        return it == SnapshotByVersion.end() ? nullptr : it->second;
+    }
+
+    ISnapshotSchema::TPtr GetSchemaUnsafe(const ui64 version) const {
+        auto it = SnapshotByVersion.find(version);
+        Y_VERIFY(it != SnapshotByVersion.end());
+        return it->second;
+    }
+
     ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
         for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
             if (it->first <= version) {
@@ -547,7 +344,10 @@ public:
         } else {
             Y_VERIFY(IndexKey->Equals(indexInfo.GetIndexKey()));
         }
-        Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
+        auto it = Snapshots.emplace(version, std::make_shared<TSnapshotSchema>(std::move(indexInfo), version));
+        if (!SnapshotByVersion.emplace(it.first->second->GetVersion(), it.first->second).second) {
+            Y_VERIFY(GetLastSchema()->GetVersion() == it.first->second->GetVersion());
+        }
     }
 };
 
@@ -556,11 +356,10 @@ class IColumnEngine {
 public:
     virtual ~IColumnEngine() = default;
 
-    virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
-    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetIndexInfo().GetReplaceKey(); }
-    virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetIndexInfo().GetSortingKey(); }
-    virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetIndexInfo().GetIndexKey(); }
+    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey(); }
+    virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetSortingKey(); }
+    virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetIndexKey(); }
     virtual const THashSet<ui64>* GetOverloadedGranules(const ui64 pathId) const = 0;
     bool HasOverloadedGranules(const ui64 pathId) const {
         return GetOverloadedGranules(pathId) != nullptr;
@@ -574,22 +373,22 @@ public:
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const THashSet<ui32>& columnIds,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
-    virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartInsert(const TCompactionLimits& limits, std::vector<TInsertedData>&& dataToIndex) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                                  const TSnapshot& outdatedSnapshot, const TCompactionLimits& limits) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, const TCompactionLimits& limits, THashSet<ui64>& pathsToDrop,
-                                                               ui32 maxRecords) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const std::shared_ptr<arrow::Schema>& schema,
-                                                           ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) = 0;
+    virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) = 0;
+    virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept = 0;
+    virtual std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
+                                                                  const TCompactionLimits& limits) noexcept = 0;
+    virtual std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
+                                                               ui32 maxRecords) noexcept = 0;
+    virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+                                                           ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void FreeLocks(std::shared_ptr<TColumnEngineChanges> changes) = 0;
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     //virtual void UpdateTableSchema(ui64 pathId, const TSnapshot& snapshot, TIndexInfo&& info) = 0; // TODO
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
     virtual TSnapshot LastUpdate() const { return TSnapshot::Zero(); }
+    virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) = 0;
 };
 
 }

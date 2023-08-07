@@ -9,6 +9,10 @@ struct TBackup {
         return "TBackup";
     }
 
+    static constexpr bool NeedSnapshotTime() {
+        return true;
+    }
+
     static bool HasTask(const TTxTransaction& tx) {
         return tx.HasBackup();
     }
@@ -17,11 +21,13 @@ struct TBackup {
         return tx.GetBackup().GetTableName();
     }
 
-    static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
+    static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
         const auto& pathId = txState.TargetPathId;
         Y_VERIFY(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
+        backup.SetSnapshotStep(snapshotTime.Step);
+        backup.SetSnapshotTxId(snapshotTime.TxId);
 
         const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {

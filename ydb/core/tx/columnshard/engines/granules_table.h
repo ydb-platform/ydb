@@ -10,7 +10,7 @@ private:
 public:
     ui64 PathId;
     ui64 Granule;
-    NArrow::TReplaceKey Mark;
+    NArrow::TStoreReplaceKey Mark;
 
     TGranuleRecord(ui64 pathId, ui64 granule, const TSnapshot& createdAt, const NArrow::TReplaceKey& mark)
         : CreatedAt(createdAt)
@@ -36,6 +36,10 @@ public:
             << snap;
         out << '}';
         return out;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << *this;
     }
 };
 

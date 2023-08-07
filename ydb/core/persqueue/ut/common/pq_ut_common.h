@@ -77,7 +77,6 @@ public:
     }
 };
 
-
 struct TTestContext {
     const TTabletTypes::EType PQTabletType = TTabletTypes::PersQueue;
     const TTabletTypes::EType BalancerTabletType = TTabletTypes::PersQueueReadBalancer;
@@ -253,7 +252,7 @@ struct TTabletPreparationParameters {
     ui64 readFromTimestampsMs{0};
     ui64 sidMaxCount{0};
     ui32 specVersion{0};
-    ui32 speed{0};
+    ui32 writeSpeed{0};
     i32 storageLimitBytes{0};
     TString folderId{"somefolder"};
     TString cloudId{"somecloud"};
@@ -458,7 +457,8 @@ void CmdRead(
     TTestContext& tc,
     TVector<i32> offsets = {},
     const ui32 maxTimeLagMs = 0,
-    const ui64 readTimestampMs = 0);
+    const ui64 readTimestampMs = 0,
+    const TString user = "user");
 
 void CmdReserveBytes(
     const ui32 partition,

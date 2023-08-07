@@ -373,6 +373,8 @@ enum EServiceKikimr {
     KAFKA_PROXY = 2200;
 
     OBJECTS_MONITORING = 2300;
+
+    STATISTICS = 2400;
 };
 
 message TActivity {
@@ -836,7 +838,7 @@ message TActivity {
         PERSQUEUE_MIRRORER = 451;
         LONG_TX_SERVICE = 452;
         LONG_TX_SERVICE_COMMIT = 453;
-        PERSQUEUE_READ_SPEED_LIMITER = 454;
+        PERSQUEUE_ACCOUNT_READ_QUOTER = 454;
         LONG_TX_SERVICE_ACQUIRE_SNAPSHOT = 455;
         BLOCKSTORE_PARTITION_NONREPL = 456;
         BS_PROXY_PATCH_ACTOR = 457;
@@ -995,5 +997,8 @@ message TActivity {
         CMS_API_ADAPTER = 613;
         KQP_SCAN_FETCH_ACTOR = 614;
         COLUMNSHARD_CONVEYOR = 615;
+        PERSQUEUE_READ_QUOTER = 616;
+        KAFKA_PRODUCE_ACTOR = 617;
+        STAT_SERVICE = 618;
     };
 };

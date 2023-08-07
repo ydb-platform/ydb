@@ -17,8 +17,8 @@
 #include "liburing.h"
 #include "helpers.h"
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 static int recv_thread_ready = 0;
 static int recv_thread_done = 0;
@@ -78,7 +78,7 @@ static void *send_thread(void *arg)
 	return NULL;
 }
 
-void *recv_thread(void *arg)
+static void *recv_thread(void *arg)
 {
 	struct data *data = arg;
 	struct io_uring ring;
@@ -196,7 +196,7 @@ static int test_accept_timeout(int do_connect, unsigned long timeout)
 	if (ret) {
 		fprintf(stderr, "queue_init: %d\n", ret);
 		return 1;
-	};
+	}
 
 	fast_poll = (p.features & IORING_FEAT_FAST_POLL) != 0;
 	io_uring_queue_exit(&ring);

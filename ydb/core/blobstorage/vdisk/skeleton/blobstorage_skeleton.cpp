@@ -454,20 +454,6 @@ namespace NKikimr {
             return status;
         }
 
-        TString GetHugeBlobsForErrorMsg(const TBatchedVec<TVPutInfo> &putsInfo) {
-            TStringBuilder hugeBlobs;
-            bool hasHugeBlob = false;
-            for (auto &item : putsInfo) {
-                if (item.IsHugeBlob) {
-                    hugeBlobs << (hasHugeBlob ? " " : "") << "{"
-                        << "BlobId# " << item.BlobId
-                        << " BufferSize# " << item.Buffer.GetSize() << "}";
-                    hasHugeBlob = true;
-                }
-            }
-            return hugeBlobs;
-        }
-
         void PrivateHandle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
             IFaceMonGroup->MultiPutMsgs()++;
             IFaceMonGroup->PutTotalBytes() += ev->GetSize();
@@ -502,7 +488,6 @@ namespace NKikimr {
             }
 
             bool hasPostponed = false;
-            bool hasHugeBlob = false;
             bool ignoreBlock = record.GetIgnoreBlock();
 
             TBatchedVec<TVPutInfo> putsInfo;
@@ -516,9 +501,14 @@ namespace NKikimr {
 
                 try {
                     info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID());
-                } catch (yexception ex) {
+                    if (info.IsHugeBlob) {
+                        LOG_CRIT_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: TEvVMultiPut has huge blob# "
+                            << blobId << " Marker# BSVS08");
+                        info.HullStatus = THullCheckStatus(NKikimrProto::ERROR, "TEvVMultiPut with huge blob");
+                    }
+                } catch (const std::exception& ex) {
                     LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what() << " Marker# BSVS39");
-                    info.HullStatus = {NKikimrProto::ERROR, 0, false};
+                    info.HullStatus = THullCheckStatus(NKikimrProto::ERROR, TStringBuilder() << "exception# " << ex.what());
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
@@ -539,17 +529,7 @@ namespace NKikimr {
                 }
                 hasPostponed |= info.HullStatus.Postponed;
 
-                if (info.IsHugeBlob) {
-                    hasHugeBlob = true;
-                } else {
-                    lsnCount += (info.HullStatus.Status == NKikimrProto::OK);
-                }
-            }
-
-            if (hasHugeBlob) {
-                LOG_CRIT_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
-                        << "TEvVMultiPut: TEvVMultiPut has huge blobs# " << GetHugeBlobsForErrorMsg(putsInfo)
-                        << " Marker# BSVS08");
+                lsnCount += info.HullStatus.Status == NKikimrProto::OK;
             }
 
             TBatchedVec<NKikimrProto::EReplyStatus> statuses;
@@ -560,7 +540,7 @@ namespace NKikimr {
                     statuses.push_back(info.HullStatus.Status);
                 }
             }
-            if (!hasHugeBlob && !lsnCount && !hasPostponed) {
+            if (!lsnCount && !hasPostponed) {
                 LOG_INFO_S(ctx, BS_VDISK_PUT, Db->VCtx->VDiskLogPrefix << "TEvVMultiPut: all items have errors"
                         << " Marker# BSVS09");
                 ReplyError(NKikimrProto::OK, TString(), ev, ctx, now, statuses);
@@ -569,8 +549,6 @@ namespace NKikimr {
 
             TOutOfSpaceStatus oosStatus = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags();
             NLWTrace::TOrbit orbit = std::move(ev->Get()->Orbit);
-            NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->Record.GetHandleClass();
-            TVDiskID vdisk = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
 
             std::unique_ptr<NPDisk::TEvMultiLog> evLogs = std::make_unique<NPDisk::TEvMultiLog>();
             ui64 cookie = ev->Cookie;
@@ -578,6 +556,7 @@ namespace NKikimr {
             IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, oosStatus, ev,
                     SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid());
             NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor);
+            ActiveActors.insert(vMultiPutActorId);
 
             TLsnSeg lsnBatch;
             if (lsnCount) {
@@ -591,11 +570,11 @@ namespace NKikimr {
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 TVPutInfo &info = putsInfo[itemIdx];
                 NKikimrProto::EReplyStatus status = info.HullStatus.Status;
-                const TString& errorReason = info.HullStatus.ErrorReason;
+
+                auto result = std::make_unique<TEvVMultiPutItemResult>(info.BlobId, itemIdx, status,
+                    info.HullStatus.ErrorReason, info.WrittenBeyondBarrier);
 
                 if (info.HullStatus.Postponed) {
-                    auto result = std::make_unique<TEvVMultiPutItemResult>(info.BlobId, itemIdx, status, errorReason,
-                        info.WrittenBeyondBarrier);
                     Hull->PostponeReplyUntilCommitted(result.release(), vMultiPutActorId, itemIdx, std::move(info.TraceId),
                         info.HullStatus.Lsn);
                     continue;
@@ -605,38 +584,13 @@ namespace NKikimr {
                     continue;
                 }
 
-                if (info.IsHugeBlob) {
-                    // pass the work to huge blob writer
-                    TInstant deadline = (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) ?
-                            TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds()) :
-                            TInstant::Max();
-                    TEvBlobStorage::TEvVPut vPut(info.BlobId, TRope(), vdisk, ignoreBlock,
-                            &itemIdx, deadline, handleClass);
-                    std::unique_ptr<TEvBlobStorage::TEvVPutResult> result(
-                        new TEvBlobStorage::TEvVPutResult(status, info.BlobId, SelfVDiskId, &itemIdx, oosStatus, now,
-                            vPut.GetCachedByteSize(), &vPut.Record, SkeletonFrontIDPtr, nullptr,
-                            VCtx->Histograms.GetHistogram(handleClass), info.Buffer.GetSize(),
-                            Db->GetVDiskIncarnationGuid(), errorReason));
-                    if (info.Buffer) {
-                        auto hugeWrite = CreateHullWriteHugeBlob(vMultiPutActorId, cookie, ignoreBlock, handleClass,
-                            info, std::move(result));
-                        ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(info.TraceId));
-                    } else {
-                        ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(),
-                            ignoreBlock, vMultiPutActorId, cookie, std::move(result), &info.ExtraBlockChecks), 0, 0,
-                            std::move(info.TraceId));
-                    }
-                } else {
-                    Y_VERIFY(lsnBatch.First <= lsnBatch.Last);
+                Y_VERIFY(lsnBatch.First <= lsnBatch.Last);
 
-                    info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
-                    lsnBatch.First++;
-                    auto evItemResult = std::make_unique<TEvVMultiPutItemResult>(info.BlobId, itemIdx, status, errorReason,
-                        info.WrittenBeyondBarrier);
-                    auto logMsg = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie, std::move(orbit),
-                        info, std::move(evItemResult));
-                    evLogs->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()));
-                }
+                info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
+                lsnBatch.First++;
+                auto logMsg = CreatePutLogEvent(ctx, "TEvVMultiPut", vMultiPutActorId, cookie, std::move(orbit),
+                    info, std::move(result));
+                evLogs->AddLog(THolder<NPDisk::TEvLog>(logMsg.release()));
             }
 
             // Manage PDisk scheduler weights

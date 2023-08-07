@@ -10,7 +10,7 @@ using namespace NYdb::NConsoleClient;
 void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(params.Driver);
 
-    auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerIdx);
+    auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerPrefix, params.ConsumerIdx);
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     auto consumers = describeTopicResult.GetConsumers();
     if (!std::any_of(consumers.begin(), consumers.end(), [consumerName](const auto& consumer) { return consumer.GetConsumerName() == consumerName; }))
@@ -59,7 +59,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
                     ui64 fullTime = (now - message.GetCreateTime()).MilliSeconds();
                     params.StatsCollector->AddReaderEvent(params.ReaderIdx, {message.GetData().Size(), fullTime});
 
-                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << message.GetMessageGroupId() 
+                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << message.GetMessageGroupId()
                         << " topic " << message.GetPartitionSession()->GetTopicPath() << " partition " << message.GetPartitionSession()->GetPartitionId() 
                         << " offset " << message.GetOffset() << " seqNo " << message.GetSeqNo()
                         << " createTime " << message.GetCreateTime() << " fullTimeMs " << fullTime);

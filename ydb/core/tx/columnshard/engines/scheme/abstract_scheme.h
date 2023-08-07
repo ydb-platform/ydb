@@ -36,12 +36,15 @@ public:
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const;
+
     virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;
+    virtual ui64 GetVersion() const = 0;
+    virtual ui32 GetColumnsCount() const = 0;
 
     std::shared_ptr<arrow::RecordBatch> NormalizeBatch(const ISnapshotSchema& dataSchema, const std::shared_ptr<arrow::RecordBatch> batch) const;
-    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const TString& dataSchemaStr, TString& strError) const;
+    std::shared_ptr<arrow::RecordBatch> PrepareForInsert(const TString& data, const std::shared_ptr<arrow::Schema>& dataSchema) const;
 };
 
 } // namespace NKikimr::NOlap

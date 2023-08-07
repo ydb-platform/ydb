@@ -4,20 +4,62 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/base/events.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 
+#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/log.h>
+#include <util/generic/noncopyable.h>
 
 namespace NYql::NDq {
 
 class TDqComputeActorChannels : public NActors::TActor<TDqComputeActorChannels> {
 public:
-    struct TPeerState {
+    struct TPeerState: NNonCopyable::TMoveOnly {
+    private:
+        static const ui32 InterconnectHeadersSize = 96;
+        i64 InFlightBytes = 0;
+        i64 InFlightRows = 0;
+        i32 InFlightCount = 0;
         i64 PeerFreeSpace = 0;
-        ui64 InFlightBytes = 0;
-        ui64 InFlightRows = 0;
-        ui32 InFlightCount = 0;
-        i64 PrevPeerFreeSpace = 0;
+    public:
+        i64 GetFreeMemory() const {
+            return PeerFreeSpace - InFlightBytes;
+        }
+
+        bool NeedAck() const {
+            return (InFlightCount % 16 == 0) || !HasFreeMemory();
+        }
+
+        TString DebugString() const {
+            return TStringBuilder() <<
+                "freeSpace:" << PeerFreeSpace << ";" <<
+                "inFlightBytes:" << InFlightBytes << ";" <<
+                "inFlightCount:" << InFlightCount << ";"
+                ;
+        }
+
+        bool HasFreeMemory() const {
+            return PeerFreeSpace >= InFlightBytes;
+        }
+
+        void ActualizeFreeSpace(const i64 actual) {
+            PeerFreeSpace = actual;
+        }
+
+        void AddInFlight(const ui64 bytes, const ui64 rows) {
+            InFlightBytes += bytes + InterconnectHeadersSize;
+            InFlightRows += rows;
+            InFlightCount += 1;
+        }
+
+        void RemoveInFlight(const ui64 bytes, const ui64 rows) {
+            InFlightBytes -= (bytes + InterconnectHeadersSize);
+            Y_VERIFY(InFlightBytes >= 0);
+            InFlightRows -= rows;
+            Y_VERIFY(InFlightRows >= 0);
+            InFlightCount -= 1;
+            Y_VERIFY(InFlightCount >= 0);
+        }
     };
 
     struct ICallbacks {
@@ -54,16 +96,16 @@ private:
     void HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& ev);
     void HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr& ev);
     void HandleWork(TEvDqCompute::TEvRetryChannelDataAck::TPtr& ev);
-    void HandleWork(NKikimr::TEvents::TEvUndelivered::TPtr& ev);
-    void HandleWork(NKikimr::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
-    void HandleUndeliveredEvChannelData(ui64 channelId, NKikimr::TEvents::TEvUndelivered::EReason reason);
-    void HandleUndeliveredEvChannelDataAck(ui64 channelId, NKikimr::TEvents::TEvUndelivered::EReason reason);
+    void HandleWork(NActors::TEvents::TEvUndelivered::TPtr& ev);
+    void HandleWork(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+    void HandleUndeliveredEvChannelData(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason);
+    void HandleUndeliveredEvChannelDataAck(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason);
     template <typename TChannelState, typename TRetryEvent>
     bool ScheduleRetryForChannel(TChannelState& channel, TInstant now);
 
 private:
     STATEFN(DeadState);
-    void HandlePoison(NKikimr::TEvents::TEvPoison::TPtr&);
+    void HandlePoison(NActors::TEvents::TEvPoison::TPtr&);
 
 private:
     TInstant Now() const;
@@ -75,8 +117,9 @@ public:
     void SetCheckpointsSupport(); // Finished channels will be polled for checkpoints.
     void SetInputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
-    bool CanSendChannelData(ui64 channelId);
-    void SendChannelData(TChannelDataOOB&& channelData);
+    bool CanSendChannelData(const ui64 channelId) const;
+    bool HasFreeMemoryInChannel(const ui64 channelId) const;
+    void SendChannelData(TChannelDataOOB&& channelData, const bool needAck);
     void SendChannelDataAck(i64 channelId, i64 freeSpace);
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);
@@ -179,6 +222,7 @@ private:
     ui32 CalcMessageFlags(const NActors::TActorId& peer);
     TInputChannelState& InCh(ui64 channelId);
     TOutputChannelState& OutCh(ui64 channelId);
+    const TOutputChannelState& OutCh(const ui64 channelId) const;
 
 private:
     const NActors::TActorId Owner;

@@ -21,9 +21,9 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers) {
-    bool useWideChannels = false;
-    return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers, useWideChannels);
+TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhyStagesTransformer(bool allowDependantConsumers, TTypeAnnotationContext& typesCtx) {
+    EChannelMode mode = EChannelMode::CHANNEL_SCALAR;
+    return NDq::CreateDqBuildPhyStagesTransformer(allowDependantConsumers, typesCtx, mode);
 }
 
 class TKqpBuildTxTransformer : public TSyncTransformerBase {
@@ -390,6 +390,7 @@ private:
                 .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
                 .Build()
             .Settings(stage.Settings())
+            .Outputs(stage.Outputs())
             .Done();
     }
 
@@ -471,7 +472,7 @@ public:
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(/* allowDependantConsumers */ false, typesCtx), "BuildPhysicalStages")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
             .Build(false);
@@ -481,7 +482,7 @@ public:
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled()), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(config->SpillingEnabled(), typesCtx), "BuildPhysicalStages")
             .Add(*BuildTxTransformer, "BuildPhysicalTx")
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config, /* withFinalStageRules */ false), "Peephole")
             .Build(false);

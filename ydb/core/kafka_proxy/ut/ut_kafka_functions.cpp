@@ -1,4 +1,4 @@
-#include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <strstream>
 
@@ -14,16 +14,20 @@ const std::vector<i16> apiKeys {
      INIT_PRODUCER_ID
 };
 
-TEST(Functions, CreateRequest) {
+Y_UNIT_TEST_SUITE(Functions) {
+
+Y_UNIT_TEST(CreateRequest) {
     for(i16 apiKey : apiKeys) {
         auto result = CreateRequest(apiKey);
-        EXPECT_EQ(result->ApiKey(), apiKey);
+        UNIT_ASSERT_EQUAL(result->ApiKey(), apiKey);
     }
 }
 
-TEST(Functions, CreateResponse) {
+Y_UNIT_TEST(CreateResponse) {
     for(i16 apiKey : apiKeys) {
         auto result = CreateResponse(apiKey);
-        EXPECT_EQ(result->ApiKey(), apiKey);
+        UNIT_ASSERT_EQUAL(result->ApiKey(), apiKey);
     }
+}
+
 }

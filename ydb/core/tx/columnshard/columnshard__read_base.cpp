@@ -9,7 +9,6 @@ std::shared_ptr<NOlap::TReadMetadata>
 TTxReadBase::PrepareReadMetadata(const NOlap::TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                 const TBatchCache& batchCache,
                                  TString& error, const bool isReverse) const {
     if (!insertTable || !index) {
         return nullptr;
@@ -20,7 +19,7 @@ TTxReadBase::PrepareReadMetadata(const NOlap::TReadDescription& read,
         return nullptr;
     }
 
-    NOlap::TDataStorageAccessor dataAccessor(insertTable, index, batchCache);
+    NOlap::TDataStorageAccessor dataAccessor(insertTable, index);
     auto readMetadata = std::make_shared<NOlap::TReadMetadata>(index->GetVersionedIndex(), read.GetSnapshot(),
                             isReverse ? NOlap::TReadMetadata::ESorting::DESC : NOlap::TReadMetadata::ESorting::ASC, read.GetProgram());
 

@@ -102,7 +102,7 @@ namespace NUnifiedAgent::NPrivate {
 
     private:
         TVector<TClient*> Clients;
-        grpc::GrpcLibraryCodegen GrpcInitializer;
+        grpc::internal::GrpcLibrary GrpcInitializer;
         bool Enabled;
         TAdaptiveLock Lock;
 

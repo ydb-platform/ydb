@@ -54,6 +54,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_monitoring
     ydb/services/ydb
+    ydb/services/ydb/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

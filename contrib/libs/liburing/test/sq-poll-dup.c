@@ -172,13 +172,20 @@ int main(int argc, char *argv[])
 	vecs = t_create_buffers(BUFFERS, BS);
 
 	fd = open(fname, O_RDONLY | O_DIRECT);
-	if (fname != argv[1])
-		unlink(fname);
-
 	if (fd < 0) {
+		int __e = errno;
+
+		if (fname != argv[1])
+			unlink(fname);
+
+		if (__e == EINVAL)
+			return T_EXIT_SKIP;
 		perror("open");
 		return -1;
 	}
+
+	if (fname != argv[1])
+		unlink(fname);
 
 	ret = test(fd, 0, 0);
 	if (ret) {

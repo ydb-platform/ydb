@@ -46,9 +46,9 @@ public:
         YQL_ENSURE(false, "Unsupported TransportVersion");
     }
 
-    void Deserialize(const TDqSerializedBatch& data, const NKikimr::NMiniKQL::TType* itemType,
+    void Deserialize(TDqSerializedBatch&& data, const NKikimr::NMiniKQL::TType* itemType,
         NKikimr::NMiniKQL::TUnboxedValueBatch& buffer) const;
-    void Deserialize(const TDqSerializedBatch& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
+    void Deserialize(TDqSerializedBatch&& data, const NKikimr::NMiniKQL::TType* itemType, NUdf::TUnboxedValue& value) const;
 
     struct TEstimateSizeSettings {
         bool WithHeaders;
@@ -80,19 +80,10 @@ private:
             ++first;
             ++count;
         }
-        const auto& packed = packer.Finish();
         TDqSerializedBatch result;
         result.Proto.SetTransportVersion(TransportVersion);
         result.Proto.SetRows(count);
-        if (TransportVersion == NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0 ||
-            TransportVersion == NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0)
-        {
-            result.Payload = NKikimr::NMiniKQL::TPagedBuffer::AsRope(packed);
-
-        } else {
-            result.Proto.MutableRaw()->reserve(packed->Size());
-            packed->CopyTo(*result.Proto.MutableRaw());
-        }
+        result.SetPayload(packer.Finish());
         return result;
     }
 

@@ -548,8 +548,6 @@ public:
         TGroupLatencyStats LatencyStats;
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
-        bool ContentChanged = false;
-        bool MoodChanged = false;
 
         TActorId VirtualGroupSetupMachineId;
 
@@ -1760,7 +1758,6 @@ private:
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -1984,7 +1981,6 @@ public:
             fFunc(NSysView::TEvSysView::EvGetStorageStatsRequest, ForwardToSystemViewsCollector);
             fFunc(TEvPrivate::EvUpdateSystemViews, EnqueueIncomingEvent);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(TEvents::TEvPoisonPill, Handle);
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             fFunc(TEvPrivate::EvUpdateSelfHealCounters, EnqueueIncomingEvent);
@@ -2012,21 +2008,9 @@ public:
         }
     }
 
-    STFUNC(StateBroken) {
-        HandleDefaultEvents(ev, SelfId());
-    }
-
     void LoadFinished() {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
         Become(&TThis::StateWork);
-
-        while (!InitQueue.empty()) {
-            TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-                (Event, ev->ToString()));
-            TActivationContext::Send(ev.Release());
-            InitQueue.pop_front();
-        }
 
         ValidateInternalState();
         UpdatePDisksCounters();
@@ -2040,6 +2024,13 @@ public:
             if (info->VirtualGroupState) {
                 StartVirtualGroupSetupMachine(info.Get());
             }
+        }
+
+        for (; !InitQueue.empty(); InitQueue.pop_front()) {
+            TAutoPtr<IEventHandle> &ev = InitQueue.front();
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
+                (Event, ev->ToString()));
+            StateWork(ev);
         }
     }
 
@@ -2227,7 +2218,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    void OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
+    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
     void OnWardenConnected(TNodeId nodeId);
     void OnWardenDisconnected(TNodeId nodeId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);

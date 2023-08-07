@@ -1,5 +1,5 @@
 #include "kqp_scan_fetcher_actor.h"
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -335,23 +335,23 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
         auto newShard = TShardState(partition.ShardId, ++ScansCounter);
 
         for (ui64 j = i; j < state.Ranges.size(); ++j) {
-            CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, state.Ranges[j].ToTableRange(), tr)
-                << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr));
+            auto comparison = CompareRanges(partitionRange, state.Ranges[j].ToTableRange(), KeyColumnTypes);
+            CA_LOG_D("Compare range #" << j << " " << DebugPrintRange(KeyColumnTypes, state.Ranges[j].ToTableRange(), tr)
+                << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
+                << " : " << comparison);
 
-            auto intersection = Intersect(KeyColumnTypes, partitionRange, state.Ranges[j].ToTableRange());
-
-            if (!intersection.IsEmptyRange(KeyColumnTypes)) {
+            if (comparison > 0) {
+                continue;
+            } else if (comparison == 0) {
+                auto intersection = Intersect(KeyColumnTypes, partitionRange, state.Ranges[j].ToTableRange());
                 CA_LOG_D("Add range to new shardId: " << partition.ShardId
                     << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
 
                 newShard.Ranges.emplace_back(TSerializedTableRange(intersection));
             } else {
-                CA_LOG_D("empty intersection");
-                if (j > i) {
-                    i = j - 1;
-                }
                 break;
             }
+            i = j;
         }
 
         if (!newShard.Ranges.empty()) {

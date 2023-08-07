@@ -26,5 +26,6 @@ target_sources(fq-libs-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/compression.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/debug_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.cpp
 )

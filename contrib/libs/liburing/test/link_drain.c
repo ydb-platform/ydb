@@ -97,7 +97,7 @@ err:
 	return 1;
 }
 
-int test_link_drain_multi(struct io_uring *ring)
+static int test_link_drain_multi(struct io_uring *ring)
 {
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe[9];
@@ -199,15 +199,17 @@ err:
 
 }
 
-int main(int argc, char *argv[])
+static int test_drain(bool defer)
 {
 	struct io_uring ring;
 	int i, ret;
+	unsigned int flags = 0;
 
-	if (argc > 1)
-		return 0;
+	if (defer)
+		flags = IORING_SETUP_SINGLE_ISSUER |
+			IORING_SETUP_DEFER_TASKRUN;
 
-	ret = io_uring_queue_init(100, &ring, 0);
+	ret = io_uring_queue_init(100, &ring, flags);
 	if (ret) {
 		printf("ring setup failed\n");
 		return 1;
@@ -227,4 +229,28 @@ int main(int argc, char *argv[])
 	}
 
 	return ret;
+}
+
+int main(int argc, char *argv[])
+{
+	int ret;
+
+	if (argc > 1)
+		return T_EXIT_SKIP;
+
+	ret = test_drain(false);
+	if (ret) {
+		fprintf(stderr, "test_drain(false) failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	if (t_probe_defer_taskrun()) {
+		ret = test_drain(true);
+		if (ret) {
+			fprintf(stderr, "test_drain(true) failed\n");
+			return T_EXIT_FAIL;
+		}
+	}
+
+	return T_EXIT_PASS;
 }

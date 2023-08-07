@@ -4,6 +4,7 @@
 
 #include "node_warden_mock.h"
 
+#include <ydb/core/driver_lib/version/version.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 struct TEnvironmentSetup {

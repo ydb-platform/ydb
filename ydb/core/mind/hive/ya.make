@@ -80,6 +80,7 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
+    library/cpp/containers/ring_buffer
     library/cpp/json
     library/cpp/monlib/dynamic_counters
     ydb/core/base

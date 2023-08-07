@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifndef GRPC_CORE_LIB_EVENT_ENGINE_FORKABLE_H
-#define GRPC_CORE_LIB_EVENT_ENGINE_FORKABLE_H
+#ifndef GRPC_SRC_CORE_LIB_EVENT_ENGINE_FORKABLE_H
+#define GRPC_SRC_CORE_LIB_EVENT_ENGINE_FORKABLE_H
 
 #include <grpc/support/port_platform.h>
 
@@ -27,6 +27,19 @@ namespace experimental {
 //
 // This should be called once upon grpc_initialization.
 void RegisterForkHandlers();
+
+// We've faced flickering crash in grpc during fork.
+// Crash is observed in different places before 'execv' is called.
+// It is mentioned in https://man7.org/linux/man-pages/man2/fork.2.html
+// that in multithreading application not all function could be called
+// after fork, so we think that we deal with 'undefined behaviour'.
+// In original grpc code the threads are created during postfork operations,
+// but thread creation is not safe in accordance to the fork documentation.
+//
+// So, if threads in child process are not required, user could
+// skip threads recovery after fork for child process in order
+// to exclude issues with possible UB.
+void SetSkipPostForkChild();
 
 // Global callback for pthread_atfork's *prepare argument
 void PrepareFork();
@@ -58,4 +71,4 @@ void StopManagingForkable(Forkable* forkable);
 }  // namespace experimental
 }  // namespace grpc_event_engine
 
-#endif  // GRPC_CORE_LIB_EVENT_ENGINE_FORKABLE_H
+#endif  // GRPC_SRC_CORE_LIB_EVENT_ENGINE_FORKABLE_H

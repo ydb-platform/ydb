@@ -8,14 +8,22 @@
 
 
 add_executable(ydb-core-kafka_proxy-ut)
+target_compile_options(ydb-core-kafka_proxy-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-kafka_proxy-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy
+)
 target_link_libraries(ydb-core-kafka_proxy-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
-  cpp-testing-gtest
-  cpp-testing-gtest_main
+  cpp-testing-unittest_main
   ydb-core-kafka_proxy
+  persqueue-ut-common
+  core-testlib-default
+  ydb_persqueue_core-ut-ut_utils
 )
 target_link_options(ydb-core-kafka_proxy-ut PRIVATE
   -ldl
@@ -30,21 +38,35 @@ target_link_options(ydb-core-kafka_proxy-ut PRIVATE
 target_sources(ydb-core-kafka_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_kafka_functions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_serialization.cpp
-)
-add_test(
-  NAME
-  ydb-core-kafka_proxy-ut
-  COMMAND
-  ydb-core-kafka_proxy-ut
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/metarequest_ut.cpp
 )
 set_property(
+  TARGET
+  ydb-core-kafka_proxy-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
+  NAME
+  ydb-core-kafka_proxy-ut
+  TEST_TARGET
+  ydb-core-kafka_proxy-ut
+  TEST_ARG
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+set_yunittest_property(
   TEST
   ydb-core-kafka_proxy-ut
   PROPERTY
   LABELS
   SMALL
 )
-set_property(
+set_yunittest_property(
   TEST
   ydb-core-kafka_proxy-ut
   PROPERTY

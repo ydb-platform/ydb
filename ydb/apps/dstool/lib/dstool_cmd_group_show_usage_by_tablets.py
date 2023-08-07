@@ -4,6 +4,7 @@ import ydb.apps.dstool.lib.table as table
 import multiprocessing
 import json
 import sys
+import itertools
 from collections import defaultdict
 
 description = 'Estimate groups usage by tablets'
@@ -88,6 +89,16 @@ def write_cache(args, tablet_channel_group_stat, group_sizes_map):
         json.dump(j, f, indent=2, sort_keys=True)
 
 
+def fetcher(args):
+    host, items = args
+    res_q = []
+    for group_id, node_id, pdisk_id, vslot_id in items:
+        data = grouptool.parse_vdisk_storage(host, node_id, pdisk_id, vslot_id)
+        for tablet_id, channel, size in data or []:
+            res_q.append((group_id, tablet_id, channel, size))
+    return res_q
+
+
 def do(args):
     tablet_channel_group_stat = None
     group_sizes_map = None
@@ -132,31 +143,13 @@ def do(args):
                 host = node_fqdn_map[vslot.NodeId]
                 host_requests_map[host].append((group.GroupId, vslot.NodeId, vslot.PDiskId, vslot.VSlotId))
 
-        def fetcher(host, items, res_q):
-            for group_id, node_id, pdisk_id, vslot_id in items:
-                data = grouptool.parse_vdisk_storage(host, node_id, pdisk_id, vslot_id)
-                for tablet_id, channel, size in data or []:
-                    res_q.put((group_id, tablet_id, channel, size))
-            res_q.put(None)
-
-        processes = []
-        res_q = multiprocessing.Queue()
-        for key, value in host_requests_map.items():
-            processes.append(multiprocessing.Process(target=fetcher, kwargs=dict(host=key, items=value, res_q=res_q), daemon=True))
-        for p in processes:
-            p.start()
-        num_q = len(processes)
         tablet_channel_group_stat = defaultdict(list)
-        while num_q:
-            item = res_q.get()
-            if item is None:
-                num_q -= 1
-                continue
-            group_id, tablet_id, channel, size = item
-            key = tablet_id, channel, group_id, type_map.get(tablet_id, ''), group_to_sp_name.get(group_id)
-            tablet_channel_group_stat[key].append(size)
-        for p in processes:
-            p.join()
+
+        with multiprocessing.Pool(128) as pool:
+            for item in itertools.chain.from_iterable(pool.imap_unordered(fetcher, host_requests_map.items())):
+                group_id, tablet_id, channel, size = item
+                key = tablet_id, channel, group_id, type_map.get(tablet_id, ''), group_to_sp_name.get(group_id)
+                tablet_channel_group_stat[key].append(size)
 
         if args.cache_file:
             write_cache(args, tablet_channel_group_stat, group_sizes_map)

@@ -28,9 +28,9 @@ public:
     void EraseGranule(ui32, const IColumnEngine&, const TGranuleRecord&) override {}
     bool LoadGranules(ui32, const IColumnEngine&, const std::function<void(const TGranuleRecord&)>&) override { return true; }
 
-    void WriteColumn(ui32, const TColumnRecord&) override {}
-    void EraseColumn(ui32, const TColumnRecord&) override {}
-    bool LoadColumns(ui32, const std::function<void(const TColumnRecord&)>&) override { return true; }
+    void WriteColumn(ui32, const TPortionInfo&, const TColumnRecord&) override {}
+    void EraseColumn(ui32, const TPortionInfo&, const TColumnRecord&) override {}
+    bool LoadColumns(ui32, const std::function<void(const TPortionInfo&, const TColumnRecord&)>&) override { return true; }
 
     void WriteCounter(ui32, ui32, ui64) override {}
     bool LoadCounters(ui32, const std::function<void(ui32 id, ui64 value)>&) override { return true; }

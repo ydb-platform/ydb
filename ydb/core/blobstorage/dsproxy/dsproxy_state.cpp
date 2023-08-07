@@ -206,11 +206,16 @@ namespace NKikimr {
         auto *msg = ev->Get();
         Y_VERIFY(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
-            msg->ExtraBlockChecksSupport, *Topology);
+            msg->ExtraBlockChecksSupport, msg->MinREALHugeBlobInBytes, *Topology);
+        MinREALHugeBlobInBytes = Sessions->GetMinREALHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
+        } else if (!msg->IsConnected && CurrentStateFunc() == &TThis::StateWork && !Sessions->GoodToGo(*Topology, false)) {
+            SetStateEstablishingSessions();
         }
+
+        Y_VERIFY_DEBUG(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
 
         if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
             NodeMon->IncNumUnconnected(NumUnconnectedDisks);
@@ -303,7 +308,7 @@ namespace NKikimr {
 
             Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = Register(CreateBlobStorageGroupProxyMon(Mon, GroupId, Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId, Info, SelfId()));
         }
     }
 

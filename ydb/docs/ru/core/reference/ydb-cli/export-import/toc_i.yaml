@@ -1,0 +1,15 @@
+items:
+- name: Файловая структура выгрузки
+  href: file-structure.md
+- name: Выгрузка в файловую систему
+  href: tools-dump.md
+- name: Загрузка из файловой системы
+  href: tools-restore.md
+- name: Соединение и аутентификация с S3
+  href: auth-s3.md
+- name: Выгрузка в S3
+  href: export-s3.md
+- name: Загрузка из S3
+  href: import-s3.md
+- name: Импорт данных из файла в существующую таблицу
+  href: import-file.md

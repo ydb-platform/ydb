@@ -10,6 +10,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
@@ -4201,7 +4202,6 @@ void TSchemeShard::Enqueue(STFUNC_SIG) {
 void TSchemeShard::StateInit(STFUNC_SIG) {
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
-        HFuncTraced(TEvents::TEvPoisonPill, Handle);
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         //console configs
@@ -4219,7 +4219,6 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
-        HFuncTraced(TEvents::TEvPoisonPill, Handle);
         HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
@@ -4262,7 +4261,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
-        HFuncTraced(TEvents::TEvPoisonPill, Handle);
         HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
 
@@ -4417,6 +4415,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
+
+        HFuncTraced(NStat::TEvStatistics::TEvGetStatisticsFromSS, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -5813,11 +5813,6 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
     }
 }
 
-void TSchemeShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
-    BreakTabletAndRestart(ctx);
-}
-
 void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     RenderHtmlPage(ev, ctx);
 }
@@ -6236,6 +6231,10 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
 
     if (tinfo->HasReplicationConfig()) {
         tableDescr->MutableReplicationConfig()->CopyFrom(tinfo->ReplicationConfig());
+    }
+
+    if (AppData()->DisableRichTableDescriptionForTest) {
+        return;
     }
 
     // Fill indexes & cdc streams (if any)
@@ -6743,6 +6742,34 @@ void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(i64 delta) {
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxLogin(ev), ctx);
+}
+
+void TSchemeShard::Handle(NStat::TEvStatistics::TEvGetStatisticsFromSS::TPtr& ev, const TActorContext& ctx) {
+    const auto& recordIn = ev->Get()->Record;
+
+    auto result = MakeHolder<NStat::TEvStatistics::TEvGetStatisticsFromSSResult>();
+    auto& recordOut = result->Record;
+    recordOut.SetRequestId(recordIn.GetRequestId());
+
+    for (const auto& pathIdIn : recordIn.GetPathIds()) {
+        TPathId pathId(pathIdIn.GetOwnerId(), pathIdIn.GetLocalId());
+        auto pathFound = Tables.find(pathId);
+
+        auto& entryOut = *recordOut.AddEntries();
+        entryOut.MutablePathId()->CopyFrom(pathIdIn);
+        if (pathFound == Tables.end()) {
+            entryOut.SetSuccess(false);
+            entryOut.SetRowCount(0);
+            entryOut.SetBytesSize(0);
+        } else {
+            const auto& aggregated = pathFound->second->GetStats().Aggregated;
+            entryOut.SetSuccess(true);
+            entryOut.SetRowCount(aggregated.RowCount);
+            entryOut.SetBytesSize(aggregated.DataSize);
+        }
+    }
+
+    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
 }
 
 } // namespace NSchemeShard

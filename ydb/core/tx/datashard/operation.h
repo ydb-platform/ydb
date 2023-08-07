@@ -78,6 +78,10 @@ struct TStepOrder {
 
     std::pair<ui64, ui64> ToPair() const { return std::pair<ui64, ui64>(Step, TxId); }
 
+    TRowVersion ToRowVersion() const {
+        return TRowVersion(Step, TxId);
+    }
+
     TString ToString() const {
         return TStringBuilder() << Step << ':' << TxId;
     }

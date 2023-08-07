@@ -225,20 +225,14 @@ group by ten
 window w AS (order by sum(unique1) + sum(unique2))
 order by ten;
 
--- window and aggregate with GROUP BY expression (9.2 bug)
-statement stream query
-select first_value(max(x)) over w, y
-  from (select unique1 as x, ten+four as y from tenk1)
-  group by y
-  window w AS ();
-
 -- test non-default frame specifications
 statement stream query
 SELECT four, ten,
 	sum(ten) over w,
 	last_value(ten) over w
 FROM (select distinct ten, four from tenk1)
-WINDOW w AS (partition by four order by ten);
+WINDOW w AS (partition by four order by ten)
+ORDER BY four, ten;
 
 statement error
 SELECT four, ten,
@@ -263,10 +257,11 @@ WINDOW w AS (partition by four order by ten/4 range between unbounded preceding 
 
 statement stream query
 SELECT four, ten/4 as two,
-	sum(ten/4) over w,
+	sum(ten/4) over w as three,
 	last_value(ten/4) over w
 FROM (select distinct ten, four from tenk1)
 WINDOW w AS (partition by four order by ten/4 rows between unbounded preceding and current row)
+ORDER BY four, two, three;
 
 statement error
 SELECT sum(unique1) over w,

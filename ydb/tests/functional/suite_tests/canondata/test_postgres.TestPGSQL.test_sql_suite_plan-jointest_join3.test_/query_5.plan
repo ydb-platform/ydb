@@ -4,7 +4,7 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_4",
+                "Node Type": "ResultSet_5",
                 "PlanNodeId": 26,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
@@ -24,7 +24,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "tx_result_binding_4_0",
+                                        "CTE Name": "tx_result_binding_5_0",
                                         "Node Type": "Limit-InnerJoin (MapJoin)-Filter-TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
@@ -46,7 +46,7 @@
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
                                             },
                                             {
-                                                "Iterator": "%kqp%tx_result_binding_3_0",
+                                                "Iterator": "%kqp%tx_result_binding_4_0",
                                                 "Name": "Iterator"
                                             }
                                         ],
@@ -62,7 +62,7 @@
                 ]
             },
             {
-                "Node Type": "Precompute_3",
+                "Node Type": "Precompute_4",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 21,
                 "PlanNodeType": "Materialize",
@@ -82,10 +82,10 @@
                         "PlanNodeId": 20
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_3_0"
+                "Subplan Name": "CTE tx_result_binding_4_0"
             },
             {
-                "Node Type": "Precompute_2",
+                "Node Type": "Precompute_3",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 18,
                 "PlanNodeType": "Materialize",
@@ -114,11 +114,11 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "CTE Name": "tx_result_binding_2_0",
+                                                        "CTE Name": "tx_result_binding_3_0",
                                                         "Node Type": "ConstantExpr",
                                                         "Operators": [
                                                             {
-                                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                                "Iterator": "%kqp%tx_result_binding_1_0",
                                                                 "Name": "Iterator"
                                                             }
                                                         ],
@@ -141,7 +141,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "CTE Name": "tx_result_binding_2_0",
+                                                                        "CTE Name": "tx_result_binding_3_0",
                                                                         "Node Type": "Filter-TablePointLookup-ConstantExpr",
                                                                         "Operators": [
                                                                             {
@@ -156,7 +156,7 @@
                                                                                 "Table": "postgres_jointest/join3.test_plan/child"
                                                                             },
                                                                             {
-                                                                                "Iterator": "%kqp%tx_result_binding_1_0",
+                                                                                "Iterator": "%kqp%tx_result_binding_2_0",
                                                                                 "Name": "Iterator"
                                                                             }
                                                                         ],
@@ -178,10 +178,10 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_2_0"
+                "Subplan Name": "CTE tx_result_binding_3_0"
             },
             {
-                "Node Type": "Precompute_1",
+                "Node Type": "Precompute_2",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 7,
                 "PlanNodeType": "Materialize",
@@ -201,10 +201,10 @@
                         "PlanNodeId": 6
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_1_0"
+                "Subplan Name": "CTE tx_result_binding_2_0"
             },
             {
-                "Node Type": "Precompute_0",
+                "Node Type": "Precompute_1",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 4,
                 "PlanNodeType": "Materialize",
@@ -219,18 +219,20 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TableRangeScan",
+                                        "CTE Name": "tx_result_binding_1_0",
+                                        "Node Type": "TablePointLookup-ConstantExpr",
                                         "Operators": [
                                             {
-                                                "Name": "TableRangeScan",
+                                                "Name": "TablePointLookup",
                                                 "ReadColumns": [
                                                     "k",
                                                     "pd"
                                                 ],
-                                                "ReadRange": [
-                                                    "k [2, 1]"
-                                                ],
                                                 "Table": "postgres_jointest/join3.test_plan/parent"
+                                            },
+                                            {
+                                                "Iterator": "%kqp%tx_result_binding_0_0",
+                                                "Name": "Iterator"
                                             }
                                         ],
                                         "PlanNodeId": 1,
@@ -243,7 +245,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_0_0"
+                "Subplan Name": "CTE tx_result_binding_1_0"
             }
         ]
     },
@@ -268,17 +270,14 @@
             "reads": [
                 {
                     "columns": [
-                        "k",
-                        "pd"
+                        "k"
                     ],
-                    "scan_by": [
-                        "k [2, 1]"
-                    ],
-                    "type": "Scan"
+                    "type": "Lookup"
                 },
                 {
                     "columns": [
-                        "k"
+                        "k",
+                        "pd"
                     ],
                     "type": "Lookup"
                 }

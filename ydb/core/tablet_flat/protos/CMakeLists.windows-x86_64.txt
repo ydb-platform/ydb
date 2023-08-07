@@ -37,6 +37,7 @@ target_link_libraries(core-tablet_flat-protos PUBLIC
   yutil
   contrib-libs-protobuf
   ydb-core-protos
+  core-scheme-protos
 )
 target_proto_messages(core-tablet_flat-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/protos/flat_table_part.proto

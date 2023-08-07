@@ -14,6 +14,7 @@
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
 #include "build_index.h"
+#include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
 #include "change_exchange.h"
 #include "change_record.h"
@@ -224,6 +225,7 @@ class TDataShard
     class TTxVolatileTxAbort;
     class TTxCdcStreamScanRun;
     class TTxCdcStreamScanProgress;
+    class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
 
     template <typename T> friend class TTxDirectBase;
@@ -272,6 +274,7 @@ class TDataShard
     friend class TVolatileTxManager;
     friend class TConflictsCache;
     friend class TCdcStreamScanManager;
+    friend class TCdcStreamHeartbeatManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
 
@@ -995,6 +998,27 @@ class TDataShard
             using TColumns = TableColumns<LockId, TxId>;
         };
 
+        struct CdcStreamHeartbeats : Table<36> {
+            struct TableOwnerId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct TablePathId : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct StreamOwnerId : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct StreamPathId : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct IntervalMs : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct LastStep : Column<6, NScheme::NTypeIds::Uint64> {};
+            struct LastTxId : Column<7, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<TableOwnerId, TablePathId, StreamOwnerId, StreamPathId>;
+            using TColumns = TableColumns<
+                TableOwnerId,
+                TablePathId,
+                StreamOwnerId,
+                StreamPathId,
+                IntervalMs,
+                LastStep,
+                LastTxId
+            >;
+        };
+
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
             Snapshots, S3Uploads, S3Downloads, ChangeRecords, ChangeRecordDetails, ChangeSenders, S3UploadedParts,
@@ -1003,7 +1027,7 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies>;
+            LockVolatileDependencies, CdcStreamHeartbeats>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1148,7 +1172,6 @@ class TDataShard
     }
 
     void Handle(TEvents::TEvGone::TPtr &ev);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvSchemaChangedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvStateChangedResult::TPtr &ev, const TActorContext &ctx);
@@ -1797,6 +1820,10 @@ public:
     TCdcStreamScanManager& GetCdcStreamScanManager() { return CdcStreamScanManager; }
     const TCdcStreamScanManager& GetCdcStreamScanManager() const { return CdcStreamScanManager; }
 
+    TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
+    const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
+    void EmitHeartbeats(const TActorContext& ctx);
+
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
@@ -1859,7 +1886,7 @@ public:
         IEventBase* event,
         ui64 cookie = 0,
         const TActorId& sessionId = {});
-    void SendAfterMediatorStepActivate(ui64 mediatorStep);
+    void SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx);
 
     void CheckMediatorStateRestored();
 
@@ -2439,6 +2466,7 @@ private:
     TVolatileTxManager VolatileTxManager;
     TConflictsCache ConflictsCache;
     TCdcStreamScanManager CdcStreamScanManager;
+    TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -2710,11 +2738,7 @@ protected:
     // Redundant init state required by flat executor implementation
     void StateInit(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
-        switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
-        default:
-            StateInitImpl(ev, SelfId());
-        }
+        StateInitImpl(ev, SelfId());
     }
 
     void Enqueue(STFUNC_SIG) override {
@@ -2731,7 +2755,6 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -2746,7 +2769,6 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
             HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
@@ -2867,7 +2889,6 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, HandleAsFollower);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);
             HFuncTraced(TEvDataShard::TEvReadColumnsRequest, Handle);
@@ -2882,21 +2903,6 @@ protected:
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
             }
-            break;
-        }
-    }
-
-    // State after tablet takes poison pill
-    void StateBroken(TAutoPtr<NActors::IEventHandle> &ev) {
-        TRACE_EVENT(NKikimrServices::TX_DATASHARD);
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
-        default:
-            ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
-                       << " unhandled event type: " << ev->GetTypeRewrite()
-                       << " event: " << ev->ToString());
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -2927,12 +2933,6 @@ protected:
         Y_VERIFY(LoanReturnTracker.Empty());
         SplitSrcSnapshotSender.Shutdown(ctx);
         return IActor::Die(ctx);
-    }
-
-    void BecomeBroken(const TActorContext &ctx)
-    {
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {

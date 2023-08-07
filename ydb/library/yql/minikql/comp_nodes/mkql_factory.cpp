@@ -228,6 +228,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"ToIndexDict", &WrapToIndexDict},
         {"JoinDict", &WrapJoinDict},
         {"GraceJoin", &WrapGraceJoin},
+        {"SelfJoin", &WrapSelfJoin},
         {"MapJoinCore", &WrapMapJoinCore},
         {"CommonJoinCore", &WrapCommonJoinCore},
         {"CombineCore", &WrapCombineCore},

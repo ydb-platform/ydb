@@ -1459,7 +1459,6 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     auto newTableInfo = AlterTableSchemaVersion(ctx, txc, prevId, version, false);
     newTableInfo->SetPath(move.GetDstPath());
 
-    Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
     const THashMap<TPathId, TPathId> remap = GetRemapIndexes(move);
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -1477,7 +1476,6 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
         newTableInfo->Indexes.erase(prevPathId);
     }
     newTableInfo->SetSchema(schema);
-    Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
 
     //NOTE: Stats building is bound to table id, but move-table changes table id,
     // so already built stats couldn't be inherited by moved table
@@ -2192,7 +2190,7 @@ void TDataShard::SendImmediateReadResult(
     SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
-void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
+void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx) {
     for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
         const ui64 step = it->first.Step;
 
@@ -2207,7 +2205,7 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
         if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
             MediatorTimeCastWaitingSteps.insert(step);
             Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
         }
         break;
     }
@@ -2215,6 +2213,8 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
     if (IsMvccEnabled()) {
         PromoteFollowerReadEdge();
     }
+
+    EmitHeartbeats(ctx);
 }
 
 void TDataShard::CheckMediatorStateRestored() {
@@ -2366,12 +2366,6 @@ Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EK
 
 void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
     Actors.erase(ev->Sender);
-}
-
-void TDataShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvents::TEvPoisonPill");
-    Y_UNUSED(ev);
-    BecomeBroken(ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx) {
@@ -2691,7 +2685,7 @@ void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorCont
         LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "tablet " << TabletID() <<
                    " receive PlanStep " << ev->Get()->Record.GetStep() <<
                    " from unauthorized mediator " << srcMediatorId);
-        BecomeBroken(ctx);
+        HandlePoison(ctx);
         return;
     }
 
@@ -3012,7 +3006,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     MediatorTimeCastEntry = ev->Get()->Entry;
     Y_VERIFY(MediatorTimeCastEntry);
 
-    SendAfterMediatorStepActivate(MediatorTimeCastEntry->Get(TabletID()));
+    SendAfterMediatorStepActivate(MediatorTimeCastEntry->Get(TabletID()), ctx);
 
     Pipeline.ActivateWaitingTxOps(ctx);
 
@@ -3049,7 +3043,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
     for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end() && *it <= step;)
         it = MediatorTimeCastWaitingSteps.erase(it);
 
-    SendAfterMediatorStepActivate(step);
+    SendAfterMediatorStepActivate(step, ctx);
 
     Pipeline.ActivateWaitingTxOps(ctx);
 
@@ -4192,7 +4186,19 @@ void TEvDataShard::TEvReadResult::FillRecord() {
         protoBatch->SetBatch(NArrow::SerializeBatchNoCompression(ArrowBatch));
         ArrowBatch.reset();
         return;
-    } else if (!Rows.empty()) {
+    }
+
+    if (!Batch.empty()) {
+        auto* protoBatch = Record.MutableCellVec();
+        protoBatch->MutableRows()->Reserve(Batch.Size());
+        for (const auto& row: Batch) {
+            protoBatch->AddRows(TSerializedCellVec::Serialize(row));
+        }
+        Batch = {};
+        return;
+    }
+
+    if (!Rows.empty()) {
         auto* protoBatch = Record.MutableCellVec();
         protoBatch->MutableRows()->Reserve(Rows.size());
         for (const auto& row: Rows) {

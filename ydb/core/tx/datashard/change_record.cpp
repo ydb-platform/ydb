@@ -155,7 +155,17 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
     }
 }
 
+static void SerializeVirtualTimestamp(NJson::TJsonValue& value, std::initializer_list<ui64> vt) {
+    for (auto v : vt) {
+        value.AppendValue(v);
+    }
+}
+
 void TChangeRecord::SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTimestamps) const {
+    if (Kind == EKind::CdcHeartbeat) {
+        return SerializeVirtualTimestamp(json["resolved"], {Step, TxId});
+    }
+
     Y_VERIFY(Kind == EKind::CdcDataChange);
     Y_VERIFY(Schema);
 
@@ -192,9 +202,7 @@ void TChangeRecord::SerializeToYdbJson(NJson::TJsonValue& json, bool virtualTime
     }
 
     if (virtualTimestamps) {
-        for (auto v : {Step, TxId}) {
-            json["ts"].AppendValue(v);
-        }
+        SerializeVirtualTimestamp(json["ts"], {Step, TxId});
     }
 }
 
@@ -382,8 +390,11 @@ TString TChangeRecord::GetPartitionKey() const {
             break;
         }
 
-        case EKind::AsyncIndex:
         case EKind::CdcHeartbeat: {
+            return {}; // not used
+        }
+
+        case EKind::AsyncIndex: {
             Y_FAIL("Not supported");
         }
     }

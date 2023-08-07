@@ -116,18 +116,49 @@ bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, 
 }
 
 void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-        bool extraGroupChecksSupport, const TBlobStorageGroupInfo::TTopology& topology) {
+        bool extraGroupChecksSupport, ui32 minREALHugeBlobInBytes, const TBlobStorageGroupInfo::TTopology& topology) {
     const auto v = topology.GetVDiskId(orderNumber);
     const ui32 fdom = topology.GetFailDomainOrderNumber(v);
-    auto& q = GroupQueues->FailDomains[fdom].VDisks[v.VDisk].Queues.GetQueue(queueId);
+    auto& f = GroupQueues->FailDomains[fdom];
+    auto& vdisk = f.VDisks[v.VDisk];
+    auto& q = vdisk.Queues.GetQueue(queueId);
 
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
         q.ExtraBlockChecksSupport = extraGroupChecksSupport;
+        q.MinREALHugeBlobInBytes = minREALHugeBlobInBytes;
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
         q.ExtraBlockChecksSupport.reset();
+        q.MinREALHugeBlobInBytes = 0;
     }
+    q.IsConnected = connected;
+
+    auto update = [](auto& current, const auto& next) {
+        if (next.MinREALHugeBlobInBytes && (!current.MinREALHugeBlobInBytes || next.MinREALHugeBlobInBytes < current.MinREALHugeBlobInBytes)) {
+            current.MinREALHugeBlobInBytes = next.MinREALHugeBlobInBytes;
+        }
+    };
+
+    // recalculate MinREALHugeBlobInBytes for the whole VDisk
+    vdisk.MinREALHugeBlobInBytes = 0;
+    vdisk.Queues.ForEachQueue([&](auto& q) { update(vdisk, q); });
+
+    // do the same for the fail domain
+    f.MinREALHugeBlobInBytes = 0;
+    for (const auto& vdisk : f.VDisks) {
+        update(f, vdisk);
+    }
+
+    // and for the whole group
+    GroupQueues->MinREALHugeBlobInBytes = 0;
+    for (const auto& fdom : GroupQueues->FailDomains) {
+        update(*GroupQueues, fdom);
+    }
+}
+
+ui32 TGroupSessions::GetMinREALHugeBlobInBytes() const {
+    return GroupQueues->MinREALHugeBlobInBytes;
 }
 
 ui32 TGroupSessions::GetNumUnconnectedDisks() {

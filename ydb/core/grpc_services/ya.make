@@ -24,7 +24,6 @@ SRCS(
     rpc_export.cpp
     rpc_create_coordination_node.cpp
     rpc_create_table.cpp
-    rpc_delete_session.cpp
     rpc_describe_coordination_node.cpp
     rpc_describe_path.cpp
     rpc_describe_table.cpp
@@ -123,6 +122,7 @@ PEERDIR(
     ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos
+    ydb/public/lib/fq
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/resources
     ydb/services/ext_index/common

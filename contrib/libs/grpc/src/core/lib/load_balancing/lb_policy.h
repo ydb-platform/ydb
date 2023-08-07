@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef GRPC_CORE_LIB_LOAD_BALANCING_LB_POLICY_H
-#define GRPC_CORE_LIB_LOAD_BALANCING_LB_POLICY_H
+#ifndef GRPC_SRC_CORE_LIB_LOAD_BALANCING_LB_POLICY_H
+#define GRPC_SRC_CORE_LIB_LOAD_BALANCING_LB_POLICY_H
 
 #include <grpc/support/port_platform.h>
 
@@ -28,21 +28,25 @@
 #include <utility>
 #include <vector>
 
+#include "y_absl/base/thread_annotations.h"
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
 #include "y_absl/types/variant.h"
 
-#include <grpc/impl/codegen/connectivity_state.h>
+#include <grpc/event_engine/event_engine.h>
+#include <grpc/impl/connectivity_state.h>
 
 #include "src/core/ext/filters/client_channel/lb_policy/backend_metric_data.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/debug_location.h"
+#include "src/core/lib/gprpp/dual_ref_counted.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/work_serializer.h"
 #include "src/core/lib/iomgr/iomgr_fwd.h"
 #include "src/core/lib/load_balancing/subchannel_interface.h"
@@ -176,6 +180,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// implementation does not take ownership, so any data that needs to be
     /// used after returning must be copied.
     struct FinishArgs {
+      y_absl::string_view peer_address;
       y_absl::Status status;
       MetadataInterface* trailing_metadata;
       BackendMetricAccessor* backend_metric_accessor;
@@ -256,12 +261,13 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   /// Currently, pickers are always accessed from within the
   /// client_channel data plane mutex, so they do not have to be
   /// thread-safe.
-  class SubchannelPicker {
+  class SubchannelPicker : public DualRefCounted<SubchannelPicker> {
    public:
-    SubchannelPicker() = default;
-    virtual ~SubchannelPicker() = default;
+    SubchannelPicker();
 
     virtual PickResult Pick(PickArgs args) = 0;
+
+    void Orphan() override {}
   };
 
   /// A proxy object implemented by the client channel and used by the
@@ -284,13 +290,16 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// by the client channel.
     virtual void UpdateState(grpc_connectivity_state state,
                              const y_absl::Status& status,
-                             std::unique_ptr<SubchannelPicker>) = 0;
+                             RefCountedPtr<SubchannelPicker> picker) = 0;
 
     /// Requests that the resolver re-resolve.
     virtual void RequestReresolution() = 0;
 
     /// Returns the channel authority.
     virtual y_absl::string_view GetAuthority() = 0;
+
+    /// Returns the EventEngine to use for timers and async work.
+    virtual grpc_event_engine::experimental::EventEngine* GetEventEngine() = 0;
 
     /// Adds a trace message associated with the channel.
     enum TraceSeverity { TRACE_INFO, TRACE_WARNING, TRACE_ERROR };
@@ -386,8 +395,8 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     PickResult Pick(PickArgs args) override;
 
    private:
-    RefCountedPtr<LoadBalancingPolicy> parent_;
-    bool exit_idle_called_ = false;
+    Mutex mu_;
+    RefCountedPtr<LoadBalancingPolicy> parent_ Y_ABSL_GUARDED_BY(&mu_);
   };
 
   // A picker that returns PickResult::Fail for all picks.
@@ -433,4 +442,4 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_LIB_LOAD_BALANCING_LB_POLICY_H
+#endif  // GRPC_SRC_CORE_LIB_LOAD_BALANCING_LB_POLICY_H

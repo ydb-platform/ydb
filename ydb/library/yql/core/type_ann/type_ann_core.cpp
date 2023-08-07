@@ -5660,79 +5660,45 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureComputable(input->Head(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!IsSet && !EnsureTupleSize(input->Head(), 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto commonType = input->Head().GetTypeAnn();
-        bool needRetype = false;
-        for (size_t i = 1; i < input->ChildrenSize(); ++i) {
-            const auto child = input->Child(i);
+        for (const auto& child : input->Children()) {
             if (!EnsureComputable(*child, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (!IsSet && !EnsureTupleSize(*child, 2, ctx.Expr)) {
+            if constexpr (!IsSet) {
+                if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        if constexpr (IsStrict) {
+            std::set<const TTypeAnnotationNode*> set;
+            input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
+            if (1U != set.size()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
+                "Dict items types isn't same: " << **set.crbegin() << " and " << **set.cbegin()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (IsSameAnnotation(*commonType, *child->GetTypeAnn())) {
-                continue;
-            }
-
-            if (!IsStrict) {
-                auto arg1 = ctx.Expr.NewArgument(input->Pos(), "arg");
-                auto& arg2 = input->ChildRef(i);
-                auto item1 = arg1;
-                auto item2 = arg2;
-                if (SilentInferCommonType(item1, *commonType, item2, *arg2->GetTypeAnn(), ctx.Expr, commonType)
-                    != IGraphTransformer::TStatus::Error) {
-                    needRetype = needRetype || (item2 != arg2);
-                    arg2 = item2;
-                    if (item1 != arg1) {
-                        // need update all previous items
-                        for (ui32 index = 0; index < i; ++index) {
-                            input->ChildRef(index) = ctx.Expr.ReplaceNode(TExprNode::TPtr(item1), *arg1, input->ChildPtr(index));
-                        }
-
-                        return IGraphTransformer::TStatus::Repeat;
-                    }
-
-                    continue;
-                }
-            }
-
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() <<
-                "Cannot infer common type for : " << *commonType << " and " << *child->GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (needRetype) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (IsStrict) {
             output = ctx.Expr.RenameNode(*input, IsSet ? "AsSet" : "AsDict");
             return IGraphTransformer::TStatus::Repeat;
-        }
+        } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
+            if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok)
+                return status;
 
-        const TDictExprType* dictType;
-        if (!IsSet) {
-            auto tupleType = commonType->Cast<TTupleExprType>();
-            dictType = ctx.Expr.MakeType<TDictExprType>(tupleType->GetItems()[0], tupleType->GetItems()[1]);
-        } else {
-            dictType = ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>());
-        }
+            const auto dictType = IsSet ?
+                ctx.Expr.MakeType<TDictExprType>(commonType, ctx.Expr.MakeType<TVoidExprType>()):
+                ctx.Expr.MakeType<TDictExprType>(commonType->Cast<TTupleExprType>()->GetItems().front(), commonType->Cast<TTupleExprType>()->GetItems().back());
 
-        if (!dictType->Validate(input->Pos(), ctx.Expr)) {
+            if (!dictType->Validate(input->Pos(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->SetTypeAnn(dictType);
+        } else
             return IGraphTransformer::TStatus::Error;
-        }
 
-        input->SetTypeAnn(dictType);
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -5804,7 +5770,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         const auto elseNode = input->Child(2);
         const auto thenType = thenNode->GetTypeAnn();
         const auto elseType = elseNode->GetTypeAnn();
-        if (IsStrict) {
+        if constexpr (IsStrict) {
             if (IsSameAnnotation(*thenType, *elseType)) {
                 output = ctx.Expr.RenameNode(*input, "If");
                 return IGraphTransformer::TStatus::Repeat;
@@ -5813,20 +5779,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     *thenType << ", else type: " << *elseType));
                 return IGraphTransformer::TStatus::Error;
             }
-        }
+        } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr)) {
+            if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr).Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr)); status != IGraphTransformer::TStatus::Ok)
+                return status;
 
-        const TTypeAnnotationNode* commonType = nullptr;
-        if (SilentInferCommonType(input->ChildRef(1), input->ChildRef(2), ctx.Expr, commonType) == IGraphTransformer::TStatus::Error) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Uncompatible types of branches, then type: " <<
-                *thenType << ", else type: " << *elseType));
+            input->SetTypeAnn(commonType);
+        } else
             return IGraphTransformer::TStatus::Error;
-        }
 
-        if (thenNode != input->Child(1) || elseNode != input->Child(2)) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        input->SetTypeAnn(commonType);
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -9164,9 +9124,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        THashSet<TStringBuf> addedInProjectionFields;
+        THashSet<TString> addedInProjectionFields;
         TVector<const TItemExprType*> allItems;
-        for (auto& item : input->Child(1)->Children()) {
+        TVector<size_t> autoNameIndexes;
+        for (size_t i = 0; i < input->Child(1)->ChildrenSize(); ++i) {
+            auto item = input->Child(1)->Child(i);
             if (!item->IsCallable({"SqlProjectItem", "SqlProjectStarItem"})) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Pos()),
                     TStringBuilder() << "Expected SqlProjectItem or SqlProjectStarItem as argument"));
@@ -9182,9 +9144,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             } else {
                 YQL_ENSURE(item->Child(1)->IsAtom());
                 const auto fieldName = item->Child(1)->Content();
-                allItems.push_back(ctx.Expr.MakeType<TItemExprType>(fieldName, item->GetTypeAnn()));
-                addedInProjectionFields.emplace(fieldName);
+                if (item->ChildrenSize() == 4 && HasSetting(*item->Child(3), "autoName")) {
+                    autoNameIndexes.push_back(i);
+                } else {
+                    addedInProjectionFields.emplace(fieldName);                    
+                    allItems.push_back(ctx.Expr.MakeType<TItemExprType>(fieldName, item->GetTypeAnn()));
+                }
             }
+        }
+
+        if (!autoNameIndexes.empty()) {
+            auto sqlProjectItems = input->Child(1)->ChildrenList();
+            for (size_t nameSuffix = autoNameIndexes.front(), i = 0; i < autoNameIndexes.size(); ) {
+                TString autoName = "column" + ToString(nameSuffix);
+                if (!addedInProjectionFields.insert(autoName).second) {
+                    ++nameSuffix;
+                    continue;
+                }
+
+                if (i + 1 != autoNameIndexes.size()) {
+                    nameSuffix = autoNameIndexes[i + 1];
+                }
+
+                auto& sqlProjectItem = sqlProjectItems[autoNameIndexes[i++]];
+                YQL_ENSURE(sqlProjectItem->IsCallable("SqlProjectItem"));
+                YQL_ENSURE(sqlProjectItem->ChildrenSize() == 4);
+
+                sqlProjectItem = ctx.Expr.ChangeChild(*sqlProjectItem, 1, ctx.Expr.NewAtom(sqlProjectItem->Child(1)->Pos(), autoName));
+                sqlProjectItem = ctx.Expr.ChangeChild(*sqlProjectItem, 3, RemoveSetting(*sqlProjectItem->Child(3), "autoName", ctx.Expr));
+            }
+
+            output = ctx.Expr.ChangeChild(*input, 1, ctx.Expr.NewList(input->Child(1)->Pos(), std::move(sqlProjectItems)));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         TVector<TStringBuf> transparentFields;
@@ -9241,7 +9232,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus SqlProjectItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
         YQL_ENSURE(input->IsCallable({"SqlProjectItem", "SqlProjectStarItem"}));
         const bool isStar = input->IsCallable("SqlProjectStarItem");
         if (!EnsureMinMaxArgsCount(*input, 3, 4, ctx.Expr)) {
@@ -9284,6 +9274,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        bool warnShadow = false;
         if (input->ChildrenSize() == 4) {
             // validate options
             THashSet<TStringBuf> seenOptions;
@@ -9321,7 +9312,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureAtom(*optionNode->Child(1), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else if (!isStar && name == "warnShadow") {
+                } else if (!isStar && (name == "warnShadow" || name == "autoName")) {
                     // no params
                     if (!EnsureTupleSize(*optionNode, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
@@ -9339,23 +9330,39 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            if (seenOptions.contains("warnShadow")) {
-                auto alias = input->Child(1)->Content();
-                if (itemType->Cast<TStructExprType>()->FindItem(alias)) {
-                    auto issue = TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
-                        TStringBuilder() << "Alias `" << alias << "` shadows column with the same name. It looks like comma is missed here. "
-                                            "If not, it is recommended to use ... AS `" << alias << "` to avoid confusion");
-                    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_ALIAS_SHADOWS_COLUMN, issue);
-                    if (!ctx.Expr.AddWarning(issue)) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
+            if (seenOptions.contains("autoName")) {
+                if (seenOptions.contains("warnShadow")) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()),
+                        TStringBuilder() << "Options warnShadow and autoName cannot be used at the same time"));
+                    return IGraphTransformer::TStatus::Error;
                 }
-                auto newChildren = input->ChildrenList();
-                // drop options
-                newChildren.pop_back();
-                output = ctx.Expr.ChangeChildren(*input, std::move(newChildren));
-                return IGraphTransformer::TStatus::Repeat;
+                auto alias = input->Child(1)->Content();
+                if (!alias.empty()) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
+                        TStringBuilder() << "Non-empty name '" << alias << "' is used with autoName set"));
+                    return IGraphTransformer::TStatus::Error;
+                }
             }
+
+            if (seenOptions.contains("warnShadow")) {
+                warnShadow = true;
+            }
+        }
+
+        if (warnShadow) {
+            auto alias = input->Child(1)->Content();
+            if (itemType->Cast<TStructExprType>()->FindItem(alias)) {
+                auto issue = TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
+                    TStringBuilder() << "Alias `" << alias << "` shadows column with the same name. It looks like comma is missed here. "
+                                        "If not, it is recommended to use ... AS `" << alias << "` to avoid confusion");
+                SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_ALIAS_SHADOWS_COLUMN, issue);
+                if (!ctx.Expr.AddWarning(issue)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+            auto newOptions = RemoveSetting(*input->Child(3), "warnShadow", ctx.Expr);
+            output = ctx.Expr.ChangeChild(*input, 3, std::move(newOptions));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         auto& lambda = input->ChildRef(2);
@@ -9380,6 +9387,100 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         input->SetTypeAnn(lambdaResult);
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus SqlRenameWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsEmptyList(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!itemType) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
+                TStringBuilder() << "Expected Struct as a sequence item type, but got lambda"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+
+        if (!EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        const ui32 numColumns = structType->GetSize();
+        if (!EnsureTupleSize(*input->Child(1), numColumns, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTupleOfAtoms(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto childColumnOrder = ctx.Types.LookupColumnOrder(input->Head());
+        if (!childColumnOrder.Defined()) {
+            // somewhat ugly attempt to find SqlProject to obtain column order
+            auto currInput = input->HeadPtr();
+            TString path = ToString(input->Content());
+            while (currInput->IsCallable({"PersistableRepr", "SqlAggregateAll", "RemoveSystemMembers", "Sort"})) {
+                path = path + " -> " + ToString(currInput->Content());
+                currInput = currInput->HeadPtr();
+            }
+            if (!currInput->IsCallable({"SqlProject", "OrderedSqlProject"})) {
+                path = path + " -> " + ToString(currInput->Content());
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
+                    TStringBuilder() << "Failed to deduce column order for input - unable to locate SqlProject: " << path));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            childColumnOrder.ConstructInPlace();
+            for (const auto& item : currInput->Child(1)->ChildrenList()) {
+                if (!item->IsCallable("SqlProjectItem")) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(item->Pos()),
+                        TStringBuilder() << "Failed to deduce column order for input - star / qualified star is prosent in projection"));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                childColumnOrder->push_back(ToString(item->Child(1)->Content()));
+            }
+
+        }
+        YQL_ENSURE(childColumnOrder->size() == numColumns);
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("AssumeColumnOrder")
+                .Callable(0, input->IsCallable("OrderedSqlRename") ? "OrderedMap" : "Map")
+                    .Add(0, input->HeadPtr())
+                    .Lambda(1)
+                        .Param("item")
+                        .Callable("AsStruct")
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0; i < numColumns; ++i) {
+                                    parent
+                                        .List(i)
+                                            .Add(0, input->Child(1)->ChildPtr(i))
+                                            .Callable(1, "Member")
+                                                .Arg(0, "item")
+                                                .Atom(1, (*childColumnOrder)[i])
+                                            .Seal()
+                                        .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Add(1, input->ChildPtr(1))
+            .Seal()
+            .Build();
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     IGraphTransformer::TStatus SqlTypeFromYsonWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -11143,7 +11244,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureSpecificDataType(input->Head(), EDataSlot::Uint64, ctx.Expr)) {
+        if (!IsVoidType(input->Head(), ctx.Expr) && !EnsureSpecificDataType(input->Head(), EDataSlot::Uint64, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -11574,9 +11675,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListZipAll"] = &ListZipAllWrapper;
         Functions["Sort"] = &SortWrapper;
         Functions["AssumeSorted"] = &SortWrapper;
-        Functions["AssumeUnique"] = &AssumeConstraintWrapper;
-        Functions["AssumeDistinct"] = &AssumeConstraintWrapper;
-        Functions["AssumeChopped"] = &AssumeConstraintWrapper;
+        Functions["AssumeUnique"] = &AssumeConstraintWrapper<false>;
+        Functions["AssumeDistinct"] = &AssumeConstraintWrapper<false>;
+        Functions["AssumeChopped"] = &AssumeConstraintWrapper<true>;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
         Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["Top"] = &TopWrapper;
@@ -11973,6 +12074,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
         ExtFunctions["BlockMergeManyFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;
+
+        ExtFunctions["SqlRename"] = &SqlRenameWrapper;
+        ExtFunctions["OrderedSqlRename"] = &SqlRenameWrapper;
 
         Functions["AsRange"] = &AsRangeWrapper;
         Functions["RangeCreate"] = &RangeCreateWrapper;

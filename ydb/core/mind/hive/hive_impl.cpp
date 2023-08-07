@@ -50,11 +50,6 @@ void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
     Execute(CreateAdoptTablet(rec, ev->Sender, ev->Cookie));
 }
 
-void THive::Handle(TEvents::TEvPoisonPill::TPtr&) {
-    BLOG_D("Handle TEvents::TEvPoisonPill");
-    Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->ClientId == BSControllerPipeClient && msg->Status != NKikimrProto::OK) {
@@ -593,7 +588,6 @@ void THive::BuildCurrentConfig() {
         }
     }
     MakeTabletTypeSet(BalancerIgnoreTabletTypes);
-    WarmUp = CurrentConfig.GetWarmUpEnabled();
 }
 
 void THive::Cleanup() {
@@ -1388,6 +1382,7 @@ TNodeInfo& THive::GetNode(TNodeId nodeId) {
     auto it = Nodes.find(nodeId);
     if (it == Nodes.end()) {
         it = Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *this)).first;
+        TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Add(1);
     }
     return it->second;
 }
@@ -1507,6 +1502,7 @@ void THive::DeleteTablet(TTabletId tabletId) {
 }
 
 void THive::DeleteNode(TNodeId nodeId) {
+    TabletCounters->Simple()[NHive::COUNTER_NODES_TOTAL].Sub(1);
     Nodes.erase(nodeId);
 }
 
@@ -1572,6 +1568,19 @@ void THive::UpdateCounterEventQueueSize(i64 eventQueueSizeDiff) {
         auto newValue = counter.Get() + eventQueueSizeDiff;
         counter.Set(newValue);
     }
+}
+
+void THive::UpdateCounterNodesConnected(i64 nodesConnectedDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_CONNECTED];
+        auto newValue = counter.Get() + nodesConnectedDiff;
+        counter.Set(newValue);
+    }
+}
+
+void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
+    TabletMoveHistory.PushBack(moveInfo);
+    TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
 }
 
 bool THive::DomainHasNodes(const TSubDomainKey &domainKey) const {
@@ -2114,7 +2123,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
         BLOG_D("Balancer has been postponed because of sub activity");
-        ProcessTabletBalancerPostponed = false;
+        ProcessTabletBalancerPostponed = true;
         return;
     }
 
@@ -2444,6 +2453,8 @@ TDuration THive::GetBalancerCooldown() const {
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
+        case EBalancerType::Manual:
+            return TDuration::Seconds(1);
     }
 }
 
@@ -2567,7 +2578,6 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvLocal::TEvTabletStatus, Handle); // from bootqueue
         hFunc(TEvLocal::TEvRegisterNode, Handle); // from local
         hFunc(TEvBlobStorage::TEvControllerSelectGroupsResult, Handle);
-        hFunc(TEvents::TEvPoisonPill, Handle);
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         hFunc(TEvTabletPipe::TEvServerConnected, Handle);
@@ -2639,6 +2649,10 @@ void THive::EnqueueIncomingEvent(STATEFN_SIG) {
 STFUNC(THive::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+        // We subscribe to config updates before hive is fully loaded
+        hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
+        fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
     default:
         StateInitImpl(ev, SelfId());
     }
@@ -2657,7 +2671,6 @@ STFUNC(THive::StateWork) {
         fFunc(TEvLocal::TEvTabletStatus::EventType, EnqueueIncomingEvent); // from bootqueue
         fFunc(TEvLocal::TEvRegisterNode::EventType, EnqueueIncomingEvent); // from local
         fFunc(TEvBlobStorage::TEvControllerSelectGroupsResult::EventType, EnqueueIncomingEvent);
-        fFunc(TEvents::TEvPoisonPill::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvClientConnected::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvClientDestroyed::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvServerConnected::EventType, EnqueueIncomingEvent);

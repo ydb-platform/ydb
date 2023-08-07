@@ -22,8 +22,8 @@ namespace NYql {
 
         template <typename TProtoConfig>
         void Init(const TProtoConfig& config,
-                  const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseIds,
+                  const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
+                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                   const TCredentials::TPtr& credentials)
         {
             TVector<TString> clusterNames(Reserve(config.ClusterMappingSize()));
@@ -35,15 +35,15 @@ namespace NYql {
             this->SetValidClusters(clusterNames);
 
             for (const auto& cluster : config.GetClusterMapping()) {
-                InitCluster(cluster, dbResolver, databaseIds, credentials);
+                InitCluster(cluster, databaseResolver, databaseAuth, credentials);
             }
             this->FreezeDefaults();
         }
 
     private:
         void InitCluster(const TGenericClusterConfig& cluster,
-                         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-                         NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseIds,
+                         const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
+                         NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                          const TCredentials::TPtr& credentials) {
             const auto& clusterName = cluster.GetName();
             const auto& databaseId = cluster.GetDatabaseId();
@@ -55,10 +55,10 @@ namespace NYql {
                 << ", database id = " << databaseId
                 << ", endpoint = " << endpoint;
 
-            if (dbResolver && databaseId) {
+            if (databaseResolver && databaseId) {
                 const auto token = MakeStructuredToken(cluster, credentials);
 
-                databaseIds[std::make_pair(databaseId, NYql::DatabaseType::Generic)] = NYql::TDatabaseAuth{token, /*AddBearer=*/true};
+                databaseAuth[std::make_pair(databaseId, DataSourceKindToDatabaseType(cluster.GetKind()))] = NYql::TDatabaseAuth{token, /*AddBearer=*/true};
 
                 DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
                 YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";

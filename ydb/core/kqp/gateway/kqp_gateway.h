@@ -61,6 +61,12 @@ struct TModuleResolverState : public TThrRefBase {
 
 void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
 
+enum class ELocksOp {
+    Unspecified = 0,
+    Commit,
+    Rollback
+};
+
 class IKqpGateway : public NYql::IKikimrGateway {
 public:
     struct TPhysicalTxData : private TMoveOnly {
@@ -124,8 +130,7 @@ public:
         TVector<TPhysicalTxData> Transactions;
         TMap<ui64, TVector<NKikimrTxDataShard::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
-        bool ValidateLocks = false;
-        bool EraseLocks = false;
+        ELocksOp LocksOp = ELocksOp::Unspecified;
         TMaybe<ui64> AcquireLocksTxId;
         TDuration Timeout;
         TMaybe<TDuration> CancelAfter;
@@ -165,6 +170,7 @@ public:
     virtual NThreading::TFuture<TGenericResult> ModifyScheme(NKikimrSchemeOp::TModifyScheme&& modifyScheme) = 0;
 
     /* Compute */
+    using NYql::IKikimrGateway::ExecuteLiteral;
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
         TQueryData::TPtr params, ui32 txIndex) = 0;
 

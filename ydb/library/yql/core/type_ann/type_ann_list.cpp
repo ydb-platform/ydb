@@ -2086,20 +2086,11 @@ namespace {
             {
                 return IGraphTransformer::TStatus::Error;
             }
-            const TTypeAnnotationNode* commonType = nullptr;
-            const auto status = SilentInferCommonType(input->ChildRef(idx1), input->ChildRef(idx2),
-                                                      ctx.Expr, commonType);
+            auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr);
+            if (!commonType)
+                return IGraphTransformer::TStatus::Error;
             if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
                 commonType = commonType->Cast<TOptionalExprType>()->GetItemType();
-            }
-            if (IGraphTransformer::TStatus::Ok != status) {
-                if (IGraphTransformer::TStatus::Error == status) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                             TStringBuilder() << "Uncompatible types: " <<
-                                             *input->Child(idx1)->GetTypeAnn() << " and "<<
-                                             *input->Child(idx2)->GetTypeAnn()));
-                }
-                return status;
             }
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("Nothing")
@@ -2150,17 +2141,13 @@ namespace {
                 return status;
             }
         } else {
-            const auto status = SilentInferCommonType(input->ChildRef(0U), input->ChildRef(1U),
-                                                      ctx.Expr, commonType);
-            if (IGraphTransformer::TStatus::Ok != status) {
-                if (IGraphTransformer::TStatus::Error == status) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                             TStringBuilder() << "Uncompatible types of bounds " <<
-                                             *input->Child(0U)->GetTypeAnn() << " and " <<
-                                             *input->Child(1U)->GetTypeAnn()));
-                }
+            commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr);
+            if (!commonType)
+                return IGraphTransformer::TStatus::Error;
+
+            if (const auto status = TryConvertTo(input->ChildRef(0U), *commonType, ctx.Expr).Combine(TryConvertTo(input->ChildRef(1U), *commonType, ctx.Expr)); status != IGraphTransformer::TStatus::Ok)
                 return status;
-            }
+
             if (stepIsOpt && ETypeAnnotationKind::Optional != commonType->GetKind()) {
                 commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
             }
@@ -2548,50 +2535,42 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        auto tmpArg1 = ctx.Expr.NewArgument(input->Pos(), "tmp1");
-        auto tmpArg2 = ctx.Expr.NewArgument(input->Pos(), "tmp2");
-        THashMap<TStringBuf, std::pair<const TTypeAnnotationNode*, ui32>> members;
-        ui32 inputsCount = input->ChildrenSize();
-        auto checkStructType = [&members, &ctx, tmpArg1, tmpArg2, inputsCount, pos = input->Pos()](TExprNode& input) -> const TStructExprType* {
+        std::unordered_map<std::string_view, std::pair<const TTypeAnnotationNode*, ui32>> members;
+        const auto inputsCount = input->ChildrenSize();
+        const auto checkStructType = [&members, &ctx, inputsCount, pos = input->Pos()](TExprNode& input) -> const TStructExprType* {
             if (!EnsureListType(input, ctx.Expr)) {
                 return nullptr;
             }
-            auto itemType = input.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            const auto itemType = input.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
             if (!EnsureStructType(input.Pos(), *itemType, ctx.Expr)) {
                 return nullptr;
             }
-            auto structType = itemType->Cast<TStructExprType>();
-            for (auto item: structType->GetItems()) {
-                auto res = members.insert({ item->GetName(), { item->GetItemType(), 1 } });
-                if (!res.second) {
+            const auto structType = itemType->Cast<TStructExprType>();
+            for (const auto& item: structType->GetItems()) {
+                if (const auto res = members.insert({ item->GetName(), { item->GetItemType(), 1U } }); !res.second) {
                     if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
                         continue;
                     }
 
                     auto& p = res.first->second;
                     if (p.first->GetKind() == ETypeAnnotationKind::Error) {
-                        members[item->GetName()] = { p.first, inputsCount };
                         continue;
                     }
 
-                    ++p.second;
-                    const TTypeAnnotationNode* commonType = nullptr;
-                    auto arg1 = tmpArg1;
-                    auto arg2 = tmpArg2;
-                    if (SilentInferCommonType(arg1, *p.first, arg2, *item->GetItemType(), ctx.Expr, commonType)
-                        != IGraphTransformer::TStatus::Error) {
+                    if (const auto commonType = CommonType<false>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
                         p.first = commonType;
+                        ++p.second;
                         continue;
                     }
 
-                    auto err = TIssue(
+                    const TIssue err(
                         ctx.Expr.GetPosition(pos),
                         TStringBuilder()
                             << "Uncompatible member " << item->GetName() << " types: "
                             << *p.first << " and " << *item->GetItemType()
                     );
 
-                    members[item->GetName()] = { ctx.Expr.MakeType<TErrorExprType>(err), inputsCount };
+                    p = { ctx.Expr.MakeType<TErrorExprType>(err), inputsCount };
                 }
             }
             return structType;
@@ -2668,7 +2647,7 @@ namespace {
 
     IGraphTransformer::TStatus InferPositionalUnionType(TPositionHandle pos, const TExprNode::TListType& children,
         TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx) {
-        TVector<const TTypeAnnotationNode*> resultTypes;
+        TTypeAnnotationNode::TListType resultTypes;
         size_t idx = 0;
         for (const auto& child : children) {
             if (!EnsureListType(*child, ctx.Expr)) {
@@ -2688,8 +2667,8 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            TVector<const TTypeAnnotationNode*> childTypes;
-            auto structType = itemType->Cast<TStructExprType>();
+            TTypeAnnotationNode::TListType childTypes;
+            const auto structType = itemType->Cast<TStructExprType>();
             for (const auto& col : *childColumnOrder) {
                 auto itemIdx = structType->FindItem(col);
                 YQL_ENSURE(itemIdx);
@@ -2707,19 +2686,10 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
                 for (size_t i = 0; i < childTypes.size(); ++i) {
-                    auto arg1 = ctx.Expr.NewArgument(child->Pos(), "arg1");
-                    auto arg2 = ctx.Expr.NewArgument(child ->Pos(), "arg2");
-                    const TTypeAnnotationNode* commonType = nullptr;
-                    auto status = SilentInferCommonType(arg1, *resultTypes[i], arg2, *childTypes[i], ctx.Expr, commonType);
-                    if (status == IGraphTransformer::TStatus::Error) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
-                            << "Can not infer common type for result column " << resultColumnOrder[i]
-                            << ": no common type for " << *resultTypes[i] << " and column " << (*childColumnOrder)[i]
-                            << " type " << *childTypes[i]));
+                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr))
+                        resultTypes[i] = commonType;
+                    else
                         return IGraphTransformer::TStatus::Error;
-                    }
-                    YQL_ENSURE(commonType);
-                    resultTypes[i] = commonType;
                 }
             }
             idx++;
@@ -4326,8 +4296,9 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template<bool Chopped>
     IGraphTransformer::TStatus AssumeConstraintWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, Chopped ? 2U : 1U, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4337,7 +4308,7 @@ namespace {
 
         if (input->ChildrenSize() > 1U) {
             for (auto i = 1U; i < input->ChildrenSize(); ++i) {
-                if (const auto status = NormalizeTupleOfAtoms<true, true>(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                if (const auto status = NormalizeTupleOfAtoms<true, Chopped ? 1U : 2U>(input, i, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                     return status;
                 }
             }
@@ -4346,6 +4317,9 @@ namespace {
         input->SetTypeAnn(input->Head().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
+
+    template IGraphTransformer::TStatus AssumeConstraintWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    template IGraphTransformer::TStatus AssumeConstraintWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     IGraphTransformer::TStatus AssumeColumnOrderWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {

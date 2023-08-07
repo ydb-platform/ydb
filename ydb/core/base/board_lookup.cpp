@@ -27,6 +27,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     const EBoardLookupMode Mode;
     const ui32 StateStorageGroupId;
     const bool Subscriber;
+    TBoardRetrySettings BoardRetrySettings;
 
     static constexpr int MAX_REPLICAS_COUNT_EXP = 32; // Replicas.size() <= 2**MAX_REPLICAS_COUNT_EXP
 
@@ -59,7 +60,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         bool IsScheduled = false;
         ui32 ReconnectNumber = 0;
         NMonotonic::TMonotonic LastReconnectAt = TMonotonic::Zero();
-        TDuration CurrentDelay = TDuration::MilliSeconds(100);
+        TDuration CurrentDelay = TDuration::Zero();
     };
 
     TVector<TReplica> Replicas;
@@ -69,13 +70,20 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     ui32 WaitForReplicasToSuccess;
 
+    const TDuration& GetCurrentDelay(TReplica& replica) {
+        if (replica.CurrentDelay == TDuration::Zero()) {
+            replica.CurrentDelay = BoardRetrySettings.StartDelayMs;
+        }
+        return replica.CurrentDelay;
+    }
+
     TDuration GetReconnectDelayForReplica(TReplica& replica) {
         auto newDelay = replica.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > TDuration::Seconds(5)) {
-            newDelay = TDuration::Seconds(5);
+        if (newDelay > BoardRetrySettings.MaxDelayMs) {
+            newDelay = BoardRetrySettings.MaxDelayMs;
         }
-        newDelay *= AppData()->RandomProvider->Uniform(100, 115);
+        newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;
         replica.CurrentDelay = newDelay;
         return replica.CurrentDelay;
@@ -402,7 +410,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         CheckCompletion();
     }
 
-    void ReconnectReplica(ui32 replicaIdx) {
+    void ReconnectReplica(ui32 replicaIdx, bool fromReconnect = false) {
         auto& replica = Replicas[replicaIdx];
 
         if (!Subscriber) {
@@ -413,10 +421,18 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         auto now = TlsActivationContext->Monotonic();
-        if (now - replica.LastReconnectAt < replica.CurrentDelay) {
+        if (now - replica.LastReconnectAt < GetCurrentDelay(replica)) {
             auto at = replica.LastReconnectAt + GetReconnectDelayForReplica(replica);
             replica.IsScheduled = true;
             Schedule(at - now, new TEvPrivate::TEvReconnectReplicas(replicaIdx));
+            return;
+        }
+        if (!fromReconnect) {
+            auto delay = TDuration::Seconds(1);
+            delay *= AppData()->RandomProvider->Uniform(10, 200);
+            delay /= 100;
+            replica.IsScheduled = true;
+            Schedule(delay, new TEvPrivate::TEvReconnectReplicas(replicaIdx));
             return;
         }
 
@@ -433,7 +449,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     void Handle(TEvPrivate::TEvReconnectReplicas::TPtr& ev) {
         const auto& idx = ev->Get()->ReplicaIdx;
         Replicas[idx].IsScheduled = false;
-        ReconnectReplica(idx);
+        ReconnectReplica(idx, true);
     }
 
     std::pair<ui64, ui64> DecodeCookie(ui64 cookie) {
@@ -477,12 +493,15 @@ public:
         return NKikimrServices::TActivity::BOARD_LOOKUP_ACTOR;
     }
 
-    TBoardLookupActor(const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId)
+    TBoardLookupActor(
+        const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId,
+        TBoardRetrySettings boardRetrySettings)
         : Path(path)
         , Owner(owner)
         , Mode(mode)
         , StateStorageGroupId(groupId)
         , Subscriber(Mode == EBoardLookupMode::Subscription)
+        , BoardRetrySettings(std::move(boardRetrySettings))
     {}
 
     void Bootstrap() {
@@ -524,8 +543,10 @@ public:
     }
 };
 
-IActor* CreateBoardLookupActor(const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode) {
-    return new TBoardLookupActor(path, owner, mode, groupId);
+IActor* CreateBoardLookupActor(
+        const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode,
+        TBoardRetrySettings boardRetrySettings) {
+    return new TBoardLookupActor(path, owner, mode, groupId, std::move(boardRetrySettings));
 }
 
 }

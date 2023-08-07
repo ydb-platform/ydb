@@ -36,7 +36,7 @@ def move_tree(src_root, dst_root):
 
 def main(args):
     arcadia_prefix = args.arcadia_prefix
-    contrib_prefoix = args.contrib_prefix
+    contrib_prefix = args.contrib_prefix
     proto_namespace = args.namespace
     check_output = args.check
     proto_file = args.proto

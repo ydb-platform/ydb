@@ -1,0 +1,229 @@
+#
+# The format of this file is described in README.txt
+#
+# Each test case contains 3 fields:
+#   - Yson representation (that cannot be parsed to type).
+#   - Expected error description.
+#   - Path in yson that we expect to see in error.
+#
+# Suggested approach to writing test:
+#  1. Try to deserialize type from yson (1st field).
+#  2. Ensure that error is raised.
+#  3. (Optionally) ensure that error description matches (contains) 2nd field.
+#  4. (Optionally) ensure that error description contains path from 3rd field
+
+5 :: type must be either a string or a map :: ;;
+
+"" :: unknown type "" :: ;;
+
+"int" :: unknown type "int" :: ;;
+
+# Type names must be in lowercase.
+"Int32" :: unknown type "Int32" :: ;;
+
+{typename=int32} :: missing required key "type_name" :: ;;
+
+{type_name=5} :: "type_name" must contain a string :: ;;
+
+#
+# Decimal
+#
+
+{
+    type_name=decimal;
+    precision=3;
+} :: missing required key "scale" :: ;;
+
+{
+    type_name=decimal;
+    scale=3;
+} :: missing required key "precision" :: ;;
+
+#
+# Optional
+#
+
+{
+    type_name=optional;
+} :: missing required key "item" :: ;;
+
+{
+    item=int32;
+} :: missing required key "type_name" :: ;;
+
+#
+# List
+#
+
+{
+    type_name=list;
+} :: missing required key "item" :: ;;
+
+#
+# Struct
+#
+
+{
+    type_name=struct;
+} :: missing required key "members" :: ;;
+
+{
+    type_name=struct;
+    members=5;
+} :: "members" must contain a list :: ;;
+
+{
+    type_name=struct;
+    members=[
+        {name=foo; type=int32;};
+        5;
+    ];
+} :: "members" must contain a list of maps :: ;;
+
+{
+    type_name=struct;
+    members=[
+        {type=int32;};
+    ];
+} :: missing required key "name" :: ;;
+
+{
+    type_name=struct;
+    members=[
+        {name=foo;};
+    ];
+} :: missing required key "type" :: ;;
+
+{
+    type_name=struct;
+    members=[
+        {name=foo; type=int32};
+        {name=bar; type=5};
+    ];
+} :: type must be either a string or a map :: /members/1/type ;;
+
+{
+    type_name=struct;
+    members=[
+        {name=4; type=int32};
+    ];
+} :: "name" must contain a string :: ;;
+
+{
+    type_name=struct;
+    elements=[
+        {name=4; type=int32};
+    ];
+} :: missing required key "members" :: ;;
+
+#
+# Tuple
+#
+
+{
+    type_name=tuple;
+} :: missing required key "elements" :: ;;
+
+{
+    type_name=tuple;
+    elements=5;
+} :: "elements" must contain a list :: ;;
+
+{
+    type_name=tuple;
+    elements=[
+        {type=int32;};
+        5;
+    ];
+} :: "elements" must contain a list of maps :: ;;
+
+{
+    type_name=tuple;
+    elements=[
+        {};
+    ];
+} :: missing required key "type" :: /elements/0 ;;
+
+{
+    type_name=tuple;
+    elements=[
+        {type=5};
+    ];
+} :: type must be either a string or a map :: /elements/1/type ;;
+
+{
+    type_name=tuple;
+    members=[
+        {name=foo; type=int32};
+    ];
+} :: missing required key "elements" :: ;;
+
+#
+# Variant
+#
+
+# We don't specify exception message here because in C++ library that message is not good and we don't want to canonize it
+# Though fixing it is not that easy too.
+{
+    type_name=variant;
+    members=[
+        {name=foo; type=int32};
+    ];
+    elements=[
+        {type=int8};
+    ]
+} :: :: ;;
+
+{
+    type_name=variant;
+} :: missing both keys "members" and "elements" :: ;;
+
+#
+# Dict
+#
+{
+    type_name=dict;
+    key=string;
+} :: missing required key "value" :: ;;
+
+{
+    type_name=dict;
+    value=string;
+} :: missing required key "key" :: ;;
+
+{
+    type_name=dict;
+    value=string;
+} :: missing required key "key" :: ;;
+
+{
+    type_name=dict;
+    key=5;
+    value=string;
+} :: type must be either a string or a map :: /key ;;
+
+{
+    type_name=dict;
+    key=string;
+    value=5;
+} :: type must be either a string or a map :: /value ;;
+
+#
+# Tagged
+#
+
+{
+    type_name=tagged;
+    item=string;
+} :: missing required key "tag" :: ;;
+
+{
+    type_name=tagged;
+    tag=string;
+} :: missing required key "item" :: ;;
+
+{
+    type_name=tagged;
+    tag=5;
+    item=string;
+} :: "tag" must contain a string :: /tag ;;

@@ -5,6 +5,7 @@
 #include "flat_store_bundle.h"
 #include "flat_exec_broker.h"
 #include "logic_redo_eggs.h"
+#include "shared_cache_memtable.h"
 #include "util_fmt_line.h"
 #include <ydb/core/base/localdb.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -85,6 +86,8 @@ struct TCompactionLogicState {
 
         THolder<NTable::ICompactionStrategy> Strategy;
 
+        TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> SharedPageCacheMemTableRegistration;
+
         TDeque<TSnapRequest> SnapRequests;
 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
@@ -156,6 +159,7 @@ struct TReflectSchemeChangesResult {
 };
 
 class TCompactionLogic {
+    THolder<NSharedCache::ISharedPageCacheMemTableObserver> SharedPageCacheMemTableObserver;
     NUtil::ILogger * const Logger;
     NTable::IResourceBroker * const Broker;
     NTable::ICompactionBackend * const Backend;
@@ -189,6 +193,7 @@ public:
     static constexpr ui32 BAD_PRIORITY = Max<ui32>();
 
     TCompactionLogic(
+        THolder<NSharedCache::ISharedPageCacheMemTableObserver> sharedPageCacheMemTableObserver,
         NUtil::ILogger*,
         NTable::IResourceBroker*,
         NTable::ICompactionBackend*,
@@ -217,11 +222,14 @@ public:
     bool PrepareForceCompaction();
     ui64 PrepareForceCompaction(ui32 table, EForceCompaction mode = EForceCompaction::Full);
 
+    void TriggerSharedPageCacheMemTableCompaction(ui32 table, ui64 expectedSize);
+
     TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 table);
 
     void AllowBorrowedGarbageCompaction(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
+    void ProvideSharedPageCacheMemTableRegistration(ui32 table, TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration);
     void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);

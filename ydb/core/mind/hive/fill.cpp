@@ -56,7 +56,7 @@ protected:
                                << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
                                << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_FILL_EXECUTED].Increment(1);
-                        Hive->TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+                        Hive->RecordTabletMove({TInstant::Now(), tablet->GetFullTabletId(), tablet->Node->Id, result.BestNode->Id});
                         Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), result.BestNode->Id), ctx);
                     }
                 }

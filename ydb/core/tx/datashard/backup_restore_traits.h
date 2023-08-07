@@ -34,6 +34,10 @@ inline TString SchemeKey(const TString& objKeyPattern) {
     return Sprintf("%s/scheme.pb", objKeyPattern.c_str());
 }
 
+inline TString MetadataKey(const TString& objKeyPattern) {
+    return Sprintf("%s/metadata.json", objKeyPattern.c_str());
+}
+
 inline TString DataKey(const TString& objKeyPattern, ui32 n, EDataFormat format, ECompressionCodec codec) {
     const auto ext = DataFileExtension(format, codec);
     return Sprintf("%s/data_%02d%s", objKeyPattern.c_str(), n, ext.c_str());

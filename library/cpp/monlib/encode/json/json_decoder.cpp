@@ -48,7 +48,7 @@ public:
             Values_.push_back(InfValue_);
         }
 
-        auto snapshot = ExplicitHistogramSnapshot(Bounds_, Values_);
+        auto snapshot = ExplicitHistogramSnapshot(Bounds_, Values_, true);
 
         Bounds_.clear();
         Values_.clear();

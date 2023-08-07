@@ -43,8 +43,14 @@ public:
     )
 
     void Handle(const TEvYdbCompute::TEvExecuteScriptRequest::TPtr& ev) {
+        const auto& event = *ev->Get();
+        NYdb::NQuery::TExecuteScriptSettings settings;
+        settings.ResultsTtl(event.ResultTtl);
+        settings.OperationTimeout(event.OperationTimeout);
+        settings.Syntax(event.Syntax);
+        settings.ExecMode(event.ExecMode);
         QueryClient
-            ->ExecuteScript(ev->Get()->Sql)
+            ->ExecuteScript(event.Sql, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
@@ -66,7 +72,7 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, response.Status().GetIssues()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, response.Metadata().ResultSetsMeta, response.Status().GetIssues()), 0, cookie);
                     } else {
                         actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Status().GetIssues(), response.Status().GetStatus()), 0, cookie);
                     }
@@ -80,7 +86,7 @@ public:
         NYdb::NQuery::TFetchScriptResultsSettings settings;
         settings.FetchToken(ev->Get()->FetchToken);
         QueryClient
-            ->FetchScriptResults(ev->Get()->ExecutionId, ev->Get()->ResultSetId, settings)
+            ->FetchScriptResults(ev->Get()->OperationId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();

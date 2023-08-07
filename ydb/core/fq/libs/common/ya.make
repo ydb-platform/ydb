@@ -7,6 +7,7 @@ SRCS(
     debug_info.cpp
     entity_id.cpp
     entity_id.h
+    util.cpp
     rows_proto_splitter.cpp
     rows_proto_splitter.h
 )

@@ -3,7 +3,7 @@
 namespace NKikimr::NTestShard {
 
     class TTestShard::TMonQueryActor : public TActorBootstrapped<TMonQueryActor> {
-        const TActorId Sender;
+        TActorId Sender;
         const ui64 Cookie;
         const TString Query;
         const TCgiParameters Params;
@@ -30,7 +30,7 @@ namespace NKikimr::NTestShard {
         }
 
         void Bootstrap() {
-            TCgiParameters params;
+            TCgiParameters params(Params);
             params.InsertUnescaped("trashvol", ToString(Trash));
 
             RepliesPending += Send(ActivityActorId, new NMon::TEvRemoteHttpInfo('?' + params()), 0, ECookie::LOAD_ACTOR);
@@ -54,8 +54,19 @@ namespace NKikimr::NTestShard {
             }
         }
 
+        void Handle(NMon::TEvRemoteJsonInfoRes::TPtr ev) {
+            Y_VERIFY(ev->Cookie == ECookie::LOAD_ACTOR);
+            Y_VERIFY(RepliesPending == 1);
+            --RepliesPending;
+            Send(Sender, ev->Release().Release(), 0, Cookie);
+            Sender = {};
+            PassAway();
+        }
+
         void PassAway() override {
-            RenderHtml();
+            if (Sender) {
+                RenderHtml();
+            }
             TActorBootstrapped::PassAway();
         }
 
@@ -76,6 +87,7 @@ namespace NKikimr::NTestShard {
 
         STRICT_STFUNC(StateFunc,
             hFunc(NMon::TEvRemoteHttpInfoRes, Handle);
+            hFunc(NMon::TEvRemoteJsonInfoRes, Handle);
         )
     };
 

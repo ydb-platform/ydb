@@ -38,6 +38,7 @@ public:
     void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
                TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
 
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -66,6 +67,8 @@ public:
 
     bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(),
                const TDuration& blockTimeout = TDuration::Max()) override;
+
+    bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) override;
 
     ui64 GetInitSeqNo() override;
 

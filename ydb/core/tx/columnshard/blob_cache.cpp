@@ -137,6 +137,10 @@ private:
     const TCounterPtr HitsBytes;
     const TCounterPtr EvictedBytes;
     const TCounterPtr ReadBytes;
+    const TCounterPtr ReadRangeFailedBytes;
+    const TCounterPtr ReadRangeFailedCount;
+    const TCounterPtr ReadSimpleFailedBytes;
+    const TCounterPtr ReadSimpleFailedCount;
     const TCounterPtr AddBytes;
     const TCounterPtr ForgetBytes;
     const TCounterPtr SizeBytesInFlight;
@@ -170,6 +174,10 @@ public:
         , HitsBytes(counters->GetCounter("HitsBytes", true))
         , EvictedBytes(counters->GetCounter("EvictedBytes", true))
         , ReadBytes(counters->GetCounter("ReadBytes", true))
+        , ReadRangeFailedBytes(counters->GetCounter("ReadRangeFailedBytes", true))
+        , ReadRangeFailedCount(counters->GetCounter("ReadRangeFailedCount", true))
+        , ReadSimpleFailedBytes(counters->GetCounter("ReadSimpleFailedBytes", true))
+        , ReadSimpleFailedCount(counters->GetCounter("ReadSimpleFailedCount", true))
         , AddBytes(counters->GetCounter("AddBytes", true))
         , ForgetBytes(counters->GetCounter("ForgetBytes", true))
         , SizeBytesInFlight(counters->GetCounter("SizeBytesInFlight"))
@@ -499,6 +507,8 @@ private:
 
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
             LOG_S_WARN("Read failed: " << ev->Get()->ToString());
+            ReadSimpleFailedBytes->Add(ev->Get()->ResponseSz);
+            ReadSimpleFailedCount->Add(1);
         }
 
         auto cookieIt = CookieToRange.find(readCookie);
@@ -520,7 +530,7 @@ private:
             if (res.Status == NKikimrProto::EReplyStatus::NODATA) {
                 fallbackRanges[blobRanges[i].BlobId].emplace_back(std::move(blobRanges[i]));
             } else {
-                ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer, ctx);
+                ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
             }
         }
 
@@ -555,6 +565,8 @@ private:
         } else {
             LOG_S_WARN("Read failed for range: " << blobRange
                 << " status: " << NKikimrProto::EReplyStatus_Name(status));
+            ReadRangeFailedBytes->Add(blobRange.Size);
+            ReadRangeFailedCount->Add(1);
         }
 
         // Send results to all waiters

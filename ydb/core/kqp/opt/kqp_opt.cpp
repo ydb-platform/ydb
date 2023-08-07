@@ -104,4 +104,18 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
+bool IsBuiltEffect(const TExprBase& effect) {
+    // Stage with effect output
+    if (effect.Maybe<TDqOutput>()) {
+        return true;
+    }
+
+    // Stage with sink effect
+    if (effect.Maybe<TKqpSinkEffect>()) {
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace NKikimr::NKqp::NOpt

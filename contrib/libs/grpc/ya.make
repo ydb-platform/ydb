@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.50.2)
+VERSION(1.54.2)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.50.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.54.2.tar.gz)
 
 LICENSE(
     Apache-2.0 AND
@@ -26,6 +26,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/algorithm
     contrib/restricted/abseil-cpp-tstring/y_absl/base
     contrib/restricted/abseil-cpp-tstring/y_absl/container
+    contrib/restricted/abseil-cpp-tstring/y_absl/flags
     contrib/restricted/abseil-cpp-tstring/y_absl/functional
     contrib/restricted/abseil-cpp-tstring/y_absl/hash
     contrib/restricted/abseil-cpp-tstring/y_absl/memory
@@ -35,7 +36,6 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
     contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
     contrib/restricted/abseil-cpp-tstring/y_absl/time
-    contrib/restricted/abseil-cpp-tstring/y_absl/types
     contrib/restricted/abseil-cpp-tstring/y_absl/utility
     library/cpp/resource
 )
@@ -60,6 +60,7 @@ IF (OS_LINUX OR OS_DARWIN)
 ENDIF()
 
 SRCS(
+    src/core/ext/filters/backend_metrics/backend_metric_filter.cc
     src/core/ext/filters/census/grpc_context.cc
     src/core/ext/filters/channel_idle/channel_idle_filter.cc
     src/core/ext/filters/channel_idle/idle_filter_state.cc
@@ -70,6 +71,7 @@ SRCS(
     src/core/ext/filters/client_channel/client_channel_channelz.cc
     src/core/ext/filters/client_channel/client_channel_factory.cc
     src/core/ext/filters/client_channel/client_channel_plugin.cc
+    src/core/ext/filters/client_channel/client_channel_service_config.cc
     src/core/ext/filters/client_channel/config_selector.cc
     src/core/ext/filters/client_channel/dynamic_filters.cc
     src/core/ext/filters/client_channel/global_subchannel_pool.cc
@@ -89,11 +91,16 @@ SRCS(
     src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.cc
     src/core/ext/filters/client_channel/lb_policy/rls/rls.cc
     src/core/ext/filters/client_channel/lb_policy/round_robin/round_robin.cc
+    src/core/ext/filters/client_channel/lb_policy/weighted_round_robin/static_stride_scheduler.cc
+    src/core/ext/filters/client_channel/lb_policy/weighted_round_robin/weighted_round_robin.cc
     src/core/ext/filters/client_channel/lb_policy/weighted_target/weighted_target.cc
     src/core/ext/filters/client_channel/lb_policy/xds/cds.cc
+    src/core/ext/filters/client_channel/lb_policy/xds/xds_attributes.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_impl.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc
     src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_resolver.cc
+    src/core/ext/filters/client_channel/lb_policy/xds/xds_override_host.cc
+    src/core/ext/filters/client_channel/lb_policy/xds/xds_wrr_locality.cc
     src/core/ext/filters/client_channel/local_subchannel_pool.cc
     src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc
     src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc
@@ -102,14 +109,12 @@ SRCS(
     src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc
     src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc
     src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc
-    src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.cc
     src/core/ext/filters/client_channel/resolver/dns/native/dns_resolver.cc
     src/core/ext/filters/client_channel/resolver/fake/fake_resolver.cc
     src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc
     src/core/ext/filters/client_channel/resolver/polling_resolver.cc
     src/core/ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc
     src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc
-    src/core/ext/filters/client_channel/resolver_result_parsing.cc
     src/core/ext/filters/client_channel/retry_filter.cc
     src/core/ext/filters/client_channel/retry_service_config.cc
     src/core/ext/filters/client_channel/retry_throttle.cc
@@ -119,18 +124,19 @@ SRCS(
     src/core/ext/filters/client_channel/subchannel_stream_client.cc
     src/core/ext/filters/deadline/deadline_filter.cc
     src/core/ext/filters/fault_injection/fault_injection_filter.cc
-    src/core/ext/filters/fault_injection/service_config_parser.cc
+    src/core/ext/filters/fault_injection/fault_injection_service_config_parser.cc
     src/core/ext/filters/http/client/http_client_filter.cc
     src/core/ext/filters/http/client_authority_filter.cc
     src/core/ext/filters/http/http_filters_plugin.cc
-    src/core/ext/filters/http/message_compress/message_compress_filter.cc
-    src/core/ext/filters/http/message_compress/message_decompress_filter.cc
+    src/core/ext/filters/http/message_compress/compression_filter.cc
     src/core/ext/filters/http/server/http_server_filter.cc
     src/core/ext/filters/message_size/message_size_filter.cc
     src/core/ext/filters/rbac/rbac_filter.cc
     src/core/ext/filters/rbac/rbac_service_config_parser.cc
-    src/core/ext/filters/server_config_selector/server_config_selector.cc
     src/core/ext/filters/server_config_selector/server_config_selector_filter.cc
+    src/core/ext/filters/stateful_session/stateful_session_filter.cc
+    src/core/ext/filters/stateful_session/stateful_session_service_config_parser.cc
+    src/core/ext/gcp/metadata_query.cc
     src/core/ext/transport/binder/client/binder_connector.cc
     src/core/ext/transport/binder/client/channel_create.cc
     src/core/ext/transport/binder/client/channel_create_impl.cc
@@ -169,6 +175,7 @@ SRCS(
     src/core/ext/transport/chttp2/transport/hpack_parser.cc
     src/core/ext/transport/chttp2/transport/hpack_parser_table.cc
     src/core/ext/transport/chttp2/transport/http2_settings.cc
+    src/core/ext/transport/chttp2/transport/http_trace.cc
     src/core/ext/transport/chttp2/transport/huffsyms.cc
     src/core/ext/transport/chttp2/transport/parsing.cc
     src/core/ext/transport/chttp2/transport/stream_lists.cc
@@ -245,7 +252,11 @@ SRCS(
     src/core/ext/upb-generated/envoy/extensions/filters/http/fault/v3/fault.upb.c
     src/core/ext/upb-generated/envoy/extensions/filters/http/rbac/v3/rbac.upb.c
     src/core/ext/upb-generated/envoy/extensions/filters/http/router/v3/router.upb.c
+    src/core/ext/upb-generated/envoy/extensions/filters/http/stateful_session/v3/stateful_session.upb.c
          src/core/ext/upb-generated/envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upb.c
+    src/core/ext/upb-generated/envoy/extensions/http/stateful_session/cookie/v3/cookie.upb.c
+         src/core/ext/upb-generated/envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3/client_side_weighted_round_robin.upb.c
+    src/core/ext/upb-generated/envoy/extensions/load_balancing_policies/common/v3/common.upb.c
     src/core/ext/upb-generated/envoy/extensions/load_balancing_policies/ring_hash/v3/ring_hash.upb.c
     src/core/ext/upb-generated/envoy/extensions/load_balancing_policies/wrr_locality/v3/wrr_locality.upb.c
     src/core/ext/upb-generated/envoy/extensions/transport_sockets/tls/v3/cert.upb.c
@@ -259,12 +270,14 @@ SRCS(
     src/core/ext/upb-generated/envoy/service/status/v3/csds.upb.c
     src/core/ext/upb-generated/envoy/type/http/v3/cookie.upb.c
     src/core/ext/upb-generated/envoy/type/http/v3/path_transformation.upb.c
+    src/core/ext/upb-generated/envoy/type/matcher/v3/filter_state.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/http_inputs.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/metadata.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/node.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/number.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/path.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/regex.upb.c
+    src/core/ext/upb-generated/envoy/type/matcher/v3/status_code_input.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/string.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/struct.upb.c
     src/core/ext/upb-generated/envoy/type/matcher/v3/value.upb.c
@@ -312,6 +325,7 @@ SRCS(
     src/core/ext/upb-generated/xds/annotations/v3/status.upb.c
     src/core/ext/upb-generated/xds/annotations/v3/versioning.upb.c
     src/core/ext/upb-generated/xds/core/v3/authority.upb.c
+    src/core/ext/upb-generated/xds/core/v3/cidr.upb.c
     src/core/ext/upb-generated/xds/core/v3/collection_entry.upb.c
     src/core/ext/upb-generated/xds/core/v3/context_params.upb.c
     src/core/ext/upb-generated/xds/core/v3/extension.upb.c
@@ -320,9 +334,16 @@ SRCS(
     src/core/ext/upb-generated/xds/core/v3/resource_name.upb.c
     src/core/ext/upb-generated/xds/data/orca/v3/orca_load_report.upb.c
     src/core/ext/upb-generated/xds/service/orca/v3/orca.upb.c
+    src/core/ext/upb-generated/xds/type/matcher/v3/cel.upb.c
+    src/core/ext/upb-generated/xds/type/matcher/v3/domain.upb.c
+    src/core/ext/upb-generated/xds/type/matcher/v3/http_inputs.upb.c
+    src/core/ext/upb-generated/xds/type/matcher/v3/ip.upb.c
     src/core/ext/upb-generated/xds/type/matcher/v3/matcher.upb.c
+    src/core/ext/upb-generated/xds/type/matcher/v3/range.upb.c
     src/core/ext/upb-generated/xds/type/matcher/v3/regex.upb.c
     src/core/ext/upb-generated/xds/type/matcher/v3/string.upb.c
+    src/core/ext/upb-generated/xds/type/v3/cel.upb.c
+    src/core/ext/upb-generated/xds/type/v3/range.upb.c
     src/core/ext/upb-generated/xds/type/v3/typed_struct.upb.c
     src/core/ext/upbdefs-generated/envoy/admin/v3/certs.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/admin/v3/clusters.upbdefs.c
@@ -392,7 +413,9 @@ SRCS(
     src/core/ext/upbdefs-generated/envoy/extensions/filters/http/fault/v3/fault.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/extensions/filters/http/rbac/v3/rbac.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/extensions/filters/http/router/v3/router.upbdefs.c
+    src/core/ext/upbdefs-generated/envoy/extensions/filters/http/stateful_session/v3/stateful_session.upbdefs.c
          src/core/ext/upbdefs-generated/envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upbdefs.c
+    src/core/ext/upbdefs-generated/envoy/extensions/http/stateful_session/cookie/v3/cookie.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/extensions/transport_sockets/tls/v3/cert.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/extensions/transport_sockets/tls/v3/common.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/extensions/transport_sockets/tls/v3/secret.upbdefs.c
@@ -404,12 +427,14 @@ SRCS(
     src/core/ext/upbdefs-generated/envoy/service/status/v3/csds.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/http/v3/cookie.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/http/v3/path_transformation.upbdefs.c
+    src/core/ext/upbdefs-generated/envoy/type/matcher/v3/filter_state.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/http_inputs.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/metadata.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/node.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/number.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/path.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/regex.upbdefs.c
+    src/core/ext/upbdefs-generated/envoy/type/matcher/v3/status_code_input.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/string.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/struct.upbdefs.c
     src/core/ext/upbdefs-generated/envoy/type/matcher/v3/value.upbdefs.c
@@ -451,15 +476,23 @@ SRCS(
     src/core/ext/upbdefs-generated/xds/annotations/v3/status.upbdefs.c
     src/core/ext/upbdefs-generated/xds/annotations/v3/versioning.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/authority.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/core/v3/cidr.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/collection_entry.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/context_params.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/extension.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/resource.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/resource_locator.upbdefs.c
     src/core/ext/upbdefs-generated/xds/core/v3/resource_name.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/matcher/v3/cel.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/matcher/v3/domain.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/matcher/v3/http_inputs.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/matcher/v3/ip.upbdefs.c
     src/core/ext/upbdefs-generated/xds/type/matcher/v3/matcher.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/matcher/v3/range.upbdefs.c
     src/core/ext/upbdefs-generated/xds/type/matcher/v3/regex.upbdefs.c
     src/core/ext/upbdefs-generated/xds/type/matcher/v3/string.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/v3/cel.upbdefs.c
+    src/core/ext/upbdefs-generated/xds/type/v3/range.upbdefs.c
     src/core/ext/upbdefs-generated/xds/type/v3/typed_struct.upbdefs.c
     src/core/ext/xds/certificate_provider_store.cc
     src/core/ext/xds/file_watcher_certificate_provider_factory.cc
@@ -475,12 +508,13 @@ SRCS(
     src/core/ext/xds/xds_cluster_specifier_plugin.cc
     src/core/ext/xds/xds_common_types.cc
     src/core/ext/xds/xds_endpoint.cc
+    src/core/ext/xds/xds_health_status.cc
     src/core/ext/xds/xds_http_fault_filter.cc
     src/core/ext/xds/xds_http_filters.cc
     src/core/ext/xds/xds_http_rbac_filter.cc
+    src/core/ext/xds/xds_http_stateful_session_filter.cc
     src/core/ext/xds/xds_lb_policy_registry.cc
     src/core/ext/xds/xds_listener.cc
-    src/core/ext/xds/xds_resource_type.cc
     src/core/ext/xds/xds_route_config.cc
     src/core/ext/xds/xds_routing.cc
     src/core/ext/xds/xds_server_config_fetcher.cc
@@ -488,6 +522,8 @@ SRCS(
     src/core/lib/address_utils/parse_address.cc
     src/core/lib/address_utils/sockaddr_utils.cc
     src/core/lib/backoff/backoff.cc
+    src/core/lib/backoff/random_early_detection.cc
+    src/core/lib/channel/call_tracer.cc
     src/core/lib/channel/channel_args.cc
     src/core/lib/channel/channel_args_preconditioning.cc
     src/core/lib/channel/channel_stack.cc
@@ -498,82 +534,107 @@ SRCS(
     src/core/lib/channel/channelz_registry.cc
     src/core/lib/channel/connected_channel.cc
     src/core/lib/channel/promise_based_filter.cc
+    src/core/lib/channel/server_call_tracer_filter.cc
     src/core/lib/channel/status_util.cc
     src/core/lib/compression/compression.cc
     src/core/lib/compression/compression_internal.cc
     src/core/lib/compression/message_compress.cc
+    src/core/lib/config/config_vars.cc
+    src/core/lib/config/config_vars_non_generated.cc
     src/core/lib/config/core_configuration.cc
+    src/core/lib/config/load_config.cc
+    src/core/lib/debug/event_log.cc
+    src/core/lib/debug/histogram_view.cc
     src/core/lib/debug/stats.cc
     src/core/lib/debug/stats_data.cc
     src/core/lib/debug/trace.cc
     src/core/lib/event_engine/channel_args_endpoint_config.cc
     src/core/lib/event_engine/default_event_engine.cc
     src/core/lib/event_engine/default_event_engine_factory.cc
-    src/core/lib/event_engine/executor/threaded_executor.cc
+    src/core/lib/event_engine/event_engine.cc
     src/core/lib/event_engine/forkable.cc
     src/core/lib/event_engine/memory_allocator.cc
+    src/core/lib/event_engine/posix_engine/ev_epoll1_linux.cc
+    src/core/lib/event_engine/posix_engine/ev_poll_posix.cc
+    src/core/lib/event_engine/posix_engine/event_poller_posix_default.cc
+    src/core/lib/event_engine/posix_engine/internal_errqueue.cc
+    src/core/lib/event_engine/posix_engine/lockfree_event.cc
+    src/core/lib/event_engine/posix_engine/posix_endpoint.cc
     src/core/lib/event_engine/posix_engine/posix_engine.cc
+    src/core/lib/event_engine/posix_engine/posix_engine_listener.cc
+    src/core/lib/event_engine/posix_engine/posix_engine_listener_utils.cc
+    src/core/lib/event_engine/posix_engine/tcp_socket_utils.cc
     src/core/lib/event_engine/posix_engine/timer.cc
     src/core/lib/event_engine/posix_engine/timer_heap.cc
     src/core/lib/event_engine/posix_engine/timer_manager.cc
+    src/core/lib/event_engine/posix_engine/traced_buffer_list.cc
+    src/core/lib/event_engine/posix_engine/wakeup_fd_eventfd.cc
+    src/core/lib/event_engine/posix_engine/wakeup_fd_pipe.cc
+    src/core/lib/event_engine/posix_engine/wakeup_fd_posix_default.cc
     src/core/lib/event_engine/resolved_address.cc
+    src/core/lib/event_engine/shim.cc
     src/core/lib/event_engine/slice.cc
     src/core/lib/event_engine/slice_buffer.cc
+    src/core/lib/event_engine/tcp_socket_utils.cc
+    src/core/lib/event_engine/thread_local.cc
     src/core/lib/event_engine/thread_pool.cc
     src/core/lib/event_engine/time_util.cc
     src/core/lib/event_engine/trace.cc
     src/core/lib/event_engine/utils.cc
     src/core/lib/event_engine/windows/iocp.cc
     src/core/lib/event_engine/windows/win_socket.cc
+    src/core/lib/event_engine/windows/windows_endpoint.cc
     src/core/lib/event_engine/windows/windows_engine.cc
+    src/core/lib/event_engine/windows/windows_listener.cc
     src/core/lib/experiments/config.cc
     src/core/lib/experiments/experiments.cc
     src/core/lib/gpr/alloc.cc
+    src/core/lib/gpr/android/log.cc
     src/core/lib/gpr/atm.cc
-    src/core/lib/gpr/cpu_iphone.cc
-    src/core/lib/gpr/cpu_linux.cc
-    src/core/lib/gpr/cpu_posix.cc
-    src/core/lib/gpr/cpu_windows.cc
+    src/core/lib/gpr/iphone/cpu.cc
+    src/core/lib/gpr/linux/cpu.cc
+    src/core/lib/gpr/linux/log.cc
     src/core/lib/gpr/log.cc
-    src/core/lib/gpr/log_android.cc
-    src/core/lib/gpr/log_linux.cc
-    src/core/lib/gpr/log_posix.cc
-    src/core/lib/gpr/log_windows.cc
-    src/core/lib/gpr/murmur_hash.cc
+    src/core/lib/gpr/msys/tmpfile.cc
+    src/core/lib/gpr/posix/cpu.cc
+    src/core/lib/gpr/posix/log.cc
+    src/core/lib/gpr/posix/string.cc
+    src/core/lib/gpr/posix/sync.cc
+    src/core/lib/gpr/posix/time.cc
+    src/core/lib/gpr/posix/tmpfile.cc
     src/core/lib/gpr/string.cc
-    src/core/lib/gpr/string_posix.cc
-    src/core/lib/gpr/string_util_windows.cc
-    src/core/lib/gpr/string_windows.cc
     src/core/lib/gpr/sync.cc
     src/core/lib/gpr/sync_abseil.cc
-    src/core/lib/gpr/sync_posix.cc
-    src/core/lib/gpr/sync_windows.cc
     src/core/lib/gpr/time.cc
-    src/core/lib/gpr/time_posix.cc
     src/core/lib/gpr/time_precise.cc
-    src/core/lib/gpr/time_windows.cc
-    src/core/lib/gpr/tmpfile_msys.cc
-    src/core/lib/gpr/tmpfile_posix.cc
-    src/core/lib/gpr/tmpfile_windows.cc
+    src/core/lib/gpr/windows/cpu.cc
+    src/core/lib/gpr/windows/log.cc
+    src/core/lib/gpr/windows/string.cc
+    src/core/lib/gpr/windows/string_util.cc
+    src/core/lib/gpr/windows/sync.cc
+    src/core/lib/gpr/windows/time.cc
+    src/core/lib/gpr/windows/tmpfile.cc
     src/core/lib/gpr/wrap_memcpy.cc
-    src/core/lib/gprpp/env_linux.cc
-    src/core/lib/gprpp/env_posix.cc
-    src/core/lib/gprpp/env_windows.cc
+    src/core/lib/gprpp/crash.cc
     src/core/lib/gprpp/examine_stack.cc
     src/core/lib/gprpp/fork.cc
-    src/core/lib/gprpp/global_config_env.cc
     src/core/lib/gprpp/host_port.cc
+    src/core/lib/gprpp/linux/env.cc
+    src/core/lib/gprpp/load_file.cc
     src/core/lib/gprpp/mpscq.cc
-    src/core/lib/gprpp/stat_posix.cc
-    src/core/lib/gprpp/stat_windows.cc
+    src/core/lib/gprpp/posix/env.cc
+    src/core/lib/gprpp/posix/stat.cc
+    src/core/lib/gprpp/posix/thd.cc
     src/core/lib/gprpp/status_helper.cc
+    src/core/lib/gprpp/strerror.cc
     src/core/lib/gprpp/tchar.cc
-    src/core/lib/gprpp/thd_posix.cc
-    src/core/lib/gprpp/thd_windows.cc
     src/core/lib/gprpp/time.cc
     src/core/lib/gprpp/time_averaged_stats.cc
     src/core/lib/gprpp/time_util.cc
     src/core/lib/gprpp/validation_errors.cc
+    src/core/lib/gprpp/windows/env.cc
+    src/core/lib/gprpp/windows/stat.cc
+    src/core/lib/gprpp/windows/thd.cc
     src/core/lib/gprpp/work_serializer.cc
     src/core/lib/handshaker/proxy_mapper_registry.cc
     src/core/lib/http/format_request.cc
@@ -583,6 +644,7 @@ SRCS(
     src/core/lib/iomgr/buffer_list.cc
     src/core/lib/iomgr/call_combiner.cc
     src/core/lib/iomgr/cfstream_handle.cc
+    src/core/lib/iomgr/closure.cc
     src/core/lib/iomgr/combiner.cc
     src/core/lib/iomgr/dualstack_socket_posix.cc
     src/core/lib/iomgr/endpoint.cc
@@ -596,6 +658,9 @@ SRCS(
     src/core/lib/iomgr/ev_poll_posix.cc
     src/core/lib/iomgr/ev_posix.cc
     src/core/lib/iomgr/ev_windows.cc
+    src/core/lib/iomgr/event_engine_shims/closure.cc
+    src/core/lib/iomgr/event_engine_shims/endpoint.cc
+    src/core/lib/iomgr/event_engine_shims/tcp_client.cc
     src/core/lib/iomgr/exec_ctx.cc
     src/core/lib/iomgr/executor.cc
     src/core/lib/iomgr/fork_posix.cc
@@ -630,6 +695,7 @@ SRCS(
     src/core/lib/iomgr/socket_utils_posix.cc
     src/core/lib/iomgr/socket_utils_windows.cc
     src/core/lib/iomgr/socket_windows.cc
+    src/core/lib/iomgr/systemd_utils.cc
     src/core/lib/iomgr/tcp_client.cc
     src/core/lib/iomgr/tcp_client_cfstream.cc
     src/core/lib/iomgr/tcp_client_posix.cc
@@ -660,7 +726,9 @@ SRCS(
     src/core/lib/load_balancing/lb_policy_registry.cc
     src/core/lib/matchers/matchers.cc
     src/core/lib/promise/activity.cc
+    src/core/lib/promise/party.cc
     src/core/lib/promise/sleep.cc
+    src/core/lib/promise/trace.cc
     src/core/lib/resolver/resolver.cc
     src/core/lib/resolver/resolver_registry.cc
     src/core/lib/resolver/server_address.cc
@@ -725,7 +793,6 @@ SRCS(
     src/core/lib/security/security_connector/security_connector.cc
     src/core/lib/security/security_connector/ssl/ssl_security_connector.cc
     src/core/lib/security/security_connector/ssl_utils.cc
-    src/core/lib/security/security_connector/ssl_utils_config.cc
     src/core/lib/security/security_connector/tls/tls_security_connector.cc
     src/core/lib/security/transport/client_auth_filter.cc
     src/core/lib/security/transport/secure_endpoint.cc
@@ -738,9 +805,7 @@ SRCS(
     src/core/lib/slice/b64.cc
     src/core/lib/slice/percent_encoding.cc
     src/core/lib/slice/slice.cc
-    src/core/lib/slice/slice_api.cc
     src/core/lib/slice/slice_buffer.cc
-    src/core/lib/slice/slice_buffer_api.cc
     src/core/lib/slice/slice_refcount.cc
     src/core/lib/slice/slice_string_helpers.cc
     src/core/lib/surface/api_trace.cc
@@ -750,6 +815,7 @@ SRCS(
     src/core/lib/surface/call.cc
     src/core/lib/surface/call_details.cc
     src/core/lib/surface/call_log_batch.cc
+    src/core/lib/surface/call_trace.cc
     src/core/lib/surface/channel.cc
     src/core/lib/surface/channel_init.cc
     src/core/lib/surface/channel_ping.cc
@@ -764,6 +830,7 @@ SRCS(
     src/core/lib/surface/server.cc
     src/core/lib/surface/validate_metadata.cc
     src/core/lib/surface/version.cc
+    src/core/lib/transport/batch_builder.cc
     src/core/lib/transport/bdp_estimator.cc
     src/core/lib/transport/connectivity_state.cc
     src/core/lib/transport/error_utils.cc
@@ -807,26 +874,25 @@ SRCS(
     src/core/tsi/ssl/session_cache/ssl_session_cache.cc
     src/core/tsi/ssl/session_cache/ssl_session_openssl.cc
     src/core/tsi/ssl_transport_security.cc
+    src/core/tsi/ssl_transport_security_utils.cc
     src/core/tsi/transport_security.cc
     src/core/tsi/transport_security_grpc.cc
     src/cpp/client/channel_cc.cc
     src/cpp/client/client_callback.cc
     src/cpp/client/client_context.cc
     src/cpp/client/client_interceptor.cc
+    src/cpp/client/client_stats_interceptor.cc
     src/cpp/client/create_channel.cc
     src/cpp/client/create_channel_internal.cc
     src/cpp/client/create_channel_posix.cc
-    src/cpp/client/credentials_cc.cc
     src/cpp/client/insecure_credentials.cc
     src/cpp/client/secure_credentials.cc
     src/cpp/client/xds_credentials.cc
-    src/cpp/codegen/codegen_init.cc
     src/cpp/common/alarm.cc
     src/cpp/common/auth_property_iterator.cc
     src/cpp/common/channel_arguments.cc
     src/cpp/common/channel_filter.cc
     src/cpp/common/completion_queue_cc.cc
-    src/cpp/common/core_codegen.cc
     src/cpp/common/resource_quota_cc.cc
     src/cpp/common/rpc_method.cc
     src/cpp/common/secure_auth_context.cc
@@ -838,21 +904,19 @@ SRCS(
     src/cpp/common/validate_service_config.cc
     src/cpp/common/version_cc.cc
     src/cpp/server/async_generic_service.cc
+    src/cpp/server/backend_metric_recorder.cc
     src/cpp/server/channel_argument_option.cc
     src/cpp/server/create_default_thread_pool.cc
-    src/cpp/server/dynamic_thread_pool.cc
     src/cpp/server/external_connection_acceptor_impl.cc
     src/cpp/server/health/default_health_check_service.cc
     src/cpp/server/health/health_check_service.cc
     src/cpp/server/health/health_check_service_server_builder_option.cc
     src/cpp/server/insecure_server_credentials.cc
-    src/cpp/server/orca/call_metric_recorder.cc
     src/cpp/server/secure_server_credentials.cc
     src/cpp/server/server_builder.cc
     src/cpp/server/server_callback.cc
     src/cpp/server/server_cc.cc
     src/cpp/server/server_context.cc
-    src/cpp/server/server_credentials.cc
     src/cpp/server/server_posix.cc
     src/cpp/server/xds_server_credentials.cc
     src/cpp/thread_manager/thread_manager.cc

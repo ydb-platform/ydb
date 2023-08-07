@@ -4,7 +4,7 @@
 #include "runtime.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -136,7 +136,7 @@ namespace NPDisk {
 
         runtime.AddLocalService(MakeSharedPageCacheId(0),
             TActorSetupCmd(
-                CreateSharedPageCache(std::move(pageCollectionCacheConfig)),
+                CreateSharedPageCache(std::move(pageCollectionCacheConfig), runtime.GetMemObserver(nodeIndex)),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);

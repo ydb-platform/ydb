@@ -33,6 +33,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -986,7 +987,6 @@ public:
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, const TActorContext& ctx);
@@ -1241,6 +1241,9 @@ public:
         const TCdcStreamInfo::TShardStatus& status);
     void RemoveCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx);
     // } // NCdcStreamScan
+
+    // simple statistics
+    void Handle(NStat::TEvStatistics::TEvGetStatisticsFromSS::TPtr& ev, const TActorContext& ctx);
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;

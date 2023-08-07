@@ -144,7 +144,7 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
 
     for (unsigned consumerIdx = 0; consumerIdx < consumerCount; ++consumerIdx) {
         settings
-            .BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(consumerIdx))
+            .BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(ConsumerPrefix, consumerIdx))
             .EndAddConsumer();
     }
 
@@ -176,6 +176,7 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .Database = database,
                 .TopicName = TopicName,
                 .ConsumerIdx = consumerIdx,
+                .ConsumerPrefix = ConsumerPrefix,
                 .ReaderIdx = readerIdx
             };
 

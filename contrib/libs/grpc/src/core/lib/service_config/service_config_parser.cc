@@ -23,9 +23,7 @@
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
-#include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/str_join.h"
 
 #include <grpc/support/log.h>
 
@@ -50,43 +48,28 @@ void ServiceConfigParser::Builder::RegisterParser(
   registered_parsers_.emplace_back(std::move(parser));
 }
 
-y_absl::StatusOr<ServiceConfigParser::ParsedConfigVector>
+ServiceConfigParser::ParsedConfigVector
 ServiceConfigParser::ParseGlobalParameters(const ChannelArgs& args,
-                                           const Json& json) const {
+                                           const Json& json,
+                                           ValidationErrors* errors) const {
   ParsedConfigVector parsed_global_configs;
-  std::vector<TString> errors;
-  for (size_t i = 0; i < registered_parsers_.size(); i++) {
-    auto parsed_config = registered_parsers_[i]->ParseGlobalParams(args, json);
-    if (!parsed_config.ok()) {
-      errors.emplace_back(parsed_config.status().message());
-    } else {
-      parsed_global_configs.push_back(std::move(*parsed_config));
-    }
+  for (auto& parser : registered_parsers_) {
+    parsed_global_configs.push_back(
+        parser->ParseGlobalParams(args, json, errors));
   }
-  if (!errors.empty()) {
-    return y_absl::InvalidArgumentError(y_absl::StrJoin(errors, "; "));
-  }
-  return std::move(parsed_global_configs);
+  return parsed_global_configs;
 }
 
-y_absl::StatusOr<ServiceConfigParser::ParsedConfigVector>
+ServiceConfigParser::ParsedConfigVector
 ServiceConfigParser::ParsePerMethodParameters(const ChannelArgs& args,
-                                              const Json& json) const {
+                                              const Json& json,
+                                              ValidationErrors* errors) const {
   ParsedConfigVector parsed_method_configs;
-  std::vector<TString> errors;
-  for (size_t i = 0; i < registered_parsers_.size(); ++i) {
-    auto parsed_config =
-        registered_parsers_[i]->ParsePerMethodParams(args, json);
-    if (!parsed_config.ok()) {
-      errors.emplace_back(parsed_config.status().message());
-    } else {
-      parsed_method_configs.push_back(std::move(*parsed_config));
-    }
+  for (auto& parser : registered_parsers_) {
+    parsed_method_configs.push_back(
+        parser->ParsePerMethodParams(args, json, errors));
   }
-  if (!errors.empty()) {
-    return y_absl::InvalidArgumentError(y_absl::StrJoin(errors, "; "));
-  }
-  return std::move(parsed_method_configs);
+  return parsed_method_configs;
 }
 
 size_t ServiceConfigParser::GetParserIndex(y_absl::string_view name) const {

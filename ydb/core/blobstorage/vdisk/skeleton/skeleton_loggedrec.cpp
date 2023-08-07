@@ -2,7 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufresize.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
 

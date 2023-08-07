@@ -52,6 +52,7 @@ public:
     ui32 ProducerThreadCount;
     ui32 ConsumerThreadCount;
     ui32 ConsumerCount;
+    TString ConsumerPrefix;
     size_t MessageSize;
     size_t MessageRate;
     size_t ByteRate;

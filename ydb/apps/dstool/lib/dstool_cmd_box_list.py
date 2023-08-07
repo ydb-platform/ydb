@@ -71,7 +71,7 @@ def do(args):
         for disk_type, box in box_data.items():
             row = {}
             row['BoxId'] = box_id
-            row['DiskType'] = kikimr_bsconfig.EPDiskType.Name(disk_type)
+            row['DiskType'] = common.EPDiskType.Name(disk_type)
 
             for key, value in box.items():
                 row[key] = value

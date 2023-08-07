@@ -1696,7 +1696,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT(createTabletReply->Record.HasForwardRequest());
             UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
 
-        });
+        }, Max<ui32>(), Max<ui64>(), 1, 2);
     }
 
     Y_UNIT_TEST(TestCreateAndDeleteTabletWithStoragePoolsReboots) {
@@ -4068,7 +4068,6 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    /* Set WarmUpEnabled in config to true to pass this test
     Y_UNIT_TEST(TestHiveBalancerNodeRestarts) {
         static const int NUM_NODES = 5;
         static const int TABLETS_PER_NODE = 5;
@@ -4147,7 +4146,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // check distribution
         check_distribution();
-    }*/
+    }
 
     Y_UNIT_TEST(TestSpreadNeighboursWithUpdateTabletsObject) {
         TTestBasicRuntime runtime(2, false);

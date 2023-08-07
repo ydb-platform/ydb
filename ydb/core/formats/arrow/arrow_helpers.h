@@ -1,7 +1,6 @@
 #pragma once
 #include "switch_type.h"
 #include "size_calcer.h"
-#include "replace_key.h"
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/json/writer/json_value.h>
@@ -13,10 +12,6 @@
 namespace NKikimr::NArrow {
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
-template<typename T>
-class TReplaceKeyTemplate;
-using TReplaceKey = TReplaceKeyTemplate<std::shared_ptr<TArrayVec>>;
-using TRawReplaceKey = TReplaceKeyTemplate<const TArrayVec*>;
 
 std::shared_ptr<arrow::DataType> GetArrowType(NScheme::TTypeInfo typeInfo);
 std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId);
@@ -93,14 +88,10 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(ui64 value, i64 size);
-std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse = false);
 std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
-size_t LowerBound(const std::vector<TRawReplaceKey>& batchKeys, const TReplaceKey& key, size_t offset = 0);
 bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const std::shared_ptr<arrow::Schema>& sortingKey);
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                                               const std::shared_ptr<arrow::Schema>& sortingKey);
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,

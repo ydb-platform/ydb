@@ -12,6 +12,7 @@ target_link_libraries(yql-core-cbo PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-disjoint_sets
 )
 target_sources(yql-core-cbo PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/cbo/cbo_optimizer.cpp

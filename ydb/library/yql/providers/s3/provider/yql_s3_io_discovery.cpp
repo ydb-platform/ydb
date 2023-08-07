@@ -587,7 +587,7 @@ private:
         if (!s3ParseSettingsBase.Paths().Empty()) {
             resultSetLimitPerPath /= s3ParseSettingsBase.Paths().Size();
         }
-        
+
         for (auto path : s3ParseSettingsBase.Paths()) {
             NS3Details::TPathList directories;
             NS3Details::UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), directories);
@@ -613,7 +613,7 @@ private:
                             State_->Configuration->UseConcurrentDirectoryLister.Get().GetOrElse(
                                 State_->Configuration->AllowConcurrentListings),
                         .MaxResultSet = resultSetLimitPerPath});
-            
+
 
                 RequestsByNode_[source.Raw()].push_back(req);
                 PendingRequests_[req] = future;
@@ -755,7 +755,7 @@ private:
                 .S3Request{.Url = url, .Token = tokenStr},
                 .FilePattern = effectiveFilePattern,
                 .Options{
-                    .IsConcurrentListing = isConcurrentListingEnabled, 
+                    .IsConcurrentListing = isConcurrentListingEnabled,
                     .MaxResultSet = std::max(State_->Configuration->MaxDiscoveryFilesPerQuery, State_->Configuration->MaxDirectoriesAndFilesPerQuery)
                 }};
 

@@ -78,11 +78,15 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             }
 
             if (gatewaysConfig) {
-                auto filter = [username, state](const NYql::TAttr& attr) -> bool {
+                std::unordered_set<std::string_view> groups;
+                if (state->TypeCtx->Credentials != nullptr) {
+                    groups.insert(state->TypeCtx->Credentials->GetGroups().begin(), state->TypeCtx->Credentials->GetGroups().end());
+                }
+                auto filter = [username, state, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
                     if (!attr.HasActivation()) {
                         return true;
                     }
-                    if (NConfig::Allow(attr.GetActivation(), username)) {
+                    if (NConfig::Allow(attr.GetActivation(), username, groups)) {
                         with_lock(state->Mutex) {
                             state->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                         }

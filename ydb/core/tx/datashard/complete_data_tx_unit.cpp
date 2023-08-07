@@ -122,6 +122,7 @@ void TCompleteOperationUnit::Complete(TOperation::TPtr op,
         DataShard.NotifySchemeshard(ctx, op->GetTxId());
 
     DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
+    DataShard.EmitHeartbeats(ctx);
 
     if (op->HasOutputData()) {
         const auto& outReadSets = op->OutReadSets();

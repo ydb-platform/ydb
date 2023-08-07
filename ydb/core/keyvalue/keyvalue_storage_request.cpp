@@ -280,19 +280,16 @@ public:
         auto groupId = ev->Get()->GroupId;
         decltype(request.ReadQueue)::iterator it = request.ReadQueue.begin();
         for (ui32 i = 0, num = ev->Get()->ResponseSz; i < num; ++i, ++it) {
-            const auto& response = ev->Get()->Responses[i];
+            auto& response = ev->Get()->Responses[i];
             auto& read = *it->Read;
             auto& readItem = *it->ReadItem;
 
             if (response.Status == NKikimrProto::OK) {
-                if (read.Value.size() != read.ValueSize) {
-                    read.Value.resize(read.ValueSize);
-                }
                 Y_VERIFY(response.Buffer.size() == readItem.BlobSize);
                 Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
-                memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size());
                 IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
+                read.Value.Write(readItem.ValueOffset, std::move(response.Buffer));
             } else {
                 TStringStream err;
                 if (read.Message.size()) {
@@ -485,7 +482,7 @@ public:
         ctx.Send(keyValueActorId, new TEvKeyValue::TEvNotify(
             IntermediateResults->RequestUid,
             IntermediateResults->CreatedAtGeneration, IntermediateResults->CreatedAtStep,
-            IntermediateResults->Stat, status));
+            IntermediateResults->Stat, status, std::move(IntermediateResults->RefCountsIncr)));
         Die(ctx);
     }
 
@@ -600,11 +597,8 @@ public:
             auto &getStatus = IntermediateResults->GetStatuses[i];
             if (getStatus.Status != NKikimrProto::OK) {
                 Y_VERIFY(getStatus.Status == NKikimrProto::UNKNOWN);
-                const ui32 groupId = TabletInfo->GroupFor(getStatus.LogoBlobId.Channel(), getStatus.LogoBlobId.Generation());
-                Y_VERIFY(groupId != Max<ui32>(), "GetStatus Blob# %s is mapped to an invalid group (-1)!",
-                        getStatus.LogoBlobId.ToString().c_str());
                 SendToBSProxy(
-                        ctx, groupId,
+                        ctx, getStatus.GroupId,
                         new TEvBlobStorage::TEvStatus(IntermediateResults->Deadline), i);
                 ++GetStatusRequestsSent;
             }
@@ -635,15 +629,15 @@ public:
                 if (request.Status != NKikimrProto::SCHEDULED) {
                     Y_VERIFY(request.Status == NKikimrProto::UNKNOWN);
 
-                    const TRcBuf& data = request.Data;
-                    const TContiguousSpan whole = data.GetContiguousSpan();
+                    const TRope& data = request.Data;
+                    auto iter = data.begin();
 
-                    ui64 offset = 0;
                     for (const TLogoBlobID& logoBlobId : request.LogoBlobIds) {
-                        const TContiguousSpan chunk = whole.SubSpan(offset, logoBlobId.BlobSize());
+                        const auto begin = iter;
+                        iter += logoBlobId.BlobSize();
                         THolder<TEvBlobStorage::TEvPut> put(
                             new TEvBlobStorage::TEvPut(
-                                logoBlobId, TRcBuf(TRcBuf::Piece, chunk.data(), chunk.size(), data),
+                                logoBlobId, TRcBuf(TRope(begin, iter)),
                                 IntermediateResults->Deadline, request.HandleClass,
                                 request.Tactic));
                         const ui32 groupId = TabletInfo->GroupFor(logoBlobId.Channel(), logoBlobId.Generation());
@@ -656,7 +650,6 @@ public:
                         SendPutToGroup(ctx, groupId, TabletInfo.Get(), std::move(put), i);
 
                         ++WriteRequestsSent;
-                        offset += logoBlobId.BlobSize();
                     }
                 }
             }

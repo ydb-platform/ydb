@@ -70,7 +70,7 @@ protected:
                                 << " from node " << tablet->Node->Id << " " << tablet->Node->ResourceValues
                                 << " to node " << result.BestNode->Id << " " << result.BestNode->ResourceValues);
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
-                    Hive->TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
+                    Hive->RecordTabletMove({TInstant::Now(), tablet->GetFullTabletId(), tablet->Node->Id, result.BestNode->Id});
                     Hive->Execute(Hive->CreateRestartTablet(tabletId, result.BestNode->Id));
                 } else {
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_FAILED].Increment(1);
@@ -158,10 +158,13 @@ public:
         TNodeInfo* nodeInfo = Hive->FindNode(NodeId);
         if (nodeInfo != nullptr) {
             {
-                const auto& tablets = nodeInfo->Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING];
-                Tablets.reserve(tablets.size());
-                for (TTabletInfo* tabletInfo : tablets) {
-                    Tablets.push_back(tabletInfo->GetFullTabletId());
+                Tablets.reserve(nodeInfo->GetTabletsRunning());
+                for (const auto& [object, tablets] : nodeInfo->TabletsOfObject) {
+                    for (TTabletInfo* tabletInfo : tablets) {
+                        if (tabletInfo->GetVolatileState() == TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING) {
+                            Tablets.push_back(tabletInfo->GetFullTabletId());
+                        }
+                    }
                 }
             }
             NextKick = Tablets.begin();

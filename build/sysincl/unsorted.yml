@@ -795,7 +795,6 @@
   - alias.h
   - calendar.h
   - fetch.h
-  - gelf.h
   - gnuregex.h
   - kafs.h
   - login_cap.h

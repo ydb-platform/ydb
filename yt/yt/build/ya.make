@@ -1,0 +1,45 @@
+LIBRARY()
+
+INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
+
+SET(YT_VERSION_MAJOR 23)
+SET(YT_VERSION_MINOR 2)
+
+DEFAULT(YT_VERSION_PATCH 0)
+DEFAULT(YT_VERSION_BRANCH "local")
+
+# We define this variable in order to mute ya's warnings.
+# Actually version will be computed from SVNVERSION.
+SET(YT_VERSION "version-unknown")
+
+SET(YT_BUILD_HOST "")
+SET(YT_BUILD_MACHINE "")
+SET(YT_BUILD_TIME "")
+
+SET(HAVE_CXXABI_H 0)
+SET(HAVE_DLFCN_H 1)
+SET(HAVE_EXECINFO_H 1)
+SET(HAVE_LIBUNWIND_H 0)
+SET(HAVE_PTHREAD_H 1)
+SET(HAVE_SYS_TYPES_H 1)
+SET(HAVE_SYS_UCONTEXT_H 1)
+SET(HAVE_UCONTEXT_H 1)
+SET(HAVE_UNISTD_H 1)
+SET(HAVE_UNWIND_H 0)
+SET(PC_FROM_UCONTEXT "uc_mcontext.gregs[REG_RIP]")
+
+IF (NOT OPENSOURCE)
+    SET(YT_VERSION_TYPE "ya")
+ELSE()
+    SET(YT_VERSION_TYPE "os")
+ENDIF()
+
+SRCS(
+  config.h.in
+  build.cpp.in
+  build.h
+
+  ya_version.cpp
+)
+
+END()

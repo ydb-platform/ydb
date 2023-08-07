@@ -15,11 +15,13 @@
                         "Name"
                     ],
                     "limit": "1001",
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
                     "scan_by": [
-                        "Group [10, 10)",
                         "Name [Name2, Name4)"
                     ],
-                    "type": "Scan"
+                    "type": "Lookup"
                 }
             ]
         }

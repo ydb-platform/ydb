@@ -1,0 +1,15 @@
+#pragma once
+
+#include "stream.h"
+
+namespace NYT::NCompression::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Lz4Compress(TSource* source, TBlob* sink, bool highCompression);
+void Lz4Decompress(TSource* source, TBlob* sink);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NCompression::NDetail
+

@@ -11,6 +11,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NKikimr {
@@ -44,6 +46,7 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
+            IgnoreFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress);
             default: TBase::StateWork(ev);
         }
     }

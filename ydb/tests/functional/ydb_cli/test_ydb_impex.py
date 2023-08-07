@@ -12,8 +12,13 @@ import pyarrow.parquet as pq
 
 logger = logging.getLogger(__name__)
 
+DATA = {}
+DATA_ARRAY = {}
+DATA_ARRAY_BAD_HEADER = {}
+DATA_END_LINES = {}
+DATA_EXCESS = {}
 
-DATA_CSV = """key,id,value
+DATA["csv"] = """key,id,value
 1,1111,"one"
 2,2222,"two"
 3,3333,"three"
@@ -21,7 +26,15 @@ DATA_CSV = """key,id,value
 7,7777,"seven"
 """
 
-DATA_ARRAY_CSV = ["""key,id,value
+DATA_EXCESS["csv"] = """key,id,value,excess
+1,1111,"one",1
+2,2222,"two",1
+3,3333,"three",1
+5,5555,"five",1
+7,7777,"seven",1
+"""
+
+DATA_ARRAY["csv"] = ["""key,id,value
 1,1111,"one"
 2,2222,"two"
 3,3333,"three"
@@ -47,27 +60,35 @@ DATA_ARRAY_CSV = ["""key,id,value
 7777,7777,"seven"
 """]
 
-DATA_ARRAY_CSV_BAD_HEADER = DATA_ARRAY_CSV
-DATA_ARRAY_CSV_BAD_HEADER[0].replace("key,id,value", 'a,b,c')
+DATA_ARRAY_BAD_HEADER["csv"] = DATA_ARRAY["csv"]
+DATA_ARRAY_BAD_HEADER["csv"][0].replace("key,id,value", 'a,b,c')
 
-DATA_CSV_END_LINES = DATA_CSV.replace("\n", ",\n")
+DATA_END_LINES["csv"] = DATA["csv"].replace("\n", ",\n")
 
-DATA_TSV = DATA_CSV.replace(',', '\t')
+DATA["tsv"] = DATA["csv"].replace(',', '\t')
+DATA_EXCESS["tsv"] = DATA_EXCESS["csv"].replace(',', '\t')
 
-DATA_ARRAY_TSV = list(map(lambda s: s.replace(',', '\t'), DATA_ARRAY_CSV))
-DATA_ARRAY_TSV_BAD_HEADER = DATA_ARRAY_TSV
-DATA_ARRAY_TSV_BAD_HEADER[0].replace("key\tid\tvalue", 'a\tb\tc')
+DATA_ARRAY["tsv"] = list(map(lambda s: s.replace(',', '\t'), DATA_ARRAY["csv"]))
+DATA_ARRAY_BAD_HEADER["tsv"] = DATA_ARRAY["tsv"]
+DATA_ARRAY_BAD_HEADER["tsv"][0].replace("key\tid\tvalue", 'a\tb\tc')
 
-DATA_TSV_END_LINES = DATA_TSV.replace('\n', '\t\n')
+DATA_END_LINES["tsv"] = DATA["tsv"].replace('\n', '\t\n')
 
-DATA_JSON = """{"key":1,"id":1111,"value":"one"}
+DATA["json"] = """{"key":1,"id":1111,"value":"one"}
 {"key":2,"id":2222,"value":"two"}
 {"key":3,"id":3333,"value":"three"}
 {"key":5,"id":5555,"value":"five"}
 {"key":7,"id":7777,"value":"seven"}
 """
 
-DATA_ARRAY_JSON = ["""{"key":1,"id":1111,"value":"one"}
+DATA_EXCESS["json"] = """{"key":1,"id":1111,"value":"one","excess":1}
+{"key":2,"id":2222,"value":"two","excess":1}
+{"key":3,"id":3333,"value":"three","excess":1}
+{"key":5,"id":5555,"value":"five","excess":1}
+{"key":7,"id":7777,"value":"seven","excess":1}
+"""
+
+DATA_ARRAY["json"] = ["""{"key":1,"id":1111,"value":"one"}
 {"key":2,"id":2222,"value":"two"}
 {"key":3,"id":3333,"value":"three"}
 {"key":5,"id":5555,"value":"five"}
@@ -90,11 +111,14 @@ DATA_ARRAY_JSON = ["""{"key":1,"id":1111,"value":"one"}
 """]
 
 FILES_COUNT = 4
-DATASET_SIZE = 1000
+DATASET_SIZE = 200000
 
 ARRAYS = [pa.array([1, 2, 3, 5, 7], type=pa.uint32()), pa.array([1111, 2222, 3333, 5555, 7777], type=pa.uint64()), pa.array(["one", "two", "three", "five", "seven"], type=pa.string())]
 ARRAY_NAMES = ['key', 'id', 'value']
 DATA_PARQUET = pa.Table.from_arrays(ARRAYS, names=ARRAY_NAMES)
+
+ALL_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []), ("tsv", ["--newline-delimited"]), ("json", [])]
+ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []), ("tsv", ["--newline-delimited"])]
 
 
 def ydb_bin():
@@ -103,15 +127,24 @@ def ydb_bin():
     raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
-def create_table(session, path):
-    session.create_table(
-        path,
-        ydb.TableDescription()
-        .with_column(ydb.Column("key", ydb.OptionalType(ydb.PrimitiveType.Uint32)))
-        .with_column(ydb.Column("id", ydb.OptionalType(ydb.PrimitiveType.Uint64)))
-        .with_column(ydb.Column("value", ydb.OptionalType(ydb.PrimitiveType.Utf8)))
-        .with_primary_keys("key")
-    )
+def create_table(session, path, table_type):
+    partition_by = ""
+    if table_type == "column":
+        partition_by = "PARTITION BY HASH(key)"
+    query = \
+        """
+        CREATE TABLE `{}` (
+            key Uint32 NOT NULL,
+            id Uint64,
+            value Utf8,
+            PRIMARY KEY(key)
+        )
+        {}
+        WITH (
+            STORE = {}
+        )
+        """.format(path, partition_by, table_type)
+    session.execute_scheme(query)
 
 
 class BaseTestTableService(object):
@@ -151,19 +184,20 @@ class BaseTestTableService(object):
         return result
 
 
+@pytest.mark.parametrize("table_type", ["row", "column"])
 class TestImpex(BaseTestTableService):
 
     @classmethod
     def setup_class(cls):
         BaseTestTableService.setup_class()
 
-        session = cls.driver.table_client.session().create()
+        cls.session = cls.driver.table_client.session().create()
         cls.table_path = cls.root_dir + "/impex_table"
-        create_table(session, cls.table_path)
+        create_table(cls.session, cls.table_path, "row")
 
     def clear_table(self):
-        query = "DELETE FROM `{}`".format(self.table_path)
-        self.execute_ydb_cli_command(["yql", "-s", query])
+        self.session.drop_table(self.table_path)
+        create_table(self.session, self.table_path, self.table_type)
 
     @staticmethod
     def write_array_to_files(arr, ftype):
@@ -211,12 +245,12 @@ class TestImpex(BaseTestTableService):
             f.writelines(data)
         self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", "tempinput.{}".format(ftype)] + self.get_header_flag(ftype) + additional_args)
 
-    def run_import_from_stdin(self, ftype, data):
+    def run_import_from_stdin(self, ftype, data, additional_args=[]):
         self.clear_table()
         with open("tempinput.{}".format(ftype), "w") as f:
             f.writelines(data)
         with open("tempinput.{}".format(ftype), "r") as f:
-            self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype), stdin=f)
+            self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f)
 
     def run_import_multiple_files(self, ftype, files_count, additional_args=[]):
         self.clear_table()
@@ -225,9 +259,9 @@ class TestImpex(BaseTestTableService):
             args.append("tempinput{}.{}".format(i, ftype))
         self.execute_ydb_cli_command(args)
 
-    def run_import_multiple_files_and_stdin(self, ftype, files_count):
+    def run_import_multiple_files_and_stdin(self, ftype, files_count, additional_args=[]):
         self.clear_table()
-        args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype)
+        args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args
         for i in range(1, files_count):
             args.append("tempinput{}.{}".format(i, ftype))
         with open("tempinput0.{}".format(ftype), "r") as f:
@@ -240,137 +274,73 @@ class TestImpex(BaseTestTableService):
         self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", "tempinput.parquet"])
 
     def run_export(self, format):
+        if format == "json":
+            format = "json-unicode"
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
         output_file_name = "result.output"
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format], stdout=output_file_name)
         return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
 
-    def test_format_csv(self):
-        self.run_import("csv", DATA_CSV)
-        return self.run_export("csv")
+    def validate_gen_data(self):
+        query = "SELECT count(*) FROM `{}`".format(self.table_path)
+        output_file_name = "result.output"
+        self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan"], stdout=output_file_name)
+        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
 
-    def test_format_csv_delimeter_at_end_of_lines(self):
-        self.run_import("csv", DATA_CSV_END_LINES)
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_simple(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.run_import(ftype, DATA[ftype], additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_delimeter_at_end_of_lines_newline_delimited(self):
-        self.run_import("csv", DATA_CSV_END_LINES, ["--newline-delimited"])
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ONLY_CSV_TSV_PARAMS)
+    def test_delimeter_at_end_of_lines(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.run_import(ftype, DATA_END_LINES[ftype], additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_from_stdin(self):
-        self.run_import_from_stdin("csv", DATA_CSV)
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_excess_columns(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.run_import(ftype, DATA_EXCESS[ftype], additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_multiple_files(self):
-        self.write_array_to_files(DATA_ARRAY_CSV, "csv")
-        self.run_import_multiple_files("csv", len(DATA_ARRAY_CSV))
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_stdin(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.run_import_from_stdin(ftype, DATA[ftype], additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_multiple_files_and_stdin(self):
-        self.write_array_to_files(DATA_ARRAY_CSV, "csv")
-        self.run_import_multiple_files("csv", len(DATA_ARRAY_CSV))
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_multiple_files(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.write_array_to_files(DATA_ARRAY[ftype], ftype)
+        self.run_import_multiple_files(ftype, len(DATA_ARRAY[ftype]), additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_multiple_files_columns(self):
-        self.write_array_to_files(DATA_ARRAY_CSV_BAD_HEADER, "csv")
-        self.run_import_multiple_files("csv", len(DATA_ARRAY_CSV_BAD_HEADER), ["--columns", self.get_header("csv")])
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_multiple_files_and_stdin(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.write_array_to_files(DATA_ARRAY[ftype], ftype)
+        self.run_import_multiple_files(ftype, len(DATA_ARRAY[ftype]), additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_multiple_files_big_data(self):
-        self.gen_dataset(DATASET_SIZE, FILES_COUNT, "csv")
-        self.run_import_multiple_files("csv", FILES_COUNT)
-        return self.run_export("csv")
+    @pytest.mark.parametrize("ftype,additional_args", ONLY_CSV_TSV_PARAMS)
+    def test_multiple_files_and_columns_opt(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.write_array_to_files(DATA_ARRAY_BAD_HEADER[ftype], ftype)
+        self.run_import_multiple_files(ftype, len(DATA_ARRAY_BAD_HEADER[ftype]), ["--columns", self.get_header(ftype)] + additional_args)
+        return self.run_export(ftype)
 
-    def test_format_csv_multiple_files_newline_delimited(self):
-        self.write_array_to_files(DATA_ARRAY_CSV, "csv")
-        self.run_import_multiple_files("csv", len(DATA_ARRAY_CSV), ["--newline-delimited"])
-        return self.run_export("csv")
-
-    def test_format_csv_multiple_files_newline_delimited_and_columns(self):
-        self.write_array_to_files(DATA_ARRAY_CSV_BAD_HEADER, "csv")
-        self.run_import_multiple_files("csv", len(DATA_ARRAY_CSV_BAD_HEADER), ["--newline-delimited", "--columns", self.get_header("csv")])
-        return self.run_export("csv")
-
-    def test_format_csv_multiple_files_newline_delimited_big_data(self):
-        self.gen_dataset(DATASET_SIZE, FILES_COUNT, "csv")
-        self.run_import_multiple_files("csv", FILES_COUNT, ["--newline-delimited"])
-        return self.run_export("csv")
-
-    def test_format_tsv(self):
-        self.run_import("tsv", DATA_TSV)
-        return self.run_export("tsv")
-
-    def test_format_tsv_delimeter_at_end_of_lines(self):
-        self.run_import("tsv", DATA_TSV_END_LINES)
-        return self.run_export("tsv")
-
-    def test_format_tsv_delimeter_at_end_of_lines_newline_delimited(self):
-        self.run_import("tsv", DATA_TSV_END_LINES, ["--newline-delimited"])
-        return self.run_export("tsv")
-
-    def test_format_tsv_from_stdin(self):
-        self.run_import_from_stdin("tsv", DATA_TSV)
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files(self):
-        self.write_array_to_files(DATA_ARRAY_TSV, "tsv")
-        self.run_import_multiple_files("tsv", len(DATA_ARRAY_TSV))
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files_and_stdin(self):
-        self.write_array_to_files(DATA_ARRAY_TSV, "tsv")
-        self.run_import_multiple_files_and_stdin("tsv", len(DATA_ARRAY_TSV))
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files_columns(self):
-        self.write_array_to_files(DATA_ARRAY_TSV_BAD_HEADER, "tsv")
-        self.run_import_multiple_files("tsv", len(DATA_ARRAY_TSV_BAD_HEADER), ["--columns", self.get_header("tsv")])
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files_big_data(self):
-        self.gen_dataset(DATASET_SIZE, FILES_COUNT, "tsv")
-        self.run_import_multiple_files("tsv", FILES_COUNT)
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files_newline_delimited(self):
-        self.write_array_to_files(DATA_ARRAY_TSV, "tsv")
-        self.run_import_multiple_files("tsv", len(DATA_ARRAY_TSV), ["--newline-delimited"])
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files_newline_delimited_and_columns(self):
-        self.write_array_to_files(DATA_ARRAY_TSV_BAD_HEADER, "tsv")
-        self.run_import_multiple_files("tsv", len(DATA_ARRAY_TSV_BAD_HEADER), ["--newline-delimited", "--columns", self.get_header("tsv")])
-        return self.run_export("tsv")
-
-    def test_format_tsv_multiple_files_newline_delimited_big_data(self):
-        self.gen_dataset(DATASET_SIZE, FILES_COUNT, "tsv")
-        self.run_import_multiple_files("tsv", FILES_COUNT, ["--newline-delimited"])
-        return self.run_export("tsv")
-
-    def test_format_json(self):
-        self.run_import("json", DATA_JSON)
-        return self.run_export("json-unicode")
-
-    def test_format_json_from_stdin(self):
-        self.run_import_from_stdin("json", DATA_JSON)
-        return self.run_export("json-unicode")
-
-    def test_format_json_multiple_files(self):
-        self.write_array_to_files(DATA_ARRAY_JSON, "json")
-        self.run_import_multiple_files("json", len(DATA_ARRAY_JSON))
-        return self.run_export("json-unicode")
-
-    def test_format_json_multiple_files_and_stdin(self):
-        self.write_array_to_files(DATA_ARRAY_JSON, "json")
-        self.run_import_multiple_files_and_stdin("json", len(DATA_ARRAY_JSON))
-        return self.run_export("json-unicode")
-
-    def test_format_json_multiple_files_big_data(self):
-        self.gen_dataset(DATASET_SIZE, FILES_COUNT, "json")
-        self.run_import_multiple_files("json", FILES_COUNT)
-        return self.run_export("json-unicode")
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_big_dataset(self, table_type, ftype, additional_args):
+        self.table_type = table_type
+        self.gen_dataset(DATASET_SIZE, FILES_COUNT, ftype)
+        self.run_import_multiple_files(ftype, FILES_COUNT, additional_args)
+        return self.validate_gen_data()
 
     @pytest.mark.skip("test is failing right now")
-    def test_format_parquet(self):
+    def test_format_parquet(self, table_type):
+        self.table_type = table_type
         self.run_import_parquet(DATA_PARQUET)
         return self.run_export("csv")

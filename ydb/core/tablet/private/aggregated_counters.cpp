@@ -545,6 +545,8 @@ void TAggregatedLabeledCounters::FillGetRequestV1(
     labeledCounters->SetGroup(group);
     labeledCounters->SetDelimiter("/"); //TODO: change here to "|"
     for (ui32 i = start; i < end; ++i) {
+        if (strlen(Names[i]) == 0 || strcmp(Names[i], "PQ/") == 0)
+            continue;
         auto& labeledCounter = *labeledCounters->AddLabeledCounter();
         labeledCounter.SetValue(GetValue(i));
         labeledCounter.SetId(GetId(i));
@@ -570,7 +572,7 @@ void TAggregatedLabeledCounters::FillGetRequestV2(
         labeledCounter.SetValue(GetValue(i));
         labeledCounter.SetNameId(context->GetNameId(Names[i]));
         labeledCounter.SetAggregateFunc(NKikimr::TLabeledCounterOptions::EAggregateFunc(AggrFunc[i]));
-        labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i]));
+        labeledCounter.SetType(NKikimr::TLabeledCounterOptions::ECounterType(Types[i])); 
     }
 }
 

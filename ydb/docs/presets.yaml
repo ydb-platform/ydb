@@ -24,6 +24,8 @@ default:
   sf-name: Cloud Functions
   concept_secondary_index: ../../../../concepts/secondary_indexes
   concept_table: ../../../../concepts/datamodel/table
+  ydb-binaries-url: https://binaries.ydb.tech
+  ydb-stable-binary-archive: ydbd-stable-linux-amd64.tar.gz
   ydb_local_docker_image: cr.yandex/yc/yandex-docker-local-ydb
   ydb_local_docker_image_tag: latest
   managed-k8s-full-name: Yandex Managed Service for Kubernetes

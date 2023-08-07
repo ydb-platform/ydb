@@ -11,4 +11,6 @@ PEERDIR(
     ydb/core/formats/arrow
 )
 
+GENERATE_ENUM_SERIALIZATION(granule.h)
+
 END()

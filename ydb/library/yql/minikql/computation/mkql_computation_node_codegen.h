@@ -63,6 +63,8 @@ using TPairStateFlowCodegeneratorNode = TPairStateFlowComputationNode<TDerived>;
 template <typename TDerived>
 using TFlowSourceCodegeneratorNode = TFlowSourceComputationNode<TDerived>;
 
+template <typename TDerived>
+using TWideFlowSourceCodegeneratorNode = TWideFlowSourceComputationNode<TDerived>;
 }
 }
 #else
@@ -500,6 +502,23 @@ protected:
         } else {
             return value;
         }
+    }
+};
+
+template <typename TDerived>
+class TWideFlowSourceCodegeneratorNode: public TWideFlowSourceComputationNode<TDerived>, public ICodegeneratorInlineWideNode
+{
+using TBase = TWideFlowSourceComputationNode<TDerived>;
+protected:
+    TWideFlowSourceCodegeneratorNode(TComputationMutables& mutables,EValueRepresentation stateKind)
+        : TBase(mutables, stateKind)
+    {}
+
+    TGenerateResult GenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const final {
+        auto& context = ctx.Codegen->GetContext();
+        const auto valueType = Type::getInt128Ty(context);
+        const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
+        return static_cast<const TDerived*>(this)->DoGenGetValues(ctx, statePtr, block);
     }
 };
 

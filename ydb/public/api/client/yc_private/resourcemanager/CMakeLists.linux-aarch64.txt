@@ -54,11 +54,11 @@ set_property(TARGET client-yc_private-resourcemanager PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
 target_link_libraries(client-yc_private-resourcemanager PUBLIC
+  contrib-libs-googleapis-common-protos
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
-  contrib-libs-googleapis-common-protos
   client-yc_private-operation
   client-yc_private-servicecontrol
   contrib-libs-protobuf

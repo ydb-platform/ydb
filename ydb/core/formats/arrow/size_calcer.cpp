@@ -159,25 +159,25 @@ ui64 GetArrayDataSizeImpl<arrow::NullType>(const std::shared_ptr<arrow::Array>& 
 template <>
 ui64 GetArrayDataSizeImpl<arrow::StringType>(const std::shared_ptr<arrow::Array>& column) {
     auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column);
-    return typedColumn->total_values_length();
+    return typedColumn->total_values_length() + sizeof(arrow::StringArray::offset_type) * column->length();
 }
 
 template <>
 ui64 GetArrayDataSizeImpl<arrow::LargeStringType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::StringArray>(column);
-    return typedColumn->total_values_length();
+    auto typedColumn = std::static_pointer_cast<arrow::LargeStringArray>(column);
+    return typedColumn->total_values_length() + sizeof(arrow::LargeStringArray::offset_type) * column->length();
 }
 
 template <>
 ui64 GetArrayDataSizeImpl<arrow::BinaryType>(const std::shared_ptr<arrow::Array>& column) {
     auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column);
-    return typedColumn->total_values_length();
+    return typedColumn->total_values_length() + sizeof(arrow::BinaryArray::offset_type) * column->length();
 }
 
 template <>
 ui64 GetArrayDataSizeImpl<arrow::LargeBinaryType>(const std::shared_ptr<arrow::Array>& column) {
-    auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(column);
-    return typedColumn->total_values_length();
+    auto typedColumn = std::static_pointer_cast<arrow::LargeBinaryArray>(column);
+    return typedColumn->total_values_length() + sizeof(arrow::LargeBinaryArray::offset_type) * column->length();
 }
 
 template <>
@@ -214,7 +214,7 @@ ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
 }
 
 NKikimr::NArrow::TSerializedBatch TSerializedBatch::Build(std::shared_ptr<arrow::RecordBatch> batch) {
-    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows());
+    return TSerializedBatch(NArrow::SerializeSchema(*batch->schema()), NArrow::SerializeBatchNoCompression(batch), batch->num_rows(), NArrow::GetBatchDataSize(batch));
 }
 
 bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage) {

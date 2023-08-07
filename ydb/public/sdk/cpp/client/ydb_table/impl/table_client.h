@@ -1,9 +1,11 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_client/session_client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
@@ -11,92 +13,27 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
-#include <util/random/random.h>
-
 #include "client_session.h"
 #include "data_query.h"
 #include "request_migrator.h"
 #include "readers.h"
-#include "session_pool.h"
 
 
 namespace NYdb {
 namespace NTable {
 
-using namespace NThreading;
-
-
-//How often run session pool keep alive check
-constexpr TDuration PERIODIC_ACTION_INTERVAL = TDuration::Seconds(5);
 //How ofter run host scan to perform session balancing
 constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
-constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
-
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
 ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
-bool IsSessionCloseRequested(const TStatus& status);
-TDuration RandomizeThreshold(TDuration duration);
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
-TStatus GetStatus(const TOperation& operation);
-TStatus GetStatus(const TStatus& status);
 
-
-template<typename TResponse>
-NThreading::TFuture<TResponse> InjectSessionStatusInterception(
-        std::shared_ptr<TSession::TImpl>& impl, NThreading::TFuture<TResponse> asyncResponse,
-        bool updateTimeout,
-        TDuration timeout,
-        std::function<void(const TResponse&, TSession::TImpl&)> cb = {})
-{
-    auto promise = NThreading::NewPromise<TResponse>();
-    asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
-        Y_VERIFY(future.HasValue());
-
-        // TResponse can hold refcounted user provided data (TSession for example)
-        // and we do not want to have copy of it (for example it can cause delay dtor call)
-        // so using move semantic here is mandatory.
-        // Also we must reset captured shared pointer to session impl
-        TResponse value = std::move(future.ExtractValue());
-
-        const TStatus& status = GetStatus(value);
-        // Exclude CLIENT_RESOURCE_EXHAUSTED from transport errors which can cause to session disconnect
-        // since we have guarantee this request wasn't been started to execute.
-
-        if (status.IsTransportError() && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::BAD_SESSION) {
-            impl->MarkBroken();
-        } else if (IsSessionCloseRequested(status)) {
-            impl->MarkAsClosing();
-        } else {
-            // NOTE: About GetState and lock
-            // Simultanious call multiple requests on the same session make no sence, due to server limitation.
-            // But user can perform this call, right now we do not protect session from this, it may cause
-            // raise on session state if respoise is not success.
-            // It should not be a problem - in case of this race we close session
-            // or put it in to settler.
-            if (updateTimeout && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED) {
-                impl->ScheduleTimeToTouch(RandomizeThreshold(timeout), impl->GetState() == TSession::TImpl::EState::S_ACTIVE);
-            }
-        }
-        if (cb) {
-            cb(value, *impl);
-        }
-        impl.reset();
-        promise.SetValue(std::move(value));
-    });
-    return promise.GetFuture();
-}
-
-
-class TTableClient::TImpl: public TClientImplCommon<TTableClient::TImpl>, public IMigratorClient {
+class TTableClient::TImpl: public TClientImplCommon<TTableClient::TImpl>, public ISessionClient {
 public:
     using TReadTableStreamProcessorPtr = TTablePartIterator::TReaderImpl::TStreamProcessorPtr;
     using TScanQueryProcessorPtr = TScanQueryPartIterator::TReaderImpl::TStreamProcessorPtr;
@@ -123,7 +60,7 @@ public:
     i64 GetActiveSessionsLimit() const;
     i64 GetCurrentPoolSize() const;
     TAsyncCreateSessionResult CreateSession(const TCreateSessionSettings& settings, bool standalone,
-        TString preferedLocation = TString());
+        TString preferredLocation = TString());
     TAsyncKeepAliveResult KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings);
 
     TFuture<TStatus> CreateTable(Ydb::Table::CreateTableRequest&& request, const TCreateTableSettings& settings);
@@ -147,7 +84,7 @@ public:
 
         CacheMissCounter.Inc();
 
-        return InjectSessionStatusInterception(session.SessionImpl_,
+        return ::NYdb::NSessionPool::InjectSessionStatusInterception(session.SessionImpl_,
             ExecuteDataQueryInternal(session, query, txControl, params, settings, false),
             true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
     }
@@ -157,13 +94,13 @@ public:
         TParamsType params, const TExecDataQuerySettings& settings,
         bool fromCache) {
         TString queryKey = dataQuery.Impl_->GetTextHash();
-        auto cb = [queryKey](const TDataQueryResult& result, TSession::TImpl& session) {
+        auto cb = [queryKey](const TDataQueryResult& result, TKqpSessionCommon& session) {
             if (result.GetStatus() == EStatus::NOT_FOUND) {
-                session.InvalidateQueryInCache(queryKey);
+                static_cast<TSession::TImpl&>(session).InvalidateQueryInCache(queryKey);
             }
         };
 
-        return InjectSessionStatusInterception<TDataQueryResult>(
+        return ::NYdb::NSessionPool::InjectSessionStatusInterception<TDataQueryResult>(
             session.SessionImpl_,
             session.Client_->ExecuteDataQueryInternal(session, dataQuery, txControl, params, settings, fromCache),
             true,
@@ -194,16 +131,12 @@ public:
         const TReadTableSettings& settings);
     TAsyncReadRowsResult ReadRows(const TString& path, TValue&& keys, const TVector<TString>& columns, const TReadRowsSettings& settings);
 
-    TAsyncStatus Close(const TSession::TImpl* sessionImpl, const TCloseSessionSettings& settings);
-    TAsyncStatus CloseInternal(const TSession::TImpl* sessionImpl);
+    TAsyncStatus Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings);
+    TAsyncStatus CloseInternal(const TKqpSessionCommon* sessionImpl);
 
-    bool ReturnSession(TSession::TImpl* sessionImpl);
-    void DeleteSession(TSession::TImpl* sessionImpl);
+    bool ReturnSession(TKqpSessionCommon* sessionImpl) override;
+    void DeleteSession(TKqpSessionCommon* sessionImpl) override;
     ui32 GetSessionRetryLimit() const;
-    static void CloseAndDeleteSession(
-        std::unique_ptr<TSession::TImpl>&& impl,
-        std::shared_ptr<TTableClient::TImpl> client);
-
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
@@ -329,8 +262,8 @@ private:
             &Ydb::Table::V1::TableService::Stub::AsyncExecuteDataQuery,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
-            session.SessionImpl_->GetEndpointKey());
+            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+            );
 
         return promise.GetFuture();
     }
@@ -360,7 +293,7 @@ public:
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> RequestMigrated;
 
 private:
-    TSessionPool SessionPool_;
+    NSessionPool::TSessionPool SessionPool_;
     TRequestMigrator RequestMigrator_;
     static const TKeepAliveSettings KeepAliveSettings;
 };

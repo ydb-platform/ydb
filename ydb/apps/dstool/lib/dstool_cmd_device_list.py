@@ -49,7 +49,7 @@ def do(args):
         row['NodeId'] = device.NodeId
         row['FQDN'] = node_to_fqdn[device.NodeId]
         row['Path'] = device.Path
-        row['Type'] = kikimr_bsconfig.EPDiskType.Name(device.Type)
+        row['Type'] = common.EPDiskType.Name(device.Type)
         row['BoxId'] = device.BoxId
         row['Guid'] = device.Guid if device.Guid > 0 else 'NULL'
 

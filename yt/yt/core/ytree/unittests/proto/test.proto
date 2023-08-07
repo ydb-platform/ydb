@@ -1,0 +1,7 @@
+package NYT.NYTree.NProto;
+
+message TTestMessage
+{
+    optional int32 int32_field = 1;
+    optional string string_field = 2;
+}

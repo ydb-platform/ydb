@@ -102,8 +102,10 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     }
 
     void Complete(const TActorContext &ctx) override {
-        // Assume worst case, everything up to LastBlockedStep was planned
-        LastPlanned = Max(LastPlanned, LastBlockedStep);
+        if (!LastBlockedActor) {
+            // Assume worst case, everything up to LastBlockedStep was planned
+            LastPlanned = Max(LastPlanned, LastBlockedStep);
+        }
 
         // Assume worst case, last planned step was also acquired
         LastAcquired = Max(LastAcquired, LastPlanned);
@@ -123,6 +125,17 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             Self->Config.ReducedResolution = ReducedResolution;
             Self->Config.HaveProcessingParams = HaveProcessingParams;
             Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 1 : 0);
+
+            if (LastBlockedActor && LastPlanned < LastBlockedStep) {
+                Self->RestoreState(LastBlockedActor, LastBlockedStep);
+                return;
+            }
+
+            if (LastBlockedActor) {
+                // The previous state actor is no longer needed
+                ctx.Send(LastBlockedActor, new TEvents::TEvPoison);
+            }
+
             Self->Execute(Self->CreateTxRestoreTransactions(), ctx);
             return;
         }

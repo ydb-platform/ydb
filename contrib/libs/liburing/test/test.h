@@ -14,7 +14,8 @@ typedef struct io_uring_test_config {
 	const char *description;
 } io_uring_test_config;
 
-io_uring_test_config io_uring_test_configs[] = {
+__attribute__((__unused__))
+static io_uring_test_config io_uring_test_configs[] = {
 	{ 0, 						"default" },
 	{ IORING_SETUP_SQE128, 				"large SQE"},
 	{ IORING_SETUP_CQE32, 				"large CQE"},

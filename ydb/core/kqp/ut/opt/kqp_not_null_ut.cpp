@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -1480,7 +1481,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(Describe) {
-        TKikimrRunner kikimr;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -1488,7 +1489,9 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
             CREATE TABLE `/Root/DescribeTest` (
                 Key1 Uint64 NOT NULL,
                 Key2 Uint64,
-                Value String,
+                Value1 String,
+                Value2 PgInt2,
+                Value3 PgInt2 NOT NULL,
                 PRIMARY KEY (Key1, Key2)
             );
         )")).ExtractValueSync();
@@ -1500,12 +1503,60 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         const THashMap<std::string_view, std::string_view> columnTypes = {
             {"Key1", "Uint64"},
             {"Key2", "Uint64?"},
-            {"Value", "String?"}
+            {"Value1", "String?"},
+            {"Value2", "Pg('pgint2','',21,0,0)"},
+            {"Value3", "Pg('pgint2','',21,0,0)"}
+        };
+
+        const THashMap<std::string_view, bool> columnNullability = {
+            {"Key1", true},
+            {"Key2", false},
+            {"Value1", false},
+            {"Value2", false},
+            {"Value3", true}
         };
 
         const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
         for (const auto& column : columns) {
-            UNIT_ASSERT_VALUES_EQUAL(column.Type.ToString(), columnTypes.at(column.Name));
+            UNIT_ASSERT_VALUES_EQUAL_C(column.Type.ToString(), columnTypes.at(column.Name), column.Name);
+            UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull.value(), columnNullability.at(column.Name), column.Name);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableWithNotNullColumns) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            TTableBuilder builder;
+            builder.AddNullableColumn("1", EPrimitiveType::Uint64);
+            builder.AddNonNullableColumn("2", EPrimitiveType::Uint64);
+            builder.AddNullableColumn("3", TPgType("pgint2"));
+            builder.AddNonNullableColumn("4", TPgType("pgint2"));
+            builder.SetPrimaryKeyColumn("1");
+            auto result = session.CreateTable("/Root/NotNullCheck", builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        auto describeTableResult = session.DescribeTable("/Root/NotNullCheck").GetValueSync();
+        UNIT_ASSERT_C(describeTableResult.IsSuccess(), describeTableResult.GetIssues().ToString());
+        const THashMap<std::string_view, bool> columnNullability = {
+            {"1", false},
+            {"2", true},
+            {"3", false},
+            {"4", true},
+        };
+
+        const auto& columns = describeTableResult.GetTableDescription().GetTableColumns();
+        for (const auto& column : columns) {
+            UNIT_ASSERT_VALUES_EQUAL_C(column.NotNull.value(), columnNullability.at(column.Name), column.Name);
+        }
+
+        {
+            auto proto = NYdb::TProtoAccessor::GetProto(describeTableResult.GetTableDescription());
+            proto.mutable_columns()->begin()->set_not_null(true);
+            auto result = session.CreateTable("/Root/NotNullCheck2", TTableDescription(std::move(proto), {})).GetValueSync();
+            UNIT_ASSERT_C(!result.GetIssues().Empty(), "ok with faulty protobuf");
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Error: Not consistent column type and not_null option for column: 1"));
         }
     }
 

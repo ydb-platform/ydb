@@ -42,10 +42,10 @@ Using the extended version of SessionWindow, you can, for example, do the follow
 **Example**
 
 ```sql
-$max_len = 1000; is the maximum session length.
-$timeout = 100; is the timeout (timeout_expr in a simplified version of SessionWindow).
+$max_len = 1000; -- is the maximum session length.
+$timeout = 100; -- is the timeout (timeout_expr in a simplified version of SessionWindow).
 
-$init = ($row) -> (AsTuple($row.ts, $row.ts)); is the session status: tuple from 1) value of the temporary column ts in the session's first line and 2) in the current line
+$init = ($row) -> (AsTuple($row.ts, $row.ts)); -- is the session status: tuple from 1) value of the temporary column ts in the session's first line and 2) in the current line
 $update = ($row, $state) -> {
   $is_end_session = $row.ts - $state.0 > $max_len OR $row.ts - $state.1 > $timeout;
   $new_state = AsTuple(IF($is_end_session, $row.ts, $state.0), $row.ts);

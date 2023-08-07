@@ -91,6 +91,10 @@ namespace NYql::NConnector {
             // preserve server error
             out->Error = response.error();
 
+            if (!ErrorIsSuccess(out->Error)) {
+                break;
+            }
+
             // convert our own columnar format into arrow batch
             out->RecordBatches.push_back(APIReadSplitsResponseToArrowRecordBatch(response));
         }

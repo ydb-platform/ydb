@@ -90,13 +90,15 @@ struct TTableColumn {
     TString Name;
     TType Type;
     TString Family;
+    std::optional<bool> NotNull;
 
     TTableColumn() = default;
 
-    TTableColumn(TString name, TType type, TString family = TString())
+    TTableColumn(TString name, TType type, TString family = TString(), std::optional<bool> notNull = std::nullopt)
         : Name(std::move(name))
         , Type(std::move(type))
         , Family(std::move(family))
+        , NotNull(std::move(notNull))
     { }
 
     // Conversion from TColumn for API compatibility
@@ -521,7 +523,7 @@ private:
     TTableDescription();
     explicit TTableDescription(const Ydb::Table::CreateTableRequest& request);
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family);
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull);
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
 
     // common
@@ -928,6 +930,7 @@ struct TSessionPoolSettings {
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     using TSelf = TClientSettings;
+    using TSessionPoolSettings = TSessionPoolSettings;
 
     // Enable client query cache. Client query cache is used to map query text to
     // prepared query id for ExecuteDataQuery calls on client side.
@@ -996,6 +999,8 @@ public:
     using TOperationSyncFunc = std::function<TStatus(TSession session)>;
     using TOperationWithoutSessionFunc = std::function<TAsyncStatus(TTableClient& tableClient)>;
     using TOperationWithoutSessionSyncFunc = std::function<TStatus(TTableClient& tableClient)>;
+    using TSettings = TClientSettings;
+    using TSession = TSession;
 
 public:
     TTableClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());

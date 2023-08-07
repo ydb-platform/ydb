@@ -410,6 +410,15 @@ TString TProgram::TakeSessionId() {
     }
 }
 
+void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
+    for (const auto& p : userDataTable) {
+        if (!SavedUserDataTable_.emplace(p).second) {
+            ythrow yexception() << "UserDataTable already has user data block with key " << p.first;
+        }
+        UserDataStorage_->AddUserDataBlock(p.first, p.second);
+    }
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);

@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/signer/signer.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
@@ -28,7 +29,7 @@ NActors::IActor* CreateYqlAnalyticsPrivateProxy(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     ::NMonitoring::TDynamicCounterPtr counters,
-    const NConfig::TTokenAccessorConfig& tockenAccessorConfig
+    const ::NFq::TSigner::TPtr& signer
 );
 
 NActors::IActor* CreatePingTaskRequestActor(
@@ -40,7 +41,7 @@ NActors::IActor* CreatePingTaskRequestActor(
 
 NActors::IActor* CreateGetTaskRequestActor(
     const NActors::TActorId& sender,
-    const NConfig::TTokenAccessorConfig& tockenAccessorConfig,
+    const ::NFq::TSigner::TPtr& signer,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvGetTaskRequest> ev,
     ::NMonitoring::TDynamicCounterPtr counters

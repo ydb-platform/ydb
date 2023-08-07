@@ -2,7 +2,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 

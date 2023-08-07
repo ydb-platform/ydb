@@ -99,6 +99,8 @@ struct TEvNodeBroker {
         // internal
         //EvNodeExpire = EvListNodes + 512,
 
+        EvCompactTables = EvListNodes + 1024, // for tests
+
         EvEnd
     };
 
@@ -126,6 +128,9 @@ struct TEvNodeBroker {
     struct TEvExtendLeaseRequest : public TEventPB<TEvExtendLeaseRequest,
                                                    NKikimrNodeBroker::TExtendLeaseRequest,
                                                    EvExtendLeaseRequest> {
+    };
+
+    struct TEvCompactTables : public TEventLocal<TEvCompactTables, EvCompactTables> {
     };
 
     struct TEvNodesInfo : public TEventPreSerializedPB<TEvNodesInfo,

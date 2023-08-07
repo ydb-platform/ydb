@@ -88,8 +88,11 @@ class Platform(object):
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
 
+        self.is_wasm64 = self.arch == 'wasm64'
+        self.is_wasm = self.is_wasm64
+
         self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m or self.is_riscv32 or self.is_nds32 or self.is_armv7em or self.is_xtensa
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -120,6 +123,7 @@ class Platform(object):
 
         self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
+        self.is_emscripten = self.os == 'emscripten'
 
         self.is_none = self.os == 'none'
 
@@ -170,6 +174,7 @@ class Platform(object):
             (self.is_riscv32, 'ARCH_RISCV32'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
+            (self.is_wasm64, 'ARCH_WASM64'),
             (self.is_32_bit, 'ARCH_TYPE_32'),
             (self.is_64_bit, 'ARCH_TYPE_64'),
         ))
@@ -461,7 +466,7 @@ class Options(object):
         self.toolchain_params = self.options.toolchain_params
 
         self.presets = parse_presets(self.options.presets)
-        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS', 'USE_LOCAL_SWIG', 'SWIG_TOOL', 'SWIG_LIBRARY'))
+        userify_presets(self.presets, ('CFLAGS', 'CXXFLAGS', 'CONLYFLAGS', 'LDFLAGS', 'GO_COMPILE_FLAGS', 'GO_LINK_FLAGS'))
 
     Instance = None
 
@@ -692,8 +697,6 @@ class Build(object):
         cuda = Cuda(self)
         cuda.print_()
         CuDNN(cuda).print_()
-
-        print_swig_config()
 
         if self.ignore_local_files or host.is_windows or is_positive('NO_SVN_DEPENDS'):
             emit_with_ignore_comment('SVN_DEPENDS')
@@ -987,7 +990,7 @@ class ToolchainOptions(object):
             self.compiler_version = self.params.get('gcc_version') or self.params.get('version') or '0'
             self.compiler_version_list = list(map(int, self.compiler_version.split('.')))
 
-        # TODO(somov): Посмотреть, можно ли спрятать это поле.
+        # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
         self.arch_opt = self.params.get('arch_opt', [])
@@ -1224,6 +1227,8 @@ class GnuToolchain(Toolchain):
                     (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
                     (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
                     (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+
+                    (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
                 ])
 
             if target.is_android:
@@ -1384,6 +1389,10 @@ class GnuCompiler(Compiler):
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
             '-fno-common',
+
+            # Split all functions and data into separate sections for DCE and ICF linker passes
+            '-ffunction-sections',
+            '-fdata-sections'
         ]
 
         if self.tc.is_clang and self.target.is_linux:
@@ -1507,11 +1516,6 @@ class GnuCompiler(Compiler):
                 self.c_foptions.append('-fno-delete-null-pointer-checks')
                 self.c_foptions.append('-fabi-version=8')
 
-        # Split all functions and data into separate sections for DCE and ICF linker passes
-        # NOTE: iOS build uses -fembed-bitcode which conflicts with -ffunction-sections (only relevant for ELF targets)
-        if not self.target.is_ios:
-            self.c_foptions.extend(['-ffunction-sections', '-fdata-sections'])
-
     def configure_build_type(self):
         if self.build.is_valgrind:
             self.c_defines.append('-DWITH_VALGRIND=1')
@@ -1612,7 +1616,7 @@ class Linker(object):
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -2517,34 +2521,6 @@ class CuDNN(object):
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():
             self.cudnn_version.emit()
-
-
-def print_swig_config():
-    def get_swig_tool():
-        tool = preset('USER_SWIG_TOOL')
-        if not tool:
-            tool = which('swig')
-            if not tool:
-                raise ConfigureError('SWIG_TOOL is not specified and "swig" is not found in PATH')
-        return os.path.abspath(tool)
-
-    def get_swig_library(tool):
-        library = preset('USER_SWIG_LIBRARY')
-        if not library:
-            library, code = get_stdout_and_code((tool, '-swiglib'))
-            if code != 0:
-                raise ConfigureError('SWIG_LIBRARY is not specified and "{} -swiglib" failed'.format(tool))
-            library = library.split('\n')[0]
-        return os.path.abspath(library)
-
-    use_local_swig = to_bool(preset('USER_USE_LOCAL_SWIG'), False) or bool(preset('USER_SWIG_TOOL'))
-    if use_local_swig:
-        tool = get_swig_tool()
-        library = get_swig_library(tool)
-
-        emit('USE_LOCAL_SWIG', True)
-        emit('SWIG_TOOL', tool)
-        emit('SWIG_LIBRARY', library)
 
 
 def main():

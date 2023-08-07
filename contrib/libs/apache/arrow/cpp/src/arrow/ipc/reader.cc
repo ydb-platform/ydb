@@ -57,10 +57,10 @@
 #include "arrow/util/vector.h"
 #include "arrow/visitor_inline.h"
 
-#include "generated/File_generated.h"  // IWYU pragma: export
-#include "generated/Message_generated.h"
-#include "generated/Schema_generated.h"
-#include "generated/SparseTensor_generated.h"
+#include "generated/File.fbs.h"  // IWYU pragma: export
+#include "generated/Message.fbs.h"
+#include "generated/Schema.fbs.h"
+#include "generated/SparseTensor.fbs.h"
 
 namespace arrow {
 

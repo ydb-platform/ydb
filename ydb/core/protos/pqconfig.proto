@@ -6,7 +6,7 @@ import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/library/services/services.proto";
-import "ydb/core/protos/type_info.proto";
+import "ydb/core/scheme/protos/type_info.proto";
 
 import "library/cpp/actors/protos/actors.proto";
 
@@ -79,6 +79,8 @@ message TPQConfig {
         optional uint64 QuotaWaitDurationMs = 6 [default = 0]; // 0 means infinity
 
         optional bool PartitionReadQuotaIsTwiceWriteQuota = 7 [default = false];
+
+        optional uint32 MaxParallelConsumersPerPartition = 8 [default = 20];
 
     }
     optional TQuotingConfig QuotingConfig = 18;
@@ -251,7 +253,7 @@ message TPartitionConfig {
     optional uint64 MaxWriteInflightSize = 9 [default = 30000000]; //near 30mb
     optional uint64 BorderWriteInflightSize = 12 [default = 10000000]; //near 10mb
 
-    optional uint32 NumChannels = 10 [default = 10];
+    reserved 10; // (deprecated) NumChannels;
 
     optional uint32 TotalPartitions = 13 [default = 1];
 
@@ -483,6 +485,7 @@ message TRegisterReadSession {
 
 message TGetReadSessionsInfo {
     optional string ClientId = 1;
+    repeated uint32 Partitions = 2;
 }
 
 
@@ -530,6 +533,22 @@ message TReadSessionsInfoResponse {
 
     }
     repeated TReadSessionInfo ReadSessions = 3;
+}
+
+
+message TGetPartitionsLocation {
+    repeated uint64 Partitions = 1;
+}
+
+message TPartitionLocation {
+    optional uint32 PartitionId = 1;
+    optional uint64 NodeId = 2;
+    optional uint32 Generation = 3;
+};
+
+message TPartitionsLocationResponse {
+    optional bool Status = 1;
+    repeated TPartitionLocation Locations = 2;
 }
 
 message TLockPartition {

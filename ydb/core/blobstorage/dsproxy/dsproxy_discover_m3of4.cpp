@@ -338,8 +338,8 @@ public:
                 break;
 
             case NKikimrProto::OK:
-                SendResponseAndDie(std::make_unique<TEvBlobStorage::TEvDiscoverResult>(resp.Id, MinGeneration, resp.Buffer,
-                    BlockedGeneration));
+                SendResponseAndDie(std::make_unique<TEvBlobStorage::TEvDiscoverResult>(resp.Id, MinGeneration,
+                    resp.Buffer.ConvertToString(), BlockedGeneration));
                 break;
 
             default:

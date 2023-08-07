@@ -3,6 +3,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
+#include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/snapshot.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -109,6 +111,70 @@ public:
 
 private:
     TActorId ActorId;
+};
+
+struct TDescribeObjectResponse {
+    TDescribeObjectResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Status(status)
+        , Issues(std::move(issues))
+    {}
+
+    TDescribeObjectResponse(const TString& secretValue)
+        : SecretValue(secretValue)
+        , Status(Ydb::StatusIds::SUCCESS)
+    {}
+
+    TString SecretValue;
+    Ydb::StatusIds::StatusCode Status;
+    NYql::TIssues Issues;
+};
+
+class TDescribeObjectActor: public NActors::TActorBootstrapped<TDescribeObjectActor> {
+    STRICT_STFUNC(StateFunc,
+        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+    )
+
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+        auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
+
+        TString secretValue;
+        bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(SecretId), secretValue);
+        
+        if (isFound) {
+            Promise.SetValue(TDescribeObjectResponse(secretValue));
+        } else {
+            Promise.SetValue(TDescribeObjectResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + SecretId.GetSecretId() + "' not found") }));
+        }
+
+        PassAway();
+    }
+
+    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() {
+        return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
+    }
+
+public:
+    TDescribeObjectActor(const TString& ownerUserId, const TString& secretId, NThreading::TPromise<TDescribeObjectResponse> promise) 
+        : SecretId(ownerUserId, secretId)
+        , Promise(promise)
+    {}
+
+    void Bootstrap() {
+        if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+            Promise.SetValue(TDescribeObjectResponse(Ydb::StatusIds::INTERNAL_ERROR, { NYql::TIssue("metadata service is not active") }));
+            PassAway();
+            return;
+        }
+        
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+
+        Become(&TDescribeObjectActor::StateFunc);
+    }
+
+private:
+    const NMetadata::NSecret::TSecretId SecretId;
+    NThreading::TPromise<TDescribeObjectResponse> Promise;
 };
 
 }

@@ -231,6 +231,11 @@ NUdf::IBlockItemComparator::TPtr MakePgItemComparator(ui32 typeId) {
     throw yexception() << "PG types are not supported";
 }
 
+NUdf::IBlockItemHasher::TPtr MakePgItemHasher(ui32 typeId) {
+    Y_UNUSED(typeId);
+    throw yexception() << "PG types are not supported";
+}
+
 void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFactory>>& registry) {
     Y_UNUSED(registry);
 }
@@ -241,6 +246,13 @@ void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFacto
 namespace NYql {
 
 arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(pool);
+    return arrow::Datum();
+}
+
+arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
     Y_UNUSED(type);
     Y_UNUSED(value);
     Y_UNUSED(pool);
@@ -334,9 +346,6 @@ std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
 bool HasPgKernel(ui32 procOid) {
     Y_UNUSED(procOid);
     return false;
-}
-
-void RegisterPgKernels() {
 }
 
 std::function<NKikimr::NMiniKQL::IComputationNode* (NKikimr::NMiniKQL::TCallable&,

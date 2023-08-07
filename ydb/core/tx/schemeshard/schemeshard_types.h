@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/base/row_version.h>
+
 #include <util/generic/fwd.h>
 
 namespace NKikimr::NSchemeShard {
@@ -58,13 +60,13 @@ struct TSchemeLimits {
 
 using ETabletType = TTabletTypes;
 
-struct TVirtualTimestamp {
-    TStepId Step = InvalidStepId;
-    TTxId TxId = InvalidTxId;
+struct TVirtualTimestamp
+    : public TRowVersion
+{
+    using TRowVersion::TRowVersion;
 
     TVirtualTimestamp(TStepId step, TTxId txId)
-        : Step(step)
-        , TxId(txId)
+        : TRowVersion(step.GetValue(), txId.GetValue())
     {}
 
     bool Empty() const {
@@ -75,14 +77,26 @@ struct TVirtualTimestamp {
         return !Empty();
     }
 
-    bool operator < (const TVirtualTimestamp& ts) const {
-        Y_VERIFY_DEBUG(Step, "Comparing with unset timestamp");
-        Y_VERIFY_DEBUG(ts.Step, "Comparing with unset timestamp");
-        return Step < ts.Step || Step == ts.Step && TxId < ts.TxId;
+    TStepId GetStep() const {
+        return TStepId(Step);
     }
 
-    bool operator == (const TVirtualTimestamp& ts) const {
-        return Step == ts.Step && TxId == ts.TxId;
+    void SetStep(TStepId step) {
+        Step = step.GetValue();
+    }
+
+    TTxId GetTxId() const {
+        return TTxId(TxId);
+    }
+
+    void SetTxId(TTxId txid) {
+        TxId = txid.GetValue();
+    }
+
+    bool operator<(const TVirtualTimestamp& ts) const {
+        Y_VERIFY_DEBUG(Step, "Comparing with unset timestamp");
+        Y_VERIFY_DEBUG(ts.Step, "Comparing with unset timestamp");
+        return static_cast<const TRowVersion&>(*this) < ts;
     }
 
     TString ToString() const {

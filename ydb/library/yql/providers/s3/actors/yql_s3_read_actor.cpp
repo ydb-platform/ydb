@@ -193,7 +193,7 @@ struct TEvPrivate {
     };
 
     struct TEvReadStarted : public TEventLocal<TEvReadStarted, EvReadStarted> {
-        TEvReadStarted(CURLcode curlResponseCode, long httpResponseCode) 
+        TEvReadStarted(CURLcode curlResponseCode, long httpResponseCode)
             : CurlResponseCode(curlResponseCode), HttpResponseCode(httpResponseCode) {}
         const CURLcode CurlResponseCode;
         const long HttpResponseCode;
@@ -1287,7 +1287,7 @@ struct TReadBufferCounter {
         DecodedBytes += deltaDecodedBytes;
         DecodedRows += deltaDecodedRows;
     }
- 
+
     ui64 Value = 0;
     const ui64 Limit;
     ui64 CoroCount = 0;
@@ -2280,8 +2280,8 @@ public:
     void Bootstrap() {
         LOG_D("TS3StreamReadActor", "Bootstrap");
         QueueBufferCounter = std::make_shared<TReadBufferCounter>(
-            ReadActorFactoryCfg.DataInflight, 
-            TActivationContext::ActorSystem(), 
+            ReadActorFactoryCfg.DataInflight,
+            TActivationContext::ActorSystem(),
             QueueDataSize,
             TaskQueueDataSize,
             DownloadPaused,

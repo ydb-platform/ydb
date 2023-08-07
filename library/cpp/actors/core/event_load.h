@@ -24,6 +24,7 @@ namespace NActors {
         size_t Size = 0; // full size of serialized event section (a chunk in rope)
         size_t Tailroom = 0; // tailroom for the chunk
         size_t Alignment = 0; // required alignment
+        bool IsInline = false; // if true, goes through ordinary channel
     };
 
     struct TEventSerializationInfo {
@@ -51,7 +52,7 @@ namespace NActors {
             , SerializationInfo(original.SerializationInfo)
         {
             if (!SerializationInfo.Sections.empty()) {
-                SerializationInfo.Sections.push_back(TEventSectionInfo{0, extraBuffer.size(), 0, 0});
+                SerializationInfo.Sections.push_back(TEventSectionInfo{0, extraBuffer.size(), 0, 0, true});
             }
             Append(std::move(extraBuffer));
         }

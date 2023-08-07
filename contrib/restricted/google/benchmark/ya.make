@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.8.0)
+VERSION(1.8.2)
 
-ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.8.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/benchmark/archive/v1.8.2.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/google/benchmark/include

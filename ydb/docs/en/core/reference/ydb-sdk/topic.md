@@ -5,23 +5,72 @@ This article provides examples of how to use the {{ ydb-short-name }} SDK to wor
 
 Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
 
+## Initializing a connection {#init}
+
+{% list tabs %}
+
+- C++
+
+  To interact with YDB Topics, create an instance of the YDB driver and topic client.
+
+  The YDB driver lets the app and YDB interact at the transport layer. The driver must exist during the YDB access lifecycle and be initialized before creating a client.
+
+  Topic client ([source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) requires the YDB driver for work. It handles topics and manages read and write sessions.
+
+  App code snippet for driver initialization:
+  ```cpp
+  auto driverConfig = TDriverConfig()
+      .SetEndpoint(opts.Endpoint)
+      .SetDatabase(opts.Database)
+      .SetAuthToken(GetEnv("YDB_TOKEN"));
+
+  TDriver driver(driverConfig);
+  ```
+
+  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) и [Authentication](../../concepts/auth.md) pages.
+
+  App code snippet for creating a client:
+
+  ```cpp
+  TTopicClient topicClient(driver);
+  ```
+
+{% endlist %}
+
 ## Managing topics {#manage}
 
 ### Creating a topic {#create-topic}
 
 {% list tabs %}
 
-The only mandatory parameter for creating a topic is its path, other parameters are optional.
+- C++
 
+  The topic path is mandatory. Other parameters are optional.
+
+  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
+
+  Example of creating a topic with three partitions and ZSTD codec support:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TCreateTopicSettings()
+      .PartitioningSettings(3, 3)
+      .AppendSupportedCodecs(NYdb::NTopic::ECodec::ZSTD);
+
+  auto status = topicClient
+      .CreateTopic("my-topic", settings)  // returns TFuture<TStatus>
+      .GetValueSync();
+  ```
 - Go
+
+  The topic path is mandatory. Other parameters are optional.
 
    For a full list of supported parameters, see the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
-   Example of creating a topic with a list of supported codecs and a minimum number of partitions
+   Example of creating a topic with a list of supported codecs and a minimum number of partitions:
 
    ```go
    err := db.Topic().Create(ctx, "topic-path",
-       // optional
+     // optional
      topicoptions.CreateWithSupportedCodecs(topictypes.CodecRaw, topictypes.CodecGzip),
 
      // optional
@@ -30,6 +79,8 @@ The only mandatory parameter for creating a topic is its path, other parameters 
    ```
 
 - Python
+
+   Example of creating a topic with a list of supported codecs and a minimum number of partitions:
 
    ```python
    driver.topic_client.create_topic(topic_path,
@@ -46,11 +97,29 @@ When you update a topic, you must specify the topic path and the parameters to b
 
 {% list tabs %}
 
+- C++
+
+  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
+
+  Example of adding an [important consumer](../../concepts/topic#important-consumer) and setting two days [retention time](../../concepts/topic#retention-time) for the topic:
+
+  ```cpp
+  auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
+      .BeginAddConsumer("my-consumer")
+          .Important(true)
+      .EndAddConsumer()
+      .SetRetentionPeriod(TDuration::Days(2));
+
+  auto status = topicClient
+      .AlterTopic("my-topic", alterSettings)  // returns TFuture<TStatus>
+      .GetValueSync();
+  ```
+
 - Go
 
    For a full list of supported parameters, see the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#AlterOption).
 
-   Example of adding a consumer to a topic
+   Example of adding a consumer to a topic:
 
    ```go
    err := db.Topic().Alter(ctx, "topic-path",
@@ -70,6 +139,24 @@ When you update a topic, you must specify the topic path and the parameters to b
 ### Getting topic information {#describe-topic}
 
 {% list tabs %}
+
+- C++
+
+  Use `DescribeTopic` method to get information about topic.
+
+  For a full list of description fields, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L163).
+
+  Example of using topic description:
+
+  ```cpp
+  auto result = topicClient.DescribeTopic("my-topic").GetValueSync();
+  if (result.IsSuccess()) {
+      const auto& description = result.GetTopicDescription();
+      std::cout << "Topic description: " << GetProto(description) << std::endl;
+  }
+  ```
+
+  There is another method `DescribeConsumer` to get informtaion about consumer.
 
 - Go
 
@@ -97,6 +184,12 @@ To delete a topic, just specify the path to it.
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  auto status = topicClient.DropTopic("my-topic").GetValueSync();
+  ```
+
 - Go
 
    ```go
@@ -115,9 +208,27 @@ To delete a topic, just specify the path to it.
 
 ### Connecting to a topic for message writes {#start-writer}
 
-Only connections with matching producer_id and message_group_id are currently supported. This restriction will be removed in the future.
+Only connections with matching [producer and message group](../../concepts/topic#producer-id) identifiers are currently supported (`producer_id` shoud be equal to `message_group_id`). This restriction will be removed in the future.
 
 {% list tabs %}
+
+- C++
+
+  The write session object with `IWriteSession` interface is used to connect to a topic for writing.
+
+  For a full list of write session settings, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+
+  Example of creating a write session:
+
+  ```cpp
+  TString producerAndGroupID = "group-id";
+  auto settings = TWriteSessionSettings()
+      .Path("my-topic")
+      .ProducerId(producerAndGroupID)
+      .MessageGroupId(producerAndGroupID);
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
 - Go
 
@@ -142,6 +253,40 @@ Only connections with matching producer_id and message_group_id are currently su
 ### Asynchronous message writes {#async-write}
 
 {% list tabs %}
+
+- C++
+
+  `IWriteSession` interface allows asynchronous write.
+
+  The user processes three kinds of events in a loop: `TReadyToAcceptEvent`, `TAcksEvent`, and `TSessionClosedEvent`.
+
+  For each kind of event user can set a handler in write session settings before session creation. Also, a common handler can be set.
+
+  If handler is not set for a particular event, it will be delivered to SDK client via `GetEvent` / `GetEvents` methods. `WaitEvent` method allows user to await for a next event in non-blocking way with `TFuture<void>()` interface.
+
+  To write a message, user uses a move-only `TContinuationToken` object, which has been created by the SDK and has been delivered to the user with a `TReadyToAcceptEvent` event. During write user can set an arbitrary sequential number and a message creation timestamp. By default they are generated by the SDK.
+
+  `Write` is asynchronous. Data from messages is processed and stored in the internal buffer. Settings `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, and `BatchFlushSizeBytes` control sending in the background. Write session reconnects to the YDB if the connection fails and resends the message if possible, with regard to `RetryPolicy` setting. If an error that cannot be repeated is received, write session stops and sends `TSessionClosedEvent` to the client.
+
+  Example of writing using event loop without any handlers set up:
+  ```cpp
+  // Event loop
+  while (true) {
+      // Get event
+      // May block for a while if write session is busy
+      TMaybe<TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+
+      if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+          session->Write(std::move(event.ContinuationToken), "This is yet another message.");
+
+      } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+          std::cout << ackEvent->DebugString() << std::endl;
+
+      } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+          break;
+      }
+  }
+  ```
 
 - Go
 
@@ -200,6 +345,35 @@ Only connections with matching producer_id and message_group_id are currently su
 
 {% list tabs %}
 
+- C++
+
+  `IWriteSession` interface allows getting server acknowledgments for writes.
+
+  Status of server-side message write is represented with `TAcksEvent`. One event can contain the statuses of several previously sent messages.Status is one of the following: message write is confirmed (`EES_WRITTEN`), message is discarded as a duplicate of a previously written message (`EES_ALREADY_WRITTEN`) or message is discarded because of failure (`EES_DISCARDED`).
+
+  Example of setting TAcksEvent handler for a write session:
+  ```cpp
+  auto settings = TWriteSessionSettings()
+    // other settings are set here
+    .EventHandlers(
+      TWriteSessionSettings::TEventHandlers()
+        .AcksHandler(
+          [&](TWriteSessionEvent::TAcksEvent& event) {
+            for (const auto& ack : event.Acks) {
+              if (ack.State == TWriteAck::EEventState::EES_WRITTEN) {
+                ackedSeqNo.insert(ack.SeqNo);
+                std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
+              }
+            }
+          }
+        )
+    );
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
+
+  In this write session user does not receive `TAcksEvent` events in the `GetEvent` / `GetEvents` loop. Instead, SDK will call given handler on every acknowledgment coming from server. In the same way user can set up handlers for other types of events.
+
 - Go
 
    When connected, you can specify the synchronous message write option: topicoptions.WithSyncWrite(true). Then Write will only return after receiving a confirmation from the server that all messages passed in the call have been saved. If necessary, the SDK will reconnect and retry sending messages as usual. In this mode, the context only controls the response time from the SDK, meaning the SDK will continue trying to send messages even after the context is canceled.
@@ -252,13 +426,32 @@ Only connections with matching producer_id and message_group_id are currently su
 
 ### Selecting a codec for message compression {#codec}
 
-By default, the SDK selects the codec automatically (subject to topic settings). In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
+For more details on using data compression for topics, see [here](../../concepts/topic#message-codec).
 
-If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
 {% list tabs %}
 
+- C++
+
+  The message compression can be set on the [write session creation](#start-writer) with `Codec` and `CompressionLevel` settings. By default, GZIP codec is chosen.
+
+  Example of creating a write session with no data compression:
+
+  ```cpp
+  auto settings = TWriteSessionSettings()
+    // other settings are set here
+    .Codec(ECodec::RAW);
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
+
+  Write session allows sending a message compressed with other codec. For this use `WriteEncoded` method, specify codec used and original message byte size. The codec must be allowed in topic settings.
+
 - Go
+
+   By default, the SDK selects the codec automatically based on topic settings. In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
+
+   If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
    ```go
    producerAndGroupID := "group-id"
@@ -269,6 +462,10 @@ If necessary, a fixed codec can be set in the connection options. It will then b
    ```
 
 - Python
+
+   By default, the SDK selects the codec automatically based on topic settings. In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then it sometimes tries to compress messages with all the available codecs, and then selects the codec that yields the smallest message size. If the list of allowed codecs for the topic is empty, the SDK makes automatic selection between Raw and Gzip codecs.
+
+   If necessary, a fixed codec can be set in the connection options. It will then be used and no measurements will be taken.
 
    ```python
    writer = driver.topic_client.writer(topic_path,
@@ -282,11 +479,27 @@ If necessary, a fixed codec can be set in the connection options. It will then b
 
 ### Connecting to a topic for message reads {#start-reader}
 
-To create a connection to the existing `my-topic` topic via the added `my-consumer` consumer, use the following code:
-
 {% list tabs %}
 
+- C++
+
+  The read session object with `IReadSession` interface is used to connect to one or more topics for reading.
+
+  For a full list of read session settings, see `TReadSessionSettings` class in the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1344).
+
+  To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .ConsumerName("my-consumer")
+      .AppendTopics("my-topic");
+
+  auto session = topicClient.CreateReadSession(settings);
+  ```
+
 - Go
+
+  To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 
    ```go
    reader, err := db.Topic().StartReader("my-consumer", topicoptions.ReadTopic("my-topic"))
@@ -297,15 +510,32 @@ To create a connection to the existing `my-topic` topic via the added `my-consum
 
 - Python
 
+  To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
+
    ```python
    reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
    ```
 
 {% endlist %}
 
-You can also use the advanced connection creation option to specify multiple topics and set read parameters. The following code will create a connection to the `my-topic` and `my-specific-topic` topics via the `my-consumer` consumer and also set the time to start reading messages:
+Additional options are used to specify multiple topics and other parameters.
+To establish a connection to the `my-topic` and `my-specific-topic` topics using the `my-consumer` consumer and also set the time to start reading messages, use the following code:
 
 {% list tabs %}
+
+- C++
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .ConsumerName("my-consumer")
+      .AppendTopics("my-topic")
+      .AppendTopics(
+          TTopicReadSettings("my-specific-topic")
+              .ReadFromTimestamp(someTimestamp)
+      );
+
+  auto session = topicClient.CreateReadSession(settings);
+  ```
 
 - Go
 
@@ -333,19 +563,38 @@ You can also use the advanced connection creation option to specify multiple top
 
 ### Reading messages {#reading-messages}
 
-The server stores the [consumer offset](../../concepts/topic.md#consumer-offset). After reading a message, the client can [send a commit to the server](#commit). The consumer offset will change and only uncommitted messages will be read in case of a new connection.
+The server stores the [consumer offset](../../concepts/topic.md#consumer-offset). After reading a message, the client should [send a commit to the server](#commit). The consumer offset changes and only uncommitted messages will be read in case of a new connection.
 
 You can read messages without a [commit](#no-commit) as well. In this case, all uncommited messages, including those processed, will be read if there is a new connection.
 
 Information about which messages have already been processed can be [saved on the client side](#client-commit) by sending the starting consumer offset to the server when creating a new connection. This does not change the consumer offset on the server.
 
-The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+{% list tabs %}
+
+- C++
+
+  The user processes several kinds of events in a loop: `TDataReceivedEvent`, `TCommitOffsetAcknowledgementEvent`, `TStartPartitionSessionEvent`, `TStopPartitionSessionEvent`, `TPartitionSessionStatusEvent`, `TPartitionSessionClosedEvent` and `TSessionClosedEvent`.
+
+  For each kind of event user can set a handler in read session settings before session creation. Also, a common handler can be set.
+
+  If handler is not set for a particular event, it will be delivered to SDK client via `GetEvent` / `GetEvents` methods. `WaitEvent` method allows user to await for a next event in non-blocking way with `TFuture<void>()` interface.
+
+- Go
+
+  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+
+{% endlist %}
+
 
 ### Reading without a commit {#no-commit}
 
-To read messages one by one, use the following code:
+#### Reading messages one by one
 
 {% list tabs %}
+
+- C++
+
+Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -371,9 +620,29 @@ To read messages one by one, use the following code:
 
 {% endlist %}
 
-To read message batches, use the following code:
+#### Reading message batches
 
 {% list tabs %}
+
+- C++
+
+  One simple way to read messages is to use `SimpleDataHandlers` setting when creating a read session. With it you only set a handler for a `TDataReceivedEvent`. SDK will call it for each batch of messages that came from server. By default, SDK does not send back acknowledgments of successful reads.
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .EventHandlers_.SimpleDataHandlers(
+          [](TReadSessionEvent::TDataReceivedEvent& event) {
+              std::cout << "Get data event " << DebugString(event);
+          }
+      );
+
+  auto session = topicClient.CreateReadSession(settings);
+
+  // Wait SessionClosed event.
+  ReadSession->GetEvent(/* block = */true);
+  ```
+
+  In this example client creates read session and just awaits session close in the main thread. All other event types are handled by SDK.
 
 - Go
 
@@ -405,9 +674,13 @@ Confirmation of message processing (commit) informs the server that the message 
 
 For example, if messages 1, 2, 3 are received from the server, the program processes them in parallel and sends confirmations in the following order: 1, 3, 2. In this case, message 1 will be committed first, and messages 2 and 3 will be committed only after the server receives confirmation of the processing of message 2.
 
-To commit messages one by one, use the following code:
+#### Reading messages one by one with commits
 
 {% list tabs %}
+
+- C++
+
+Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceivedEvent` represents a batch of read messages.
 
 - Go
 
@@ -435,9 +708,28 @@ To commit messages one by one, use the following code:
 
 {% endlist %}
 
-To commit message batches, use the following code:
+#### Reading message batches with commits
 
 {% list tabs %}
+
+- C++
+
+  Same as [above example](#no-commit), when using `SimpleDataHandlers` handlers you only set handler for a `TDataReceivedEvent`. SDK will call it for each batch of messages that came from server. By setting `commitDataAfterProcessing = true`, you tell SDK to send back commits after executing a handler for corresponding event.
+
+  ```cpp
+  auto settings = TReadSessionSettings()
+      .EventHandlers_.SimpleDataHandlers(
+          [](TReadSessionEvent::TDataReceivedEvent& event) {
+              std::cout << "Get data event " << DebugString(event);
+          }
+          , /* commitDataAfterProcessing = */true
+      );
+
+  auto session = topicClient.CreateReadSession(settings);
+
+  // Wait SessionClosed event.
+  ReadSession->GetEvent(/* block = */true);
+  ```
 
 - Go
 
@@ -465,11 +757,17 @@ To commit message batches, use the following code:
 
 {% endlist %}
 
-#### Reading with consumer offset storage on the client side {#client-commit}
+### Reading with consumer offset storage on the client side {#client-commit}
 
 When reading starts, the client code must transmit the starting consumer offset to the server:
 
 {% list tabs %}
+
+- C++
+
+  Setting the starting offset for reading is not supported in the current C++ SDK.
+
+  The `ReadFromTimestamp` setting is used for reading only messages with write timestamps no less than the given one.
 
 - Go
 
@@ -531,6 +829,21 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 {% list tabs %}
 
+- C++
+
+  The `TStopPartitionSessionEvent` class is used for soft reading interruption. It helps user to stop message processing gracefully.
+
+  Example of event loop fragment:
+
+  ```cpp
+  auto event = ReadSession->GetEvent(/*block=*/true);
+  if (auto* stopPartitionSessionEvent = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+      stopPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
 - Go
 
    The client code immediately receives all messages from the buffer (on the SDK side) even if they are not enough to form a batch during batch processing.
@@ -564,6 +877,23 @@ In case of a _hard interruption_, the client receives a notification that it is 
 #### Hard reading interruption {#hard-stop}
 
 {% list tabs %}
+
+- C++
+
+  The hard interruption of reading messages is implemented using an `TPartitionSessionClosedEvent` event. It can be received either as soft interrupt confirmation response, or in the case of lost connection. The user can find out the reason for session closing using the `GetReason` method.
+
+  Example of event loop fragment:
+
+  ```cpp
+  auto event = ReadSession->GetEvent(/*block=*/true);
+  if (auto* partitionSessionClosedEvent = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+      if (partitionSessionClosedEvent->GetReason() == TPartitionSessionClosedEvent::EReason::ConnectionLost) {
+          std::cout << "Connection with partition was lost" << std::endl;
+      }
+  } else {
+    // other event types
+  }
+  ```
 
 - Go
 

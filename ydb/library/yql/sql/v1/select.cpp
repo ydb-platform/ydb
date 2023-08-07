@@ -1,5 +1,5 @@
 #include "sql.h"
-#include "node.h"
+#include "source.h"
 
 #include "context.h"
 
@@ -119,10 +119,8 @@ public:
             if (IsSubquery()) {
                 /// should be not used?
                 auto columnsPtr = Source->GetColumns();
-                if (columnsPtr && (columnsPtr->All || columnsPtr->QualifiedAll)) {
+                if (columnsPtr && (columnsPtr->All || columnsPtr->QualifiedAll || columnsPtr->List.size() == 1)) {
                     Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
-                } else if (columnsPtr && columnsPtr->List.size() == 1) {
-                    Node = Y("Member", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))), Q(columnsPtr->List.front()));
                 } else {
                     ctx.Error(Pos) << "Source used in expression should contain one concrete column";
                     return false;
@@ -582,10 +580,8 @@ public:
         }
         if (src && Subquery->GetSource()->IsSelect()) {
             auto columnsPtr = &Columns;
-            if (columnsPtr && (columnsPtr->All || columnsPtr->QualifiedAll)) {
+            if (columnsPtr && (columnsPtr->All || columnsPtr->QualifiedAll || columnsPtr->List.size() == 1)) {
                 Node = Y("SingleMember", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))));
-            } else if (columnsPtr && columnsPtr->List.size() == 1) {
-                Node = Y("Member", Y("SqlAccess", Q("dict"), Y("Take", Node, Y("Uint64", Q("1"))), Y("Uint64", Q("0"))), Q(columnsPtr->List.front()));
             } else {
                 ctx.Error(Pos) << "Source used in expression should contain one concrete column";
                 return false;
@@ -1164,6 +1160,10 @@ public:
         return Settings;
     }
 
+    bool HasSelectResult() const final {
+        return !Settings.Discard;
+    }
+
     TPtr DoClone() const final {
         return new TReduceSource(Pos, Mode, Source->CloneSource(), CloneContainer(OrderBy),
             CloneContainer(Keys), CloneContainer(Args), SafeClone(Udf), SafeClone(Having), Settings,
@@ -1378,6 +1378,10 @@ public:
 
     TWriteSettings GetWriteSettings() const override {
         return Settings;
+    }
+
+    bool HasSelectResult() const override {
+        return !Settings.Discard;
     }
 
     TNodePtr DoClone() const final {
@@ -1660,7 +1664,6 @@ public:
                 return false;
             }
         }
-
         return true;
     }
 
@@ -1751,6 +1754,10 @@ public:
 
     bool IsSelect() const override {
         return true;
+    }
+
+    bool HasSelectResult() const override {
+        return !Settings.Discard;
     }
 
     bool IsStream() const override {
@@ -1866,7 +1873,7 @@ private:
                 } else if (column) {
                     label = isJoin && source && *source ? DotJoin(*source, *column) : *column;
                 } else {
-                    label = TStringBuilder() << "column" << Columns.List.size();
+                    label = Columns.AddUnnamed();
                     hasName = false;
                     if (ctx.WarnUnnamedColumns) {
                         ctx.Warning(term->GetPos(), TIssuesIds::YQL_UNNAMED_COLUMN)
@@ -1874,10 +1881,9 @@ private:
                     }
                 }
             }
-            if (!Columns.Add(&label, false, false, true, hasName)) {
+            if (hasName && !Columns.Add(&label, false, false, true)) {
                 ctx.Error(Pos) << "Duplicate column: " << label;
                 hasError = true;
-                continue;
             }
         }
 
@@ -2062,6 +2068,7 @@ private:
             }
 
             auto column = Columns.List.begin();
+            auto isNamedColumn = Columns.NamedColumns.begin();
             for (auto& term: Terms) {
                 auto sourceName = term->GetSourceName();
                 if (!term->IsAsterisk()) {
@@ -2077,9 +2084,12 @@ private:
                         lambdaPos = term->GetPos();
                         aliasPos = term->GetLabelPos() ? *term->GetLabelPos() : lambdaPos;
                     }
-                    auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(aliasPos, *column), BuildLambda(lambdaPos, Y("row"), body, "res"));
+                    auto projectItem = Y("SqlProjectItem", "projectCoreType", BuildQuotedAtom(aliasPos, *isNamedColumn ? *column : ""), BuildLambda(lambdaPos, Y("row"), body, "res"));
                     if (term->IsImplicitLabel() && ctx.WarnOnAnsiAliasShadowing) {
                         projectItem = L(projectItem, Q(Y(Q(Y(Q("warnShadow"))))));
+                    }
+                    if (!*isNamedColumn) {
+                        projectItem = L(projectItem, Q(Y(Q(Y(Q("autoName"))))));
                     }
                     sqlProjectArgs = L(sqlProjectArgs, projectItem);
                 } else {
@@ -2110,6 +2120,7 @@ private:
                     sqlProjectArgs = L(sqlProjectArgs, Y("SqlProjectStarItem", "projectCoreType", BuildQuotedAtom(Pos, *sourceName), BuildLambda(Pos, Y("row"), terms, "res"), Q(options)));
                 }
                 ++column;
+                ++isNamedColumn;
             }
         }
 
@@ -2357,6 +2368,10 @@ public:
 
     bool IsSelect() const override {
         return false;
+    }
+
+    bool HasSelectResult() const override {
+        return !Settings.Discard;
     }
 
     bool IsStream() const override {
@@ -2663,6 +2678,10 @@ public:
         return true;
     }
 
+    bool HasSelectResult() const override {
+        return !Settings.Discard;
+    }
+
     TWriteSettings GetWriteSettings() const override {
         return Settings;
     }
@@ -2857,6 +2876,10 @@ public:
         return Source->IsSelect();
     }
 
+    bool HasSelectResult() const override {
+        return Source->HasSelectResult();
+    }
+
     TPtr DoClone() const final {
         return MakeIntrusive<TSelect>(Pos, Source->CloneSource(), SafeClone(SkipTake));
     }
@@ -2890,6 +2913,10 @@ public:
 
     bool IsSelect() const override {
         return true;
+    }
+
+    bool HasSelectResult() const override {
+        return Source->HasSelectResult();
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -2941,11 +2968,15 @@ public:
         auto columns = Source->GetColumns();
         if (columns && !columns->All && !(columns->QualifiedAll && ctx.SimpleColumns)) {
             auto list = Y();
-            for (auto& c: columns->List) {
+            YQL_ENSURE(columns->List.size() == columns->NamedColumns.size());
+            for (size_t i = 0; i < columns->List.size(); ++i) {
+                auto& c = columns->List[i];
                 if (c.EndsWith('*')) {
                     list = L(list, Q(Y(Q("prefix"), BuildQuotedAtom(Pos, c.substr(0, c.size() - 1)))));
-                } else {
+                } else if (columns->NamedColumns[i]) {
                     list = L(list, BuildQuotedAtom(Pos, c));
+                } else {
+                    list = L(list, Q(Y(Q("auto"))));
                 }
             }
             settings = L(settings, Q(Y(Q("columns"), Q(list))));
@@ -2960,7 +2991,7 @@ public:
             return false;
         }
         node = L(node, Y("let", "output", output));
-        if (WriteResult) {
+        if (WriteResult || writeSettings.Discard) {
             if (EOrderKind::None == Source->GetOrderKind() && ctx.UseUnordered(*Source)) {
                 node = L(node, Y("let", "output", Y("Unordered", "output")));
             }

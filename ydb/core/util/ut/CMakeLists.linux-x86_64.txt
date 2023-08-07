@@ -53,15 +53,15 @@ target_sources(ydb-core-util-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/lf_stack_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/log_priority_mute_checker_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/lz4_data_generator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/operation_queue_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/operation_queue_priority_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/operation_queue_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/page_map_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/queue_inplace_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/queue_oneone_inplace_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/simple_cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/stlog_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/time_series_vec_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/token_bucket_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/ui64id_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/ulid_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/wildcard_ut.cpp
 )

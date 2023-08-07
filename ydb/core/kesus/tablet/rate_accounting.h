@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/kesus.pb.h>
-#include <ydb/core/util/time_series_vec.h>
+#include <ydb/library/time_series_vec/time_series_vec.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/actor.h>

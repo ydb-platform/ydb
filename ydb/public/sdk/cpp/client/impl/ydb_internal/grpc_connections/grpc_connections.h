@@ -102,7 +102,7 @@ public:
         {
             SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
         } else {
-            auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint);
+            auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
             if (!endpoint) {
                 return {nullptr, TEndpointKey()};
             }
@@ -139,7 +139,6 @@ public:
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
-        const TEndpointKey& preferredEndpoint,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         using NGrpc::TGrpcStatus;
@@ -165,8 +164,6 @@ public:
                 }
             });
         }
-
-        auto endpointPolicy = requestSettings.EndpointPolicy;
 
         WithServiceConnection<TService>(
             [this, request = std::move(request), userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), dbState]
@@ -268,7 +265,7 @@ public:
 
                 serviceConnection->DoAdvancedRequest(std::move(request), std::move(responseCbLow), rpc, meta,
                     context.get());
-            }, dbState, preferredEndpoint, endpointPolicy);
+            }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
     template<typename TService, typename TRequest, typename TResponse>
@@ -280,7 +277,6 @@ public:
         TDuration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         bool poll = false,
-        const TEndpointKey& preferredEndpoint = TEndpointKey(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         if (!TryCreateContext(context)) {
@@ -322,7 +318,6 @@ public:
             rpc,
             dbState,
             requestSettings,
-            preferredEndpoint,
             std::move(context));
     }
 
@@ -349,7 +344,6 @@ public:
             rpc,
             dbState,
             requestSettings,
-            TEndpointKey(),
             nullptr);
     }
 
@@ -361,7 +355,6 @@ public:
         TDbDriverStatePtr dbState,
         TDuration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
-        const TEndpointKey& preferredEndpoint = TEndpointKey(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         auto operationCb = [userResponseCb = std::move(userResponseCb)](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
@@ -381,7 +374,6 @@ public:
             deferredTimeout,
             requestSettings,
             true, // poll
-            preferredEndpoint,
             context);
     }
 
@@ -410,11 +402,8 @@ public:
             return;
         }
 
-        auto endpointPolicy = requestSettings.EndpointPolicy;
-
         WithServiceConnection<TService>(
-            [request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
+            [request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
                     responseCb(std::move(status), nullptr);
                     return;
@@ -489,7 +478,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TEndpointKey(), endpointPolicy);
+            }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
     template<class TService, class TRequest, class TResponse, class TCallback>
@@ -508,8 +497,6 @@ public:
             connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
         }
-
-        auto endpointPolicy = requestSettings.EndpointPolicy;
 
         WithServiceConnection<TService>(
             [connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
@@ -586,7 +573,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TEndpointKey(), endpointPolicy);
+            }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;

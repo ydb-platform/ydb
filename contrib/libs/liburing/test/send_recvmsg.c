@@ -185,22 +185,11 @@ static void *recv_fn(void *data)
 
 	if ((rd->buf_ring || rd->buf_select) && !rd->no_buf_add) {
 		if (rd->buf_ring) {
-			struct io_uring_buf_reg reg = { };
-			void *ptr;
-
-			if (posix_memalign(&ptr, 4096, 4096))
-				goto err;
-
-			reg.ring_addr = (unsigned long) ptr;
-			reg.ring_entries = 1;
-			reg.bgid = BUF_BGID;
-			if (io_uring_register_buf_ring(&ring, &reg, 0)) {
+			br = io_uring_setup_buf_ring(&ring, 1, BUF_BGID, 0, &ret);
+			if (!br) {
 				no_pbuf_ring = 1;
 				goto out;
 			}
-
-			br = ptr;
-			io_uring_buf_ring_init(br);
 			io_uring_buf_ring_add(br, buf, sizeof(buf), BUF_BID,
 					      io_uring_buf_ring_mask(1), 0);
 			io_uring_buf_ring_advance(br, 1);
@@ -247,9 +236,9 @@ static void *recv_fn(void *data)
 	ret = do_recvmsg(&ring, buf, rd);
 	close(sockfd);
 
-	io_uring_queue_exit(&ring);
 	if (br)
-		free(br);
+		io_uring_free_buf_ring(&ring, br, 1, BUF_BGID);
+	io_uring_queue_exit(&ring);
 err:
 	return (void *)(intptr_t)ret;
 out:
@@ -257,7 +246,7 @@ out:
 out_no_ring:
 	pthread_mutex_unlock(mutex);
 	if (br)
-		free(br);
+		io_uring_free_buf_ring(&ring, br, 1, BUF_BGID);
 	return NULL;
 }
 

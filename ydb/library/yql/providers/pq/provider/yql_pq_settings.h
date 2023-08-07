@@ -41,7 +41,7 @@ struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher
         const TPqGatewayConfig& config,
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds);
+        THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds);
 
     TString GetDatabaseForTopic(const TString& cluster) const;
 

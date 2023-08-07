@@ -37,7 +37,7 @@ namespace NUnifiedAgent {
         grpc_core::ExecCtx execCtx;
         IOCallback->Ref();
         Y_VERIFY(grpc_cq_begin_op(CompletionQueue.cq(), this));
-        grpc_cq_end_op(CompletionQueue.cq(), this, GRPC_ERROR_NONE,
+        grpc_cq_end_op(CompletionQueue.cq(), this, y_absl::OkStatus(),
                        [](void* self, grpc_cq_completion*) {
                            Y_VERIFY(static_cast<TGrpcNotification*>(self)->InQueue.exchange(false));
                        },

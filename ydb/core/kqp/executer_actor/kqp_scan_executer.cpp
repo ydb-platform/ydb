@@ -67,8 +67,7 @@ public:
         Y_VERIFY_DEBUG(false, "You shall not pass!");
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.DataShardLocks.empty());
-        YQL_ENSURE(!Request.ValidateLocks);
-        YQL_ENSURE(!Request.EraseLocks);
+        YQL_ENSURE(Request.LocksOp == ELocksOp::Unspecified);
         YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
         YQL_ENSURE(Request.Snapshot.IsValid());
 
@@ -256,6 +255,7 @@ private:
             task.Meta.ExecuterId = SelfId();
             task.Meta.NodeId = nodeId;
             task.Meta.ScanTask = true;
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
             return task;
         }
 
@@ -266,6 +266,7 @@ private:
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
             task.Meta.ScanTask = true;
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
             tasks.push_back(task.Id);
             ++cnt;
             return task;
@@ -402,6 +403,7 @@ private:
                         task.Meta.ExecuterId = SelfId();
                         task.Meta.NodeId = nodeId;
                         task.Meta.ScanTask = true;
+                        task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
                     }
                 }
@@ -467,6 +469,7 @@ private:
 
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }
@@ -572,31 +575,19 @@ private:
             return;
         }
 
-        // NodeId -> {Tasks}
-        THashMap<ui64, TVector<ui64>> scanTasks;
         ui32 nShardScans = 0;
-        ui32 nScanTasks = 0;
-
         TVector<ui64> computeTasks;
 
         InitializeChannelProxies();
 
+        // calc stats
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-
+            
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // Task with source
                 if (!task.Meta.Reads) {
-                    scanTasks[task.Meta.NodeId].emplace_back(task.Id);
-                    nScanTasks++;
                     continue;
-                }
-
-                if (stageInfo.Meta.IsSysView()) {
-                    computeTasks.emplace_back(task.Id);
-                } else {
-                    scanTasks[task.Meta.NodeId].emplace_back(task.Id);
-                    nScanTasks++;
                 }
 
                 nShardScans += task.Meta.Reads->size();
@@ -606,17 +597,15 @@ private:
                     }
                 }
 
-            } else {
-                computeTasks.emplace_back(task.Id);
             }
         }
 
-
-        if (computeTasks.size() + nScanTasks > Request.MaxComputeActors) {
-            LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
+        if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
+            // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
+            LOG_N("Too many compute actors: totalTasks=" << TasksGraph.GetTasks().size());
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Requested too many execution units: " << (computeTasks.size() + nScanTasks)));
+                    << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
             return;
         }
 
@@ -624,12 +613,9 @@ private:
             prepareTasksSpan.End();
         }
 
-        LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"
-            << ", " << nScanTasks << " scan tasks on " << scanTasks.size() << " nodes"
-            << ", totalShardScans: " << nShardScans << ", execType: Scan"
-            << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
+        LOG_D("TotalShardScans: " << nShardScans);
 
-        ExecuteScanTx(std::move(computeTasks), std::move(scanTasks), std::move(snapshot));
+        ExecuteScanTx(std::move(snapshot));
 
         Become(&TKqpScanExecuter::ExecuteState);
         if (ExecuterStateSpan) {
@@ -669,29 +655,21 @@ public:
     }
 
 private:
-    void ExecuteScanTx(TVector<ui64>&& computeTasks, THashMap<ui64, TVector<ui64>>&& tasksPerNode,
-        TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
-        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), tasksPerNode.size());
-        for (const auto& [_, tasks]: tasksPerNode) {
-            for (const auto& task : tasks) {
-                PendingComputeTasks.insert(task);
-            }
-        }
-
-        for (auto& task : computeTasks) {
-            PendingComputeTasks.insert(task);
-        }
-
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), std::move(computeTasks),
-            std::move(tasksPerNode), GetSnapshot(),
+    void ExecuteScanTx(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
+        
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {},
+            {}, GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
-            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */);
-        LOG_D("Execute scan tx, PendingComputeTasks: " << PendingComputeTasks.size());
+            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */, Request.MkqlMemoryLimit, nullptr, false);
+        
+        LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());
         auto err = Planner->PlanExecution();
         if (err) {
             TlsActivationContext->Send(err.release());
             return;
         }
+
+        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, Planner->GetnComputeTasks(), Planner->GetnComputeTasks());
 
         Planner->Submit();
     }
@@ -700,14 +678,16 @@ private:
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues) override
     {
-        if (!PendingComputeTasks.empty()) {
-            LOG_D("terminate pending resources request: " << Ydb::StatusIds::StatusCode_Name(status));
+        if (Planner) {
+            if (!Planner->GetPendingComputeTasks().empty()) {
+                LOG_D("terminate pending resources request: " << Ydb::StatusIds::StatusCode_Name(status));
 
-            auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
-            ev->Record.SetTxId(TxId);
-            ev->Record.SetReason(Ydb::StatusIds::StatusCode_Name(status));
+                auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
+                ev->Record.SetTxId(TxId);
+                ev->Record.SetReason(Ydb::StatusIds::StatusCode_Name(status));
 
-            Send(MakeKqpNodeServiceID(SelfId().NodeId()), ev.Release());
+                Send(MakeKqpNodeServiceID(SelfId().NodeId()), ev.Release());
+            }
         }
 
         TBase::ReplyErrorAndDie(status, issues);

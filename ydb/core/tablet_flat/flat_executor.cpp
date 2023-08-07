@@ -23,6 +23,7 @@
 #include "flat_abi_evol.h"
 #include "probes.h"
 #include "shared_sausagecache.h"
+#include "shared_cache_memtable.h"
 #include "util_fmt_desc.h"
 
 #include <ydb/core/base/appdata.h>
@@ -55,6 +56,36 @@ struct TCompactionChangesCtx {
         : Proto(proto)
         , Results(results)
     { }
+};
+
+class TSharedPageCacheMemTableObserver : public NSharedCache::ISharedPageCacheMemTableObserver {
+public:
+    TSharedPageCacheMemTableObserver(TActorSystem* actorSystem, TActorId owner)
+        : ActorSystem(actorSystem)
+        , Owner(owner)
+        , SharedCacheId(MakeSharedPageCacheId())
+    {}
+
+    void Register(ui32 table) override {
+        Send(new NSharedCache::TEvMemTableRegister(table));
+    }
+    
+    void Unregister(ui32 table) override {
+        Send(new NSharedCache::TEvMemTableUnregister(table));
+    }
+
+    void CompactionComplete(TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration) override {
+        Send(new NSharedCache::TEvMemTableCompacted(std::move(registration)));
+    }
+
+private:
+    void Send(IEventBase* ev) {
+        ActorSystem->Send(new IEventHandle(SharedCacheId, Owner, ev));
+    }
+
+    TActorSystem* ActorSystem;
+    const TActorId Owner;
+    const TActorId SharedCacheId;
 };
 
 TTableSnapshotContext::TTableSnapshotContext() = default;
@@ -367,7 +398,8 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(Logger.Get(), Broker.Get(), this, loadedState->Comp,
+    auto sharedPageCacheMemTableObserver = MakeHolder<TSharedPageCacheMemTableObserver>(NActors::TActivationContext::ActorSystem(), SelfId());
+    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(std::move(sharedPageCacheMemTableObserver), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
@@ -3679,6 +3711,22 @@ bool TExecutor::CompactTables() {
     }
 }
 
+void TExecutor::Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev) {
+    const auto *msg = ev->Get();
+
+    if (CompactionLogic) {
+        CompactionLogic->ProvideSharedPageCacheMemTableRegistration(msg->Table, std::move(msg->Registration));
+    }
+}
+
+void TExecutor::Handle(NSharedCache::TEvMemTableCompact::TPtr &ev) {
+    const auto *msg = ev->Get();
+
+    if (CompactionLogic) {
+        CompactionLogic->TriggerSharedPageCacheMemTableCompaction(msg->Table, msg->ExpectedSize);
+    }
+}
+
 void TExecutor::AllowBorrowedGarbageCompaction(ui32 tableId) {
     if (CompactionLogic) {
         return CompactionLogic->AllowBorrowedGarbageCompaction(tableId);
@@ -3727,6 +3775,8 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
+        hFunc(NSharedCache::TEvMemTableRegistered, Handle);
+        hFunc(NSharedCache::TEvMemTableCompact, Handle);
     default:
         break;
     }

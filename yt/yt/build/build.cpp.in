@@ -1,0 +1,59 @@
+#include <yt/yt/build/build.h>
+
+#include <yt/yt/build/ya_version.h>
+
+#include <util/system/compiler.h>
+
+#include <util/generic/strbuf.h>
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_WEAK int GetVersionMajor()
+{
+    return @YT_VERSION_MAJOR@;
+}
+
+Y_WEAK int GetVersionMinor()
+{
+    return @YT_VERSION_MINOR@;
+}
+
+Y_WEAK int GetVersionPatch()
+{
+    return @YT_VERSION_PATCH@;
+}
+
+Y_WEAK const char* GetBranch()
+{
+    return "@YT_VERSION_BRANCH@";
+}
+
+Y_WEAK const char* GetVersionType()
+{
+    return "@YT_VERSION_TYPE@";
+}
+
+Y_WEAK const char* GetVersion()
+{
+    static auto version = CreateYTVersion(@YT_VERSION_MAJOR@, @YT_VERSION_MINOR@, @YT_VERSION_PATCH@, "@YT_VERSION_BRANCH@");
+    return version.c_str();
+}
+
+const char* GetBuildHost()
+{
+    static auto buildHost = GetYaHostName();
+    return buildHost.data();
+}
+
+const char* GetBuildTime()
+{
+    static auto buildDate = GetYaBuildDate();
+    return buildDate.data();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT
+

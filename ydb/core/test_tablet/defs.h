@@ -9,4 +9,5 @@
 #include <ydb/core/protos/test_shard.pb.h>
 #include <library/cpp/actors/core/actor_coroutine.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
+#include <library/cpp/json/json_writer.h>
 #include <contrib/libs/t1ha/t1ha.h>

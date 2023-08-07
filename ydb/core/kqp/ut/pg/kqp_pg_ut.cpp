@@ -1207,8 +1207,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
             auto tableName = "Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
             auto typeName = ((isArray) ? "_pg" : "pg") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key pgint2";
@@ -1220,7 +1220,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 PRIMARY KEY (key)\n\
             );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
             Cerr << req << Endl;
-            auto result = client.ExecuteYqlScript(req).GetValueSync();
+            auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             if (!isArray) {
@@ -1269,8 +1269,8 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
 
         auto testSingleType = [&kikimr] (const TPgTypeTestSpec& spec, bool isArray) {
-            NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
             auto tableName = "Pg" + ToString(spec.TypeId) + (isArray ? "array" : "");
             auto typeName = ((isArray) ? "_" : "") + NYql::NPg::LookupType(spec.TypeId).Name;
             auto keyEntry = spec.IsKey ? ("key "+ typeName) : "key int2";
@@ -1282,7 +1282,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 %s\n\
             );", tableName.Data(), keyEntry.Data(), valueEntry.Data());
             Cerr << req << Endl;
-            auto result = client.ExecuteYqlScript(req).GetValueSync();
+            auto result = session.ExecuteSchemeQuery(req).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             if (!isArray) {
                 ExecutePgInsert(kikimr, tableName, spec);
@@ -1338,6 +1338,93 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableSerialColumns) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableNotNullDataColumns(true));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE PgSerial (
+                key serial PRIMARY KEY,
+                value int2
+                ))");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO PgSerial (value) values (101::int2);
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            ui32 rows = 0;
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto& c = parser.ColumnParser("key");
+                Cerr << c.GetPg().Content_ << Endl;
+                rows++;
+            }
+
+            UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial WHERE key = 1;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            ui32 rows = 0;
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto& c = parser.ColumnParser("key");
+                Cerr << c.GetPg().Content_ << Endl;
+                rows++;
+            }
+
+            UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgSerial WHERE value = 101;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSetParser(0));
+            ui32 rows = 0;
+            for (size_t i = 0; parser.TryNextRow(); ++i) {
+                auto& c = parser.ColumnParser("key");
+                Cerr << c.GetPg().Content_ << Endl;
+                rows++;
+            }
+
+            UNIT_ASSERT_EQUAL(rows, static_cast<ui32>(1));
         }
     }
 
@@ -1554,6 +1641,39 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         for (const auto& spec : typeSpecs) {
             Cerr << spec.TypeId << Endl;
             testType(spec);
+        }
+    }
+
+    Y_UNIT_TEST(DeleteWithQueryService) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test (
+                key int4 PRIMARY KEY,
+                value int4
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                DELETE FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetResultSets().empty(), "results are not empty");
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

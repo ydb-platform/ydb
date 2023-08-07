@@ -19,6 +19,7 @@ SRCS(
     memory_tracker.cpp
     memory_tracker.h
     recentwnd.h
+    rope.cpp
     rope.h
     rc_buf.cpp
     rc_buf.h
@@ -37,6 +38,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl_flat_hash
     library/cpp/deprecated/atomic
     library/cpp/pop_count
 )

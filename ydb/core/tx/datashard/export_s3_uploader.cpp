@@ -2,6 +2,8 @@
 
 #include "export_s3_base_uploader.h"
 
+#include "backup_restore_common.h"
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -25,7 +27,17 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    return new TS3Uploader(dataShard, txId, Task, std::move(scheme));
+    NBackupRestore::TMetadata metadata;
+
+    NBackupRestore::TFullBackupMetadata::TPtr backup = new NBackupRestore::TFullBackupMetadata{
+        .SnapshotVts = NBackupRestore::TVirtualTimestamp(
+            Task.GetSnapshotStep(),
+            Task.GetSnapshotTxId())
+    };
+    metadata.AddFullBackup(backup);
+
+    return new TS3Uploader(
+        dataShard, txId, Task, std::move(scheme), metadata.Serialize());
 }
 
 } // NDataShard

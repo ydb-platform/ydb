@@ -74,7 +74,7 @@ namespace {
         {
             const auto array = Part->Store->PageCollectionArray(Room);
 
-            return { ui32(array.at(page).size()), ui32(EPage::Undef) };
+            return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
         NPageCollection::TBorder Bounds(ui32) const noexcept override
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
                     break;
                 }
             }
-            UNIT_ASSERT_C(holes.size() == Part0()->Index->Records,
+            UNIT_ASSERT_C(holes.size() == Part0()->Index->Count,
                 "Generated screen has " << holes.size() << " intervals");
             screen = new TScreen(std::move(holes));
         }

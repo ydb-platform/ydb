@@ -4,7 +4,7 @@
 #include "event.h"
 #include "executor_thread.h"
 #include "monotonic.h"
-#include "indexes.h"
+#include <library/cpp/actors/actor_type/indexes.h>
 
 #include <library/cpp/actors/util/local_process_key.h>
 
@@ -659,6 +659,10 @@ namespace NActors {
         template <class TEnum = EActivityType>
         TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev), const TEnum activityEnumType = EActivityType::OTHER)
             : IActorCallback(static_cast<TReceiveFunc>(func), activityEnumType) {
+        }
+
+        TActor(void (TDerived::* func)(TAutoPtr<IEventHandle>& ev), const TString& actorName)
+            : IActorCallback(static_cast<TReceiveFunc>(func), TLocalProcessKeyState<TActorActivityTag>::GetInstance().Register(actorName)) {
         }
 
     public:

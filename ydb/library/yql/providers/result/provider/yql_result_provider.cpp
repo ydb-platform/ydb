@@ -96,18 +96,19 @@ namespace {
 
     IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) {
         bool hasPrefixes = false;
+        bool hasAutoNames = false;
         for (auto& child : columns->Children()) {
             if (HasError(child->GetTypeAnn(), ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (!child->IsAtom() && !child->IsList()) {
-                ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), "either atom or tuple with prefix is expected"));
+                ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), "either atom or tuple is expected"));
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (child->IsList()) {
-                if (!EnsureTupleSize(*child, 2, ctx)) {
+                if (!EnsureTupleMinSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -115,17 +116,24 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (!EnsureAtom(*child->Child(1), ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (child->Child(0)->Content() != "prefix") {
+                if (child->Child(0)->Content() == "prefix") {
+                    if (!EnsureTupleSize(*child, 2, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!EnsureAtom(*child->Child(1), ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    hasPrefixes = true;
+                } else if (child->Child(0)->Content() == "auto") {
+                    if (!EnsureTupleSize(*child, 1, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    hasAutoNames = true;
+                } else {
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                        "Expected 'prefix', but got: " << child->Child(0)->Content()));
+                        "Expected 'prefix' or 'auto', but got: " << child->Child(0)->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
-
-                hasPrefixes = true;
             }
         }
 
@@ -147,27 +155,46 @@ namespace {
         auto structType = itemType->Cast<TStructExprType>();
         TSet<TString> usedFields;
         TExprNode::TListType orderedFields;
-        for (auto& child : columns->Children()) {
-            TVector<TStringBuf> names;
+        for (size_t i = 0; i < columns->ChildrenSize(); ++i) {
+            auto child = columns->ChildPtr(i);
             if (child->IsAtom()) {
                 orderedFields.push_back(child);
                 if (!structType->FindItem(child->Content())) {
+                    if (hasAutoNames) {
+                        columns = {};
+                        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                    }
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
                         "Unknown field in hint: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 if (!usedFields.insert(TString(child->Content())).second) {
+                    if (hasAutoNames) {
+                        columns = {};
+                        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                    }
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
                         "Duplicate field in hint: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
                 }
+            } else if (child->Child(0)->Content() == "auto") {
+                TString columnName = "column" + ToString(i);
+                if (!structType->FindItem(columnName) || !usedFields.insert(columnName).second) {
+                    columns = {};
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                }
+                orderedFields.push_back(ctx.NewAtom(child->Pos(), columnName));
             } else {
                 auto prefix = child->Child(1)->Content();
                 for (auto& x : structType->GetItems()) {
                     if (x->GetName().StartsWith(prefix)) {
                         orderedFields.push_back(ctx.NewAtom(child->Pos(), x->GetName()));
                         if (!usedFields.insert(TString(x->GetName())).second) {
+                            if (hasAutoNames) {
+                                columns = {};
+                                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                            }
                             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
                                 "Duplicate field in hint: " << x->GetName()));
                             return IGraphTransformer::TStatus::Error;
@@ -178,13 +205,17 @@ namespace {
         }
 
         if (usedFields.size() != structType->GetSize()) {
+            if (hasAutoNames) {
+                columns = {};
+                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            }
             ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()), TStringBuilder() <<
                 "Mismatch of fields in hint and in the struct, columns fields: " << usedFields.size()
                 << ", struct fields:" << structType->GetSize()));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (hasPrefixes) {
+        if (hasPrefixes || hasAutoNames) {
             columns = ctx.NewList(columns->Pos(), std::move(orderedFields));
             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
         }
@@ -1010,9 +1041,13 @@ namespace {
                                 auto status = ValidateColumns(columns, res.Data().Ref().GetTypeAnn(), ctx);
                                 if (status.Level != IGraphTransformer::TStatus::Ok) {
                                     if (status.Level == IGraphTransformer::TStatus::Repeat) {
-                                        auto newSetting = ctx.ChangeChild(*setting, 1, std::move(columns));
-                                        auto newSettings = ctx.ChangeChild(*settings, settingPos, std::move(newSetting));
-                                        output = ctx.ChangeChild(*input, 4, std::move(newSettings));
+                                        if (!columns) {
+                                            output = ctx.ChangeChild(*input, 4, RemoveSetting(*input->Child(4), "columns", ctx));
+                                        } else {
+                                            auto newSetting = ctx.ChangeChild(*setting, 1, std::move(columns));
+                                            auto newSettings = ctx.ChangeChild(*settings, settingPos, std::move(newSetting));
+                                            output = ctx.ChangeChild(*input, 4, std::move(newSettings));
+                                        }
                                     }
 
                                     return status;

@@ -593,44 +593,25 @@ order by ten;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-select first_value(max(x)) over w, y
-  from (select unique1 as x, ten+four as y from tenk1)
-  group by y
-  window w AS ();
-
- column0 | y  
----------+----
-    9999 | 12 
-    9999 | 10 
-    9999 |  8 
-    9999 |  6 
-    9999 |  4 
-    9999 |  2 
-    9999 |  0 
-(7 rows)
-
-
---!syntax_v1
-pragma TablePathPrefix = "/Root/stream_query_window.test_results";
-pragma SimpleColumns;
 SELECT four, ten,
 	sum(ten) over w,
 	last_value(ten) over w
 FROM (select distinct ten, four from tenk1)
-WINDOW w AS (partition by four order by ten);
+WINDOW w AS (partition by four order by ten)
+ORDER BY four, ten;
 
  four | ten | column2 | column3 
 ------+-----+---------+---------
-    1 |   1 |       1 |       1 
-    1 |   3 |       4 |       3 
-    1 |   5 |       9 |       5 
-    1 |   7 |      16 |       7 
-    1 |   9 |      25 |       9 
     0 |   0 |       0 |       0 
     0 |   2 |       2 |       2 
     0 |   4 |       6 |       4 
     0 |   6 |      12 |       6 
     0 |   8 |      20 |       8 
+    1 |   1 |       1 |       1 
+    1 |   3 |       4 |       3 
+    1 |   5 |       9 |       5 
+    1 |   7 |      16 |       7 
+    1 |   9 |      25 |       9 
     2 |   0 |       0 |       0 
     2 |   2 |       2 |       2 
     2 |   4 |       6 |       4 
@@ -648,33 +629,34 @@ WINDOW w AS (partition by four order by ten);
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT four, ten/4 as two,
-	sum(ten/4) over w,
+	sum(ten/4) over w as three,
 	last_value(ten/4) over w
 FROM (select distinct ten, four from tenk1)
 WINDOW w AS (partition by four order by ten/4 rows between unbounded preceding and current row)
+ORDER BY four, two, three;
 
- four | two | column2 | column3 
-------+-----+---------+---------
-    1 |   0 |       0 |       0 
-    1 |   0 |       0 |       0 
-    1 |   1 |       1 |       1 
-    1 |   1 |       2 |       1 
-    1 |   2 |       4 |       2 
-    0 |   0 |       0 |       0 
-    0 |   0 |       0 |       0 
-    0 |   1 |       1 |       1 
-    0 |   1 |       2 |       1 
-    0 |   2 |       4 |       2 
-    2 |   0 |       0 |       0 
-    2 |   0 |       0 |       0 
-    2 |   1 |       1 |       1 
-    2 |   1 |       2 |       1 
-    2 |   2 |       4 |       2 
-    3 |   0 |       0 |       0 
-    3 |   0 |       0 |       0 
-    3 |   1 |       1 |       1 
-    3 |   1 |       2 |       1 
-    3 |   2 |       4 |       2 
+ four | two | three | column3 
+------+-----+-------+---------
+    0 |   0 |     0 |       0 
+    0 |   0 |     0 |       0 
+    0 |   1 |     1 |       1 
+    0 |   1 |     2 |       1 
+    0 |   2 |     4 |       2 
+    1 |   0 |     0 |       0 
+    1 |   0 |     0 |       0 
+    1 |   1 |     1 |       1 
+    1 |   1 |     2 |       1 
+    1 |   2 |     4 |       2 
+    2 |   0 |     0 |       0 
+    2 |   0 |     0 |       0 
+    2 |   1 |     1 |       1 
+    2 |   1 |     2 |       1 
+    2 |   2 |     4 |       2 
+    3 |   0 |     0 |       0 
+    3 |   0 |     0 |       0 
+    3 |   1 |     1 |       1 
+    3 |   1 |     2 |       1 
+    3 |   2 |     4 |       2 
 (20 rows)
 
 

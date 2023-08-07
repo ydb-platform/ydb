@@ -73,6 +73,7 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         setup1->Start();
         auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
         auto settings = setup1->GetWriteSessionSettings();
+        settings.ClusterDiscoveryMode(EClusterDiscoveryMode::On);
         settings.PreferredCluster("dc2");
         settings.AllowFallbackToOtherClusters(false);
         settings.RetryPolicy(retryPolicy);

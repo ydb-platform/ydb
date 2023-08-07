@@ -53,6 +53,7 @@ runs:
       echo "logfilename=${{inputs.log_suffix}}-ctest-stdout.gz" >> $GITHUB_OUTPUT
       echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
       echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
+      echo "functestfilterfile=$(pwd)/.github/config/muted_functest.txt" >> $GITHUB_OUTPUT
       echo "logurlprefix=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_OUTPUT
       echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
 
@@ -117,6 +118,11 @@ runs:
         --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 
+  - name: Print test history link
+    shell: bash
+    run: |
+      echo "[Test history](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
+
   - name: Run unit tests
     id: ctest
     if: inputs.run_unit_tests == 'true'
@@ -125,7 +131,6 @@ runs:
       cd $WORKDIR/../build/ydb
 
       echo "[Stdout unittest/ctest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.logfilename}})" >> $GITHUB_STEP_SUMMARY
-      echo "[Testmo](${TESTMO_URL}/automation/runs/view/${{steps.th.outputs.runid}})" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
@@ -157,6 +162,22 @@ runs:
     if: inputs.run_unit_tests == 'true'
     shell: bash
     run: |
+      echo "::group::extract-logs"
+
+      mkdir $ARTIFACTS_DIR/logs/
+
+      .github/scripts/tests/attach-logs.py \
+        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
+        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
+        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
+        --ctest-report $TESTREPDIR/suites/ctest_report.xml \
+        --junit-reports-path $TESTREPDIR/unittests/ \
+        --decompress \
+        $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
+        $ARTIFACTS_DIR/logs/
+
+      echo "::endgroup::"
+
       echo "::group::junit-postprocess"
       
       .github/scripts/tests/junit-postprocess.py \
@@ -172,22 +193,6 @@ runs:
         --decompress \
         $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
         $TESTREPDIR/suites/ctest_report.xml
-
-      echo "::endgroup::"
-
-      echo "::group::extract-logs"
-
-      mkdir $ARTIFACTS_DIR/logs/
-
-      .github/scripts/tests/attach-logs.py \
-        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
-        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
-        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
-        --ctest-report $TESTREPDIR/suites/ctest_report.xml \
-        --junit-reports-path $TESTREPDIR/unittests/ \
-        --decompress \
-        $ARTIFACTS_DIR/${{steps.init.outputs.logfilename}} \
-        $ARTIFACTS_DIR/logs/
 
       echo "::endgroup::"
 
@@ -247,6 +252,19 @@ runs:
         tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
         grep -E '(FAILED|ERROR)\s*\[.*\]' | \
         tee $WORKDIR/pytest-short.log
+
+  - name: postprocess functional test reports
+    if: always() && inputs.run_functional_tests == 'true'
+    shell: bash
+    run: |
+      echo "::group::junit-postprocess"
+      
+      .github/scripts/tests/junit-postprocess.py \
+        --filter-file ${{ steps.init.outputs.functestfilterfile }} \
+        $PYTESTREPDIR/
+
+      echo "::endgroup::"
+
 
   - name: write functional tests summary
     if: always() && inputs.run_functional_tests == 'true'

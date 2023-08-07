@@ -48,6 +48,12 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetUseJsonEnumValue(bool jsonEnumValue) {
+            Y_ENSURE(!jsonEnumValue || EnumValueMode == EnumCaseSensetive, "EnumValueMode and UseJsonEnumValue are mutually exclusive");
+            UseJsonEnumValue = jsonEnumValue;
+            return *this;
+        }
+
         TSelf& AddStringTransform(TStringTransformPtr transform) {
             StringTransforms.push_back(transform);
             return *this;
@@ -84,6 +90,7 @@ namespace NProtobufJson {
         }
 
         TSelf& SetEnumValueMode(EnumValueMode enumValueMode) {
+            Y_ENSURE(!UseJsonEnumValue || enumValueMode == EnumCaseSensetive, "EnumValueMode and UseJsonEnumValue are mutually exclusive");
             EnumValueMode = enumValueMode;
             return *this;
         }
@@ -114,6 +121,10 @@ namespace NProtobufJson {
         /// Use 'json_name' protobuf option for field name, mutually exclusive
         /// with FieldNameMode.
         bool UseJsonName = false;
+
+        /// Use 'json_enum_value' protobuf option for enum value, mutually exclusive
+        /// with EnumValueMode
+        bool UseJsonEnumValue = false;
 
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
         TVector<TStringTransformPtr> StringTransforms;

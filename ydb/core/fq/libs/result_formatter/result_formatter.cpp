@@ -405,6 +405,7 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet,
     THolderFactory holderFactory(alloc.Ref(), memInfo);
 
     NJson::TJsonValue& columns = root["columns"];
+    columns.SetType(NJson::JSON_ARRAY);
     const auto& columnsMeta = resultSet.GetColumnsMeta();
 
     TVector<TTypePair> columnTypes;

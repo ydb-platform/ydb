@@ -6,64 +6,216 @@ namespace NKikimr {
 namespace NPDisk {
 
 Y_UNIT_TEST_SUITE(TLogCache) {
-    TLogCache::TCacheRecord MakeRecord(ui64 offset, TString str) {
-        return TLogCache::TCacheRecord(
-            offset,
-            TRcBuf(TString(str.c_str(), str.c_str() + str.size() + 1)),
-            {});
-    }
-
     Y_UNIT_TEST(Simple) {
         TLogCache cache;
+        char buf[2] = {};
 
-        UNIT_ASSERT(cache.Insert(MakeRecord(1, "a")));
-        UNIT_ASSERT(cache.Insert(MakeRecord(2, "b")));
+        UNIT_ASSERT(cache.Insert("a", 1, 1));
+        UNIT_ASSERT(cache.Insert("b", 2, 1));
         UNIT_ASSERT_EQUAL(cache.Size(), 2);
-        UNIT_ASSERT_STRINGS_EQUAL(cache.Find(1)->Data.GetData(), "a");
+        UNIT_ASSERT(cache.Find(1, 1, buf));
+        UNIT_ASSERT_STRINGS_EQUAL(buf, "a");
 
-        UNIT_ASSERT(cache.Insert(MakeRecord(3, "c")));
+        UNIT_ASSERT(cache.Insert("c", 3, 1));
         UNIT_ASSERT(cache.Pop()); // 2 must be evicted
         UNIT_ASSERT_EQUAL(cache.Size(), 2);
-        UNIT_ASSERT_EQUAL(nullptr, cache.Find(2));
-        UNIT_ASSERT_STRINGS_EQUAL(cache.Find(3)->Data.GetData(), "c");
+        UNIT_ASSERT(!cache.Find(2, 1, buf));
+        UNIT_ASSERT(cache.Find(3, 1, buf));
+        UNIT_ASSERT_STRINGS_EQUAL(buf, "c");
 
         UNIT_ASSERT(cache.Pop()); // 1 must be evicted
-        UNIT_ASSERT(cache.Insert(MakeRecord(4, "d")));
+        UNIT_ASSERT(cache.Insert("d", 4, 1));
 
         UNIT_ASSERT_EQUAL(cache.Size(), 2);
-        UNIT_ASSERT_EQUAL(nullptr, cache.Find(1));
-        UNIT_ASSERT_STRINGS_EQUAL(cache.Find(4)->Data.GetData(), "d");
+        UNIT_ASSERT(!cache.Find(1, 1, buf));
+        UNIT_ASSERT(cache.Find(4, 1, buf));
+        UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
 
         UNIT_ASSERT(cache.Pop()); // 3 must be evicted
         UNIT_ASSERT_EQUAL(cache.Size(), 1);
-        UNIT_ASSERT_EQUAL(nullptr, cache.Find(3));
-        UNIT_ASSERT_STRINGS_EQUAL(cache.Find(4)->Data.GetData(), "d");
+        UNIT_ASSERT(!cache.Find(3, 1, buf));
+        UNIT_ASSERT(cache.Find(4, 1, buf));
+        UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
 
-        UNIT_ASSERT_EQUAL(0, cache.Erase(3));
-        UNIT_ASSERT_EQUAL(1, cache.Erase(4));
+
+        UNIT_ASSERT_EQUAL(1, cache.EraseRange(3, 5));
         UNIT_ASSERT_EQUAL(cache.Size(), 0);
         UNIT_ASSERT(!cache.Pop());
         UNIT_ASSERT_EQUAL(cache.Size(), 0);
     }
 
+    Y_UNIT_TEST(DoubleInsertion) {
+        TLogCache cache;
+        
+        char buf[5] = {};
+
+        auto checkFn = [&]() {
+            UNIT_ASSERT_EQUAL(25, cache.Size());
+            
+            for (int i = 0; i < 100; i += 4) {
+                UNIT_ASSERT(cache.Find(i, 4, buf));
+                UNIT_ASSERT_STRINGS_EQUAL(buf, "abcd");
+            }
+        };
+
+        for (int i = 0; i < 100; i += 4) {
+            UNIT_ASSERT(cache.Insert("abcd", i, 4));
+        }
+
+        checkFn();
+        
+        for (int i = 0; i < 100; i += 4) {
+            UNIT_ASSERT(!cache.Insert("abcd", i, 4));
+        }
+
+        checkFn();
+    }
+
+    Y_UNIT_TEST(FullyOverlapping) {
+        TLogCache cache;
+        
+        cache.Insert("abcd", 0, 4);
+        UNIT_ASSERT_EQUAL(1, cache.Size());
+
+        UNIT_ASSERT(!cache.Insert("bc", 1, 2));
+        UNIT_ASSERT_EQUAL(1, cache.Size());
+
+        char buf[2] = {};
+        UNIT_ASSERT(cache.Find(3, 1, buf));
+        UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
+    }
+
+    Y_UNIT_TEST(BetweenTwoEntries) {
+        {
+            TLogCache cache;
+            
+            UNIT_ASSERT(cache.Insert("abcd", 0, 4));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+            UNIT_ASSERT(cache.Insert("ijkl", 8, 4));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+            UNIT_ASSERT(cache.Insert("efgh", 4, 4));
+            UNIT_ASSERT_EQUAL(3, cache.Size());
+
+            char buf[5] = {};
+            UNIT_ASSERT(cache.Find(4, 4, buf));
+            UNIT_ASSERT_STRINGS_EQUAL(buf, "efgh");
+        }
+
+        {
+            TLogCache cache;
+            
+            UNIT_ASSERT(cache.Insert("abcd", 0, 4));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+            UNIT_ASSERT(cache.Insert("ijkl", 8, 4));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+            UNIT_ASSERT(cache.Insert("defghi", 3, 6));
+            UNIT_ASSERT_EQUAL(3, cache.Size());
+
+            char buf[5] = {};
+            UNIT_ASSERT(cache.Find(4, 4, buf));
+            UNIT_ASSERT_STRINGS_EQUAL(buf, "efgh");
+        }
+
+        {
+            TLogCache cache;
+            
+            UNIT_ASSERT(cache.Insert("abcd", 0, 4));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+            UNIT_ASSERT(cache.Insert("ijkl", 8, 4));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+            UNIT_ASSERT(cache.Insert("efgh", 4, 4));
+            UNIT_ASSERT_EQUAL(3, cache.Size());
+
+            char buf[7] = {};
+            UNIT_ASSERT(cache.Find(3, 6, buf));
+            UNIT_ASSERT_STRINGS_EQUAL(buf, "defghi");
+        }
+
+        {
+            TLogCache cache;
+            
+            UNIT_ASSERT(cache.Insert("abcd", 0, 4));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+            UNIT_ASSERT(cache.Insert("ijkl", 8, 4));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+            UNIT_ASSERT(cache.Insert("defghi", 3, 6));
+            UNIT_ASSERT_EQUAL(3, cache.Size());
+
+            char buf[7] = {};
+            UNIT_ASSERT(cache.Find(3, 6, buf));
+            UNIT_ASSERT_STRINGS_EQUAL(buf, "defghi");
+        }
+    }
+
+    Y_UNIT_TEST(NoDuplicates) {
+        {
+            TLogCache cache;
+            
+            UNIT_ASSERT(cache.Insert("abcd", 0, 4));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+            UNIT_ASSERT(cache.Insert("def", 3, 3));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+
+            char buf[2] = {};
+            UNIT_ASSERT(cache.Find(3, 1, buf));
+            UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
+
+            char buf2[3] = {};
+            UNIT_ASSERT(cache.Find(3, 2, buf2));
+            UNIT_ASSERT_STRINGS_EQUAL(buf2, "de");
+
+            char buf3[11] = {};
+            UNIT_ASSERT(!cache.Find(3, 10, buf3));
+            UNIT_ASSERT_STRINGS_EQUAL(buf3, "");
+        }
+
+        {
+            TLogCache cache;
+            
+            UNIT_ASSERT(cache.Insert("def", 3, 3));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+            UNIT_ASSERT(cache.Insert("abcd", 0, 4));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+
+            char buf[2] = {};
+            UNIT_ASSERT(cache.Find(3, 1, buf));
+            UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
+
+            char buf2[5] = {};
+            UNIT_ASSERT(cache.Find(0, 4, buf2));
+            UNIT_ASSERT_STRINGS_EQUAL(buf2, "abcd");
+
+            char buf3[11] = {};
+            UNIT_ASSERT(!cache.Find(3, 10, buf3));
+            UNIT_ASSERT_STRINGS_EQUAL(buf3, "");
+        }
+    }
+
     TLogCache SetupCache(const TVector<std::pair<ui64, TString>>& content = {{5, "x"}, {1, "y"}, {10, "z"}}) {
         TLogCache cache;
         for (auto pair : content) {
-            cache.Insert(MakeRecord(pair.first, pair.second));
+            auto& data = pair.second;
+
+            cache.Insert(data.c_str(), pair.first, data.Size());
         }
         return cache;
     };
 
     void AssertCacheContains(TLogCache& cache, const TVector<std::pair<ui64, TString>>& content = {{5, "x"}, {1, "y"}, {10, "z"}}) {
         UNIT_ASSERT_VALUES_EQUAL(content.size(), cache.Size());
+
+        char buf[2] = {};
+
         for (auto pair : content) {
-            UNIT_ASSERT_STRINGS_EQUAL(
-                pair.second,
-                cache.FindWithoutPromote(pair.first)->Data.GetData());
+            UNIT_ASSERT(cache.FindWithoutPromote(pair.first, 1, buf));
+
+            UNIT_ASSERT_STRINGS_EQUAL(pair.second, buf);
         }
+
         for (auto pair : content) {
             UNIT_ASSERT(cache.Pop());
-            UNIT_ASSERT_EQUAL(nullptr, cache.FindWithoutPromote(pair.first));
+
+            UNIT_ASSERT(!cache.FindWithoutPromote(pair.first, 1, buf));
         }
     }
 

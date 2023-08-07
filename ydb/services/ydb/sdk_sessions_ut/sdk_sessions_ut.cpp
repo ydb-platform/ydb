@@ -1,5 +1,6 @@
 #include "ydb_common_ut.h"
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -204,7 +205,20 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(MultiThreadSessionPoolLimitSync) {
+    void EnsureCanExecQuery(NYdb::NTable::TSession session) {
+        auto execStatus = session.ExecuteDataQuery("SELECT 42;",
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync().GetStatus();
+        UNIT_ASSERT_EQUAL(execStatus, EStatus::SUCCESS);
+    }
+
+    void EnsureCanExecQuery(NYdb::NQuery::TSession session) {
+        auto execStatus = session.ExecuteQuery("SELECT 42;",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync().GetStatus();
+        UNIT_ASSERT_EQUAL(execStatus, EStatus::SUCCESS);
+    }
+
+    template<typename TClient>
+    void DoMultiThreadSessionPoolLimitSync() {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -215,14 +229,14 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
                 .SetEndpoint(location));
 
         const int maxActiveSessions = 45;
-        NYdb::NTable::TTableClient client(driver,
-            TClientSettings()
+        TClient client(driver,
+            typename TClient::TSettings()
                 .SessionPoolSettings(
-                    TSessionPoolSettings().MaxActiveSessions(maxActiveSessions)));
+                    typename TClient::TSettings::TSessionPoolSettings().MaxActiveSessions(maxActiveSessions)));
 
         constexpr int nThreads = 100;
         NYdb::EStatus statuses[nThreads];
-        TVector<TMaybe<NYdb::NTable::TSession>> sessions;
+        TVector<TMaybe<typename TClient::TSession>> sessions;
         sessions.resize(nThreads);
         TAtomic t = 0;
         auto job = [client, &t, &statuses, &sessions]() mutable {
@@ -230,9 +244,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
             int i = AtomicIncrement(t);
             statuses[--i] = sessionResponse.GetStatus();
             if (statuses[i] == EStatus::SUCCESS) {
-                auto execStatus = sessionResponse.GetSession().ExecuteDataQuery("SELECT 42;",
-                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync().GetStatus();
-                UNIT_ASSERT_EQUAL(execStatus, EStatus::SUCCESS);
+                EnsureCanExecQuery(sessionResponse.GetSession());
                 sessions[i] = sessionResponse.GetSession();
             }
         };
@@ -270,7 +282,26 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(MultiThreadMultipleRequestsOnSharedSessions) {
+    Y_UNIT_TEST(MultiThreadSessionPoolLimitSyncTableClient) {
+        DoMultiThreadSessionPoolLimitSync<NYdb::NTable::TTableClient>();
+    }
+
+    Y_UNIT_TEST(MultiThreadSessionPoolLimitSyncQueryClient) {
+        DoMultiThreadSessionPoolLimitSync<NYdb::NQuery::TQueryClient>();
+    }
+
+    NYdb::NTable::TAsyncDataQueryResult ExecQueryAsync(NYdb::NTable::TSession session, const TString q) {
+        return session.ExecuteDataQuery(q,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx());
+    }
+
+    NYdb::NQuery::TAsyncExecuteQueryResult ExecQueryAsync(NYdb::NQuery::TSession session, const TString q) {
+        return session.ExecuteQuery(q,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+    }
+
+    template<typename T>
+    void DoMultiThreadMultipleRequestsOnSharedSessions() {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -281,21 +312,21 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
                 .SetEndpoint(location));
 
         const int maxActiveSessions = 10;
-        NYdb::NTable::TTableClient client(driver,
-            TClientSettings()
+        typename T::TClient client(driver,
+            typename T::TClient::TSettings()
                 .SessionPoolSettings(
-                    TSessionPoolSettings().MaxActiveSessions(maxActiveSessions)));
+                    typename T::TClient::TSettings::TSessionPoolSettings().MaxActiveSessions(maxActiveSessions)));
 
         constexpr int nThreads = 20;
         constexpr int nRequests = 50;
-        std::array<TVector<TAsyncDataQueryResult>, nThreads> results;
+        std::array<TVector<typename T::TResult>, nThreads> results;
         TAtomic t = 0;
         TAtomic validSessions = 0;
         auto job = [client, &t, &results, &validSessions]() mutable {
             auto sessionResponse = client.GetSession().ExtractValueSync();
 
             int i = AtomicIncrement(t);
-            TVector<TAsyncDataQueryResult>& r = results[--i];
+            TVector<typename T::TResult>& r = results[--i];
 
             if (sessionResponse.GetStatus() != EStatus::SUCCESS) {
                 return;
@@ -303,8 +334,7 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
             AtomicIncrement(validSessions);
 
             for (int i = 0; i < nRequests; i++) {
-                r.push_back(sessionResponse.GetSession().ExecuteDataQuery("SELECT 42;",
-                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()));
+                r.push_back(ExecQueryAsync(sessionResponse.GetSession(), "SELECT 42;"));
             }
         };
         IThreadFactory* pool = SystemThreadFactory();
@@ -353,6 +383,23 @@ Y_UNIT_TEST_SUITE(YdbSdkSessions) {
         UNIT_ASSERT_VALUES_EQUAL(client.GetActiveSessionCount(), 0);
         driver.Stop(true);
     }
+
+    Y_UNIT_TEST(MultiThreadMultipleRequestsOnSharedSessionsTableClient) {
+        struct TTypeHelper {
+            using TClient = NYdb::NTable::TTableClient;
+            using TResult = NYdb::NTable::TAsyncDataQueryResult;
+        };
+        DoMultiThreadMultipleRequestsOnSharedSessions<TTypeHelper>();
+    }
+
+    // Enable after interactive tx support
+    //Y_UNIT_TEST(MultiThreadMultipleRequestsOnSharedSessionsQueryClient) {
+    //    struct TTypeHelper {
+    //        using TClient = NYdb::NQuery::TQueryClient;
+    //        using TResult = NYdb::NQuery::TAsyncExecuteQueryResult;
+    //    };
+    //    DoMultiThreadMultipleRequestsOnSharedSessions<TTypeHelper>();
+    //}
 
     Y_UNIT_TEST(SessionsServerLimit) {
         NKikimrConfig::TAppConfig appConfig;

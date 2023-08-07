@@ -272,7 +272,8 @@ class KikimrSqsTestBase(object):
         raised = False
         try:
             self._driver.scheme_client.describe_path('{}/{}/Queues'.format(self.sqs_root, username))
-        except:
+        except Exception as e:
+            logger.debug(f'No queue table: {e}')
             raised = True  # Expect SchemeError or at least ConnectionLost in tests with node killings
 
         assert_that(raised)
@@ -556,7 +557,7 @@ class KikimrSqsTestBase(object):
             else:
                 if self.cluster.nodes[i + 1].is_alive():
                     return i
-        assert(False)
+        assert False, 'alive node not found'
 
     def _get_mon_port(self, node_index):
         if self.slot_count:
@@ -581,7 +582,7 @@ class KikimrSqsTestBase(object):
             raise Exception('Unknown counters format: \"{}\"'.format(counters_format))
 
         if folder is not None:
-            labels="/cloud%3D{cloud}/folder%3D{folder}".format(cloud=cloud, folder=folder)
+            labels = "/cloud%3D{cloud}/folder%3D{folder}".format(cloud=cloud, folder=folder)
         else:
             labels = ''
         counters_url = 'http://localhost:{port}/counters/counters%3D{component}{labels}{suffix}'.format(

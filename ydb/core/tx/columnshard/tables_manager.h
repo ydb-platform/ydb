@@ -142,11 +142,15 @@ public:
         return Ttl;
     }
 
-    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction, TInstant now, bool force) {
-        Ttl.AddTtls(eviction, now, force);
+    void AddTtls(THashMap<ui64, NOlap::TTiering>& eviction) {
+        Ttl.AddTtls(eviction);
     }
 
     const THashSet<ui64>& GetPathsToDrop() const {
+        return PathsToDrop;
+    }
+
+    THashSet<ui64>& MutablePathsToDrop() {
         return PathsToDrop;
     }
 
@@ -171,10 +175,9 @@ public:
         return *PrimaryIndex;
     }
 
-    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version = NOlap::TSnapshot::Zero()) const {
-        Y_UNUSED(version);
+    const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
         Y_VERIFY(!!PrimaryIndex);
-        return PrimaryIndex->GetIndexInfo();
+        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
     }
 
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {
@@ -195,7 +198,7 @@ public:
     ui64 GetMemoryUsage() const;
 
     bool HasTable(const ui64 pathId) const;
-    bool IsWritableTable(const ui64 pathId) const;
+    bool IsReadyForWrite(const ui64 pathId) const;
     bool HasPreset(const ui32 presetId) const;
 
     void DropTable(const ui64 pathId, const TRowVersion& version, NIceDb::TNiceDb& db);
@@ -206,11 +209,6 @@ public:
 
     void AddPresetVersion(const ui32 presetId, const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema, NIceDb::TNiceDb& db);
     void AddTableVersion(const ui64 pathId, const TRowVersion& version, const TTableInfo::TTableVersionInfo& versionInfo, NIceDb::TNiceDb& db);
-
-    void OnTtlUpdate();
-
-    std::shared_ptr<NOlap::TColumnEngineChanges> StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords);
-
 private:
     void IndexSchemaVersion(const TRowVersion& version, const NKikimrSchemeOp::TColumnTableSchema& schema);
     static NOlap::TIndexInfo DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema);

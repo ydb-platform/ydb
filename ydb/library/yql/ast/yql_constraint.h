@@ -25,6 +25,7 @@ protected:
 public:
     using TPathType = std::deque<std::string_view>;
     using TSetType = NSorted::TSimpleSet<TPathType>;
+    using TSetOfSetsType = NSorted::TSimpleSet<TSetType>;
     using TListType = std::vector<const TConstraintNode*>;
     using TPathFilter = std::function<bool(const TPathType&)>;
     using TPathReduce = std::function<std::vector<TPathType>(const TPathType&)>;
@@ -87,6 +88,8 @@ public:
 
     static const TTypeAnnotationNode* GetSubTypeByPath(const TPathType& path, const TTypeAnnotationNode& type);
 protected:
+    static bool HasDuplicates(const TSetOfSetsType& sets);
+
     ui64 Hash_;
     std::string_view Name_;
 };
@@ -152,7 +155,6 @@ private:
 class TSortedConstraintNode final: public TConstraintNode {
 public:
     using TContainerType = TSmallVec<std::pair<TSetType, bool>>;
-    using TFullSetType = NSorted::TSimpleSet<TSetType>;
 private:
     friend struct TExprContext;
 
@@ -167,7 +169,7 @@ public:
         return Content_;
     }
 
-    TFullSetType GetAllSets() const;
+    TSetType GetFullSet() const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
@@ -194,12 +196,10 @@ private:
 };
 
 class TChoppedConstraintNode final: public TConstraintNode {
-public:
-    using TFullSetType = NSorted::TSimpleSet<TSetType>;
 private:
     friend struct TExprContext;
 
-    TChoppedConstraintNode(TExprContext& ctx, TFullSetType&& sets);
+    TChoppedConstraintNode(TExprContext& ctx, TSetOfSetsType&& sets);
     TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys);
     TChoppedConstraintNode(TChoppedConstraintNode&& constr);
 public:
@@ -207,7 +207,9 @@ public:
         return "Chopped";
     }
 
-    const TFullSetType& GetAllSets() const { return Sets_; }
+    const TSetOfSetsType& GetContent() const { return Sets_; }
+
+    TSetType GetFullSet() const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
@@ -227,25 +229,27 @@ public:
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
-    TFullSetType Sets_;
+    TSetOfSetsType Sets_;
 };
 
 template<bool Distinct>
 class TUniqueConstraintNodeBase final: public TConstraintNode {
 public:
-    using TFullSetType = NSorted::TSimpleSet<TSetType>;
+    using TContentType = NSorted::TSimpleSet<TSetOfSetsType>;
 protected:
     friend struct TExprContext;
 
     TUniqueConstraintNodeBase(TExprContext& ctx, const std::vector<std::string_view>& columns);
-    TUniqueConstraintNodeBase(TExprContext& ctx, TFullSetType&& sets);
+    TUniqueConstraintNodeBase(TExprContext& ctx, TContentType&& sets);
     TUniqueConstraintNodeBase(TUniqueConstraintNodeBase&& constr);
 public:
     static constexpr std::string_view Name() {
         return Distinct ? "Distinct" : "Unique";
     }
 
-    const TFullSetType& GetAllSets() const { return Sets_; }
+    const TContentType& GetContent() const { return Content_; }
+
+    TSetType GetFullSet() const;
 
     bool Equals(const TConstraintNode& node) const override;
     bool Includes(const TConstraintNode& node) const override;
@@ -270,10 +274,11 @@ public:
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
-    static TSetType ColumnsListToSet(const std::vector<std::string_view>& columns);
-    static TFullSetType DedupSets(TFullSetType&& sets);
+    static TSetOfSetsType ColumnsListToSets(const std::vector<std::string_view>& columns);
+    static TContentType DedupSets(TContentType&& sets);
+    static TContentType MakeCommonContent(const TContentType& one, const TContentType& two);
 
-    TFullSetType Sets_;
+    TContentType Content_;
 };
 
 using TUniqueConstraintNode = TUniqueConstraintNodeBase<false>;

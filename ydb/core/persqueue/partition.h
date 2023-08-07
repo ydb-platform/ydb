@@ -10,6 +10,7 @@
 #include "subscriber.h"
 #include "user_info.h"
 #include "utils.h"
+#include "read_quoter.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -108,8 +109,9 @@ private:
     void FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config, const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
 
-    void Handle(NReadSpeedLimiterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadSpeedLimiterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvApproveQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx);
@@ -162,7 +164,7 @@ private:
     void LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx);
     void LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx);
 
-    void OnReadRequestFinished(TReadInfo&& info, ui64 answerSize);
+    void OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx);
 
     void ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx);
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
@@ -327,7 +329,7 @@ public:
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace,
+               const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                bool newPartition = false,
                TVector<TTransaction> distrTxs = {});
 
@@ -386,13 +388,14 @@ private:
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
+            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -414,7 +417,7 @@ private:
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
+            HFuncTraced(TEvPQ::TEvApproveQuota, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
@@ -429,7 +432,6 @@ private:
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
@@ -447,7 +449,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-
+            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -468,7 +471,7 @@ private:
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
+            HFuncTraced(TEvPQ::TEvApproveQuota, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
@@ -483,7 +486,6 @@ private:
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
@@ -501,7 +503,8 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, Handle);
             HFuncTraced(TEvPQ::TEvTxRollback, Handle);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-
+            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
             break;
@@ -626,7 +629,10 @@ private:
     TSet<THasDataDeadline> HasDataDeadlines;
     ui64 HasDataReqNum;
 
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>> AvgReadBytes;
+
     TMaybe<TQuotaTracker> WriteQuota;
+    TActorId ReadQuotaTrackerActor;
     THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 
@@ -637,6 +643,7 @@ private:
     std::deque<THolder<TEvPQ::TEvReserveBytes>> ReserveRequests;
 
     ui32 Channel;
+    ui32 NumChannels;
     TVector<ui32> TotalChannelWritesByHead;
 
     TWorkingTimeCounter WriteBufferIsFullCounter;

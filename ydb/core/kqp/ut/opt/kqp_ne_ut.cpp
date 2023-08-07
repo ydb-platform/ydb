@@ -205,11 +205,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQuerySourceRead()) {
-            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpReadRangesSource"), explainResult.GetAst());
-        } else {
-            UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
-        }
+        UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$group").OptionalUint32(1).Build()
@@ -1225,17 +1221,24 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[[1];[101u];["Value1"]];[[3];[301u];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1); // no literal phase
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 2);
+        size_t phase = 0;
+        if (stats.query_phases().size() == 2) {
+            phase = 1;
+        } else if (stats.query_phases().size() == 0) {
+            phase = 0;
+        } else {
+            UNIT_ASSERT(false);
         }
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
-        UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 0);
-        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access().size(), 1);
+        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).affected_shards(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).partitions_count(), 2);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).name(), "/Root/EightShard");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 2);
+        UNIT_ASSERT(stats.query_phases(phase).table_access(0).reads().bytes() > 0);
+        UNIT_ASSERT(stats.query_phases(phase).duration_us() > 0);
     }
 
     Y_UNIT_TEST(PrunePartitionsByExpr) {
@@ -3245,14 +3248,18 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(PagingNoPredicateExtract) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(PagingNoPredicateExtract, SourceRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr{serverSettings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExplainDataQuery(R"(
             --!syntax_v1
-            PRAGMA kikimr.OptEnablePredicateExtract = 'false';
 
             DECLARE $app AS Utf8;
             DECLARE $last_ts AS Int64;
@@ -3286,6 +3293,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // Cerr << result.GetPlan() << Endl;
+
+        if (SourceRead) {
+            return;
+        }
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -3463,7 +3474,6 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(StreamLookupForDataQuery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamPointLookup(true);
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3535,10 +3545,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT(streamLookup.IsDefined());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/KeyValue");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/KeyValue");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 2);
         }
     }
 

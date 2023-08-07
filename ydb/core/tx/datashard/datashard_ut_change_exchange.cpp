@@ -826,6 +826,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return streamDesc;
     }
 
+    TCdcStream WithResolvedTimestamps(TDuration interval, TCdcStream streamDesc) {
+        streamDesc.ResolvedTimestamps = interval;
+        return streamDesc;
+    }
+
     TCdcStream WithInitialScan(TCdcStream streamDesc) {
         streamDesc.InitialState = NKikimrSchemeOp::ECdcStreamStateScan;
         return streamDesc;
@@ -1582,7 +1587,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
             if (records.size() == expected.size()) {
                 for (ui32 i = 0; i < expected.size(); ++i) {
-                    UNIT_ASSERT_VALUES_EQUAL(expected.at(i), records.at(i).second);
+                    UNIT_ASSERT_C(AreJsonsEqual(records.at(i).second, expected.at(i)), TStringBuilder()
+                        << records.at(i).second << " != " << expected.at(i));
                 }
 
                 break;
@@ -2693,6 +2699,132 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         checkAwsRegion("/Root/Table/Stream1", "defaultRegion");
         checkAwsRegion("/Root/Table/Stream2", "customRegion");
+    }
+
+    Y_UNIT_TEST(ResolvedTimestamps) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3), Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+        });
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
+
+        // split table
+        const auto tabletIds = GetTableShards(server, edgeActor, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+        WaitTxNotification(server, edgeActor, AsyncSplitTable(server, edgeActor, "/Root/Table", tabletIds.at(0), 2));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+        });
+
+        // disable stream
+        WaitTxNotification(server, edgeActor, AsyncAlterDisableStream(server, "/Root", "Table", "Stream"));
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"resolved":"***"})",
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+            R"({"resolved":"***"})",
+        });
+    }
+
+    Y_UNIT_TEST(InitialScanAndResolvedTimestamps) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvCdcStreamScanRequest) {
+                delayed.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithResolvedTimestamps(TDuration::Seconds(3),
+                WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))
+            )
+        ));
+
+        if (!delayed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
+                return bool(delayed);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        SimulateSleep(server, TDuration::Seconds(5));
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(delayed.Release(), 0, true);
+
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"resolved":"***"})",
+        });
     }
 
 } // Cdc

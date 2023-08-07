@@ -303,7 +303,7 @@ void ConductGet(TTestBasicRuntime &runtime, const TTestArgs &args, ENaivePatchCa
             getResult->Responses[0].Id = args.OriginalId;
             getResult->Responses[0].Status = NKikimrProto::ERROR;
         } else {
-            getResult->Responses[0].Buffer = args.Buffer;
+            getResult->Responses[0].Buffer = TRope(args.Buffer);
             getResult->Responses[0].Id = args.OriginalId;
             getResult->Responses[0].Status = NKikimrProto::OK;
         }

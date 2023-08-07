@@ -1,7 +1,7 @@
 #include "../config-host.h"
 /* SPDX-License-Identifier: MIT */
 /*
- * Description: run various nop tests
+ * Description: run various rename tests
  *
  */
 #include <errno.h>

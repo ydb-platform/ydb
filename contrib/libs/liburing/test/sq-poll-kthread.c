@@ -118,7 +118,7 @@ err_pipe:
 	return ret;
 }
 
-int test_sq_poll_kthread_stopped(bool do_exit)
+static int test_sq_poll_kthread_stopped(bool do_exit)
 {
 	pid_t pid;
 	int status = 0;

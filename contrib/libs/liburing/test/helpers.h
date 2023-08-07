@@ -85,7 +85,11 @@ enum t_setup_ret t_register_buffers(struct io_uring *ring,
 
 bool t_probe_defer_taskrun(void);
 
+unsigned __io_uring_flush_sq(struct io_uring *ring);
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+void t_error(int status, int errnum, const char *format, ...);
 
 #ifdef __cplusplus
 }

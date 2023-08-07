@@ -136,7 +136,7 @@ namespace NKikimr {
                     return;
                 }
 
-                Buffer = result->Responses[0].Buffer;
+                Buffer = result->Responses[0].Buffer.ConvertToString();
                 ApplyDiffs();
                 TInstant deadline = TActivationContext::Now() + TDuration::MilliSeconds(SubRequestDurationMs);
 

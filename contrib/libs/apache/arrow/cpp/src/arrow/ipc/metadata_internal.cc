@@ -41,11 +41,11 @@
 #include "arrow/util/ubsan.h"
 #include "arrow/visitor_inline.h"
 
-#include "generated/File_generated.h"
-#include "generated/Message_generated.h"
-#include "generated/Schema_generated.h"
-#include "generated/SparseTensor_generated.h"
-#include "generated/Tensor_generated.h"
+#include "generated/File.fbs.h"
+#include "generated/Message.fbs.h"
+#include "generated/Schema.fbs.h"
+#include "generated/SparseTensor.fbs.h"
+#include "generated/Tensor.fbs.h"
 
 namespace arrow {
 
@@ -312,7 +312,7 @@ Status ConcreteTypeFromFlatbuffer(flatbuf::Type type, const void* type_data,
     case flatbuf::Type::Timestamp: {
       auto ts_type = static_cast<const flatbuf::Timestamp*>(type_data);
       TimeUnit::type unit = FromFlatbufferUnit(ts_type->unit());
-      *out = timestamp(unit, StringFromFlatbuffers(ts_type->timezone()));
+      *out = timestamp(unit, StringFromFlatbuffers(ts_type->time_zone()));
       return Status::OK();
     }
     case flatbuf::Type::Duration: {

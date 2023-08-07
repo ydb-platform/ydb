@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(actors)
 add_subdirectory(events)
 add_subdirectory(ut)
 
@@ -24,9 +25,11 @@ target_link_libraries(fq-libs-control_plane_proxy PUBLIC
   libs-compute-ydb
   compute-ydb-control_plane
   fq-libs-control_plane_config
+  libs-control_plane_proxy-actors
   libs-control_plane_proxy-events
   fq-libs-control_plane_storage
   libs-rate_limiter-events
+  fq-libs-result_formatter
   ydb-core-mon
   ydb-library-folder_service
   ydb-library-security

@@ -24,6 +24,10 @@ namespace NYdb {
     namespace NScheme {
         struct TPermissions;
     }
+
+    namespace NTable {
+        class TTransaction;
+    }
 }
 
 namespace NYdb::NTopic {
@@ -124,6 +128,21 @@ private:
     TString ReadSessionId_;
 };
 
+// Topic partition location
+class TPartitionLocation {
+public:
+    TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    i32 GetNodeId() const;
+    i64 GetGeneration() const;
+
+private:    
+    // Node identificator.
+    i32 NodeId_ = 1;
+
+    // Partition generation.
+    i64 Generation_ = 2;
+};
+
 class TPartitionInfo {
 public:
     TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo);
@@ -136,6 +155,7 @@ public:
 
     const TMaybe<TPartitionStats>& GetPartitionStats() const;
     const TMaybe<TPartitionConsumerStats>& GetPartitionConsumerStats() const;
+    const TMaybe<TPartitionLocation>& GetPartitionLocation() const;
 
 private:
     ui64 PartitionId_;
@@ -144,14 +164,17 @@ private:
     TVector<ui64> ParentPartitionIds_;
     TMaybe<TPartitionStats> PartitionStats_;
     TMaybe<TPartitionConsumerStats> PartitionConsumerStats_;
+    TMaybe<TPartitionLocation> PartitionLocation_;
 };
-
 
 class TPartitioningSettings {
 public:
     TPartitioningSettings() : MinActivePartitions_(0), PartitionCountLimit_(0){}
     TPartitioningSettings(const Ydb::Topic::PartitioningSettings& settings);
-    TPartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit) : MinActivePartitions_(minActivePartitions), PartitionCountLimit_(partitionCountLimit) {}
+    TPartitioningSettings(ui64 minActivePartitions, ui64 partitionCountLimit)
+        : MinActivePartitions_(minActivePartitions)
+        , PartitionCountLimit_(partitionCountLimit) {
+    }
 
     ui64 GetMinActivePartitions() const;
     ui64 GetPartitionCountLimit() const;
@@ -241,8 +264,21 @@ private:
     TConsumer Consumer_;
 };
 
+class TPartitionDescription {
+    friend class NYdb::TProtoAccessor;
 
-// Result for describe resource request.
+public:
+    TPartitionDescription(Ydb::Topic::DescribePartitionResult&& desc);
+
+    const TPartitionInfo& GetPartition() const;
+private:
+    const Ydb::Topic::DescribePartitionResult& GetProto() const;
+
+    const Ydb::Topic::DescribePartitionResult Proto_;
+    TPartitionInfo Partition_;
+};
+
+// Result for describe topic request.
 struct TDescribeTopicResult : public TStatus {
     friend class NYdb::TProtoAccessor;
 
@@ -255,7 +291,7 @@ private:
     TTopicDescription TopicDescription_;
 };
 
-// Result for describe resource request.
+// Result for describe consumer request.
 struct TDescribeConsumerResult : public TStatus {
     friend class NYdb::TProtoAccessor;
 
@@ -268,9 +304,21 @@ private:
     TConsumerDescription ConsumerDescription_;
 };
 
+// Result for describe partition request.
+struct TDescribePartitionResult: public TStatus {
+    friend class NYdb::TProtoAccessor;
+
+    TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result);
+
+    const TPartitionDescription& GetPartitionDescription() const;
+
+private:
+    TPartitionDescription PartitionDescription_;
+};
 
 using TAsyncDescribeTopicResult = NThreading::TFuture<TDescribeTopicResult>;
 using TAsyncDescribeConsumerResult = NThreading::TFuture<TDescribeConsumerResult>;
+using TAsyncDescribePartitionResult = NThreading::TFuture<TDescribePartitionResult>;
 
 template <class TSettings>
 class TAlterAttributesBuilderImpl {
@@ -525,24 +573,50 @@ struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings>
     using TOperationRequestSettings<TDropTopicSettings>::TOperationRequestSettings;
 };
 
-// Settings for describe resource request.
+// Settings for describe topic request.
 struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {
     using TSelf = TDescribeTopicSettings;
 
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
 };
 
-// Settings for describe resource request.
+// Settings for describe consumer request.
 struct TDescribeConsumerSettings : public TOperationRequestSettings<TDescribeConsumerSettings> {
     using TSelf = TDescribeConsumerSettings;
 
     FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
+};
+
+// Settings for describe partition request.
+struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePartitionSettings> {
+    using TSelf = TDescribePartitionSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeStats, false);
+
+    FLUENT_SETTING_DEFAULT(bool, IncludeLocation, false);
 };
 
 // Settings for commit offset request.
 struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <typename TEvent>
+class TPrintable {
+public:
+    TString DebugString(bool printData = false) const {
+        TStringBuilder b;
+        static_cast<const TEvent*>(this)->DebugString(b, printData);
+        return b;
+    }
+
+    // implemented in template specializations
+    void DebugString(TStringBuilder& ret, bool printData = false) const = delete;
+};
 
 //! Session metainformation.
 struct TWriteSessionMeta: public TThrRefBase {
@@ -552,12 +626,20 @@ struct TWriteSessionMeta: public TThrRefBase {
     THashMap<TString, TString> Fields;
 };
 
-//! Event that is sent to client during session destruction.
-struct TSessionClosedEvent: public TStatus {
-    using TStatus::TStatus;
+struct TMessageMeta: public TThrRefBase {
+    using TPtr = TIntrusivePtr<TMessageMeta>;
 
-    TString DebugString() const;
+    //! User defined fields.
+    TVector<std::pair<TString, TString>> Fields;
 };
+
+//! Event that is sent to client during session destruction.
+struct TSessionClosedEvent: public TStatus, public TPrintable<TSessionClosedEvent> {
+    using TStatus::TStatus;
+};
+
+template<>
+void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& res, bool) const;
 
 struct TWriteStat : public TThrRefBase {
     TDuration WriteTime;
@@ -640,7 +722,7 @@ struct TReaderCounters: public TThrRefBase {
 };
 
 //! Partition session.
-struct TPartitionSession: public TThrRefBase {
+struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {
     using TPtr = TIntrusivePtr<TPartitionSession>;
 
 public:
@@ -674,11 +756,26 @@ protected:
     ui64 PartitionId;
 };
 
+template<>
+void TPrintable<TPartitionSession>::DebugString(TStringBuilder& res, bool) const;
+
 //! Events for read session.
 struct TReadSessionEvent {
+    class TPartitionSessionAccessor {
+    public:
+        TPartitionSessionAccessor(TPartitionSession::TPtr partitionSession);
+
+        virtual ~TPartitionSessionAccessor() = default;
+
+        virtual const TPartitionSession::TPtr& GetPartitionSession() const;
+
+    protected:
+        TPartitionSession::TPtr PartitionSession;
+    };
+
     //! Event with new data.
     //! Contains batch of messages from single partition session.
-    struct TDataReceivedEvent {
+    struct TDataReceivedEvent : public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
         struct TMessageInformation {
             TMessageInformation(ui64 offset,
                                 TString producerId,
@@ -686,7 +783,7 @@ struct TReadSessionEvent {
                                 TInstant createTime,
                                 TInstant writeTime,
                                 TWriteSessionMeta::TPtr meta,
-                                TWriteSessionMeta::TPtr messageMeta,
+                                TMessageMeta::TPtr messageMeta,
                                 ui64 uncompressedSize,
                                 TString messageGroupId);
             ui64 Offset;
@@ -695,43 +792,20 @@ struct TReadSessionEvent {
             TInstant CreateTime;
             TInstant WriteTime;
             TWriteSessionMeta::TPtr Meta;
-            TWriteSessionMeta::TPtr MessageMeta;
+            TMessageMeta::TPtr MessageMeta;
             ui64 UncompressedSize;
             TString MessageGroupId;
         };
 
-        class IMessage {
+        class TMessageBase : public TPrintable<TMessageBase> {
         public:
-            IMessage(const TString& data, TPartitionSession::TPtr partitionSession);
+            TMessageBase(const TString& data, TMessageInformation info);
 
-            virtual ~IMessage() = default;
+            virtual ~TMessageBase() = default;
 
             virtual const TString& GetData() const;
 
-            //! Partition session. Same as in batch.
-            const TPartitionSession::TPtr& GetPartitionSession() const;
-
             virtual void Commit() = 0;
-
-            TString DebugString(bool printData = false) const;
-            virtual void DebugString(TStringBuilder& ret, bool printData = false) const = 0;
-
-        protected:
-            TString Data;
-
-            TPartitionSession::TPtr PartitionSession;
-        };
-
-        //! Single message.
-        struct TMessage: public IMessage {
-            TMessage(const TString& data, std::exception_ptr decompressionException,
-                     const TMessageInformation& information, TPartitionSession::TPtr partitionSession);
-
-            //! User data.
-            //! Throws decompressor exception if decompression failed.
-            const TString& GetData() const override;
-
-            bool HasException() const;
 
             //! Message offset.
             ui64 GetOffset() const;
@@ -755,21 +829,39 @@ struct TReadSessionEvent {
             const TWriteSessionMeta::TPtr& GetMeta() const;
 
             //! Message level meta info.
-            const TWriteSessionMeta::TPtr& GetMessageMeta() const;
+            const TMessageMeta::TPtr& GetMessageMeta() const;
+
+        protected:
+            TString Data;
+            TMessageInformation Information;
+        };
+
+        //! Single message.
+        struct TMessage: public TMessageBase, public TPartitionSessionAccessor, public TPrintable<TMessage> {
+            using TPrintable<TMessage>::DebugString;
+
+            TMessage(const TString& data, std::exception_ptr decompressionException, TMessageInformation information,
+                     TPartitionSession::TPtr partitionSession);
+
+            //! User data.
+            //! Throws decompressor exception if decompression failed.
+            const TString& GetData() const override;
 
             //! Commits single message.
             void Commit() override;
 
-            using IMessage::DebugString;
-            void DebugString(TStringBuilder& ret, bool printData = false) const override;
+            bool HasException() const;
 
         private:
             std::exception_ptr DecompressionException;
-            TMessageInformation Information;
         };
 
-        struct TCompressedMessage: public IMessage {
-            TCompressedMessage(ECodec codec, const TString& data, const TMessageInformation& information,
+        struct TCompressedMessage: public TMessageBase,
+                                   public TPartitionSessionAccessor,
+                                   public TPrintable<TCompressedMessage> {
+            using TPrintable<TCompressedMessage>::DebugString;
+
+            TCompressedMessage(ECodec codec, const TString& data, TMessageInformation information,
                                TPartitionSession::TPtr partitionSession);
 
             virtual ~TCompressedMessage() {
@@ -778,52 +870,19 @@ struct TReadSessionEvent {
             //! Message codec
             ECodec GetCodec() const;
 
-            //! Message offset.
-            ui64 GetOffset() const;
-
-            //! Producer id
-            const TString& GetProducerId() const;
-
-            //! Message group id.
-            const TString& GetMessageGroupId() const;
-
-            //! Sequence number.
-            ui64 GetSeqNo() const;
-
-            //! Message creation timestamp.
-            TInstant GetCreateTime() const;
-
-            //! Message write timestamp.
-            TInstant GetWriteTime() const;
-
-            //! Metainfo.
-            const TWriteSessionMeta::TPtr& GetMeta() const;
-
-            //! Message level meta info.
-            const TWriteSessionMeta::TPtr& GetMessageMeta() const;
-
             //! Uncompressed size.
             ui64 GetUncompressedSize() const;
 
             //! Commits all offsets in compressed message.
             void Commit() override;
 
-            using IMessage::DebugString;
-            void DebugString(TStringBuilder& ret, bool printData = false) const override;
-
         private:
             ECodec Codec;
-            TMessageInformation Information;
         };
 
     public:
         TDataReceivedEvent(TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
                            TPartitionSession::TPtr partitionSession);
-
-        //! Partition session.
-        const TPartitionSession::TPtr& GetPartitionSession() const {
-            return PartitionSession;
-        }
 
         bool HasCompressedMessages() const {
             return !CompressedMessages.empty();
@@ -858,8 +917,6 @@ struct TReadSessionEvent {
         //! Commits all messages in batch.
         void Commit();
 
-        TString DebugString(bool printData = false) const;
-
     private:
         void CheckMessagesFilled(bool compressed) const {
             Y_VERIFY(!Messages.empty() || !CompressedMessages.empty());
@@ -874,18 +931,13 @@ struct TReadSessionEvent {
     private:
         TVector<TMessage> Messages;
         TVector<TCompressedMessage> CompressedMessages;
-        TPartitionSession::TPtr PartitionSession;
         std::vector<std::pair<ui64, ui64>> OffsetRanges;
     };
 
     //! Acknowledgement for commit request.
-    struct TCommitOffsetAcknowledgementEvent {
+    struct TCommitOffsetAcknowledgementEvent: public TPartitionSessionAccessor,
+                                              public TPrintable<TCommitOffsetAcknowledgementEvent> {
         TCommitOffsetAcknowledgementEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset);
-
-        //! Partition session.
-        const TPartitionSession::TPtr& GetPartitionSession() const {
-            return PartitionSession;
-        }
 
         //! Committed offset.
         //! This means that from now the first available
@@ -896,20 +948,14 @@ struct TReadSessionEvent {
             return CommittedOffset;
         }
 
-        TString DebugString() const;
-
     private:
-        TPartitionSession::TPtr PartitionSession;
         ui64 CommittedOffset;
     };
 
     //! Server command for creating and starting partition session.
-    struct TStartPartitionSessionEvent {
+    struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
+                                        public TPrintable<TStartPartitionSessionEvent> {
         explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset);
-
-        const TPartitionSession::TPtr& GetPartitionSession() const {
-            return PartitionSession;
-        }
 
         //! Current committed offset in partition session.
         ui64 GetCommittedOffset() const {
@@ -926,10 +972,7 @@ struct TReadSessionEvent {
         //! If maybe is empty then no rewinding
         void Confirm(TMaybe<ui64> readOffset = Nothing(), TMaybe<ui64> commitOffset = Nothing());
 
-        TString DebugString() const;
-
     private:
-        TPartitionSession::TPtr PartitionSession;
         ui64 CommittedOffset;
         ui64 EndOffset;
     };
@@ -937,12 +980,8 @@ struct TReadSessionEvent {
     //! Server command for stopping and destroying partition session.
     //! Server can destroy partition session gracefully
     //! for rebalancing among all topic clients.
-    struct TStopPartitionSessionEvent {
+    struct TStopPartitionSessionEvent: public TPartitionSessionAccessor, public TPrintable<TStopPartitionSessionEvent> {
         TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset);
-
-        const TPartitionSession::TPtr& GetPartitionSession() const {
-            return PartitionSession;
-        }
 
         //! Last offset of the partition session that was committed.
         ui64 GetCommittedOffset() const {
@@ -953,21 +992,15 @@ struct TReadSessionEvent {
         //! Confirm has no effect if TPartitionSessionClosedEvent for same partition session with is received.
         void Confirm();
 
-        TString DebugString() const;
-
     private:
-        TPartitionSession::TPtr PartitionSession;
         ui64 CommittedOffset;
     };
 
     //! Status for partition session requested via TPartitionSession::RequestStatus()
-    struct TPartitionSessionStatusEvent {
+    struct TPartitionSessionStatusEvent: public TPartitionSessionAccessor,
+                                         public TPrintable<TPartitionSessionStatusEvent> {
         TPartitionSessionStatusEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset, ui64 readOffset,
                                      ui64 endOffset, TInstant writeTimeHighWatermark);
-
-        const TPartitionSession::TPtr& GetPartitionSession() const {
-            return PartitionSession;
-        }
 
         //! Committed offset.
         ui64 GetCommittedOffset() const {
@@ -990,10 +1023,7 @@ struct TReadSessionEvent {
             return WriteTimeHighWatermark;
         }
 
-        TString DebugString() const;
-
     private:
-        TPartitionSession::TPtr PartitionSession;
         ui64 CommittedOffset = 0;
         ui64 ReadOffset = 0;
         ui64 EndOffset = 0;
@@ -1004,7 +1034,8 @@ struct TReadSessionEvent {
     //! partition session death.
     //! This could be after graceful stop of partition session
     //! or when connection with partition was lost.
-    struct TPartitionSessionClosedEvent {
+    struct TPartitionSessionClosedEvent: public TPartitionSessionAccessor,
+                                         public TPrintable<TPartitionSessionClosedEvent> {
         enum class EReason {
             StopConfirmedByUser,
             Lost,
@@ -1014,18 +1045,11 @@ struct TReadSessionEvent {
     public:
         TPartitionSessionClosedEvent(TPartitionSession::TPtr partitionSession, EReason reason);
 
-        const TPartitionSession::TPtr& GetPartitionSession() const {
-            return PartitionSession;
-        }
-
         EReason GetReason() const {
             return Reason;
         }
 
-        TString DebugString() const;
-
     private:
-        TPartitionSession::TPtr PartitionSession;
         EReason Reason;
     };
 
@@ -1071,7 +1095,28 @@ private:
     THolder<TImpl> Impl;
 };
 
-//! Event debug string.
+//! Events debug strings.
+template<>
+void TPrintable<TReadSessionEvent::TDataReceivedEvent::TMessageBase>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TDataReceivedEvent::TMessage>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TStartPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TPartitionSessionStatusEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TReadSessionEvent::TPartitionSessionClosedEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+
 TString DebugString(const TReadSessionEvent::TEvent& event);
 
 //! Retry policy.
@@ -1168,29 +1213,27 @@ struct TWriteSessionEvent {
 
     };
 
-    struct TAcksEvent {
-        //! Acks could be batched from several WriteBatch/Write requests.
-        //! Acks for messages from one WriteBatch request could be emitted as several TAcksEvents -
-        //! they are provided to client as soon as possible.
+    struct TAcksEvent : public TPrintable<TAcksEvent> {
+        //! Acks could be batched from several Write requests.
+        //! They are provided to client as soon as possible.
         TVector<TWriteAck> Acks;
-
-        TString DebugString() const;
-
     };
 
     //! Indicates that a writer is ready to accept new message(s).
     //! Continuation token should be kept and then used in write methods.
-    struct TReadyToAcceptEvent {
+    struct TReadyToAcceptEvent : public TPrintable<TReadyToAcceptEvent> {
         TContinuationToken ContinuationToken;
-
-        TString DebugString() const;
-
     };
 
     using TEvent = std::variant<TAcksEvent, TReadyToAcceptEvent, TSessionClosedEvent>;
 };
 
-//! Event debug string.
+//! Events debug strings.
+template<>
+void TPrintable<TWriteSessionEvent::TAcksEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+template<>
+void TPrintable<TWriteSessionEvent::TReadyToAcceptEvent>::DebugString(TStringBuilder& ret, bool printData) const;
+
 TString DebugString(const TWriteSessionEvent::TEvent& event);
 
 using TSessionClosedHandler = std::function<void(const TSessionClosedEvent&)>;
@@ -1469,12 +1512,60 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING_OPTIONAL(TLog, Log);
 };
 
+//! Contains the message to write and all the options.
+struct TWriteMessage {
+    using TSelf = TWriteMessage;
+    using TMessageMeta = TVector<std::pair<TString, TString>>;
+public:
+    TWriteMessage() = delete;
+    TWriteMessage(TStringBuf data)
+        : Data(data)
+    {}
+
+    //! A message that is already compressed by codec. Codec from WriteSessionSettings does not apply to this message.
+    //! Compression will not be performed in SDK for such messages.
+    static TWriteMessage CompressedMessage(const TStringBuf& data, ECodec codec, ui32 originalSize) {
+        TWriteMessage result{data};
+        result.Codec = codec;
+        result.OriginalSize = originalSize;
+        return result;
+    }
+
+    bool Compressed() const {
+        return Codec.Defined();
+    }
+
+    //! Message body.
+    const TStringBuf Data;
+
+    //! Codec and original size for compressed message.
+    //! Do not specify or change these options directly, use CompressedMessage()
+    //! method to create an object for compressed message.
+    TMaybe<ECodec> Codec;
+    ui32 OriginalSize = 0;
+
+    //! Message SeqNo, optional. If not provided SDK core will calculate SeqNo automatically.
+    //! NOTICE: Either all messages within one write session must have SeqNo provided or none of them.
+    FLUENT_SETTING_OPTIONAL(ui64, SeqNo);
+
+    //! Message creation timestamp. If not provided, Now() will be used.
+    FLUENT_SETTING_OPTIONAL(TInstant, CreateTimestamp);
+
+    //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
+    FLUENT_SETTING(TMessageMeta, MessageMeta);
+
+};
+
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
 class ISimpleBlockingWriteSession : public TThrRefBase {
 public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
     //! no Ack is provided.
+    virtual bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) = 0;
+
+
+    //! Write single message. Deprecated method with only basic message options.
     virtual bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(),
                        const TDuration& blockTimeout = TDuration::Max()) = 0;
 
@@ -1516,12 +1607,15 @@ public:
 
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+    virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) = 0;
 
-    //! Write single message that is already coded by codec. Codec from settings does not apply to this message.
-    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    //! originalSize - size of unpacked message
-    virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+    //! Write single message. Old method with only basic message options.
+    virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(),
+                       TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+
+    //! Write single message that is already compressed by codec. Old method with only basic message options.
+    virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
+                              TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) = 0;
 
 
     //! Wait for all writes to complete (no more that closeTimeout()), than close. Empty maybe - means infinite timeout.
@@ -1533,6 +1627,15 @@ public:
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~IWriteSession() = default;
+};
+
+struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSessionGetEventSettings> {
+    using TSelf = TReadSessionGetEventSettings;
+
+    FLUENT_SETTING_DEFAULT(bool, Block, false);
+    FLUENT_SETTING_OPTIONAL(size_t, MaxEventsCount);
+    FLUENT_SETTING_DEFAULT(size_t, MaxByteSize, std::numeric_limits<size_t>::max());
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<NTable::TTransaction>, Tx);
 };
 
 class IReadSession {
@@ -1554,9 +1657,13 @@ public:
     virtual TVector<TReadSessionEvent::TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(),
                                                          size_t maxByteSize = std::numeric_limits<size_t>::max()) = 0;
 
+    virtual TVector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) = 0;
+
     //! Get single event.
     virtual TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block = false,
                                                        size_t maxByteSize = std::numeric_limits<size_t>::max()) = 0;
+
+    virtual TMaybe<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) = 0;
 
     //! Close read session.
     //! Waits for all commit acknowledgments to arrive.
@@ -1601,12 +1708,14 @@ public:
     // Delete a topic.
     TAsyncStatus DropTopic(const TString& path, const TDropTopicSettings& settings = {});
 
-    // Describe settings of topic.
+    // Describe a topic.
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings = {});
 
-    // Describe settings of topic's consumer.
-    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer,
-        const TDescribeConsumerSettings& settings = {});
+    // Describe a topic consumer.
+    TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings = {});
+
+    // Describe a topic partition
+    TAsyncDescribePartitionResult DescribePartition(const TString& path, i64 partitionId, const TDescribePartitionSettings& settings = {});
 
     //! Create read session.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);

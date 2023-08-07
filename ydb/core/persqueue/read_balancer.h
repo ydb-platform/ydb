@@ -179,11 +179,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     friend struct TTxWrite;
 
-    void Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext &ctx) {
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-    }
-
     void HandleWakeup(TEvents::TEvWakeup::TPtr&, const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, TStringBuilder() << "TPersQueueReadBalancer::HandleWakeup");
 
@@ -201,7 +196,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         StopWatchingSubDomainPathId();
 
         for (auto& pipe : TabletPipes) {
-            NTabletPipe::CloseClient(ctx, pipe.second);
+            NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
         }
         TabletPipes.clear();
         TActor<TPersQueueReadBalancer>::Die(ctx);
@@ -224,8 +219,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         Die(ctx);
     }
 
-    void DefaultSignalTabletActive(const TActorContext &ctx) override {
-        Y_UNUSED(ctx); //TODO: this is signal that tablet is ready for work
+    void DefaultSignalTabletActive(const TActorContext &) override {
+        // must be empty
     }
 
     void InitDone(const TActorContext &ctx) {
@@ -276,6 +271,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx);
 
+    void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&);
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
@@ -293,7 +291,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
-    void RestartPipe(const ui64 tabletId, const TActorContext&);
+    void ClosePipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
     void UpdateCounters(const TActorContext&);
 
@@ -309,7 +307,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void AnswerWaitingRequests(const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvents::TEvPoisonPill &ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx);
@@ -467,7 +464,14 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 
-    THashMap<ui64, TActorId> TabletPipes;
+    struct TPipeLocation {
+        TActorId PipeActor;
+        TMaybe<ui64> NodeId;
+        TMaybe<ui32> Generation;
+    };
+
+    THashMap<ui64, TPipeLocation> TabletPipes;
+    THashSet<ui64> PipesRequested;
 
     bool WaitingForACL;
 
@@ -563,7 +567,6 @@ public:
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
             HFunc(TEvPersQueue::TEvWakeupClient, Handle);
             HFunc(TEvPersQueue::TEvDescribe, Handle);
@@ -575,6 +578,7 @@ public:
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
             default:
                 StateInitImpl(ev, SelfId());
                 break;
@@ -586,7 +590,6 @@ public:
         TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
 
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvents::TEvWakeup, HandleWakeup);
             HFunc(TEvPersQueue::TEvUpdateACL, HandleUpdateACL);
             HFunc(TEvPersQueue::TEvCheckACL, Handle);
@@ -607,19 +610,11 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvStatus, Handle);
+            HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
 
             default:
                 HandleDefaultEvents(ev, SelfId());
                 break;
-        }
-    }
-
-    STFUNC(StateBroken) {
-        auto ctx(ActorContext());
-        TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
-
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
         }
     }
 

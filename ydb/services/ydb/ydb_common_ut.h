@@ -77,7 +77,7 @@ public:
             ServerSettings->AddStoragePoolType("hdd1");
             ServerSettings->AddStoragePoolType("hdd2");
         }
-        ServerSettings->SetAppConfig(appConfig);
+        ServerSettings->AppConfig.MergeFrom(appConfig);
         ServerSettings->AuthConfig = appConfig.GetAuthConfig();
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->SetKqpSettings(kqpSettings);

@@ -158,8 +158,8 @@ bool TTablesManager::HasTable(const ui64 pathId) const {
     return true;
 }
 
-bool TTablesManager::IsWritableTable(const ui64 pathId) const {
-    return HasTable(pathId);
+bool TTablesManager::IsReadyForWrite(const ui64 pathId) const {
+    return HasPrimaryIndex() &&  HasTable(pathId);
 }
 
 bool TTablesManager::HasPreset(const ui32 presetId) const {
@@ -183,15 +183,14 @@ ui64 TTablesManager::GetMemoryUsage() const {
     return memory;
 }
 
-void TTablesManager::OnTtlUpdate() {
-    Ttl.Repeat();
-}
-
 void TTablesManager::DropTable(const ui64 pathId, const TRowVersion& version, NIceDb::TNiceDb& db) {
     auto& table = Tables.at(pathId);
     table.SetDropVersion(version);
     PathsToDrop.insert(pathId);
     Ttl.DropPathTtl(pathId);
+    if (PrimaryIndex) {
+        PrimaryIndex->OnTieringModified(nullptr, Ttl);
+    }
     Schema::SaveTableDropVersion(db, pathId, version.Step, version.TxId);
 }
 
@@ -234,6 +233,9 @@ void TTablesManager::AddPresetVersion(const ui32 presetId, const TRowVersion& ve
     schemaPreset.AddVersion(version, versionInfo);
     if (versionInfo.HasSchema()){
         IndexSchemaVersion(version, versionInfo.GetSchema());
+        for (auto& columnName : Ttl.TtlColumns()) {
+            PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo().CheckTtlColumn(columnName);
+        }
     }
 }
 
@@ -261,6 +263,10 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const TRowVersion& versi
         } else {
             Ttl.DropPathTtl(pathId);
         }
+        if (PrimaryIndex) {
+            PrimaryIndex->OnTieringModified(nullptr, Ttl);
+        }
+
     }
     Schema::SaveTableVersionInfo(db, pathId, version, versionInfo);
     table.AddVersion(version, versionInfo);
@@ -273,19 +279,12 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     if (!PrimaryIndex) {
         PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
     } else {
-        Y_VERIFY(PrimaryIndex->GetIndexInfo().GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
-        Y_VERIFY(PrimaryIndex->GetIndexInfo().GetIndexKey()->Equals(indexInfo.GetIndexKey()));
+        const NOlap::TIndexInfo& lastIndexInfo = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
+        Y_VERIFY(lastIndexInfo.GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));
+        Y_VERIFY(lastIndexInfo.GetIndexKey()->Equals(indexInfo.GetIndexKey()));
     }
     PrimaryIndex->UpdateDefaultSchema(snapshot, std::move(indexInfo));
-
-    for (auto& columnName : Ttl.TtlColumns()) {
-        PrimaryIndex->GetIndexInfo().CheckTtlColumn(columnName);
-    }
-}
-
-std::shared_ptr<NOlap::TColumnEngineChanges> TTablesManager::StartIndexCleanup(const NOlap::TSnapshot& snapshot, const NOlap::TCompactionLimits& limits, ui32 maxRecords) {
-    Y_VERIFY(PrimaryIndex);
-    return PrimaryIndex->StartCleanup(snapshot, limits, PathsToDrop, maxRecords);
+    PrimaryIndex->OnTieringModified(nullptr, Ttl);
 }
 
 NOlap::TIndexInfo TTablesManager::DeserializeIndexInfoFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {

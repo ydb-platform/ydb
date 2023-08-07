@@ -7,7 +7,7 @@ public:
     TCompatibilityInfoTest() = delete;
 
     static void Reset(NKikimrConfig::TCurrentCompatibilityInfo* newCurrent) {
-        TCompatibilityInfo::Reset(newCurrent);
+        CompatibilityInfo.Reset(newCurrent);
     }
 };
 

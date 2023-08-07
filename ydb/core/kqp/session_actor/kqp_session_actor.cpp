@@ -22,7 +22,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -55,6 +55,14 @@ namespace {
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
 #define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
+
+void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQueryResponse& resp) {
+    for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+        const auto& binding = phyQuery.GetResultBindings(i);
+        auto ydbRes = resp.AddYdbResults();
+        ydbRes->mutable_columns()->CopyFrom(binding.GetResultSetMeta().columns());
+    }
+}
 
 class TRequestFail : public yexception {
 public:
@@ -120,6 +128,7 @@ public:
    TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
             const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+            NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
         : Owner(owner)
         , SessionId(sessionId)
@@ -127,6 +136,7 @@ public:
         , Settings(workerSettings)
         , HttpGateway(std::move(httpGateway))
         , AsyncIoFactory(std::move(asyncIoFactory))
+        , CredentialsFactory(std::move(credentialsFactory))
         , ModuleResolverState(std::move(moduleResolverState))
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
@@ -181,29 +191,10 @@ public:
             Settings.Service, std::move(id));
     }
 
-    bool ConvertParameters() {
-        auto& proto = QueryState->RequestEv->Record;
-
-        if (!proto.GetRequest().HasParameters() && QueryState->RequestEv->GetYdbParameters().size()) {
-            try {
-                ConvertYdbParamsToMiniKQLParams(QueryState->RequestEv->GetYdbParameters(), *proto.MutableRequest()->MutableParameters());
-            } catch (const std::exception& ex) {
-                TString message = TStringBuilder() << "Failed to parse query parameters. "<< ex.what();
-                ReplyProcessError(QueryState->Sender, QueryState->ProxyRequestId, Ydb::StatusIds::BAD_REQUEST, message);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        if (!ConvertParameters())
-            return;
-
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
-                HttpGateway, ModuleResolverState, Counters));
+                HttpGateway, ModuleResolverState, Counters, CredentialsFactory));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
@@ -691,7 +682,6 @@ public:
         }
 
         try {
-            QueryState->QueryData->ParseParameters(QueryState->GetParameters());
             QueryState->QueryData->ParseParameters(QueryState->GetYdbParameters());
         } catch(const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
@@ -968,12 +958,13 @@ public:
             }
 
             if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasReadOperations()) {
-                request.ValidateLocks = !txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() ||
-                    txCtx.TopicOperations.HasReadOperations();
-                request.EraseLocks = true;
-
-                LOG_D("TExecPhysicalRequest, tx has locks, ValidateLocks: " << request.ValidateLocks
-                        << " EraseLocks: " << request.EraseLocks);
+                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasReadOperations()) {
+                    LOG_D("TExecPhysicalRequest, tx has commit locks");
+                    request.LocksOp = ELocksOp::Commit;
+                } else {
+                    LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                    request.LocksOp = ELocksOp::Rollback;
+                }
 
                 for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
                     auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
@@ -1515,6 +1506,13 @@ public:
 
             response.SetQueryPlan(preparedQuery->GetPhysicalQuery().GetQueryPlan());
             response.SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+
+            const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+            FillColumnsMeta(phyQuery, response);
+        } else if (compileResult->Status == Ydb::StatusIds::TIMEOUT && QueryState->QueryDeadlines.CancelAt) {
+            // The compile timeout cause cancelation execution of request.
+            // So in case of cancel after we can reply with canceled status
+            ev.SetYdbStatus(Ydb::StatusIds::CANCELLED);
         }
     }
 
@@ -1577,8 +1575,7 @@ public:
             AppData()->TimeProvider, AppData()->RandomProvider);
         auto request = PreparePhysicalRequest(nullptr, allocPtr);
 
-        request.EraseLocks = true;
-        request.ValidateLocks = false;
+        request.LocksOp = ELocksOp::Rollback;
 
         // Should tx with empty LocksMap be aborted?
         for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {
@@ -2003,6 +2000,7 @@ private:
     TKqpWorkerSettings Settings;
     NYql::IHTTPGateway::TPtr HttpGateway;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
@@ -2024,10 +2022,11 @@ private:
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters)
+    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(asyncIoFactory), std::move(moduleResolverState), counters);
+    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(asyncIoFactory), std::move(credentialsFactory), std::move(moduleResolverState), counters);
 }
 
 }

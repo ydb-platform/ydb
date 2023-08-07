@@ -124,7 +124,7 @@
             "uid": "$ds"
           },
           "editorMode": "code",
-          "expr": "count(HC_Root{counter=\"healthcheck\"}) by (MESSAGE, STATUS, DATABASE)",
+          "expr": "count(ydb_healthcheck{counter=\"healthcheck\"}) by (MESSAGE, STATUS, DOMAIN, DATABASE)",
           "legendFormat": "{{STATUS}} at {{ DATABASE }} ({{MESSAGE}})",
           "range": true,
           "refId": "A"
@@ -216,8 +216,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "count(HC_Root{DATABASE=\"$database\", counter=\"healthcheck-dynamic\"}) by (MESSAGE,STATUS,TYPE)",
-          "legendFormat": "{{STATUS}} at {{ DATABASE }} ({{MESSAGE}})",
+          "expr": "count(ydb_healthcheck{DATABASE=\"$database\", counter=\"healthcheck-dynamic\"}) by (MESSAGE,STATUS,TYPE)",
+          "legendFormat": "{{STATUS}} ({{MESSAGE}})",
           "range": true,
           "refId": "A"
         }

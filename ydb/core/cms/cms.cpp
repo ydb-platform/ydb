@@ -33,11 +33,17 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
+void TCms::DefaultSignalTabletActive(const TActorContext &)
+{
+    // must be empty
+}
+
 void TCms::OnActivateExecutor(const TActorContext &ctx)
 {
     if (AppData(ctx)->DomainsInfo->Domains.size() > 1) {
         NotSupportedReason = "Multiple domains are not supported.";
         Become(&TThis::StateNotSupported);
+        SignalTabletActive(ctx);
         return;
     }
 
@@ -1980,13 +1986,6 @@ void TCms::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
 
     LOG_DEBUG_S(ctx, NKikimrServices::CMS,
                 "Got config subscription id=" << ConfigSubscriptionId);
-}
-
-void TCms::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                  const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
 void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,

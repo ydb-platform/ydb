@@ -46,7 +46,7 @@ void TDataTasksProcessorContainer::Add(NOlap::NIndexedReader::TGranulesFillingCo
     if (Object) {
         Object->Add(task);
     } else {
-        task->Execute();
+        task->Execute(nullptr);
         task->Apply(context);
     }
 }

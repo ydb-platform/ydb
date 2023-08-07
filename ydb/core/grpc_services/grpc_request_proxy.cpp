@@ -570,6 +570,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvAlterTopicRequest, PreHandle);
         HFunc(TEvDescribeTopicRequest, PreHandle);
         HFunc(TEvDescribeConsumerRequest, PreHandle);
+        HFunc(TEvDescribePartitionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 

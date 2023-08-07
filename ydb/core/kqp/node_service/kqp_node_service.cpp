@@ -14,7 +14,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -146,6 +146,9 @@ public:
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
         }
+        if (config.HasIteratorReadQuotaSettings()) {
+            SetIteratorReadsQuotaSettings(config.GetIteratorReadQuotaSettings());
+        }
     }
 
     void Bootstrap() {
@@ -265,10 +268,15 @@ private:
         }
     };
 
+    static constexpr double SecToUsec = 1e6;
+
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
 
+        NHPTimer::STime workHandlerStart = ev->SendTime;
         auto& msg = ev->Get()->Record;
+        Counters->NodeServiceStartEventDelivery->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
+
         auto requester = ev->Sender;
 
         ui64 txId = msg.GetTxId();
@@ -419,9 +427,16 @@ private:
             auto& taskCtx = request.InFlyTasks[dqTask.GetId()];
             YQL_ENSURE(taskCtx.TaskId != 0);
 
-            memoryLimits.ChannelBufferSize = taskCtx.ChannelSize;
-            Y_VERIFY_DEBUG(memoryLimits.ChannelBufferSize >= Config.GetMinChannelBufferSize(),
-                "actual size: %ld, min: %ld", memoryLimits.ChannelBufferSize, Config.GetMinChannelBufferSize());
+            {
+                ui32 inputChannelsCount = 0;
+                for (auto&& i : dqTask.GetInputs()) {
+                    inputChannelsCount += i.ChannelsSize();
+                }
+                memoryLimits.ChannelBufferSize = std::max<ui32>(taskCtx.ChannelSize / std::max<ui32>(1, inputChannelsCount), Config.GetMinChannelBufferSize());
+                AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
+                    ("ch_size", taskCtx.ChannelSize)("ch_count", taskCtx.Channels)("ch_limit", memoryLimits.ChannelBufferSize)
+                    ("inputs", dqTask.InputsSize())("input_channels_count", inputChannelsCount);
+            }
 
             auto& taskOpts = dqTask.GetProgram().GetSettings();
             auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
@@ -500,6 +515,8 @@ private:
 
         Send(request.Executer, reply.Release(), IEventHandle::FlagTrackDelivery, txId);
 
+        Counters->NodeServiceProcessTime->Collect(NHPTimer::GetTimePassed(&workHandlerStart) * SecToUsec);
+
         bucket.NewRequest(txId, requester, std::move(request), memoryPool);
     }
 
@@ -510,11 +527,14 @@ private:
     }
 
     void HandleWork(TEvKqpNode::TEvCancelKqpTasksRequest::TPtr& ev) {
+        THPTimer timer;
         ui64 txId = ev->Get()->Record.GetTxId();
         auto& reason = ev->Get()->Record.GetReason();
 
         LOG_W("TxId: " << txId << ", terminate transaction, reason: " << reason);
         TerminateTx(txId, reason);
+
+        Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
     }
 
     void TerminateTx(ui64 txId, const TString& reason) {
@@ -586,8 +606,16 @@ private:
             SetIteratorReadsRetrySettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadsRetrySettings());
         }
 
+        if (event.GetConfig().GetTableServiceConfig().HasIteratorReadQuotaSettings()) {
+            SetIteratorReadsQuotaSettings(event.GetConfig().GetTableServiceConfig().GetIteratorReadQuotaSettings());
+        }
+
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+    }
+
+    void SetIteratorReadsQuotaSettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadQuotaSettings& settings) {
+        SetDefaultIteratorQuotaSettings(settings.GetMaxRows(), settings.GetMaxBytes());
     }
 
     void SetIteratorReadsRetrySettings(const NKikimrConfig::TTableServiceConfig::TIteratorReadsRetrySettings& settings) {

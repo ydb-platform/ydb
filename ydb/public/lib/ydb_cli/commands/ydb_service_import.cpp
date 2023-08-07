@@ -16,8 +16,7 @@
 #include <unistd.h>
 #endif
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TCommandImport::TCommandImport()
     : TClientCommandTree("import", {}, "Import service operations")
@@ -310,5 +309,5 @@ int TCommandImportFromParquet::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
-}
+
 }

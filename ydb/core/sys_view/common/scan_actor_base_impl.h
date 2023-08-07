@@ -27,7 +27,7 @@ class TScanActorBase : public TActorBootstrapped<TDerived> {
 public:
     using TBase = TActorBootstrapped<TDerived>;
 
-    TScanActorBase(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TScanActorBase(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : OwnerActorId(ownerId)
         , ScanId(scanId)
@@ -319,7 +319,7 @@ private:
 protected:
     static constexpr TDuration Timeout = TDuration::Seconds(60);
 
-    const TActorId OwnerActorId;
+    const NActors::TActorId OwnerActorId;
     const ui32 ScanId;
     const TTableId TableId;
     TSerializedTableRange TableRange;

@@ -25,7 +25,7 @@ SRCS(
     blobstorage_groupinfo_ut.cpp
 )
 
-IF (BUILD_TYPE == "RELEASE")
+IF (BUILD_TYPE != "DEBUG")
     SRCS(
         blobstorage_groupinfo_blobmap_ut.cpp
         blobstorage_groupinfo_partlayout_ut.cpp

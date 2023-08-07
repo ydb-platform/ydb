@@ -3,7 +3,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <functional>
 

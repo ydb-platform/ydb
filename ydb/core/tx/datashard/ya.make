@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
+    backup_restore_common.cpp
     backup_restore_traits.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
@@ -11,6 +12,7 @@ SRCS(
     build_index.cpp
     build_kqp_data_tx_out_rs_unit.cpp
     build_scheme_tx_out_rs_unit.cpp
+    cdc_stream_heartbeat.cpp
     cdc_stream_scan.cpp
     change_collector_async_index.cpp
     change_collector_base.cpp

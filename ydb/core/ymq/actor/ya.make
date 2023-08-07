@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     actor.cpp
     auth_factory.cpp
+    auth_mocks.cpp
+    auth_multi_factory.cpp
     attributes_md5.cpp
     cfg.cpp
     change_visibility.cpp

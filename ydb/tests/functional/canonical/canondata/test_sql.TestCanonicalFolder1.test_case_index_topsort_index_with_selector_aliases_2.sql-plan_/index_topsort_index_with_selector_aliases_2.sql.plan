@@ -1,0 +1,29 @@
+{
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/local/base_index_topsort_index_with_selector_aliases_2_sql_plan/personal_storefront",
+            "reads": [
+                {
+                    "columns": [
+                        "hashOrderDate",
+                        "orderDate",
+                        "orderId"
+                    ],
+                    "limit": "1000",
+                    "lookup_by": [
+                        "hashOrderDate (9983033094796217818)",
+                        "orderDate (\u00ab2023-03-01\u00bb)"
+                    ],
+                    "scan_by": [
+                        "orderId (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
+                }
+            ]
+        }
+    ]
+}

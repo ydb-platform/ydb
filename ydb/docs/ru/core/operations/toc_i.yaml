@@ -6,3 +6,4 @@ items:
   href: manage-users-attr.md
 - name: Построение планов запросов
   href: query_plan.md
+  hidden: true

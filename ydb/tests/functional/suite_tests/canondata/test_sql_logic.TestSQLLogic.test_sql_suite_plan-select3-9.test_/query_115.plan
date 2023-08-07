@@ -29,7 +29,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.col1"
+                                                "TopSortBy": "argument.b"
                                             },
                                             {
                                                 "Name": "TableFullScan",
@@ -53,7 +53,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "col1 (Asc)"
+                                    "b (Asc)"
                                 ]
                             }
                         ]

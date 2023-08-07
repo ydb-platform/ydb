@@ -65,7 +65,9 @@ void TIamAuthFactory::Initialize(
             NKikimr::NHttpProxy::MakeIamTokenServiceID(),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));
 
-    actor = NKikimr::NHttpProxy::CreateMetricsActor(NKikimr::NHttpProxy::TMetricsSettings{appData.Counters->GetSubgroup("counters", "http_proxy")});
+    bool isServerless = appData.FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
+
+    actor = NKikimr::NHttpProxy::CreateMetricsActor(NKikimr::NHttpProxy::TMetricsSettings{appData.Counters->GetSubgroup("counters", isServerless ? "http_proxy_serverless" : "http_proxy")});
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NKikimr::NHttpProxy::MakeMetricsServiceID(),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));

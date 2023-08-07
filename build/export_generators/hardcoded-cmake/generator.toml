@@ -1,0 +1,20 @@
+[root]
+
+copy=[
+	"cmake/global_flags.compiler.gnu.cmake",
+    "cmake/global_flags.compiler.msvc.cmake",
+    "cmake/global_flags.linker.gnu.cmake",
+    "cmake/global_flags.linker.msvc.cmake"
+]
+
+[attrs.target]
+vcs_info="list"
+target_joined_source="list"
+target_sources_custom="list"
+target_ragel_lexers="list"
+target_yasm_source="list"
+add_global_library_for="list"
+
+[[rules]]
+attrs=["vcs_info", "target_joined_source", "target_sources_custom", "target_ragel_lexers", "target_yasm_source", "add_global_library_for"]
+copy=["cmake/common.cmake","build/scripts/export_script_gen.py","build/scripts/split_unittest.py","build/scripts/generate_vcs_info.py"]

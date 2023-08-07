@@ -1,7 +1,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 

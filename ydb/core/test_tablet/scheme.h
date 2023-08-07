@@ -14,6 +14,12 @@ namespace NKikimr::NTestShard {
         };
 
         using TTables = SchemaTables<State>;
+
+        struct EmptySettings {
+            static void Materialize(NIceDb::TToughDb&) {}
+        };
+
+        using TSettings = SchemaSettings<EmptySettings>;
     };
 
 } // NKikimr::NTestShard

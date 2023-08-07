@@ -214,6 +214,7 @@ namespace Tests {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
+            AppConfig.MutableHiveConfig()->SetWarmUpBootWaitingPeriod(10);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
         }
 

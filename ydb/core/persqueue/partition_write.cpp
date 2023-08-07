@@ -8,7 +8,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -186,7 +186,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
 }
 
 void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ProcessReserveRequests. Partition: " << Partition);
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ProcessReserveRequests. Partition: " << Partition);
 
     const ui64 maxWriteInflightSize = Config.GetPartitionConfig().GetMaxWriteInflightSize();
 
@@ -265,7 +265,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ct
 }
 
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::AnswerCurrentWrites. Partition: " << Partition);
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::AnswerCurrentWrites. Partition: " << Partition);
 
     ui64 offset = EndOffset;
     while (!Responses.empty()) {
@@ -626,16 +626,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         }
     }
 
-    const ui64 maxSize = Config.GetPartitionConfig().GetMaxSizeInPartition();
-    const ui64 maxCount = Config.GetPartitionConfig().GetMaxCountInPartition();
-    if (EndOffset - StartOffset >= maxCount || Size() >= maxSize) {
-        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ERROR].Increment(ev->Get()->Msgs.size());
-        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ERROR].Increment(sz);
-
-        ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL,
-                   Sprintf("try later, partition is full - already have %" PRIu64" from %" PRIu64 " count, %" PRIu64 " from %" PRIu64 " size", EndOffset - StartOffset, maxCount, Size(), maxSize));
-        return;
-    }
     ui64 size = 0;
     for (auto& msg: ev->Get()->Msgs) {
         size += msg.Data.size();
@@ -1280,7 +1270,7 @@ void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext
 }
 
 bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ProcessWrites. Partition: " << Partition);
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::ProcessWrites. Partition: " << Partition);
 
     FilterDeadlinedWrites(ctx);
 
@@ -1379,7 +1369,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
 
 
 void TPartition::HandleWrites(const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::HandleWrites. Partition: " << Partition);
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::HandleWrites. Partition: " << Partition);
 
     Become(&TThis::StateWrite);
 
@@ -1395,7 +1385,7 @@ void TPartition::HandleWrites(const TActorContext& ctx) {
 
     if (!Requests.empty() && DiskIsFull) {
         CancelAllWritesOnIdle(ctx);
-        AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
+        AddCheckDiskRequest(request.Get(), NumChannels);
         haveCheckDisk = true;
     } else {
         haveData = ProcessWrites(request.Get(), now, ctx);

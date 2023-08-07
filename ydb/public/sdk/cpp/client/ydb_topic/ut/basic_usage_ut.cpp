@@ -19,6 +19,93 @@
 namespace NYdb::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+    Y_UNIT_TEST(ConnectToYDB) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetEndpoint(TStringBuilder() << "invalid:" << setup->GetGrpcPort());
+        cfg.SetDatabase("/Invalid");
+        cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
+        auto driver = NYdb::TDriver(cfg);
+
+        {
+            TTopicClient client(driver);
+
+            auto writeSettings = TWriteSessionSettings()
+                .Path(setup->GetTestTopic())
+                .MessageGroupId("group_id")
+                // TODO why retries? see LOGBROKER-8490
+                .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+            auto writeSession = client.CreateWriteSession(writeSettings);
+
+            auto event = writeSession->GetEvent(true);
+            UNIT_ASSERT(event.Defined() && std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+        }
+
+        {
+            auto settings = TTopicClientSettings()
+                .Database({"/Root"})
+                .DiscoveryEndpoint({TStringBuilder() << "localhost:" << setup->GetGrpcPort()});
+
+            TTopicClient client(driver, settings);
+
+            auto writeSettings = TWriteSessionSettings()
+                .Path(setup->GetTestTopic())
+                .MessageGroupId("group_id")
+                .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+            auto writeSession = client.CreateWriteSession(writeSettings);
+
+            auto event = writeSession->GetEvent(true);
+            UNIT_ASSERT(event.Defined() && !std::holds_alternative<TSessionClosedEvent>(event.GetRef()));
+        }
+    }
+
+
+    Y_UNIT_TEST(WriteRead) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicClient client(setup->GetDriver());
+        
+        {
+            auto writeSettings = TWriteSessionSettings()
+                        .Path(setup->GetTestTopic())
+                        .ProducerId(setup->GetTestMessageGroupId())
+                        .MessageGroupId(setup->GetTestMessageGroupId());
+            auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+            UNIT_ASSERT(writeSession->Write("message_using_MessageGroupId"));
+            writeSession->Close();
+        }
+        {
+            auto writeSettings = TWriteSessionSettings()
+                        .Path(setup->GetTestTopic())
+                        .ProducerId(setup->GetTestMessageGroupId())
+                        .PartitionId(0);
+            auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
+            UNIT_ASSERT(writeSession->Write("message_using_PartitionId"));
+            writeSession->Close();
+        }
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName(setup->GetTestConsumer())
+            .AppendTopics(setup->GetTestTopic());
+        auto readSession = client.CreateReadSession(readSettings);
+
+        auto event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+        startPartitionSession.Confirm();
+
+        event = readSession->GetEvent(true);
+        UNIT_ASSERT(event.Defined());
+
+        auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+        dataReceived.Commit();
+
+        auto& messages = dataReceived.GetMessages();
+        UNIT_ASSERT(messages.size() == 2);
+        UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
+        UNIT_ASSERT(messages[1].GetData() == "message_using_PartitionId");
+    }
 
     Y_UNIT_TEST(MaxByteSizeEqualZero) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
@@ -32,7 +119,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSession->Close();
 
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .AppendTopics(setup->GetTestTopic());
         auto readSession = client.CreateReadSession(readSettings);
 
@@ -96,7 +183,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
@@ -128,11 +215,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ReadSession->Close(TDuration::MilliSeconds(10));
         AtomicSet(check, 0);
 
-        auto status = topicClient.CommitOffset(setup->GetTestTopic(), 0, "shared/user", 50);
+        auto status = topicClient.CommitOffset(setup->GetTestTopic(), 0, setup->GetTestConsumer(), 50);
         UNIT_ASSERT(status.GetValueSync().IsSuccess());
 
         auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--" + setup->GetTestTopic(), "shared/user", describeConsumerSettings).GetValueSync();
+        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--" + setup->GetTestTopic(), setup->GetTestConsumer(), describeConsumerSettings).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
         auto description = result.GetConsumerDescription();
@@ -173,7 +260,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup->GetTestClient())
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
@@ -213,8 +300,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             WaitPlannedTasks(e, n);
             size_t completed = e->GetExecutedCount();
 
-            setup->KillPqrb(setup->GetTestTopic(), setup->GetLocalCluster());
-            Cerr << ">>> TEST: PQRB killed" << Endl;
+            setup->GetServer().KillTopicPqrbTablet(setup->GetTestTopicPath());
             Sleep(TDuration::MilliSeconds(100));
 
             e->StartFuncs(tasks);
@@ -275,7 +361,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Create read session.
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic())
             .DecompressionExecutor(stepByStepExecutor);
@@ -389,7 +475,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create read session.
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("shared/user")
+            .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 

@@ -7,16 +7,39 @@
 
 namespace NMonitoring {
 
-    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values) {
+    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values, bool shrinkBuckets) {
         Y_ENSURE(bounds.size() == values.size(),
                  "mismatched sizes: bounds(" << bounds.size() <<
                  ") != buckets(" << values.size() << ')');
 
-        auto snapshot = TExplicitHistogramSnapshot::New(bounds.size());
+        size_t requiredSize = shrinkBuckets ? std::min(bounds.size(), static_cast<size_t>(HISTOGRAM_MAX_BUCKETS_COUNT)) : bounds.size();
+        auto snapshot = TExplicitHistogramSnapshot::New(requiredSize);
+        if (requiredSize < bounds.size()) {
+            auto remains = bounds.size() % requiredSize;
+            auto divided = bounds.size() / requiredSize;
+            size_t idx{bounds.size()};
 
-        for (size_t i = 0; i != bounds.size(); ++i) {
-            (*snapshot)[i].first = bounds[i];
-            (*snapshot)[i].second = values[i];
+            for (size_t i = requiredSize; i > 0; --i) {
+                Y_ENSURE(idx > 0);
+                (*snapshot)[i - 1].first = bounds[idx - 1];
+                (*snapshot)[i - 1].second = 0;
+
+                auto repeat = divided;
+                if (remains > 0) {
+                    ++repeat;
+                    --remains;
+                }
+                for (; repeat > 0; --repeat) {
+                    Y_ENSURE(idx > 0);
+                    (*snapshot)[i - 1].second += values[idx - 1];
+                    --idx;
+                }
+            }
+        } else {
+            for (size_t i = 0; i != bounds.size(); ++i) {
+                (*snapshot)[i].first = bounds[i];
+                (*snapshot)[i].second = values[i];
+            }
         }
 
         return snapshot;

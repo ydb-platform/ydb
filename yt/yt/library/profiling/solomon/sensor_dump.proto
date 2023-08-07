@@ -1,0 +1,57 @@
+package NYT.NProfiling.NProto;
+
+message TSensorDump {
+    repeated TTag tags = 2;
+    repeated TCube cubes = 1;
+};
+
+message TTag {
+    required string key = 1;
+    required string value = 2;
+};
+
+message TCube {
+    required string name = 1;
+    repeated TProjection projections = 2;
+
+    optional bool sparse = 3 [default=false];
+    optional bool global = 4 [default=false];
+    optional bool disable_sensors_rename = 5 [default=false];
+    optional bool disable_default = 6 [default=false];
+};
+
+message TProjection {
+    repeated int64 tag_ids = 1;
+
+    required bool has_value = 8;
+
+    optional double gauge = 2;
+    optional int64 counter = 3;
+    optional int64 duration = 4;
+    optional TSummaryDouble summary = 5;
+    optional TSummaryDuration timer = 6;
+    optional THistogramSnapshot time_histogram = 7;
+    optional THistogramSnapshot gauge_histogram = 9;
+    optional THistogramSnapshot rate_histogram = 10;
+};
+
+message TSummaryDouble {
+    required double sum = 1;
+    required double min = 2;
+    required double max = 3;
+    required double last = 4;
+    required int64 count = 5;
+};
+
+message TSummaryDuration {
+    required int64 sum = 1;
+    required int64 min = 2;
+    required int64 max = 3;
+    required int64 last = 4;
+    required int64 count = 5;
+};
+
+message THistogramSnapshot {
+    repeated int64 values = 1;
+    repeated int64 times = 2;
+};

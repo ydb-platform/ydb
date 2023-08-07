@@ -18,8 +18,11 @@
 
 #include "src/core/lib/resolver/resolver_registry.h"
 
+#include <initializer_list>
+
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/ascii.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
 
@@ -37,8 +40,20 @@ void ResolverRegistry::Builder::SetDefaultPrefix(TString default_prefix) {
   state_.default_prefix = std::move(default_prefix);
 }
 
+namespace {
+
+bool IsLowerCase(y_absl::string_view str) {
+  for (unsigned char c : str) {
+    if (y_absl::ascii_isalpha(c) && !y_absl::ascii_islower(c)) return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 void ResolverRegistry::Builder::RegisterResolverFactory(
     std::unique_ptr<ResolverFactory> factory) {
+  GPR_ASSERT(IsLowerCase(factory->scheme()));
   auto p = state_.factories.emplace(factory->scheme(), std::move(factory));
   GPR_ASSERT(p.second);
 }

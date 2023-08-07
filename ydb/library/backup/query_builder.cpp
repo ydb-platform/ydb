@@ -39,11 +39,7 @@ TString TQueryBuilder::BuildQuery(const TString &path) {
 }
 
 template<typename T>
-TMaybe<T> TryParse(const TStringBuf& buf) {
-    if (buf == "null") {
-        return {};
-    }
-
+T TryParse(const TStringBuf& buf) {
     T tmp;
     TMemoryInput stream(buf);
     stream >> tmp;
@@ -51,11 +47,7 @@ TMaybe<T> TryParse(const TStringBuf& buf) {
 }
 
 template<>
-TMaybe<TString> TryParse(const TStringBuf& buf) {
-    if (buf == "null") {
-        return {};
-    }
-
+TString TryParse(const TStringBuf& buf) {
     Y_ENSURE(buf.Size() >= 1 && buf.front() == '"' && buf.back() == '"',
             "Source string neither surrounded by quotes nor equals to null, string# " << TString{buf}.Quote());
     TString tmp;
@@ -66,126 +58,113 @@ TMaybe<TString> TryParse(const TStringBuf& buf) {
 }
 
 template<>
-TMaybe<TInstant> TryParse(const TStringBuf& buf) {
-    if (buf == "null") {
-        return {};
-    }
-
+TInstant TryParse(const TStringBuf& buf) {
     return TInstant::ParseIso8601(buf);
 }
 
 template<>
-TMaybe<bool> TryParse(const TStringBuf& buf) {
-    auto tmp = TryParse<ui32>(buf);
-    if (tmp) {
-        return *tmp ? true : false;
-    } else {
-        return {};
-    }
+bool TryParse(const TStringBuf& buf) {
+    return TryParse<ui32>(buf) ? true : false;
 }
 
 void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
     switch (type) {
 
     case EPrimitiveType::Bool:
-        Value.OptionalBool(TryParse<bool>(buf));
+        Value.Bool(TryParse<bool>(buf));
         break;
 
     case EPrimitiveType::Int8:
-        Value.OptionalInt8(TryParse<i32>(buf));
+        Value.Int8(TryParse<i32>(buf));
         break;
 
     case EPrimitiveType::Uint8:
-        Value.OptionalUint8(TryParse<ui32>(buf));
+        Value.Uint8(TryParse<ui32>(buf));
         break;
 
     case EPrimitiveType::Int16:
-        Value.OptionalInt16(TryParse<i32>(buf));
+        Value.Int16(TryParse<i32>(buf));
         break;
 
     case EPrimitiveType::Uint16:
-        Value.OptionalUint16(TryParse<ui32>(buf));
+        Value.Uint16(TryParse<ui32>(buf));
         break;
 
     case EPrimitiveType::Int32:
-        Value.OptionalInt32(TryParse<i32>(buf));
+        Value.Int32(TryParse<i32>(buf));
         break;
 
     case EPrimitiveType::Uint32:
-        Value.OptionalUint32(TryParse<ui32>(buf));
+        Value.Uint32(TryParse<ui32>(buf));
         break;
 
     case EPrimitiveType::Int64:
-        Value.OptionalInt64(TryParse<i64>(buf));
+        Value.Int64(TryParse<i64>(buf));
         break;
 
     case EPrimitiveType::Uint64:
-        Value.OptionalUint64(TryParse<ui64>(buf));
+        Value.Uint64(TryParse<ui64>(buf));
         break;
 
     case EPrimitiveType::Float:
-        Value.OptionalFloat(TryParse<float>(buf));
+        Value.Float(TryParse<float>(buf));
         break;
 
     case EPrimitiveType::Double:
-        Value.OptionalDouble(TryParse<double>(buf));
+        Value.Double(TryParse<double>(buf));
         break;
 
     case EPrimitiveType::Date:
-        Value.OptionalDate(TryParse<TInstant>(buf));
+        Value.Date(TryParse<TInstant>(buf));
         break;
 
     case EPrimitiveType::Datetime:
-        Value.OptionalDatetime(TryParse<TInstant>(buf));
+        Value.Datetime(TryParse<TInstant>(buf));
         break;
 
     case EPrimitiveType::Timestamp:
-        Value.OptionalTimestamp(TryParse<TInstant>(buf));
+        Value.Timestamp(TryParse<TInstant>(buf));
         break;
 
     case EPrimitiveType::Interval:
-        Value.OptionalInterval(TryParse<i64>(buf));
+        Value.Interval(TryParse<i64>(buf));
         break;
 
     case EPrimitiveType::TzDate:
-        Value.OptionalTzDate(TryParse<TString>(buf));
+        Value.TzDate(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::TzDatetime:
-        Value.OptionalTzDatetime(TryParse<TString>(buf));
+        Value.TzDatetime(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::TzTimestamp:
-        Value.OptionalTzTimestamp(TryParse<TString>(buf));
+        Value.TzTimestamp(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::String:
-        Value.OptionalString(TryParse<TString>(buf));
+        Value.String(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::Utf8:
-        Value.OptionalUtf8(TryParse<TString>(buf));
+        Value.Utf8(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::Yson:
-        Value.OptionalYson(TryParse<TString>(buf));
+        Value.Yson(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::Json:
-        Value.OptionalJson(TryParse<TString>(buf));
+        Value.Json(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::JsonDocument:
-        Value.OptionalJsonDocument(TryParse<TString>(buf));
+        Value.JsonDocument(TryParse<TString>(buf));
         break;
 
     case EPrimitiveType::DyNumber:
-        if (buf == "null") {
-            Value.OptionalDyNumber(Nothing());
-        } else {
-            Y_ENSURE(NKikimr::NDyNumber::IsValidDyNumberString(buf));
-            Value.OptionalDyNumber(TString(buf));
-        }
+        Y_ENSURE(NKikimr::NDyNumber::IsValidDyNumberString(buf));
+        Value.DyNumber(TString(buf));
         break;
 
     case EPrimitiveType::Uuid:
@@ -195,27 +174,61 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
     }
 }
 
-void TQueryBuilder::AddMemberFromString(const TColumn &col, TStringBuf buf) {
-    TTypeParser type(col.Type);
-    Y_ENSURE(type.GetKind() == TTypeParser::ETypeKind::Optional);
-    type.OpenOptional();
+void TQueryBuilder::BuildType(TTypeParser& typeParser, TTypeBuilder& typeBuilder, const TString& name) {
+    switch (typeParser.GetKind()) {
+    case TTypeParser::ETypeKind::Primitive:
+        typeBuilder.Primitive(typeParser.GetPrimitive());
+        break;
+    case TTypeParser::ETypeKind::Decimal:
+        typeBuilder.Decimal(typeParser.GetDecimal());
+        break;
+    case TTypeParser::ETypeKind::Optional:
+        typeParser.OpenOptional();
+        typeBuilder.BeginOptional();
+        BuildType(typeParser, typeBuilder, name);
+        typeBuilder.EndOptional();
+        typeParser.CloseOptional();
+        break;
+    default:
+        throw yexception() << "Unsupported type kind \"" << typeParser.GetKind() << "\" for column: " << name;
+    }
+}
 
-    Value.AddMember(col.Name);
+TType TQueryBuilder::GetType(TTypeParser& typeParser, const TString& name) {
+    TTypeBuilder typeBuilder;
+    BuildType(typeParser, typeBuilder, name);
+    return typeBuilder.Build();
+}
+
+void TQueryBuilder::CheckNull(const TString& name, TStringBuf buf) {
+    if (buf == "null") {
+        throw yexception() << "Wrong value \"null\" for non-optional column: " << name;
+    }
+}
+
+void TQueryBuilder::AddMemberFromString(TTypeParser& type, const TString& name, TStringBuf buf) {
     switch (type.GetKind()) {
         case TTypeParser::ETypeKind::Primitive:
+            CheckNull(name, buf);
             AddPrimitiveMember(type.GetPrimitive(), buf);
             break;
-        case TTypeParser::ETypeKind::Decimal:
+        case TTypeParser::ETypeKind::Optional:
+            type.OpenOptional();
             if (buf == "null") {
-                Value.EmptyOptional();
+                Value.EmptyOptional(GetType(type, name));
             } else {
                 Value.BeginOptional();
-                Value.Decimal(TDecimalValue(TString(buf), type.GetDecimal().Precision, type.GetDecimal().Scale));
+                AddMemberFromString(type, name, buf);
                 Value.EndOptional();
             }
+            type.CloseOptional();
+            break;
+        case TTypeParser::ETypeKind::Decimal:
+            CheckNull(name, buf);
+            Value.Decimal(TDecimalValue(TString(buf), type.GetDecimal().Precision, type.GetDecimal().Scale));
             break;
         default:
-            Y_FAIL("");
+            throw yexception() << "Unsupported type kind \"" << type.GetKind() << "\" for column: " << name;
     }
 }
 
@@ -224,12 +237,15 @@ void TQueryBuilder::Begin() {
 }
 
 void TQueryBuilder::AddLine(TStringBuf line) {
+    Cerr << line << Endl;
     Value.AddListItem();
     Value.BeginStruct();
     for (const auto& col : Columns) {
         TStringBuf tok = line.NextTok(',');
         Y_ENSURE(tok, "Empty token on line");
-        AddMemberFromString(col, tok);
+        TTypeParser type(col.Type);
+        Value.AddMember(col.Name);
+        AddMemberFromString(type, col.Name, tok);
     }
     Value.EndStruct();
 }

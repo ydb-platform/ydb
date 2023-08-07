@@ -40,12 +40,6 @@ namespace NKikimr::NBlobDepot {
         TBlobDepot(TActorId tablet, TTabletStorageInfo *info);
         ~TBlobDepot();
 
-        void HandlePoison() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT23, "HandlePoison", (Id, GetLogId()));
-            Become(&TThis::StateZombie);
-            Send(Tablet(), new TEvents::TEvPoison);
-        }
-
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         TAutoPtr<TTabletCountersBase> TabletCountersPtr;
@@ -220,14 +214,6 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         STFUNC(StateInit) {
-            if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                HandlePoison();
-            } else {
-                StateInitImpl(ev, SelfId());
-            }
-        }
-
-        STFUNC(StateZombie) {
             StateInitImpl(ev, SelfId());
         }
 

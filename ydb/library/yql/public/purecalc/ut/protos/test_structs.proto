@@ -1,0 +1,122 @@
+package NPureCalcProto;
+
+message TUnparsed {
+    required string S = 1;
+}
+
+message TParsed {
+    required int32 A = 1;
+    optional int32 B = 2;
+    required int32 C = 3;
+}
+
+message TPartial {
+    required int32 X = 1;
+}
+
+message TSimpleMessage {
+    required int32 X = 1;
+}
+
+message TNamedSimpleMessage {
+    required int32 X = 1;
+    required bytes Name = 2;
+}
+
+message TStringMessage {
+    required string X = 1;
+}
+
+message TAllTypes {
+    required double FDouble = 1;
+    required float FFloat = 2;
+    required int64 FInt64 = 3;
+    required sfixed64 FSfixed64 = 4;
+    required sint64 FSint64 = 5;
+    required uint64 FUint64 = 6;
+    required fixed64 FFixed64 = 7;
+    required int32 FInt32 = 8;
+    required sfixed32 FSfixed32 = 9;
+    required sint32 FSint32 = 10;
+    required uint32 FUint32 = 11;
+    required fixed32 FFixed32 = 12;
+    required bool FBool = 13;
+    required string FString = 14;
+    required bytes FBytes = 15;
+}
+
+message TOptionalAllTypes {
+    optional double FDouble = 1;
+    optional float FFloat = 2;
+    optional int64 FInt64 = 3;
+    optional sfixed64 FSfixed64 = 4;
+    optional sint64 FSint64 = 5;
+    optional uint64 FUint64 = 6;
+    optional fixed64 FFixed64 = 7;
+    optional int32 FInt32 = 8;
+    optional sfixed32 FSfixed32 = 9;
+    optional sint32 FSint32 = 10;
+    optional uint32 FUint32 = 11;
+    optional fixed32 FFixed32 = 12;
+    optional bool FBool = 13;
+    optional string FString = 14;
+    optional bytes FBytes = 15;
+}
+
+message TSimpleNested {
+    required int32 X = 1;
+    required TAllTypes Y = 2;
+}
+
+message TOptionalNested {
+    optional TAllTypes X = 1;
+}
+
+message TSimpleRepeated {
+    required int32 X = 1;
+    repeated int32 Y = 2;
+}
+
+message TNestedRepeated {
+    required int32 X = 1;
+    repeated TSimpleNested Y = 2;
+}
+
+message TRecursive {
+    required int32 X = 1;
+    required TRecursive Nested = 2;
+}
+
+message TRecursiveIndirectly {
+    message TNested {
+        required TRecursiveIndirectly Nested = 1;
+    }
+
+    required int32 X = 1;
+    repeated TNested Nested = 2;
+}
+
+message TMessageWithEnum {
+    enum ETestEnum {
+        VALUE1 = 0;
+        VALUE2 = 1;
+    }
+    repeated ETestEnum EnumValue = 1;
+}
+
+message TUnsplitted {
+    required int32 AInt = 1;
+    required uint32 AUint = 2;
+    required string AString = 3;
+    optional bool ABool = 4;
+}
+
+message TSplitted1 {
+    required int32 BInt = 1;
+    required string BString = 2;
+}
+
+message TSplitted2 {
+    required uint32 CUint = 1;
+    required string CString = 2;
+}

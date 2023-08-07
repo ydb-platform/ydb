@@ -13,9 +13,9 @@
 #define TIMEOUT_MSEC	200
 #define TIMEOUT_SEC	10
 
-int thread_ret0, thread_ret1;
-int cnt = 0;
-pthread_mutex_t mutex;
+static int thread_ret0, thread_ret1;
+static int cnt = 0;
+static pthread_mutex_t mutex;
 
 static void msec_to_ts(struct __kernel_timespec *ts, unsigned int msec)
 {
@@ -112,7 +112,8 @@ static int test_return_after_timeout(struct io_uring *ring)
 	return 0;
 }
 
-int __reap_thread_fn(void *data) {
+static int __reap_thread_fn(void *data)
+{
 	struct io_uring *ring = (struct io_uring *)data;
 	struct io_uring_cqe *cqe;
 	struct __kernel_timespec ts;
@@ -124,12 +125,14 @@ int __reap_thread_fn(void *data) {
 	return io_uring_wait_cqe_timeout(ring, &cqe, &ts);
 }
 
-void *reap_thread_fn0(void *data) {
+static void *reap_thread_fn0(void *data)
+{
 	thread_ret0 = __reap_thread_fn(data);
 	return NULL;
 }
 
-void *reap_thread_fn1(void *data) {
+static void *reap_thread_fn1(void *data)
+{
 	thread_ret1 = __reap_thread_fn(data);
 	return NULL;
 }
@@ -138,7 +141,8 @@ void *reap_thread_fn1(void *data) {
  * This is to test issuing a sqe in main thread and reaping it in two child-thread
  * at the same time. To see if timeout feature works or not.
  */
-int test_multi_threads_timeout() {
+static int test_multi_threads_timeout(void)
+{
 	struct io_uring ring;
 	int ret;
 	bool both_wait = false;

@@ -120,7 +120,7 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
                 UNIT_ASSERT_VALUES_EQUAL(a.Status, NKikimrProto::OK);
                 UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
                 UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer);
+                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
             }
         }
     }
@@ -451,7 +451,7 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(a.Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
             UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-            BlobSet->Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer);
+            BlobSet->Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
         }
     }
 };
@@ -765,7 +765,7 @@ Y_UNIT_TEST(TestBlock42VGetCountWithErasure) {
             if (a.Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
                 UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer);
+                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
             } else {
                 TStringStream str;
                 str << " isRestore# " << isRestore
@@ -909,7 +909,7 @@ Y_UNIT_TEST(TestBlock42WipedOneDiskAndErrorDurringGet) {
             if (a.Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
                 UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer);
+                blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
             } else {
                 TStringStream str;
                 str << " isRestore# " << isRestore
@@ -1007,7 +1007,7 @@ void TestIntervalsWipedError(TErasureType::EErasureSpecies erasureSpecies, bool 
                                                 if (a.Status == NKikimrProto::OK) {
                                                     UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
                                                     UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-                                                    simulator.BlobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer);
+                                                    simulator.BlobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
                                                 } else {
                                                     TStringStream str;
                                                     str << " isRestore# " << isRestore
@@ -1183,7 +1183,7 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
                                 if (a.Status == NKikimrProto::OK) {
                                     UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
                                     UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-                                    blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer);
+                                    blobSet.Check(queryIdx % blobCount, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
                                 } else {
                                     TStringStream str;
                                     str << " isRestore# " << isRestore
@@ -1280,7 +1280,7 @@ void SpecificTest(ui32 badA, ui32 badB, ui32 blobSize, TMap<i64, i64> sizeForOff
             if (a.Status == NKikimrProto::OK) {
                 UNIT_ASSERT_VALUES_EQUAL(qb.Shift, a.Shift);
                 UNIT_ASSERT_VALUES_EQUAL(qb.Size, a.RequestedSize);
-                simulator.BlobSet.Check(0, qb.Id, qb.Shift, qb.Size, a.Buffer);
+                simulator.BlobSet.Check(0, qb.Id, qb.Shift, qb.Size, a.Buffer.ConvertToString());
             } else {
                 TStringStream str;
                 str << " isRestore# false setIdx# 0 status# " << a.Status;
@@ -1492,7 +1492,7 @@ public:
                 UNIT_ASSERT_VALUES_EQUAL_C(a.Status, NKikimrProto::OK, currentTestState.Str());
                 UNIT_ASSERT_VALUES_EQUAL_C(q.Shift, a.Shift, currentTestState.Str());
                 UNIT_ASSERT_VALUES_EQUAL_C(q.Size, a.RequestedSize, currentTestState.Str());
-                BlobSet.Check(queryIdx, q.Id, q.Shift, q.Size, a.Buffer);
+                BlobSet.Check(queryIdx, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
             }
         }
         RequestsOrder.resize(InitialRequestsSize);
@@ -1711,7 +1711,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(a.Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(q.Shift, a.Shift);
             UNIT_ASSERT_VALUES_EQUAL(q.Size, a.RequestedSize);
-            BlobSet.Check(queryIdx, q.Id, q.Shift, q.Size, a.Buffer);
+            BlobSet.Check(queryIdx, q.Id, q.Shift, q.Size, a.Buffer.ConvertToString());
         }
     }
 };

@@ -152,7 +152,7 @@ class TTypeEnvironment;
     XX(Pg, 16 + 3)          \
     XX(Multi, 16 + 11)
 
-class TType : public TNode {
+class TTypeBase : public TNode {
 public:
     enum class EKind : ui8 {
         MKQL_TYPE_KINDS(ENUM_VALUE_GEN)
@@ -162,6 +162,38 @@ public:
         return Kind;
     }
 
+    bool IsSameType(const TTypeBase& typeToCompare) const;
+    size_t CalcHash() const;
+
+    TTypeBase(const TTypeBase& other)
+        : TNode(other.Type)
+        , Kind(other.Kind)
+    {}
+
+protected:
+    TTypeBase(EKind kind, TTypeType* type);
+    TTypeBase()
+        : TNode(nullptr)
+        , Kind(EKind::Type)
+    {}
+
+    const EKind Kind;
+    TMaybe<bool> SupportsPresort; // transient
+};
+
+class TType: public TTypeBase {
+protected:
+    TType(EKind kind, TTypeType* type)
+      : TTypeBase(kind, type)
+    {}
+
+    TType()
+      : TTypeBase()
+    {}
+
+    virtual bool CalculatePresortSupport() = 0;
+
+public:
     static TStringBuf KindAsStr(EKind kind);
     TStringBuf GetKindAsStr() const;
 
@@ -172,7 +204,8 @@ public:
 
 #undef MKQL_KIND_ACCESSOR
 
-    bool IsSameType(const TType& typeToCompare) const;
+    using TTypeBase::IsSameType;
+
     bool IsConvertableTo(const TType& typeToCompare, bool ignoreTagged = false) const;
     void Accept(INodeVisitor& visitor);
     void UpdateLinks(const THashMap<TNode*, TNode*>& links);
@@ -185,20 +218,6 @@ public:
 
         return *SupportsPresort;
     }
-
-protected:
-    TType(EKind kind, TTypeType* type);
-    TType()
-        : TNode(nullptr)
-        , Kind(EKind::Type)
-    {
-    }
-
-    virtual bool CalculatePresortSupport() = 0;
-
-private:
-    const EKind Kind;
-    TMaybe<bool> SupportsPresort; // transient
 };
 
 class TTypeType : public TType {
@@ -207,6 +226,7 @@ friend class TType;
 public:
     using TType::IsSameType;
     bool IsSameType(const TTypeType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TTypeType& typeToCompare, bool ignoreTagged = false) const;
@@ -232,6 +252,7 @@ friend class TType;
 public:
     using TType::IsSameType;
     bool IsSameType(const TSingularType<SingularKind>& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TSingularType<SingularKind>& typeToCompare, bool ignoreTagged = false) const;
@@ -551,6 +572,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TDataType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TDataType& typeToCompare, bool ignoreTagged = false) const;
@@ -582,6 +604,7 @@ public:
     static TDataDecimalType* Create(ui8 precision, ui8 scale, const TTypeEnvironment& env);
 
     bool IsSameType(const TDataDecimalType& typeToCompare) const;
+    size_t CalcHash() const;
 
     bool IsConvertableTo(const TDataDecimalType& typeToCompare, bool ignoreTagged = false) const;
 
@@ -623,6 +646,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TPgType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TPgType& typeToCompare, bool ignoreTagged = false) const;
@@ -676,6 +700,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TStructType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TStructType& typeToCompare, bool ignoreTagged = false) const;
@@ -752,6 +777,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TListType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TListType& typeToCompare, bool ignoreTagged = false) const;
@@ -815,6 +841,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TStreamType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TStreamType& typeToCompare, bool ignoreTagged = false) const;
@@ -842,6 +869,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TFlowType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TFlowType& typeToCompare, bool ignoreTagged = false) const;
@@ -869,6 +897,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TOptionalType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TOptionalType& typeToCompare, bool ignoreTagged = false) const;
@@ -929,6 +958,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TDictType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TDictType& typeToCompare, bool ignoreTagged = false) const;
@@ -1001,6 +1031,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TCallableType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TCallableType& typeToCompare, bool ignoreTagged = false) const;
@@ -1110,7 +1141,7 @@ private:
     TRuntimeNode Result;
 };
 
-inline TType::TType(EKind kind, TTypeType* type)
+inline TTypeBase::TTypeBase(EKind kind, TTypeType* type)
     : TNode(type)
     , Kind(kind)
 {
@@ -1135,6 +1166,7 @@ friend class TType;
 public:
     using TType::IsSameType;
     bool IsSameType(const TAnyType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TAnyType& typeToCompare, bool ignoreTagged = false) const;
@@ -1219,6 +1251,14 @@ public:
         }
 
         return true;
+    }
+
+    size_t CalcHash() const {
+        size_t hash = 0;
+        for (size_t index = 0; index < ElementsCount; ++index) {
+            hash = CombineHashes(hash, Elements[index]->CalcHash());
+        }
+        return hash;
     }
 
     using TType::IsConvertableTo;
@@ -1381,6 +1421,7 @@ friend class TType;
 public:
     using TType::IsSameType;
     bool IsSameType(const TResourceType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TResourceType& typeToCompare, bool ignoreTagged = false) const;
@@ -1417,6 +1458,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TTaggedType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TTaggedType& typeToCompare, bool ignoreTagged = false) const;
@@ -1453,6 +1495,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TVariantType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TVariantType& typeToCompare, bool ignoreTagged = false) const;
@@ -1535,6 +1578,7 @@ public:
 
     using TType::IsSameType;
     bool IsSameType(const TBlockType& typeToCompare) const;
+    size_t CalcHash() const;
 
     using TType::IsConvertableTo;
     bool IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged = false) const;
@@ -1607,6 +1651,11 @@ bool TSingularType<SingularKind>::IsSameType(const TSingularType<SingularKind>& 
 }
 
 template <TType::EKind SingularKind>
+size_t TSingularType<SingularKind>::CalcHash() const {
+    return IntHash((size_t)SingularKind);
+}
+
+template <TType::EKind SingularKind>
 bool TSingularType<SingularKind>::IsConvertableTo(const TSingularType<SingularKind>& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
     return IsSameType(typeToCompare);
@@ -1644,6 +1693,7 @@ bool TSingular<SingularKind>::Equals(const TSingular<SingularKind>& nodeToCompar
     return true;
 }
 
+
 template <TType::EKind SingularKind>
 void TSingular<SingularKind>::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     Y_UNUSED(links);
@@ -1659,5 +1709,18 @@ template <TType::EKind SingularKind>
 void TSingular<SingularKind>::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
+
+struct THasherTType {
+    inline size_t operator()(const TTypeBase& t) const noexcept {
+        return t.CalcHash();
+    }
+};
+
+struct TEqualTType {
+    inline bool operator()(const TTypeBase& lhs, const TTypeBase& rhs) const noexcept {
+        return lhs.IsSameType(rhs);
+    }
+};
+
 }
 }

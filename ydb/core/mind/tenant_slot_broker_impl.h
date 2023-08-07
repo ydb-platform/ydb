@@ -945,11 +945,11 @@ private:
 
 
     ui64 Generation() const;
+    void DefaultSignalTabletActive(const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev,
                       const TActorContext &ctx) override;
-    void Enqueue(TAutoPtr<IEventHandle> &ev) override;
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                              const TActorContext &ctx) override;
 
@@ -957,7 +957,7 @@ private:
     void Die(const TActorContext &ctx) override;
 
     void LoadConfigFromProto(const NKikimrTenantSlotBroker::TConfig &config);
-    void ProcessEnqueuedEvents(const TActorContext &ctx);
+    void SwitchToWork(const TActorContext &ctx);
 
     void ClearState();
 
@@ -1061,8 +1061,6 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                 const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                const TActorContext &ctx);
     void Handle(TEvents::TEvUndelivered::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev,
@@ -1105,7 +1103,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFuncTraced(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
             HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
             HFuncTraced(TEvPrivate::TEvCheckAllSlotsStatus, Handle);
@@ -1152,7 +1149,6 @@ public:
     }
 
 private:
-    TDeque<TAutoPtr<IEventHandle>> InitQueue;
     NKikimrTenantSlotBroker::TConfig Config;
     TDuration PendingTimeout;
     ui64 RequestId;

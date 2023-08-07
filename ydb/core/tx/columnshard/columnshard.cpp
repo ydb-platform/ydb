@@ -10,16 +10,21 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 
 namespace NKikimr::NColumnShard {
 
-void TColumnShard::BecomeBroken(const TActorContext& ctx)
+void TColumnShard::CleanupActors(const TActorContext& ctx)
 {
-    Become(&TThis::StateBroken);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     ctx.Send(IndexingActor, new TEvents::TEvPoisonPill);
     ctx.Send(CompactionActor, new TEvents::TEvPoisonPill);
     ctx.Send(EvictionActor, new TEvents::TEvPoisonPill);
     if (Tiers) {
         Tiers->Stop();
     }
+}
+
+void TColumnShard::BecomeBroken(const TActorContext& ctx)
+{
+    Become(&TThis::StateBroken);
+    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
+    CleanupActors(ctx);
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
@@ -47,12 +52,6 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
 
     Execute(CreateTxInitSchema(), ctx);
-}
-
-void TColumnShard::Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-    LOG_S_DEBUG("Handle TEvents::TEvPoisonPill");
-    Y_UNUSED(ev);
-    BecomeBroken(ctx);
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
@@ -112,7 +111,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
     LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, *BlobManager);
+    auto blobs = InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, *BlobManager);
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
@@ -122,22 +121,23 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     }
 
-    // Cleanup just freed dropped exported blobs
-    CleanForgottenBlobs(ctx);
+    if (blobs.size()) {
+        // Cleanup just freed blobs (dropped exported ones)
+        CleanForgottenBlobs(ctx, blobs);
+    }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->Manual) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup::MANUAL")("tablet_id", TabletID());
         EnqueueBackgroundActivities();
-        return;
-    }
-
-    if (LastPeriodicBackActivation < TInstant::Now() - ActivationPeriod) {
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvPrivate::TEvPeriodicWakeup")("tablet_id", TabletID());
         SendWaitPlanStep(GetOutdatedStep());
-    }
 
-    SendPeriodicStats();
-    ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+        SendPeriodicStats();
+        ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
+    }
 }
 
 void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {
@@ -246,9 +246,7 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory =
-        BasicTxInfo.size() * sizeof(TBasicTxInfo) +
-        DeadlineQueue.size() * sizeof(TDeadlineQueueItem) +
-        (PlanQueue.size() + RunningQueue.size()) * sizeof(TPlanQueueItem) +
+        ProgressTxController.GetMemoryUsage() +
         ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
         AltersInFlight.size() * sizeof(TAlterMeta) +
         CommitsInFlight.size() * sizeof(TCommitMeta) +
@@ -258,7 +256,6 @@ ui64 TColumnShard::MemoryUsage() const {
         TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
         TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
     memory += TablesManager.GetMemoryUsage();
-    memory += BatchCache.Bytes();
     return memory;
 }
 

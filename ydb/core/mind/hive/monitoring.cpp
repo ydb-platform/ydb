@@ -1352,13 +1352,16 @@ public:
             << aliveNodes << "/" << nodes << "</td></tr>";*/
         out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << (tablets == 0 ? 0 : runningTablets * 100 / tablets) << "% "
             << runningTablets << "/" << tablets << "</td></tr>";
-        out << "<tr><td title='Rebalance all tablets' style='cursor:pointer' onclick='rebalanceTablets(this)'>Balancer: </td><td id='balancerProgress'>"
-            << (Self->BalancerProgress >= 0 ? Sprintf("%d%%", Self->BalancerProgress) : TString()) << "</td></tr>";
+        out << "<tr><td><a role='button' data-toggle='modal' href='#rebalance'>Balancer:</a></td><td id='balancerProgress'>"
+            << GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger) << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Wait Queue:" << "</td><td id='waitQueue'>" << Self->BootQueue.WaitQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Resource Total: " << "</td><td id='resourceTotal'>" << GetResourceValuesText(Self->TotalRawResourceValues) << "</td></tr>";
         out << "<tr><td>" << "Resource StDev: " << "</td><td id='resourceVariance'>"
             << convert(Self->GetStDevResourceValues(), [](double d) -> TString { return Sprintf("%.9f", d); }) << "</td></tr>";
+        THive::THiveStats stats = Self->GetStats();
+        out << "<tr><td>" << "Max usage:" << "<td id='maxUsage'>" << GetColoredValue(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) << "</td></tr>";
+        out << "<tr><td>" << "Scatter:" << "<td id='scatter'>" << GetColoredValue(stats.Scatter, Self->GetMinScatterToBalance()) << "</td></tr>";
         out << "</table>";
 
         out << "<table id='node_table' class='table simple-table2 table-hover table-condensed'>";
@@ -1540,6 +1543,89 @@ public:
                </div>
                )___";
 
+        out << R"___(
+               <div class='modal fade' id='rebalance' role='dialog'>
+                   <div class='modal-dialog' style='width:60%'>
+                       <div class='modal-content'>
+                           <div class='modal-header'>
+                               <button type='button' class='close' data-dismiss='modal'>&times;</button>
+                               <h4 class='modal-title'>Balancer</h4>
+                           </div>
+                           <div class='modal-body'>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <h2> Run Balancer</h2>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-2'>
+                                       <label for='balancer_max_movements'>Max movements</label>
+                                       <div in='balancer_max_movements' class='input-group'>
+                                           <input id='balancer_max_movements' type='number' value='1000' class='form-control'>
+                                       </div>
+                                       <br>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-2'>
+                                       <button type='submit' class='btn btn-primary' onclick='rebalanceTablets()' data-dismiss='modal' id='run-balancer'>Run</button>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <hr>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-12'>
+                                       <h2> Rebalance ALL tablets FROM SCRATCH</h2>
+                                   </div>
+                               </div>
+                               <div class='row'>
+                                   <div class='col-md-8'>
+                                       <label for='tenant_name'> Please enter the tenant name to confirm you know what you are doing</label>
+                                       <div in='tenant_name' class='input-group' style='width:100%'>
+                                           <input id='tenant_name' type='text' class='form-control'>
+                                       </div>
+                                       <br>
+                                   </div>
+                              </div>
+                              <div class='row'>
+                                   <div class='col-md-2'>
+                                       <button id='button_rebalance' type='submit' class='btn btn-danger' onclick='rebalanceTabletsFromScratch();' data-dismiss='modal'>Run</button>
+                                   </div>
+                              </div>
+                              <div class='row'>
+                                   <div class='col-md-12'>
+                                       <hr>
+                                   </div>
+                              </div>
+                              <div class='row'>
+                                   <div class='col-md-12'>
+                                       <h2> Latest tablet moves</h2>
+                                   </div>
+                              </div>
+                              <div class='row'>
+                                   <div class='col-md-12'>
+                                       <table id='move_history' class='table table-stripped'>
+                                       <thead>
+                                       <th>Timestamp</th>
+                                       <th>Tablet</th>
+                                       <th>Node</th>
+                                       </thead>
+                                       <tbody>
+                                       </tbody>
+                                       </table>
+                                   </div>
+                              </div>
+                           </div>
+                           <div class='modal-footer'>
+                               <button type='button' class='btn btn-default' data-dismiss='modal'>Cancel</button>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+               )___";
         out << "<script>";
         out << "var hiveId = '" << Self->HiveId << "';";
         out << "var tablets = [";
@@ -1707,9 +1793,15 @@ public:
                 $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); }});
             }
 
-            function rebalanceTablets(element) {
+            function rebalanceTablets() {
                 $('#balancerProgress').html('o.O');
-                $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance'});
+                var max_movements = $('#balancer_max_movements').val();
+                $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
+            }
+
+            function rebalanceTabletsFromScratch(element) {
+                var tenant_name = $('#tenant_name').val();
+                $.ajax({url:'app?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name});
             }
 
             function toggleAlert() {
@@ -1736,10 +1828,12 @@ public:
                         $('#resourceTotal').html(result.ResourceTotal);
                         $('#bootQueue').html(result.BootQueueSize);
                         $('#waitQueue').html(result.WaitQueueSize);
-                        if (result.BalancerProgress >= 0) {
-                            $('#balancerProgress').html(result.BalancerProgress + '%');
-                        } else {
-                            $('#balancerProgress').html('');
+                        $('#balancerProgress').html(result.BalancerProgress);
+                        $('#maxUsage').html(result.MaxUsage);
+                        $('#scatter').html(result.Scatter);
+                        $('#move_history > tbody > tr').remove();
+                        for (var i in result.Moves) {
+                            $(result.Moves[i]).appendTo('#move_history > tbody');
                         }
                         var old_nodes = {};
                         if (Empty) {
@@ -1956,6 +2050,7 @@ public:
         }
 
         NJson::TJsonValue jsonData;
+        THive::THiveStats stats = Self->GetStats();
 
         jsonData["TotalTablets"] = tablets;
         jsonData["RunningTablets"] = runningTablets;
@@ -1965,7 +2060,9 @@ public:
         jsonData["ResourceVariance"] = GetResourceValuesText(Self->GetStDevResourceValues());//, [](double d) -> TString { return Sprintf("%.9f", d); });
         jsonData["BootQueueSize"] = Self->BootQueue.BootQueue.size();
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
-        jsonData["BalancerProgress"] = Self->BalancerProgress;
+        jsonData["BalancerProgress"] = GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger);
+        jsonData["MaxUsage"] =  GetColoredValue(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
+        jsonData["Scatter"] = GetColoredValue(stats.Scatter, Self->GetMinScatterToBalance());
 
         TVector<TNodeInfo*> nodeInfos;
         nodeInfos.reserve(Self->Nodes.size());
@@ -2036,6 +2133,12 @@ public:
             jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.9f", nodeUsage), nodeUsage >= 1);
             jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
             jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
+        }
+        NJson::TJsonValue& moves = jsonData["Moves"];
+        if (Self->TabletMoveHistory.TotalSize()) {
+            for (int i = Self->TabletMoveHistory.TotalSize() - 1; i >= (int)Self->TabletMoveHistory.FirstIndex(); --i) {
+                moves.AppendValue(Self->TabletMoveHistory[i].ToHTML());
+            }
         }
         NJson::WriteJson(&out, &jsonData);
     }
@@ -2240,7 +2343,47 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
+        Self->LastBalancerTrigger = EBalancerType::Manual;
         Self->StartHiveBalancer(MaxMovements);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
+    }
+};
+
+class TTxMonEvent_RebalanceFromScratch : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    TString TenantName;
+
+    TTxMonEvent_RebalanceFromScratch(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+        TenantName = ev->Get()->Cgi().Get("tenantName");
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }
+
+    bool ValidateTenantName() {
+        auto domainId = Self->GetMySubDomainKey();
+        auto* domainInfo = Self->FindDomain(domainId);
+        if (!domainInfo || !domainInfo->Path) {
+            // In the non-normal case of not knowing our domain, allow anything
+            return true;
+        }
+        return TenantName == domainInfo->Path;
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext&) override {
+        if (!ValidateTenantName()) {
+            return true;
+        }
+        for (const auto& tablet : Self->Tablets) {
+            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+        }
         return true;
     }
 
@@ -3633,6 +3776,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "Rebalance") {
         return Execute(new TTxMonEvent_Rebalance(ev->Sender, ev, this), ctx);
+    }
+    if (page == "RebalanceFromScratch") {
+        return Execute(new TTxMonEvent_RebalanceFromScratch(ev->Sender, ev, this), ctx);
     }
     if (page == "LandingData") {
         return Execute(new TTxMonEvent_LandingData(ev->Sender, ev, this), ctx);

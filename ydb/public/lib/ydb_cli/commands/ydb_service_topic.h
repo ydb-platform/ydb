@@ -11,8 +11,8 @@
 
 namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs);
-    TVector<NYdb::NTopic::ECodec> InitAllowedCodecs();
-    const TVector<NYdb::NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
+    TVector<NTopic::ECodec> InitAllowedCodecs();
+    const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
 
     class TCommandWithSupportedCodecs {
     protected:
@@ -151,6 +151,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString Consumer_ = "";
+        TVector<ui64> PartitionIds_;
         TMaybe<uint32_t> Offset_;
         TMaybe<uint32_t> Partition_;
         TMaybe<ui64> Timestamp_;

@@ -411,7 +411,7 @@ static int ioring_poll(struct io_uring *ring, int fd, int fixed)
 		return 1;
 	}
 	ret = 0;
-	if (cqe->res != POLLOUT) {
+	if (!(cqe->res & POLLOUT)) {
 		fprintf(stderr, "io_uring_wait_cqe: expected 0x%.8x, got 0x%.8x\n",
 		       POLLOUT, cqe->res);
 		ret = 1;

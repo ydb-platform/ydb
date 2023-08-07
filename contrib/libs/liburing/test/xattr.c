@@ -52,10 +52,11 @@ static int io_uring_fsetxattr(struct io_uring *ring, int fd, const char *name,
 	}
 
 	ret = cqe->res;
-	if (ret == -EINVAL)
-		no_xattr = 1;
+	if (ret < 0) {
+		if (cqe->res == -EINVAL || cqe->res == -EOPNOTSUPP)
+			no_xattr = 1;
+	}
 	io_uring_cqe_seen(ring, cqe);
-
 	return ret;
 }
 
@@ -127,8 +128,11 @@ static int io_uring_setxattr(struct io_uring *ring, const char *path,
 	}
 
 	ret = cqe->res;
+	if (ret < 0) {
+		if (ret == -EINVAL || ret == -EOPNOTSUPP)
+			no_xattr = 1;
+	}
 	io_uring_cqe_seen(ring, cqe);
-
 	return ret;
 }
 

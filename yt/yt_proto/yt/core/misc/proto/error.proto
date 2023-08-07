@@ -1,0 +1,20 @@
+package NYT.NProto;
+
+option java_package = "tech.ytsaurus";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/misc";
+
+import "yt_proto/yt/core/ytree/proto/attributes.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TError
+{
+    required int32 code = 1;
+    optional string message = 2;
+    optional NYT.NYTree.NProto.TAttributeDictionary attributes = 3;
+    repeated TError inner_errors = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////

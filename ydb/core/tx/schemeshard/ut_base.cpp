@@ -8328,6 +8328,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(AssignBlockStoreCheckFillTokenInAlter) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.SetFillToken("barkovbg");
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetFillToken("barkovbg");
+        vc.AddPartitions()->SetBlockCount(24);
+        vc.AddPartitions()->SetBlockCount(24);
+
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetFillToken("svartmetal");
+        vc.AddPartitions()->SetBlockCount(25);
+        vc.AddPartitions()->SetBlockCount(25);
+
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
+                       vdescr.DebugString(),
+                       {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetFillToken("barkovbg");
+        vc.AddPartitions()->SetBlockCount(48);
+        vc.AddPartitions()->SetBlockCount(48);
+
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(BlockStoreVolumeLimits) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

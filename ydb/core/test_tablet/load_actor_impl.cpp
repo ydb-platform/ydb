@@ -8,22 +8,41 @@ namespace NKikimr::NTestShard {
         , Generation(generation)
         , Tablet(tablet)
         , Settings(settings)
-        , StateServerWriteLatency(1024)
-        , WriteLatency(1024)
-        , ReadLatency(1024)
     {}
+
+    TLoadActor::~TLoadActor() {
+        ClearKeys();
+    }
+
+    void TLoadActor::ClearKeys() {
+        for (auto& [key, info] : Keys) {
+            Y_VERIFY((info.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && info.ConfirmedKeyIndex == Max<size_t>()) ||
+                (info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && info.ConfirmedKeyIndex != Max<size_t>() &&
+                 ConfirmedKeys[info.ConfirmedKeyIndex] == key));
+            info.ConfirmedKeyIndex = Max<size_t>();
+        }
+        Keys.clear();
+        ConfirmedKeys.clear();
+    }
 
     void TLoadActor::Bootstrap(const TActorId& parentId) {
         STLOG(PRI_DEBUG, TEST_SHARD, TS31, "TLoadActor::Bootstrap", (TabletId, TabletId));
         TabletActorId = parentId;
-        Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
-            Settings.GetStorageServerPort()));
-        Send(parentId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+        if (Settings.HasStorageServerHost()) {
+            Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
+                Settings.GetStorageServerPort()));
+            Send(parentId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+        } else {
+            RunValidation(true);
+        }
+        NextWriteTimestamp = TActivationContext::Monotonic();
         Become(&TThis::StateFunc);
     }
 
     void TLoadActor::PassAway() {
-        Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+        if (Settings.HasStorageServerHost()) {
+            Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
+        }
         if (ValidationActorId) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ValidationActorId, SelfId(), nullptr, 0));
         }
@@ -55,19 +74,51 @@ namespace NKikimr::NTestShard {
                 RunValidation(false);
             }
         } else { // resume load
-            if (WritesInFlight.size() < Settings.GetMaxInFlight()) { // write until there is space in inflight
-                IssueWrite();
-                if (WritesInFlight.size() < Settings.GetMaxInFlight()) {
-                    TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+            const TMonotonic now = TActivationContext::Monotonic();
+
+            bool canWriteMore = false;
+            if (WritesInFlight.size() < Settings.GetMaxInFlight()) {
+                if (NextWriteTimestamp <= now) {
+                    IssueWrite();
+                    if (WritesInFlight.size() < Settings.GetMaxInFlight() || !Settings.GetResetWritePeriodOnFull()) {
+                        NextWriteTimestamp += GenerateRandomInterval(Settings.GetWritePeriods());
+                        canWriteMore = NextWriteTimestamp <= now;
+                    } else {
+                        NextWriteTimestamp = TMonotonic::Max();
+                    }
+                } else if (!WriteOnTimeScheduled) {
+                    Y_VERIFY(NextWriteTimestamp != TMonotonic::Max());
+                    TActivationContext::Schedule(NextWriteTimestamp, new IEventHandle(EvWriteOnTime, 0, SelfId(), {}, nullptr, 0));
+                    WriteOnTimeScheduled = true;
                 }
             }
-            if (ReadsInFlight.size() < 10 && IssueRead()) {
-                TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+
+            bool canReadMore = false;
+            if (ReadsInFlight.size() < Settings.GetMaxReadsInFlight()) {
+                canReadMore = IssueRead();
             }
+
             if (BytesOfData > Settings.GetMaxDataBytes()) { // delete some data if needed
                 IssueDelete();
             }
+
+            if (!DoSomeActionInFlight && (canWriteMore || canReadMore)) {
+                TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                DoSomeActionInFlight = true;
+            }
         }
+    }
+
+    void TLoadActor::HandleDoSomeAction() {
+        Y_VERIFY(DoSomeActionInFlight);
+        DoSomeActionInFlight = false;
+        Action();
+    }
+
+    void TLoadActor::HandleWriteOnTime() {
+        Y_VERIFY(WriteOnTimeScheduled);
+        WriteOnTimeScheduled = false;
+        Action();
     }
 
     void TLoadActor::Handle(TEvStateServerStatus::TPtr ev) {
@@ -83,7 +134,7 @@ namespace NKikimr::NTestShard {
         Y_VERIFY(interval.HasFrequency() && interval.HasMaxIntervalMs());
         const double frequency = interval.GetFrequency();
         const double xMin = exp(-frequency * interval.GetMaxIntervalMs() * 1e-3);
-        const double x = Max(xMin, TAppData::RandomProvider->GenRandReal2());
+        const double x = Max(xMin, RandomNumber<double>());
         return TDuration::Seconds(-log(x) / frequency);
     }
 
@@ -99,7 +150,7 @@ namespace NKikimr::NTestShard {
         const auto& interval = intervals[PickInterval(intervals)];
         Y_VERIFY(interval.HasMin() && interval.HasMax() && interval.GetMin() <= interval.GetMax());
         *isInline = interval.GetInline();
-        return TAppData::RandomProvider->Uniform(interval.GetMin(), interval.GetMax());
+        return interval.GetMin() + RandomNumber<size_t>(interval.GetMax() - interval.GetMin() + 1);
     }
 
     std::unique_ptr<TEvKeyValue::TEvRequest> TLoadActor::CreateRequest() {
@@ -137,7 +188,7 @@ namespace NKikimr::NTestShard {
                 DeletesInFlight.erase(it);
             }
             if (const auto it = ReadsInFlight.find(record.GetCookie()); it != ReadsInFlight.end()) {
-                const auto& [key, offset, size, timestamp] = it->second;
+                const auto& [key, timestamp, payloadInResponse, items] = it->second;
                 const auto jt = KeysBeingRead.find(key);
                 Y_VERIFY(jt != KeysBeingRead.end() && jt->second);
                 if (!--jt->second) {
@@ -159,7 +210,10 @@ namespace NKikimr::NTestShard {
             STLOG(PRI_INFO, TEST_SHARD, TS04, "TEvKeyValue::TEvResponse", (TabletId, TabletId), (Msg, makeResponse()));
             ProcessWriteResult(record.GetCookie(), record.GetWriteResult());
             ProcessDeleteResult(record.GetCookie(), record.GetDeleteRangeResult());
-            ProcessReadResult(record.GetCookie(), record.GetReadResult());
+            ProcessReadResult(record.GetCookie(), record.GetReadResult(), *ev->Get());
+        }
+        if (WritesInFlight.size() != Settings.GetMaxInFlight() && NextWriteTimestamp == TMonotonic::Max()) {
+            NextWriteTimestamp = TMonotonic::Now() + GenerateRandomInterval(Settings.GetWritePeriods());
         }
         Action();
     }

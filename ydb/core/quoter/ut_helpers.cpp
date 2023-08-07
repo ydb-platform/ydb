@@ -237,12 +237,23 @@ void TKesusProxyTestSetup::WaitProxyStart() {
 
 void TKesusProxyTestSetup::SendNotConnected(TTestTabletPipeFactory::TTestTabletPipe* pipe) {
     WaitProxyStart();
-    Runtime->Send(new IEventHandle(KesusProxyId, pipe->GetSelfID(), new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, pipe->GetSelfID(), TActorId(), true, false)), 0, true);
+    Runtime->Send(
+        new IEventHandle(
+            KesusProxyId, pipe->GetSelfID(),
+            new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, pipe->GetSelfID(), TActorId(), true, false, 0)
+        ),
+        0, true
+    );
 }
 
 void TKesusProxyTestSetup::SendConnected(TTestTabletPipeFactory::TTestTabletPipe* pipe) {
     WaitProxyStart();
-    Runtime->Send(new IEventHandle(KesusProxyId, pipe->GetSelfID(), new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::OK, pipe->GetSelfID(), pipe->GetSelfID(), true, false)), 0, true);
+    Runtime->Send(
+        new IEventHandle(
+            KesusProxyId, pipe->GetSelfID(),
+            new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::OK, pipe->GetSelfID(), pipe->GetSelfID(), true, false, 0)
+        ), 0, true
+    );
 }
 
 void TKesusProxyTestSetup::SendDestroyed(TTestTabletPipeFactory::TTestTabletPipe* pipe) {
@@ -477,11 +488,17 @@ void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::HandleResour
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendNotConnected() {
-    Send(Parent->Parent->KesusProxyId, new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, SelfID, TActorId(), true, false));
+    Send(
+        Parent->Parent->KesusProxyId,
+        new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::ERROR, SelfID, TActorId(), true, false, 0)
+    );
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendConnected() {
-    Send(Parent->Parent->KesusProxyId, new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::OK, SelfID, SelfID, true, false));
+    Send(
+        Parent->Parent->KesusProxyId,
+        new TEvTabletPipe::TEvClientConnected(KESUS_TABLET_ID, NKikimrProto::OK, SelfID, SelfID, true, false, 0)
+    );
 }
 
 void TKesusProxyTestSetup::TTestTabletPipeFactory::TTestTabletPipe::SendDestroyed() {

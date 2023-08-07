@@ -65,7 +65,7 @@ TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& tx
         for (auto& channel : task.GetOutputs(i).GetChannels()) {
             TOutputChannelState outputChannel;
             outputChannel.ChannelId = channel.GetId();
-            outputChannel.PeerState.PeerFreeSpace = channelBufferSize;
+            outputChannel.PeerState.ActualizeFreeSpace(channelBufferSize);
 
             if (channel.GetDstEndpoint().HasActorId()) {
                 outputChannel.Peer = ActorIdFromProto(channel.GetDstEndpoint().GetActorId());
@@ -205,22 +205,13 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     // remove all messages with seqNo <= ackSeqNo
     auto it = outputChannel.InFlight.begin();
     while (it != outputChannel.InFlight.end() && it->first <= record.GetSeqNo()) {
-        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightBytes >= it->second.Data.PayloadSize());
-        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightRows >= it->second.Data.RowCount());
-        Y_VERIFY_DEBUG(outputChannel.PeerState.InFlightCount >= 1);
-
-        outputChannel.PeerState.InFlightBytes -= it->second.Data.PayloadSize();
-        outputChannel.PeerState.InFlightRows -= it->second.Data.RowCount();
-        outputChannel.PeerState.InFlightCount -= 1;
+        outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.RowCount());
         it = outputChannel.InFlight.erase(it);
     }
 
-    outputChannel.PeerState.PrevPeerFreeSpace = outputChannel.PeerState.PeerFreeSpace;
-    outputChannel.PeerState.PeerFreeSpace = record.GetFreeSpace();
+    outputChannel.PeerState.ActualizeFreeSpace(record.GetFreeSpace());
 
-    LOG_T("PeerState, freeSpace: " << outputChannel.PeerState.PeerFreeSpace
-        << ", inflight bytes: " << outputChannel.PeerState.InFlightBytes
-        << ", inflight count: " << outputChannel.PeerState.InFlightCount
+    LOG_T("PeerState, peerState:(" << outputChannel.PeerState.DebugString() << ")"
         << ", sentSeqNo: " << outputChannel.LastSentSeqNo
         << ", ackSeqNo: " << record.GetSeqNo());
 
@@ -420,7 +411,7 @@ void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::T
     }
 }
 
-void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, TEvents::TEvUndelivered::EReason reason) {
+void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason) {
     TOutputChannelState& outputChannel = OutCh(channelId);
 
     if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
@@ -449,7 +440,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, TEv
     ScheduleRetryForChannel<TOutputChannelState, TEvDqCompute::TEvRetryChannelData>(outputChannel, Now());
 }
 
-void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, TEvents::TEvUndelivered::EReason reason) {
+void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason) {
     TInputChannelState& inputChannel = InCh(channelId);
     inputChannel.PollRequest.reset();
 
@@ -560,8 +551,13 @@ void TDqComputeActorChannels::SetOutputChannelPeer(ui64 channelId, const TActorI
     outputChannel.Peer = peer;
 }
 
-bool TDqComputeActorChannels::CanSendChannelData(ui64 channelId) {
-    TOutputChannelState& outputChannel = OutCh(channelId);
+bool TDqComputeActorChannels::HasFreeMemoryInChannel(const ui64 channelId) const {
+    const TOutputChannelState& outputChannel = OutCh(channelId);
+    return outputChannel.PeerState.HasFreeMemory();
+}
+
+bool TDqComputeActorChannels::CanSendChannelData(const ui64 channelId) const {
+    const TOutputChannelState& outputChannel = OutCh(channelId);
     return outputChannel.Peer && (!outputChannel.Finished || SupportCheckpoints) && !outputChannel.RetryState;
 }
 
@@ -570,16 +566,16 @@ bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) {
     return outputChannel.Finished && !SupportCheckpoints;
 }
 
-void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData) {
+void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, const bool needAck) {
     TOutputChannelState& outputChannel = OutCh(channelData.Proto.GetChannelId());
 
     YQL_ENSURE(!outputChannel.Finished || SupportCheckpoints);
     YQL_ENSURE(!outputChannel.RetryState);
 
-    ui64 seqNo = ++outputChannel.LastSentSeqNo;
-    ui32 chunkBytes = channelData.Proto.GetData().GetRaw().size() + channelData.Payload.size();
-    ui32 chunkRows = channelData.Proto.GetData().GetRows();
-    bool finished = channelData.Proto.GetFinished();
+    const ui64 seqNo = ++outputChannel.LastSentSeqNo;
+    const ui32 chunkBytes = channelData.PayloadSize();
+    const ui32 chunkRows = channelData.RowCount();
+    const bool finished = channelData.Proto.GetFinished();
 
     LOG_T("SendChannelData, channelId: " << channelData.Proto.GetChannelId()
         << ", peer: " << *outputChannel.Peer
@@ -621,11 +617,10 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData) {
     outputChannel.Finished = finished;
 
     ui32 flags = CalcMessageFlags(*outputChannel.Peer);
+    dataEv->Record.SetNoAck(!needAck);
     Send(*outputChannel.Peer, dataEv.Release(), flags, /* cookie */ outputChannel.ChannelId);
 
-    outputChannel.PeerState.InFlightBytes += chunkBytes;
-    outputChannel.PeerState.InFlightRows += chunkRows;
-    outputChannel.PeerState.InFlightCount += 1;
+    outputChannel.PeerState.AddInFlight(chunkBytes, chunkRows);
 }
 
 bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
@@ -801,7 +796,13 @@ TDqComputeActorChannels::TInputChannelState& TDqComputeActorChannels::InCh(ui64 
     return *ch;
 }
 
-TDqComputeActorChannels::TOutputChannelState& TDqComputeActorChannels::OutCh(ui64 channelId) {
+const TDqComputeActorChannels::TOutputChannelState& TDqComputeActorChannels::OutCh(const ui64 channelId) const {
+    auto ch = OutputChannelsMap.FindPtr(channelId);
+    YQL_ENSURE(ch, "task: " << TaskId << ", unknown output channelId: " << channelId);
+    return *ch;
+}
+
+TDqComputeActorChannels::TOutputChannelState& TDqComputeActorChannels::OutCh(const ui64 channelId) {
     auto ch = OutputChannelsMap.FindPtr(channelId);
     YQL_ENSURE(ch, "task: " << TaskId << ", unknown output channelId: " << channelId);
     return *ch;

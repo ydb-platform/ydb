@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <util/generic/array_ref.h>
+#include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 
 #include <contrib/libs/cxxsupp/libcxx/include/type_traits>

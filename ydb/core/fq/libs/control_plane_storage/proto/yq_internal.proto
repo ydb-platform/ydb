@@ -48,6 +48,7 @@ message QueryInternal {
     string operation_id = 24;
     string execution_id = 25;
     NFq.NConfig.TYdbStorageConfig compute_connection = 26;
+    google.protobuf.Duration result_ttl = 27;
 }
 
 message JobInternal {
@@ -67,4 +68,5 @@ message BindingInternal {
 message ComputeDatabaseInternal {
     string id = 1;
     NFq.NConfig.TYdbStorageConfig connection = 2;
+    bool synchronized = 3;
 }

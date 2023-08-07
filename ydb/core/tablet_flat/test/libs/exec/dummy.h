@@ -92,9 +92,15 @@ namespace NFake {
             Y_FAIL("Got unexpected event %s on tablet booting", name);
         }
 
+        void DefaultSignalTabletActive(const TActorContext&) override
+        {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext&) override
         {
             if (std::exchange(State, EState::Work) != EState::Work) {
+                SignalTabletActive(SelfId());
                 Send(Owner, new NFake::TEvReady(TabletID(), SelfId()));
             } else {
                 Y_FAIL("Received unexpected TExecutor activation");

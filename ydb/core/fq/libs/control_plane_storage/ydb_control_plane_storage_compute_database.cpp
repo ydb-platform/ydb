@@ -115,4 +115,76 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeDat
         });
 }
 
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatabaseRequest::TPtr& ev)
+{
+    TInstant startTime = TInstant::Now();
+    const TEvControlPlaneStorage::TEvModifyDatabaseRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCounters requestCounters = Counters.GetCounters(cloudId, scope, RTS_MODIFY_DATABASE, RTC_MODIFY_DATABASE);
+    requestCounters.IncInFly();
+    requestCounters.Common->RequestBytes->Add(event.GetByteSize());
+    const auto byteSize = event.GetByteSize();
+
+    CPS_LOG_T(MakeLogPrefix(scope, "internal", scope)
+        << "ModifyDatabaseRequest");
+
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
+    queryBuilder.AddString("scope", scope);
+    queryBuilder.AddText(
+        "SELECT `" INTERNAL_COLUMN_NAME "` FROM `" COMPUTE_DATABASES_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
+    );
+
+    auto prepareParams = [=, synchronized = ev->Get()->Synchronized](const TVector<TResultSet>& resultSets) {
+        if (resultSets.size() != 1) {
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+        }
+
+        TResultSetParser parser(resultSets.front());
+        if (!parser.TryNextRow()) {
+            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Database does not exist or permission denied. Please check the id database or your access rights";
+        }
+
+        FederatedQuery::Internal::ComputeDatabaseInternal result;
+        if (!result.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for internal compute database. Please contact internal support";
+        }
+
+        if (synchronized) {
+            result.set_synchronized(*synchronized);
+        }
+
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase(write)");
+        writeQueryBuilder.AddString("internal", result.SerializeAsString());
+        writeQueryBuilder.AddText(
+            "UPDATE `" COMPUTE_DATABASES_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME "` = $internal;"
+        );
+        const auto writeQuery = writeQueryBuilder.Build();
+        return make_pair(writeQuery.Sql, writeQuery.Params);
+    };
+
+    const auto query = queryBuilder.Build();
+    auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
+    auto result = ReadModifyWrite(query.Sql, query.Params, prepareParams, requestCounters, debugInfo);
+
+
+    auto prepare = [] { return std::make_tuple<NYql::TIssues>(NYql::TIssues{}); };
+    auto success = SendResponseTuple<TEvControlPlaneStorage::TEvModifyDatabaseResponse, std::tuple<NYql::TIssues>>(
+        MakeLogPrefix(scope, "internal", scope) + "ModifyDatabaseRequest",
+        NActors::TActivationContext::ActorSystem(),
+        result,
+        SelfId(),
+        ev,
+        startTime,
+        requestCounters,
+        prepare,
+        debugInfo);
+
+    success.Apply([=](const auto& future) {
+            TDuration delta = TInstant::Now() - startTime;
+            LWPROBE(ModifyDatabaseRequest, scope, "internal", delta, byteSize, future.GetValue());
+        });
+}
+
 } // NFq

@@ -28,6 +28,9 @@ struct IOptimizer {
     struct TInput {
         std::vector<TRel> Rels;
         std::vector<TEq> EqClasses;
+
+        TString ToString() const;
+        void Normalize();
     };
 
     enum class EJoinType {

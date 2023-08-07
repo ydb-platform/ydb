@@ -15,7 +15,8 @@
                         "Name"
                     ],
                     "scan_by": [
-                        "Group (-\u221e, 4)"
+                        "Group (0, 4)",
+                        "Name (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"
                 }

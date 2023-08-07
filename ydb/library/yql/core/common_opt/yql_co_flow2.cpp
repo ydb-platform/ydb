@@ -490,19 +490,6 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
     return ret;
 }
 
-bool HasOnlyCrossJoins(const TExprNode& joinTree) {
-    if (joinTree.IsAtom()) {
-        return true;
-    }
-
-    YQL_ENSURE(joinTree.Child(0)->IsAtom());
-    if (joinTree.Child(0)->Content() != "Cross") {
-        return false;
-    }
-
-    return HasOnlyCrossJoins(*joinTree.Child(1)) && HasOnlyCrossJoins(*joinTree.Child(2));
-}
-
 bool IsRenamingOrPassthroughFlatMap(const TCoFlatMapBase& flatMap, THashMap<TStringBuf, TStringBuf>& renames,
     THashSet<TStringBuf>& outputMembers, bool& isIdentity)
 {
@@ -830,7 +817,7 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
     auto inputsCount = ui32(node->ChildrenSize() - 2);
 
     auto joinTree = node->ChildPtr(inputsCount);
-    if (HasOnlyCrossJoins(*joinTree)) {
+    if (HasOnlyOneJoinType(*joinTree, "Cross")) {
         return node;
     }
 

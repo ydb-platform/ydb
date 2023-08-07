@@ -41,6 +41,7 @@ struct TIteratorReadBackoffSettings : TAtomicRefCount<TIteratorReadBackoffSettin
 };
 
 void SetReadIteratorBackoffSettings(TIntrusivePtr<TIteratorReadBackoffSettings>);
+void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes);
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>);
 

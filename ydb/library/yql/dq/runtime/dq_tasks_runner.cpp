@@ -150,7 +150,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
-            GetColumnsInfo(type, protoSortCols, sortColsInfo);
+            GetSortColumnsInfo(type, protoSortCols, sortColsInfo);
             YQL_ENSURE(!sortColsInfo.empty());
 
             return CreateInputMergeValue(std::move(inputs), std::move(sortColsInfo), holderFactory, stats);
@@ -161,7 +161,8 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 }
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
-    const NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)
+    const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& outputs)
 {
     TMaybe<ui32> outputWidth;
     if (type->IsMulti()) {
@@ -178,19 +179,11 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
         }
 
         case NDqProto::TTaskOutput::kHashPartition: {
-            TVector<TType*> keyColumnTypes;
-            TVector<ui32> keyColumnIndices;
-            GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumnTypes, keyColumnIndices);
-            YQL_ENSURE(!keyColumnTypes.empty());
-
+            TVector<TColumnInfo> keyColumns;
+            GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumns);
+            YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
-            TVector<ui64> channelIds(outputDesc.GetHashPartition().GetPartitionsCount());
-            for (ui32 i = 0; i < outputDesc.ChannelsSize(); ++i) {
-                channelIds[i] = outputDesc.GetChannels(i).GetId();
-            }
-
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumnTypes),
-                std::move(keyColumnIndices), outputWidth);
+            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory);
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {
@@ -213,9 +206,9 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
 
 IDqOutputConsumer::TPtr TDqTaskRunnerExecutionContext::CreateOutputConsumer(const TTaskOutput& outputDesc,
     const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext*, const TTypeEnvironment& typeEnv,
-    TVector<IDqOutput::TPtr>&& outputs) const
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TVector<IDqOutput::TPtr>&& outputs) const
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, std::move(outputs));
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs));
 }
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 /* channelId */) const {
@@ -652,7 +645,7 @@ public:
             if (transform) {
                 auto guard = BindAllocator();
                 transform->TransformOutput = execCtx.CreateOutputConsumer(outputDesc, transform->TransformOutputType,
-                    Context.ApplyCtx, typeEnv, std::move(outputs));
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs));
 
                 outputs.clear();
                 outputs.emplace_back(transform->TransformInput);
@@ -661,7 +654,7 @@ public:
             {
                 auto guard = BindAllocator();
                 outputConsumers[i] = execCtx.CreateOutputConsumer(outputDesc, entry->OutputItemTypes[i],
-                    Context.ApplyCtx, typeEnv, std::move(outputs));
+                    Context.ApplyCtx, typeEnv, holderFactory, std::move(outputs));
             }
         }
 

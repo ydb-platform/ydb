@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_ut_env.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <util/system/hp_timer.h>
@@ -840,5 +841,81 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(SmallDisk40) {
         SmallDisk(40);
     }
+
+    using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
+    void TestRestartWithDifferentVersion(TCurrent oldInfo, TCurrent newInfo, bool isCompatible) {
+        TCompatibilityInfoTest::Reset(&oldInfo);
+    
+        TActorTestContext testCtx({ false });
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+        TCompatibilityInfoTest::Reset(&newInfo);
+
+        testCtx.Send(new TEvBlobStorage::TEvRestartPDisk(testCtx.GetPDisk()->PDiskId, testCtx.MainKey, nullptr));
+        testCtx.Recv<TEvBlobStorage::TEvRestartPDiskResult>();
+        testCtx.Send(new NPDisk::TEvYardInit(vdisk.OwnerRound.fetch_add(1), vdisk.VDiskID, testCtx.TestCtx.PDiskGuid));
+        const auto evInitRes = testCtx.Recv<NPDisk::TEvYardInitResult>();
+        if (isCompatible) {
+            UNIT_ASSERT(evInitRes->Status == NKikimrProto::OK);
+        } else {
+            UNIT_ASSERT(evInitRes->Status != NKikimrProto::OK);
+        }
+    }
+
+    Y_UNIT_TEST(YdbVersionOldCompatible) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "ydb",
+                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "ydb",
+                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 2, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            true
+        );
+    }
+
+    Y_UNIT_TEST(YdbVersionIncompatible) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "ydb",
+                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "ydb",
+                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 3, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            false
+        );
+    }
+
+    Y_UNIT_TEST(YdbVersionNewIncompatibleWithDefault) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "ydb",
+                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "ydb",
+                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 0 },
+            }.ToPB(),
+            true
+        );
+    }
+
+    Y_UNIT_TEST(YdbVersionTrunk) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "trunk",
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Build = "trunk",
+            }.ToPB(),
+            true
+        );
+    }
+
 }
 } // namespace NKikimr

@@ -309,11 +309,11 @@ namespace NKikimr {
 
     bool TSyncerData::CheckCompatibility(TString& errorReason) {
         if (StoredCompatibilityInfo) {
-            return TCompatibilityInfo::CheckCompatibility(&*StoredCompatibilityInfo,
-                    (ui32)NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
+            return CompatibilityInfo.CheckCompatibility(&*StoredCompatibilityInfo,
+                    NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
         } else {
-            return TCompatibilityInfo::CheckCompatibility(nullptr,
-                    (ui32)NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
+            return CompatibilityInfo.CheckCompatibility(nullptr,
+                    NKikimrConfig::TCompatibilityRule::VDisk, errorReason);
         }
     }
 
@@ -328,7 +328,7 @@ namespace NKikimr {
                                                   top))
         , LocalSyncerState()
         , NotifyId(notifyId)
-        , CurrentCompatibilityInfo(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
+        , CurrentCompatibilityInfo(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
     {
         TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
         ParseWOSignature(serProto);
@@ -345,7 +345,7 @@ namespace NKikimr {
                                                   top))
         , LocalSyncerState()
         , NotifyId(notifyId)
-        , CurrentCompatibilityInfo(TCompatibilityInfo::MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
+        , CurrentCompatibilityInfo(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
     {
         TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
         ParseWOSignature(serProto);

@@ -407,7 +407,7 @@ void TImportFileClient::SetupUpsertSettingsCsv(const TImportFileSettings& settin
 
 TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath, const TImportFileSettings& settings,
                                      std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback) {
-    TString buffer;
+    TString localHeader;
 
     TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
 
@@ -427,7 +427,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
             headerRow.erase(headerRow.Size() - settings.Delimiter_.Size());
         }
         headerRow += '\n';
-        buffer = headerRow;
+        localHeader = headerRow;
     }
 
     // Do not use csvSettings.skip_rows.
@@ -444,7 +444,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
 
     TString line;
     std::vector<TAsyncStatus> inFlightRequests;
-
+    TString buffer = localHeader;
     while (TString line = splitter.ConsumeLine()) {
         ++row;
         readBytes += line.Size();
@@ -480,7 +480,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input, const TString& dbPath,
         };
 
         batchBytes = 0;
-        buffer = {};
+        buffer.clear();
+        buffer += localHeader;
 
         inFlightRequests.push_back(NThreading::Async(asyncUpsertCSV, *pool));
 
@@ -576,7 +577,8 @@ inline
 TAsyncStatus TImportFileClient::UpsertJsonBuffer(const TString& dbPath, TValueBuilder& builder) {
     auto upsert = [this, dbPath, rows = builder.Build()]
             (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
-        return tableClient.BulkUpsert(dbPath, std::move(rows), UpsertSettings)
+        NYdb::TValue rowsCopy(rows.GetType(), rows.GetProto());
+        return tableClient.BulkUpsert(dbPath, std::move(rowsCopy), UpsertSettings)
             .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                 NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                 return NThreading::MakeFuture(status);

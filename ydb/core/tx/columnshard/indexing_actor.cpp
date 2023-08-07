@@ -1,7 +1,9 @@
-#include "columnshard_impl.h"
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include "blob_cache.h"
+#include "columnshard_impl.h"
+#include "engines/changes/indexation.h"
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NColumnShard {
 namespace {
@@ -21,36 +23,30 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     {}
 
-    void Handle(TEvPrivate::TEvIndexing::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvIndexing::TPtr& ev) {
         LOG_S_DEBUG("TEvIndexing at tablet " << TabletId << " (index)");
 
         LastActivationTime = TAppData::TimeProvider->Now();
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
         Y_VERIFY(TxEvent);
-        auto& indexChanges = TxEvent->IndexChanges;
+        auto indexChanges = dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         Y_VERIFY(indexChanges);
         indexChanges->CachedBlobs = std::move(TxEvent->CachedBlobs);
 
-        auto& blobsToIndex = indexChanges->DataToIndex;
-        for (size_t i = 0; i < blobsToIndex.size(); ++i) {
-            auto& blobId = blobsToIndex[i].BlobId;
-            if (indexChanges->CachedBlobs.contains(blobId)) {
-                continue;
-            }
-
-            auto res = BlobsToRead.emplace(blobId, i);
-            Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str());
-            SendReadRequest(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
+        for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
+            Y_VERIFY(ranges.size() == 1);
+            Y_VERIFY(BlobsToRead.emplace(ranges.front().BlobId).second);
+            SendReadRequest(ranges.front());
             Counters.ReadBytes->Add(blobId.BlobSize());
         }
 
         if (BlobsToRead.empty()) {
-            Index(ctx);
+            Index();
         }
     }
 
-    void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
         LOG_S_TRACE("TEvReadBlobRangeResult (waiting " << BlobsToRead.size()
             << ") at tablet " << TabletId << " (index)");
 
@@ -77,29 +73,28 @@ public:
             return;
         }
 
-        ui32 pos = BlobsToRead[blobId];
         BlobsToRead.erase(blobId);
 
         Y_VERIFY(TxEvent);
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
-        Y_VERIFY(indexChanges->DataToIndex[pos].BlobId == blobId);
         indexChanges->Blobs[event.BlobRange] = blobData;
 
         if (BlobsToRead.empty()) {
-            Index(ctx);
+            Index();
         }
     }
 
-    void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+    void Bootstrap() {
         Become(&TThis::StateWait);
     }
 
     STFUNC(StateWait) {
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId));
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvIndexing, Handle);
-            HFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            hFunc(TEvPrivate::TEvIndexing, Handle);
+            hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, Handle)
             default:
                 break;
         }
@@ -110,7 +105,7 @@ private:
     TActorId Parent;
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-    THashMap<TUnifiedBlobId, ui32> BlobsToRead;
+    THashSet<TUnifiedBlobId> BlobsToRead;
     TInstant LastActivationTime;
 
     void SendReadRequest(const NBlobCache::TBlobRange& blobRange) {
@@ -124,22 +119,60 @@ private:
         Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, std::move(readOpts)));
     }
 
-    void Index(const TActorContext& ctx) {
+    class TConveyorTask: public NConveyor::ITask {
+    private:
+        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+        const TIndexationCounters Counters;
+    protected:
+        virtual bool DoExecute() override {
+            auto guard = TxEvent->PutResult->StartCpuGuard();
+
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
+            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
+            return true;
+        }
+    public:
+        virtual TString GetTaskClassIdentifier() const override {
+            return "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
+        }
+
+        std::unique_ptr<TEvPrivate::TEvWriteIndex> ExtractEvent() {
+            Y_VERIFY(TxEvent);
+            return std::move(TxEvent);
+        }
+
+        TConveyorTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters)
+            : TxEvent(std::move(txEvent))
+            , Counters(counters)
+        {
+            Y_VERIFY(TxEvent);
+        }
+    };
+
+    void Index() {
         Y_VERIFY(TxEvent);
         if (TxEvent->GetPutStatus() == NKikimrProto::UNKNOWN) {
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
-
-            TCpuGuard guard(TxEvent->ResourceUsage);
-            NOlap::TIndexationLogic indexationLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = std::move(indexationLogic.Apply(TxEvent->IndexChanges).DetachResult());
-            LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
+            std::shared_ptr<TConveyorTask> task = std::make_shared<TConveyorTask>(std::move(TxEvent), Counters);
+            NConveyor::TCompServiceOperator::SendTaskToExecute(task);
         } else {
             LOG_S_ERROR("Indexing failed at tablet " << TabletId);
+            TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
+            Send(Parent, TxEvent.release());
         }
+    }
 
-        TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
-        ctx.Send(Parent, TxEvent.release());
-        //Die(ctx); // It's alive till tablet's death
+    void Handle(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+        auto t = static_pointer_cast<TConveyorTask>(ev->Get()->GetResult());
+        Y_VERIFY_DEBUG(dynamic_pointer_cast<TConveyorTask>(ev->Get()->GetResult()));
+        auto txEvent = t->ExtractEvent();
+        if (t->HasError()) {
+            ACFL_ERROR("event", "task_error")("message", t->GetErrorMessage());
+        } else {
+            LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
+        }
+        txEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
+        Send(Parent, txEvent.release());
     }
 };
 

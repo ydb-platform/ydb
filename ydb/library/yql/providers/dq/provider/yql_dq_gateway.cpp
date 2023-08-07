@@ -130,6 +130,7 @@ public:
             if ((status.GRpcStatusCode == grpc::UNAVAILABLE /* terminating state */
                 || status.GRpcStatusCode == grpc::CANCELLED /* server crashed or stopped before task process */)
                 || status.GRpcStatusCode == grpc::RESOURCE_EXHAUSTED /* send message limit */
+                || status.GRpcStatusCode == grpc::INVALID_ARGUMENT /* Bad session */
                 )
             {
                 YQL_CLOG(ERROR, ProviderDq) << "Fallback " << status.GRpcStatusCode;

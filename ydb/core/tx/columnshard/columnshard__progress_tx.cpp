@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+
+#include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr::NColumnShard {
@@ -19,19 +21,24 @@ private:
     };
 
     struct TResultEvent {
-        TBasicTxInfo TxInfo;
+        TTxController::TBasicTxInfo TxInfo;
         NKikimrTxColumnShard::EResultStatus Status;
 
-        TResultEvent(TBasicTxInfo&& txInfo, NKikimrTxColumnShard::EResultStatus status)
+        TResultEvent(TTxController::TBasicTxInfo&& txInfo, NKikimrTxColumnShard::EResultStatus status)
             : TxInfo(std::move(txInfo))
             , Status(status)
         {}
 
-        THolder<IEventBase> MakeEvent(ui64 tabletId) const {
-            auto result = MakeHolder<TEvColumnShard::TEvProposeTransactionResult>(
+        std::unique_ptr<IEventBase> MakeEvent(ui64 tabletId) const {
+            if (TxInfo.TxKind ==  NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE) {
+                auto result = NEvents::TDataEvents::TEvWriteResult::BuildCommited(TxInfo.TxId);
+                return result;
+            } else {
+                auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(
                 tabletId, TxInfo.TxKind, TxInfo.TxId, Status);
-            result->Record.SetStep(TxInfo.PlanStep);
-            return result;
+                result->Record.SetStep(TxInfo.PlanStep);
+                return result;
+            }
         }
     };
 
@@ -61,71 +68,21 @@ public:
         LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
         Y_VERIFY(Self->ProgressTxInFlight);
 
-        NIceDb::TNiceDb db(txc.DB);
-
-        // Process deadline queue and cleanup expired transactions
-        if (Self->HaveOutdatedTxs()) {
-            size_t removedCount = 0;
-            ui64 outdatedStep = Self->GetOutdatedStep();
-            while (Self->DeadlineQueue) {
-                auto it = Self->DeadlineQueue.begin();
-                if (outdatedStep < it->MaxStep) {
-                    // This transaction has a chance to be planned
-                    break;
-                }
-                ui64 txId = it->TxId;
-                LOG_S_DEBUG(TxPrefix() << "Removing outdated txId " << txId << " max step " << it->MaxStep
-                    << " outdated step " << outdatedStep << TxSuffix());
-                Self->DeadlineQueue.erase(it);
-                Self->RemoveTx(txc.DB, txId);
-                ++removedCount;
-            }
-            if (removedCount > 0) {
-                // We cannot continue with this transaction, start a new transaction
-                Self->Execute(new TTxProgressTx(Self), ctx);
-                return true;
-            }
+        size_t removedCount = Self->ProgressTxController.CleanExpiredTxs(txc);
+        if (removedCount > 0) {
+            // We cannot continue with this transaction, start a new transaction
+            Self->Execute(new TTxProgressTx(Self), ctx);
+            return true;
         }
 
         // Process a single transaction at the front of the queue
-        if (!Self->PlanQueue.empty()) {
-            ui64 step;
-            ui64 txId;
-            {
-                auto node = Self->PlanQueue.extract(Self->PlanQueue.begin());
-                auto& item = node.value();
-                step = item.Step;
-                txId = item.TxId;
-                Self->RunningQueue.emplace(std::move(item));
-            }
+        auto plannedItem = Self->ProgressTxController.StartPlannedTx();
+        if (!!plannedItem) {
+            ui64 step = plannedItem->PlanStep;
+            ui64 txId = plannedItem->TxId;
 
-            auto& txInfo = Self->BasicTxInfo.at(txId);
+            TTxController::TBasicTxInfo txInfo = *plannedItem;
             switch (txInfo.TxKind) {
-                case NKikimrTxColumnShard::TX_KIND_DATA:
-                {
-                    NKikimrTxDataShard::TDataTransaction dataTransaction;
-                    Y_VERIFY(dataTransaction.ParseFromString(db.Table<Schema::TxInfo>().Key(txId).Select().GetValue<Schema::TxInfo::TxBody>()));
-                    {
-                        for (auto&& task : dataTransaction.GetKqpTransaction().GetTasks()) {
-                            for (auto&& o : task.GetOutputs()) {
-                                for (auto&& c : o.GetChannels()) {
-                                    TActorId actorId(c.GetDstEndpoint().GetActorId().GetRawX1(), c.GetDstEndpoint().GetActorId().GetRawX2());
-                                    {
-                                        NYql::NDqProto::TEvComputeChannelData evProto;
-                                        evProto.MutableChannelData()->SetChannelId(c.GetId());
-                                        evProto.MutableChannelData()->SetFinished(true);
-                                        evProto.SetNoAck(true);
-                                        evProto.SetSeqNo(1);
-                                        auto ev = std::make_unique<NYql::NDq::TEvDqCompute::TEvChannelData>();
-                                        ev->Record = evProto;
-                                        ctx.Send(actorId, ev.release());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
                 case NKikimrTxColumnShard::TX_KIND_SCHEMA:
                 {
                     auto& meta = Self->AltersInFlight.at(txId);
@@ -145,11 +102,6 @@ public:
                     TBlobGroupSelector dsGroupSelector(Self->Info());
                     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
-                    // CacheInserted -> CacheCommitted
-                    for (auto& writeId : meta.WriteIds) {
-                        Self->BatchCache.Commit(writeId);
-                    }
-
                     auto pathExists = [&](ui64 pathId) {
                         return Self->TablesManager.HasTable(pathId);
                     };
@@ -161,6 +113,7 @@ public:
                     Self->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
                     if (meta.MetaShard == 0) {
+                        NIceDb::TNiceDb db(txc.DB);
                         for (TWriteId writeId : meta.WriteIds) {
                             Self->RemoveLongTxWrite(db, writeId, txId);
                         }
@@ -170,23 +123,26 @@ public:
                     Trigger = ETriggerActivities::POST_INSERT;
                     break;
                 }
+                case NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE: {
+                    NOlap::TSnapshot snapshot(step, txId);
+                    Y_VERIFY(Self->OperationsManager.CommitTransaction(*Self, txId, txc, snapshot));
+                    Trigger = ETriggerActivities::POST_INSERT;
+                    break;
+                }
                 default: {
                     Y_FAIL("Unexpected TxKind");
                 }
             }
 
             // Currently transactions never fail and there are no dependencies between them
-            txInfo.PlanStep = step;
             TxResults.emplace_back(TResultEvent(std::move(txInfo), NKikimrTxColumnShard::SUCCESS));
 
-            Self->BasicTxInfo.erase(txId);
-            Schema::EraseTxInfo(db, txId);
-
+            Self->ProgressTxController.FinishPlannedTx(txId, txc);
             Self->RescheduleWaitingReads();
         }
 
         Self->ProgressTxInFlight = false;
-        if (!Self->PlanQueue.empty()) {
+        if (!!Self->ProgressTxController.GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx);
         }
         return true;
@@ -200,11 +156,10 @@ public:
         }
 
         for (auto& res : TxResults) {
-            TPlanQueueItem txItem(res.TxInfo.PlanStep, res.TxInfo.TxId);
-            Self->RunningQueue.erase(txItem);
+            Self->ProgressTxController.CompleteRunningTx(TTxController::TPlanQueueItem(res.TxInfo.PlanStep, res.TxInfo.TxId));
 
             auto event = res.MakeEvent(Self->TabletID());
-            ctx.Send(res.TxInfo.Source, event.Release(), 0, res.TxInfo.Cookie);
+            ctx.Send(res.TxInfo.Source, event.release(), 0, res.TxInfo.Cookie);
         }
 
         Self->ScheduleNextGC(ctx);
@@ -243,13 +198,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     ui64 txId = record.GetTxId();
     LOG_S_DEBUG("CheckTransaction planStep " << step << " txId " << txId << " at tablet " << TabletID());
 
-    TPlanQueueItem frontTx(LastPlannedStep, 0);
-    if (!RunningQueue.empty()) {
-        frontTx = TPlanQueueItem(RunningQueue.begin()->Step, RunningQueue.begin()->TxId);
-    } else if (!PlanQueue.empty()) {
-        frontTx = TPlanQueueItem(PlanQueue.begin()->Step, PlanQueue.begin()->TxId);
-    }
-
+    auto frontTx = ProgressTxController.GetFrontTx();
     bool finished = step < frontTx.Step || (step == frontTx.Step && txId < frontTx.TxId);
     if (finished) {
         auto txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;

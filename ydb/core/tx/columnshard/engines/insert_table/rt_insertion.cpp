@@ -18,13 +18,13 @@ void TInsertionSummary::OnEraseCommitted(TPathInfo& /*pathInfo*/, const ui64 dat
 }
 
 void TInsertionSummary::RemovePriority(const TPathInfo& pathInfo) noexcept {
-    const ui64 priority = pathInfo.GetIndexationPriority();
+    const auto priority = pathInfo.GetIndexationPriority();
     auto it = Priorities.find(priority);
     if (it == Priorities.end()) {
-        Y_VERIFY(priority == 0);
+        Y_VERIFY(!priority);
         return;
     }
-    Y_VERIFY(it->second.erase(&pathInfo) || priority == 0);
+    Y_VERIFY(it->second.erase(&pathInfo) || !priority);
     if (it->second.empty()) {
         Priorities.erase(it);
     }

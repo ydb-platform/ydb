@@ -4,6 +4,8 @@
 namespace NKikimr {
 namespace NHive {
 
+const ui64 TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE = NKikimrLocal::TTabletAvailability().GetMaxCount();
+
 TNodeInfo::TNodeInfo(TNodeId nodeId, THive& hive)
     : VolatileState(EVolatileState::Unknown)
     , Hive(hive)
@@ -28,6 +30,7 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Disconnected:
         case EVolatileState::Connecting:
             RegisterInDomains();
+            Hive.UpdateCounterNodesConnected(+1);
             break;
 
         default:
@@ -40,6 +43,7 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Connected:
         case EVolatileState::Disconnecting:
             DeregisterInDomains();
+            Hive.UpdateCounterNodesConnected(-1);
             break;
 
         default:
@@ -244,14 +248,14 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
                 maxCount = itTabletAvailability->second.GetMaxCount();
             }
         }
-        if (maxCount == 0) {
+        if (maxCount == MAX_TABLET_COUNT_DEFAULT_VALUE) {
             const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimit = Hive.GetTabletLimit();
             auto itTabletLimit = tabletLimit.find(tabletType);
             if (itTabletLimit != tabletLimit.end()) {
                 maxCount = itTabletLimit->second.GetMaxCount();
             }
         }
-        if (maxCount != 0) {
+        if (maxCount != MAX_TABLET_COUNT_DEFAULT_VALUE) {
             ui64 currentCount = GetTabletsRunningByType(tabletType);
             if (currentCount >= maxCount) {
                 if (debugState) {

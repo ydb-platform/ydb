@@ -4,7 +4,7 @@
 
 #include <library/cpp/json/json_value.h>
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <util/generic/maybe.h>

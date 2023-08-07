@@ -1185,10 +1185,6 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     }
 }
 
-void TPersQueue::DefaultSignalTabletActive(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
-}
-
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
 {
 
@@ -3273,6 +3269,9 @@ TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
                                              bool newPartition,
                                              const TActorContext& ctx)
 {
+    int channels = Info()->Channels.size() - NKeyValue::BLOB_CHANNEL; // channels 0,1 are reserved in tablet
+    Y_VERIFY(channels > 0);   
+
     return new TPartition(TabletID(),
                           partitionId,
                           ctx.SelfID,
@@ -3283,6 +3282,7 @@ TPartition* TPersQueue::CreatePartitionActor(ui32 partitionId,
                           config,
                           *Counters,
                           SubDomainOutOfSpace,
+                          (ui32)channels,
                           newPartition);
 }
 

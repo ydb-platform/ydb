@@ -17,11 +17,13 @@ TController::TController(const TActorId& tablet, TTabletStorageInfo* info)
 
 void TController::OnDetach(const TActorContext& ctx) {
     CLOG_T(ctx, "OnDetach");
+    Cleanup(ctx);
     Die(ctx);
 }
 
 void TController::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
     CLOG_T(ctx, "OnTabletDead");
+    Cleanup(ctx);
     Die(ctx);
 }
 
@@ -35,14 +37,6 @@ void TController::DefaultSignalTabletActive(const TActorContext&) {
 }
 
 STFUNC(TController::StateInit) {
-    switch (ev->GetTypeRewrite()) {
-        HFunc(TEvents::TEvPoison, Handle);
-    default:
-        return StateInitImpl(ev, SelfId());
-    }
-}
-
-STFUNC(TController::StateZombie) {
     StateInitImpl(ev, SelfId());
 }
 
@@ -61,8 +55,21 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvDiscovery::TEvDiscoveryData, Handle);
         HFunc(TEvDiscovery::TEvError, Handle);
-        HFunc(TEvents::TEvPoison, Handle);
+    default:
+        HandleDefaultEvents(ev, SelfId());
     }
+}
+
+void TController::Cleanup(const TActorContext& ctx) {
+    for (auto& [_, replication] : Replications) {
+        replication->Shutdown(ctx);
+    }
+
+    if (auto actorId = std::exchange(DiscoveryCache, {})) {
+        Send(actorId, new TEvents::TEvPoison());
+    }
+
+    NodesManager.Shutdown(ctx);
 }
 
 void TController::SwitchToWork(const TActorContext& ctx) {
@@ -186,23 +193,6 @@ void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorC
 void TController::Handle(TEvDiscovery::TEvError::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
     NodesManager.ProcessResponse(ev, ctx);
-}
-
-void TController::Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx) {
-    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
-
-    for (auto& [_, replication] : Replications) {
-        replication->Shutdown(ctx);
-    }
-
-    if (auto actorId = std::exchange(DiscoveryCache, {})) {
-        Send(actorId, new TEvents::TEvPoison());
-    }
-
-    NodesManager.Shutdown(ctx);
-
-    Send(Tablet(), new TEvents::TEvPoison());
-    Become(&TThis::StateZombie);
 }
 
 TReplication::TPtr TController::Find(ui64 id) {

@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "liburing.h"
 #include "helpers.h"
@@ -217,13 +218,21 @@ err:
 	return 1;
 }
 
+static void sig_xfsz(int sig)
+{
+}
+
 int main(int argc, char *argv[])
 {
+	struct sigaction act = { };
 	struct io_uring ring;
 	int ret;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
+
+	act.sa_handler = sig_xfsz;
+	sigaction(SIGXFSZ, &act, NULL);
 
 	ret = io_uring_queue_init(8, &ring, 0);
 	if (ret) {

@@ -2,7 +2,9 @@ option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
-import "ydb/core/protos/type_info.proto";
+import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/core/scheme/protos/key_range.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
@@ -1651,6 +1653,9 @@ message TEvRead {
     // When specified requests are handled in reverse order as well as range reads
     optional bool Reverse = 10;
 
+    // Limits total number of rows which iterator can read.
+    optional uint64 TotalRowsLimit = 12;
+
     // Request must contain either keys, queries or program
     // mixed requests are not supported
 
@@ -1720,6 +1725,8 @@ message TEvReadResult {
     repeated TLock BrokenTxLocks = 11;
 
     optional uint64 RowCount = 12;
+
+    optional uint32 NodeId = 13;
 
     // Data for the possibly partial result
     oneof ReadResult {

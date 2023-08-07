@@ -1,0 +1,158 @@
+package NYT.NYTree.NProto;
+
+import "yt_proto/yt/core/rpc/proto/rpc.proto";
+import "yt_proto/yt/core/ytree/proto/attributes.proto";
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/ytree";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TYPathHeaderExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TYPathHeaderExt ypath_header_ext = 104;
+    }
+
+    //! True if the request changes the persistent state (e.g. Set, Remove, Create etc).
+    optional bool mutating = 1;
+
+    //! The primary object targeted by this request.
+    required string target_path = 2;
+
+    //! A copy of target_path in case of path rewrite.
+    optional string original_target_path = 3;
+
+    //! In case of multivalent methods (e.g. Copy) contains the paths of other
+    //! involved objects.
+    repeated string additional_paths = 4;
+
+    //! A copy of additional_paths in case of path rewrite.
+    repeated string original_additional_paths = 5;
+
+    reserved 6;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TCachingHeaderExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TCachingHeaderExt caching_header_ext = 105;
+    }
+
+    required int32 expire_after_successful_update_time = 1;
+    required int32 expire_after_failed_update_time = 2;
+    optional int64 refresh_revision = 3;
+    optional bool disable_second_level_cache = 4;
+    optional bool disable_per_user_cache = 5;
+    optional int64 success_staleness_bound = 6;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGet
+{
+    // TODO(max42): rename attributes -> attribute_filter
+    optional TAttributeFilter attributes = 1;
+    optional int64 limit = 2;
+    optional bool ignore_opaque = 3;
+    optional NYT.NYTree.NProto.TAttributeDictionary options = 4;
+}
+
+message TRspGet
+{
+    required bytes value = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetKey
+{ }
+
+message TRspGetKey
+{
+    required bytes value = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqSet
+{
+    required bytes value = 1;
+    optional bool recursive = 2 [default = false];
+    optional bool force = 3 [default = false];
+}
+
+message TRspSet
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRemove
+{
+    optional bool recursive = 1 [default = true];
+    optional bool force = 2 [default = false];
+}
+
+message TRspRemove
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqList
+{
+    optional TAttributeFilter attributes = 1;
+    optional int64 limit = 2;
+}
+
+message TRspList
+{
+    required bytes value = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqExists
+{ }
+
+message TRspExists
+{
+    required bool value = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+// COMPAT(gritukan) This is an alias for TReqMultisetAttributes.
+message TReqMultiset
+{
+    message TSubrequest
+    {
+        required string key = 1;
+        required bytes value = 2;
+    }
+
+    repeated TSubrequest subrequests = 1;
+}
+
+message TRspMultiset
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqMultisetAttributes
+{
+    message TSubrequest
+    {
+        required string attribute = 1;
+        required bytes value = 2;
+    }
+
+    repeated TSubrequest subrequests = 1;
+}
+
+message TRspMultisetAttributes
+{ }
+
+////////////////////////////////////////////////////////////////////////////////

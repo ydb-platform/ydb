@@ -133,10 +133,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 ui32 size = query.Size ? Min(query.Size, query.Id.BlobSize() - shift) : query.Id.BlobSize() - shift;
 
                 if (!PhantomCheck) {
-                    TString data = TString::Uninitialized(size);
-                    char *dataBuffer = data.Detach();
-                    blobState.Whole.Data.Read(shift, dataBuffer, size);
-                    Decrypt(dataBuffer, dataBuffer, shift, size, query.Id, *Info);
+                    TRope data = blobState.Whole.Data.Read(shift, size);
+                    DecryptInplace(data, 0, shift, size, query.Id, *Info);
                     outResponse.Buffer = std::move(data);
                     Y_VERIFY(outResponse.Buffer, "%s empty response buffer", RequestPrefix.data());
                     ReplyBytes += outResponse.Buffer.size();

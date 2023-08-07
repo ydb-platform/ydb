@@ -109,6 +109,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.MutableTable()->CopyFrom(GetTableDescription(ss, sourcePath.Base()->PathId));
     }
 
+    task.SetSnapshotStep(exportInfo->SnapshotStep);
+    task.SetSnapshotTxId(exportInfo->SnapshotTxId);
+
     switch (exportInfo->Kind) {
     case TExportInfo::EKind::YT:
         {

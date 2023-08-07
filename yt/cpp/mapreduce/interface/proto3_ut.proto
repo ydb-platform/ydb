@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "yt/yt_proto/yt/formats/extension.proto";
+
+package NYT.NTestingProto3;
+
+option (NYT.file_default_field_flags) = SERIALIZATION_YT;
+
+message TWithOptional
+{
+    optional int64 x = 1;
+}
+
+message TWithOptionalMessage
+{
+    optional TWithOptional x = 1;
+}

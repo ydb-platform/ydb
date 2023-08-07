@@ -100,6 +100,7 @@ public:
     void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const;
     void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const;
     void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const;
+    void Execute(TEvUploadPartCopyRequest::TPtr& ev) const;
 };
 
 class TFakeExternalStorageOperator: public IExternalStorageOperator {
@@ -152,6 +153,9 @@ public:
         ExecuteImpl(ev);
     }
     virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override {
+        ExecuteImpl(ev);
+    }
+    virtual void Execute(TEvUploadPartCopyRequest::TPtr& ev) const override {
         ExecuteImpl(ev);
     }
 };

@@ -490,15 +490,16 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::TServer::TPtr server = new Tests::TServer(serverSettings);
         server->EnableGRpc(grpcPort);
         Tests::TClient client(serverSettings);
+        Tests::NCommon::TLoggerInit(server->GetRuntime()).SetComponents({ NKikimrServices::TX_COLUMNSHARD }).Initialize();
 
         auto& runtime = *server->GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+//        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
         auto sender = runtime.AllocateEdgeActor();
         server->SetupRootStoragePools(sender);
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
+//        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
@@ -532,15 +533,20 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
-        const TInstant pkStart = Now() - TDuration::Days(15);
-        ui32 idx = 0;
+        const TInstant now = Now() - TDuration::Days(100);
+        runtime.UpdateCurrentTime(now);
+        const TInstant pkStart = now - TDuration::Days(15);
 
-        auto batch = lHelper.TestArrowBatch(0, (pkStart + TDuration::Seconds(2 * idx++)).GetValue(), 6000);
+        auto batch = lHelper.TestArrowBatch(0, pkStart.GetValue(), 6000);
         auto batchSize = NArrow::GetBatchDataSize(batch);
         Cerr << "Inserting " << batchSize << " bytes..." << Endl;
         UNIT_ASSERT(batchSize > 4 * 1024 * 1024); // NColumnShard::TLimits::MIN_BYTES_TO_INSERT
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
 
+        {
+            TAtomic unusedPrev;
+            runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
+        }
         for (ui32 i = 0; i < 4; ++i) {
             lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
         }
@@ -558,6 +564,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #else
                 check = true;
 #endif
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             UNIT_ASSERT(check);
@@ -581,6 +588,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #else
                 check = true;
 #endif
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             UNIT_ASSERT(check);
@@ -861,11 +869,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         const ui32 reduceStepsCount = 1;
         for (ui32 i = 0; i < reduceStepsCount; ++i) {
             runtime.AdvanceCurrentTime(TDuration::Seconds(numRecords * (i + 1) / reduceStepsCount + 500000));
-            const TInstant start = TInstant::Now();
             const ui64 purposeSize = 800000000.0 * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeRecords = numRecords * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeMinTimestamp = numRecords * 1.0 * (i + 1) / reduceStepsCount * 1000000;
+            const TInstant start = TInstant::Now();
             while (bsCollector.GetChannelSize(2) > purposeSize && TInstant::Now() - start < TDuration::Seconds(60)) {
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             Cerr << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;

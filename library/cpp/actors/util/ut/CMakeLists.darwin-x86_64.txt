@@ -22,6 +22,8 @@ target_link_options(library-cpp-actors-util-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(library-cpp-actors-util-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/cpu_load_log_ut.cpp

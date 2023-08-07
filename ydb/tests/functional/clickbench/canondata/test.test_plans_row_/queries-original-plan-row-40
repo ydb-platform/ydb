@@ -54,7 +54,7 @@
                                                                     {
                                                                         "Limit": "10 + 100",
                                                                         "Name": "TopSort",
-                                                                        "TopSortBy": "$14.PageViews"
+                                                                        "TopSortBy": "argument.Count0"
                                                                     },
                                                                     {
                                                                         "Name": "Aggregate"
@@ -114,7 +114,7 @@
                                                             }
                                                         ],
                                                         "SortColumns": [
-                                                            "PageViews (Desc)"
+                                                            "Count0 (Desc)"
                                                         ]
                                                     }
                                                 ]

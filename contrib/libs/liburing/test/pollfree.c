@@ -253,7 +253,7 @@ static void kill_and_wait(int pid, int* status)
   }
 }
 
-static void setup_test()
+static void setup_test(void)
 {
   prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0);
   setpgrp();
@@ -343,7 +343,7 @@ static void loop(void)
 #define __NR_io_uring_enter 426
 #endif
 
-uint64_t r[4] = {0xffffffffffffffff, 0xffffffffffffffff, 0x0, 0x0};
+static uint64_t r[4] = {0xffffffffffffffff, 0xffffffffffffffff, 0x0, 0x0};
 
 void execute_call(int call)
 {
@@ -404,13 +404,13 @@ int main(int argc, char *argv[])
   if (argc > 1)
     return 0;
 
-  ret = mmap((void *)0x1ffff000ul, 0x1000ul, 0ul, 0x32ul, -1, 0ul);
+  ret = mmap((void *)0x1ffff000ul, 0x1000ul, 0ul, MAP_ANON|MAP_PRIVATE, -1, 0ul);
   if (ret == MAP_FAILED)
     return 0;
-  ret = mmap((void *)0x20000000ul, 0x1000000ul, 7ul, 0x32ul, -1, 0ul);
+  ret = mmap((void *)0x20000000ul, 0x1000000ul, 7ul, MAP_ANON|MAP_PRIVATE, -1, 0ul);
   if (ret == MAP_FAILED)
     return 0;
-  ret = mmap((void *)0x21000000ul, 0x1000ul, 0ul, 0x32ul, -1, 0ul);
+  ret = mmap((void *)0x21000000ul, 0x1000ul, 0ul, MAP_ANON|MAP_PRIVATE, -1, 0ul);
   if (ret == MAP_FAILED)
     return 0;
   loop();

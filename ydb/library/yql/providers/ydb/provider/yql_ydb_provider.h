@@ -33,7 +33,7 @@ struct TYdbState : public TThrRefBase
     TYdbConfiguration::TPtr Configuration = MakeIntrusive<TYdbConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
 };
 

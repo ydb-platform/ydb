@@ -4,10 +4,10 @@ namespace NKikimr::NConveyor {
 
 void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     auto& workerTask = ev->Get()->GetTask();
-    if (workerTask.GetTask()->Execute()) {
-        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask.GetOwnerId(), workerTask.GetTask()).SendTo(ev->Sender);
+    if (workerTask.GetTask()->Execute(workerTask.GetTaskSignals())) {
+        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask, workerTask.GetTask()).SendTo(ev->Sender);
     } else {
-        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask.GetOwnerId(), workerTask.GetTask()->GetErrorMessage()).SendTo(ev->Sender);
+        TBase::Sender<TEvInternal::TEvTaskProcessedResult>(workerTask, workerTask.GetTask()->GetErrorMessage()).SendTo(ev->Sender);
     }
 }
 

@@ -1,1 +1,1 @@
-{% include [file_structure.md](_includes/import-file.md) %}
+{% include [import-file.md](../export-import/_includes/import-file.md) %}

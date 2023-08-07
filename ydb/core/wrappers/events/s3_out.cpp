@@ -196,6 +196,19 @@ void Out(IOutputStream& out, const UploadPartOutcome& outcome) {
     OutOutcome(out, outcome);
 }
 
+void Out(IOutputStream& out, const UploadPartCopyRequest& request) {
+    using T = UploadPartCopyRequest;
+    OutRequest(out, request, {&Bucket<T>, &Key<T>, &UploadId<T>, &PartNumber<T>});
+}
+
+void Out(IOutputStream& out, const UploadPartCopyResult& result) {
+    OutResult(out, result, "UploadPartCopyResult", {});
+}
+
+void Out(IOutputStream& out, const UploadPartCopyOutcome& outcome) {
+    OutOutcome(out, outcome);
+}
+
 void Out(IOutputStream& out, const CompletedMultipartUpload& upload) {
     out << "{ Parts: [" << JoinSeq(",", upload.GetParts()) << "] }";
 }

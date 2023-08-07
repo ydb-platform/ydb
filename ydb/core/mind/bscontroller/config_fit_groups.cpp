@@ -321,7 +321,7 @@ namespace NKikimr {
                             for (const auto& [pos, vslotId] : replacedSlots) {
                                 const TPDiskId& pdiskId = group[pos.FailRealm][pos.FailDomain][pos.VDisk];
                                 const TPDiskInfo *pdisk = State.PDisks.Find(pdiskId);
-                                if (!pdisk->SlotSpaceEnforced(State.Self)) {
+                                if (requiredSpace != Min<i64>() && !pdisk->SlotSpaceEnforced(State.Self)) {
                                     Mapper->AdjustSpaceAvailable(pdiskId, -requiredSpace);
                                 }
                             }
@@ -350,7 +350,8 @@ namespace NKikimr {
 
                     // create slots for the new group
                     auto newSlots = CreateVSlotsForGroup(groupInfo, group, preservedSlots);
-                    groupInfo->ContentChanged = true;
+                    State.GroupContentChanged.insert(groupId);
+                    State.GroupFailureModelChanged.insert(groupId);
 
                     if (replacedSlots) {
                         if (!IgnoreGroupFailModelChecks) {

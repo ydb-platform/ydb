@@ -16,6 +16,7 @@ namespace NMiniKQL {
 class TBlockTypeHelper : public NUdf::IBlockTypeHelper {
 public:
     NUdf::IBlockItemComparator::TPtr MakeComparator(NUdf::TType* type) const final;
+    NUdf::IBlockItemHasher::TPtr MakeHasher(NUdf::TType* type) const final;
 };
 
 constexpr size_t MaxBlockSizeInBytes = 1_MB;
@@ -222,6 +223,18 @@ bool CanHash(const NMiniKQL::TType* type);
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);
 NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type);
 NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type);
+
+template<typename T>
+ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper) {
+    ui64 maxBlockLen = Max<ui64>();
+    while (beginIt != endIt) {
+        const TType* itemType = *beginIt++;
+        if (itemType) {
+            maxBlockLen = std::min(maxBlockLen, helper.GetMaxBlockLength(itemType));
+        }
+    }
+    return (maxBlockLen == Max<ui64>()) ? 0 : maxBlockLen;
+}
 
 } // namespace NMiniKQL
 } // namespace Nkikimr

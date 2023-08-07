@@ -5,6 +5,8 @@
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
+#include <ydb/core/tx/ev_write/write_data.h>
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
@@ -228,20 +230,8 @@ struct TEvColumnShard {
         }
     };
 
-    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite>
-                    , public NColumnShard::TPutStatus {
+    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
         TEvWrite() = default;
-
-        TEvWrite(const TActorId& source, ui64 metaShard, ui64 writeId, ui64 tableId,
-                 const TString& dedupId, const TString& data, const ui32 writePartId) {
-            ActorIdToProto(source, Record.MutableSource());
-            Record.SetTxInitiator(metaShard);
-            Record.SetWriteId(writeId);
-            Record.SetTableId(tableId);
-            Record.SetDedupId(dedupId);
-            Record.SetData(data);
-            Record.SetWritePartId(writePartId);
-        }
 
         TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
                  const TString& dedupId, const TString& data, const ui32 writePartId) {
@@ -268,23 +258,23 @@ struct TEvColumnShard {
         TActorId GetSource() const {
             return ActorIdFromProto(Record.GetSource());
         }
-
-        NColumnShard::TUnifiedBlobId BlobId;
-        std::shared_ptr<arrow::RecordBatch> WrittenBatch;
-        NColumnShard::TBlobBatch BlobBatch;
-        NColumnShard::TUsage ResourceUsage;
     };
 
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult,
                             TEvColumnShard::EvWriteResult> {
         TEvWriteResult() = default;
 
-        TEvWriteResult(ui64 origin, ui64 metaShard, ui64 writeId, ui64 tableId, const TString& dedupId, ui32 status) {
+        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
+            : TEvWriteResult(origin, writeMeta, writeMeta.GetWriteId(), status)
+        {
+        }
+
+        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, const i64 writeId, ui32 status) {
             Record.SetOrigin(origin);
-            Record.SetTxInitiator(metaShard);
+            Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(tableId);
-            Record.SetDedupId(dedupId);
+            Record.SetTableId(writeMeta.GetTableId());
+            Record.SetDedupId(writeMeta.GetDedupId());
             Record.SetStatus(status);
         }
 
@@ -328,6 +318,22 @@ struct TEvColumnShard {
 
         TEvReadResult(const TEvReadResult& ev) {
             Record.CopyFrom(ev.Record);
+        }
+
+        std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const {
+            const auto& scheme = Record.GetMeta().GetSchema();
+            if (scheme.empty() || Record.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
+                return nullptr;
+            }
+            const auto arrowSchema = NArrow::DeserializeSchema(scheme);
+            if (Record.GetData().empty()) {
+                return NArrow::MakeEmptyBatch(arrowSchema);
+            }
+            return NArrow::DeserializeBatch(Record.GetData(), arrowSchema);
+        }
+
+        bool HasMore() const {
+            return !Record.GetFinished();
         }
     };
 

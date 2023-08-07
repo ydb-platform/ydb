@@ -134,4 +134,15 @@ namespace NActors {
         }
         Y_FAIL("missing PoolId: %d", int(poolId));
     }
+
+    TVector<IExecutorPool*> TCpuManager::GetBasicExecutorPools() const {
+        TVector<IExecutorPool*> pools;
+        for (ui32 idx = 0; idx < ExecutorPoolCount; ++idx) {
+            if (auto basicPool = dynamic_cast<TBasicExecutorPool*>(Executors[idx].Get()); basicPool != nullptr) {
+                pools.push_back(basicPool);
+            }
+        }
+        return pools;
+    }
+
 }

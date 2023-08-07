@@ -19,8 +19,6 @@ ENDIF()
 SRCS(
     export.cpp
     export.h
-    sqs.cpp
-    sqs.h
     main.cpp
 )
 
@@ -34,6 +32,8 @@ PEERDIR(
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
+    ydb/core/ymq/actor
+    ydb/core/ymq/base
     ydb/library/folder_service/mock
     ydb/library/keys
     ydb/library/pdisk_io
@@ -88,11 +88,13 @@ CHECK_DEPENDENT_DIRS(
 YQL_LAST_ABI_VERSION()
 
 IF (OPENSOURCE)
-    RESTRICT_LICENSES(
+    LICENSE_RESTRICTION(
         DENY REQUIRE_DISCLOSURE FORBIDDEN PROTESTWARE
-        EXCEPT contrib/libs/linux-headers  # DTCC-553
-        EXCEPT contrib/libs/fmt            #
-        EXCEPT contrib/libs/t1ha           # KIKIMR-16412
+    )
+    LICENSE_RESTRICTION_EXCEPTIONS(
+        contrib/libs/linux-headers  # DTCC-553
+        contrib/libs/fmt            #
+        contrib/libs/t1ha           # KIKIMR-16412
     )
 ENDIF()
 

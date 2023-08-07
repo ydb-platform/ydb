@@ -1,3 +1,21 @@
+liburing-2.4 release
+
+- Add io_uring_{major,minor,check}_version() functions.
+- Add IO_URING_{MAJOR,MINOR,CHECK}_VERSION() macros.
+- FFI support (for non-C/C++ languages integration).
+- Add io_uring_prep_msg_ring_cqe_flags() function.
+- Deprecate --nolibc configure option.
+- CONFIG_NOLIBC is always enabled on x86-64, x86, and aarch64.
+- Add support for IORING_REGISTER_USE_REGISTERED_RING and use if available.
+- Add io_uring_close_ring_fd() function.
+- Add io_uring_prep_msg_ring_fd_alloc function.
+- Add io_uring_free_buf_ring() and io_uring_setup_buf_ring() functions.
+- Ensure that io_uring_prep_accept_direct(), io_uring_prep_openat_direct(),
+  io_uring_prep_openat2_direct(), io_uring_prep_msg_ring_fd(), and
+  io_uring_prep_socket_direct() factor in being called with
+  IORING_FILE_INDEX_ALLOC for allocating a direct descriptor.
+- Add io_uring_prep_sendto() function.
+
 liburing-2.3 release
 
 - Support non-libc build for aarch64.

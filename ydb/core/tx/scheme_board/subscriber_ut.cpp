@@ -2,7 +2,7 @@
 #include "subscriber.h"
 #include "ut_helpers.h"
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>

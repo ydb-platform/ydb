@@ -41,6 +41,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   cpp-client-ydb_operation
   cpp-client-ydb_scheme
   cpp-client-ydb_monitoring
+  services-ydb-ut_helpers
 )
 target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp

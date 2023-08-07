@@ -1110,6 +1110,39 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    void WaitForAsyncIndexContent(TSession session, const TString& table, size_t rowsInserted) {
+        UNIT_ASSERT_C(rowsInserted, "rowsInserted must be set");
+        size_t rowsRead = 0;
+        size_t attempt = 0;
+        while (rowsRead != rowsInserted) {
+            auto it = session.ReadTable(table).GetValueSync();
+            UNIT_ASSERT(it.IsSuccess());
+            rowsRead = 0;
+            for (;;) {
+                auto tablePart = it.ReadNext().GetValueSync();
+                if (tablePart.EOS()) {
+                    break;
+                }
+
+                UNIT_ASSERT_VALUES_EQUAL(tablePart.IsSuccess(), true);
+
+                auto rsParser = TResultSetParser(tablePart.ExtractPart());
+
+                while (rsParser.TryNextRow()) {
+                    rowsRead++;
+                }
+            }
+
+            if (attempt)
+                Sleep(TDuration::Seconds(1));
+
+            if (attempt++ > 10) {
+                UNIT_ASSERT_C(false, "unable to get expected rows count during async index update");
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rowsInserted, rowsRead);
+    }
+
     void CheckWriteIntoRenamingIndex(bool asyncIndex) {
         TKikimrRunner kikimr;
 
@@ -1184,10 +1217,16 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             }
         }, 0, 2, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
+        const TString indexPath = "/Root/MultiShardIndexed/index_new/indexImplTable";
+
+        if (asyncIndex) {
+            WaitForAsyncIndexContent(session, indexPath, rowsInserted);
+        }
+
         {
             TReadTableSettings settings;
             settings.Ordered(true);
-            auto it = session.ReadTable("/Root/MultiShardIndexed/index_new/indexImplTable", settings).GetValueSync();
+            auto it = session.ReadTable(indexPath, settings).GetValueSync();
             UNIT_ASSERT(it.IsSuccess());
 
             int shard = 0;

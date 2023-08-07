@@ -28,8 +28,8 @@
 namespace grpc_event_engine {
 namespace experimental {
 
-TString HandleToString(EventEngine::TaskHandle handle) {
-  return y_absl::StrCat("{", handle.keys[0], ",", handle.keys[1], "}");
+TString HandleToStringInternal(uintptr_t a, uintptr_t b) {
+  return y_absl::StrCat("{", a, ",", b, "}");
 }
 
 grpc_core::Timestamp ToTimestamp(grpc_core::Timestamp now,

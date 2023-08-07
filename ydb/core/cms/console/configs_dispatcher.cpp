@@ -6,8 +6,8 @@
 #include "util.h"
 
 #include <ydb/core/cms/console/util/config_index.h>
-#include <ydb/core/cms/console/yaml_config/util.h>
-#include <ydb/core/cms/console/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_config/util.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
 
@@ -664,6 +664,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     } else {
         newYamlProtoConfig = YamlProtoConfig;
     }
+
+    AppData()->YamlConfigEnabled = YamlConfigEnabled;
 
     std::swap(YamlProtoConfig, newYamlProtoConfig);
 

@@ -24,13 +24,11 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
     Metadata_.ExecMode = static_cast<EExecMode>(metadata.exec_mode());
     Metadata_.ExecStatus = static_cast<EExecStatus>(metadata.exec_status());
     Metadata_.ExecStats = metadata.exec_stats();
+    Metadata_.ResultSetsMeta.insert(Metadata_.ResultSetsMeta.end(), metadata.result_sets_meta().begin(), metadata.result_sets_meta().end());
 
     if (metadata.has_script_content()) {
         Metadata_.ScriptContent.Syntax = static_cast<ESyntax>(metadata.script_content().syntax());
         Metadata_.ScriptContent.Text = metadata.script_content().text();
-    }
-    if (metadata.has_script_id()) {
-        Metadata_.ScriptId = TVersionedScriptId(metadata.script_id().id(), metadata.script_id().revision());
     }
 }
 

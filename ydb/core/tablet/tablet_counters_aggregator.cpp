@@ -157,6 +157,8 @@ public:
         }
 
         for (ui32 i = 0, e = labeledCounters->GetCounters().Size(); i < e; ++i) {
+            if(!strlen(labeledCounters->GetCounterName(i))) 
+                continue;
             const ui64& value = labeledCounters->GetCounters()[i].Get();
             const ui64& id = labeledCounters->GetIds()[i].Get();
             iterTabletType->second->SetValue(tabletId, i, value, id);
@@ -837,13 +839,13 @@ private:
                 "table.datashard.size_bytes", false);
 
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.scan.rows", false);
+                "table.columnshard.scan.rows", true);
             ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.scan.bytes", false);
+                "table.columnshard.scan.bytes", true);
             ColumnShardBulkUpsertRows_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.bulk_upsert.rows", false);
+                "table.columnshard.bulk_upsert.rows", true);
             ColumnShardBulkUpsertBytes_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.bulk_upsert.bytes", false);
+                "table.columnshard.bulk_upsert.bytes", true);
 
             ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.used_bytes", false);

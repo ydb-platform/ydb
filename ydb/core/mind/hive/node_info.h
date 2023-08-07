@@ -30,6 +30,7 @@ struct TNodeInfo {
 
 protected:
     EVolatileState VolatileState;
+    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
 
 public:
     THive& Hive;
@@ -111,6 +112,13 @@ public:
             totalSize += t.second.size();
         }
         return totalSize;
+    }
+
+    ui32 GetTabletsRunning() const {
+        auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
+        if (it != Tablets.end())
+            return it->second.size();
+        return 0;
     }
 
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {

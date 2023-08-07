@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(columnshard-engines-storage)
 target_link_libraries(columnshard-engines-storage PUBLIC
@@ -14,8 +20,14 @@ target_link_libraries(columnshard-engines-storage PUBLIC
   libs-apache-arrow
   ydb-core-protos
   core-formats-arrow
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(columnshard-engines-storage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/granule.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/storage.cpp
+)
+generate_enum_serilization(columnshard-engines-storage
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/granule.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/storage/granule.h
 )

@@ -185,46 +185,24 @@ message ExecuteQueryResponsePart {
     // Result set part
     Ydb.ResultSet result_set = 4;
 
-    reserved 5; // tx_meta
-    reserved 6; // result_sets_meta
-
     // Execution statistics (last part only)
-    Ydb.TableStats.QueryStats exec_stats = 7;
-}
-
-message VersionedScriptId {
-    // Script id
-    string id = 1 [(Ydb.length).le = 1024];
-
-    // Script revision.
-    // If specified in method parameters, the real script revision
-    // before modification will be compared with this revision
-    // and request will be cancelled if they don't match.
-    int64 revision = 2 [(Ydb.value) = ">= 0"];
+    Ydb.TableStats.QueryStats exec_stats = 5;
 }
 
 message ExecuteScriptRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Session identifier. If empty, implicit session is created for script execution.
-    string session_id = 2 [(Ydb.length).le = 1024];
-    ExecMode exec_mode = 3;
+    ExecMode exec_mode = 2;
 
-    oneof script {
-        QueryContent script_content = 4;
-        VersionedScriptId script_id = 5;
-    }
+    QueryContent script_content = 3;
 
-    map<string, TypedValue> parameters = 6;
+    map<string, TypedValue> parameters = 4;
 
-    bool persistent = 7; // TODO: Persistent execution / persistent results?
-    string execution_name = 8 [(Ydb.length).le = 1024];
-    StatsMode stats_mode = 9;
-    map<string, string> attributes = 10 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
+    StatsMode stats_mode = 5;
 
     // After script execution operation finishes, TTL will start counting.
     // After this TTL the results will be removed from database.
-    google.protobuf.Duration results_ttl = 11;
+    google.protobuf.Duration results_ttl = 6;
 }
 
 enum ExecStatus {
@@ -241,25 +219,20 @@ message ExecuteScriptMetadata {
     ExecStatus exec_status = 2;
 
     QueryContent script_content = 3;
-    VersionedScriptId script_id = 4;
 
-    map<string, string> attributes = 5 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
-    repeated ResultSetMeta result_sets_meta = 6;
+    repeated ResultSetMeta result_sets_meta = 4;
 
-    ExecMode exec_mode = 7;
+    ExecMode exec_mode = 5;
     // Execution statistics
-    Ydb.TableStats.QueryStats exec_stats = 8;
+    Ydb.TableStats.QueryStats exec_stats = 6;
 }
 
 message FetchScriptResultsRequest {
-    oneof execution {
-        string execution_id = 1 [(Ydb.length).le = 1024];
-        string operation_id = 5 [(Ydb.length).le = 1024];
-    }
+    string operation_id = 1 [(Ydb.length).le = 1024];
 
-    int64 result_set_id = 6;
+    int64 result_set_index = 2;
 
-    string fetch_token = 2 [(Ydb.length).le = 1024];
+    string fetch_token = 3 [(Ydb.length).le = 1024];
     int64 rows_limit = 4 [(Ydb.value) = ">= 0"];
 }
 
@@ -274,40 +247,5 @@ message FetchScriptResultsResponse {
 }
 
 message Script {
-    VersionedScriptId script_id = 1;
-    QueryContent script_content = 2;
-}
-
-message SaveScriptRequest {
-    VersionedScriptId script_id = 1; // If specified, set new content to existing script
-    QueryContent script_content = 2;
-}
-
-message SaveScriptResponse {
-    StatusIds.StatusCode status = 1;
-    repeated Ydb.Issue.IssueMessage issues = 2;
-
-    VersionedScriptId script_id = 3;
-}
-
-message ListScriptsRequest {
-    string page_token = 1 [(Ydb.length).le = 1024];
-    int64 page_size = 2 [(Ydb.value) = ">= 0"];
-}
-
-message ListScriptsResponse {
-    StatusIds.StatusCode status = 1;
-    repeated Ydb.Issue.IssueMessage issues = 2;
-
-    repeated Script scripts = 3;
-    string next_page_token = 4 [(Ydb.length).le = 1024];
-}
-
-message DeleteScriptRequest {
-    VersionedScriptId script_id = 1;
-}
-
-message DeleteScriptResponse {
-    StatusIds.StatusCode status = 1;
-    repeated Ydb.Issue.IssueMessage issues = 2;
+    QueryContent script_content = 1;
 }

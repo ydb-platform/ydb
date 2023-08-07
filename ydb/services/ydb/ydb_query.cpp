@@ -48,6 +48,12 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                 (ctx, &DoCreateSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
     })
 
+    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_,
+            new TGrpcRequestNoOperationCall<DeleteSessionRequest, DeleteSessionResponse>
+                (ctx, &DoDeleteSession, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));
+    })
+
     ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, {
         ActorSystem_->Send(GRpcRequestProxyId_,
             new TGrpcRequestNoOperationCall<AttachSessionRequest, SessionState>

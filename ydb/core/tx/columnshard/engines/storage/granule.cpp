@@ -3,15 +3,23 @@
 
 namespace NKikimr::NOlap {
 
-bool TGranuleMeta::NeedSplit(const TCompactionLimits& limits, bool& inserted) const {
-    inserted = GetAdditiveSummary().GetInserted().GetPortionsCount();
-    bool differentBorders = GetHardSummary().GetDifferentBorders();
-    if (GetAdditiveSummary().GetActivePortionsCount() < 2) {
-        inserted = false;
-        return false;
+TGranuleAdditiveSummary::ECompactionClass TGranuleMeta::GetCompactionType(const TCompactionLimits& limits) const {
+    const TGranuleAdditiveSummary::ECompactionClass classActual = GetAdditiveSummary().GetCompactionClass(
+        limits, ModificationLastTime, TMonotonic::Now());
+    switch (classActual) {
+        case TGranuleAdditiveSummary::ECompactionClass::Split:
+        {
+            if (GetHardSummary().GetDifferentBorders()) {
+                return TGranuleAdditiveSummary::ECompactionClass::Split;
+            } else {
+                return TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
+            }
+        }
+        case TGranuleAdditiveSummary::ECompactionClass::WaitInternal:
+        case TGranuleAdditiveSummary::ECompactionClass::Internal:
+        case TGranuleAdditiveSummary::ECompactionClass::NoCompaction:
+            return classActual;
     }
-    return differentBorders && (GetAdditiveSummary().GetMaxColumnsSize() >= limits.GranuleBlobSplitSize ||
-        GetAdditiveSummary().GetGranuleSize() >= limits.GranuleOverloadSize);
 }
 
 ui64 TGranuleMeta::Size() const {
@@ -19,10 +27,10 @@ ui64 TGranuleMeta::Size() const {
 }
 
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
-    auto it = Portions.find(info.Portion());
+    auto it = Portions.find(info.GetPortion());
     if (it == Portions.end()) {
         OnBeforeChangePortion(nullptr, &info);
-        Portions.emplace(info.Portion(), info);
+        Portions.emplace(info.GetPortion(), info);
     } else {
         OnBeforeChangePortion(&it->second, &info);
         it->second = info;
@@ -33,38 +41,68 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", Record.PathId);
         return false;
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second)("pathId", Record.PathId);
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second)("pathId", Record.PathId);
     OnBeforeChangePortion(&it->second, nullptr);
     Portions.erase(it);
     OnAfterChangePortion();
     return true;
 }
 
-void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec) {
-    auto& portion = Portions[rec.Portion];
-    auto portionNew = portion;
-    portionNew.AddRecord(indexInfo, rec);
-    OnBeforeChangePortion(&portion, &portionNew);
-    portion = std::move(portionNew);
-    OnAfterChangePortion();
+void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec) {
+    auto it = Portions.find(portion.GetPortion());
+    if (it == Portions.end()) {
+        auto portionNew = portion;
+        portionNew.AddRecord(indexInfo, rec);
+        OnBeforeChangePortion(nullptr, &portionNew);
+        Portions.emplace(portion.GetPortion(), std::move(portionNew));
+        OnAfterChangePortion();
+    } else {
+        Y_VERIFY(it->second.IsEqualWithSnapshots(portion));
+        auto portionNew = it->second;
+        portionNew.AddRecord(indexInfo, rec);
+        OnBeforeChangePortion(&it->second, &portionNew);
+        it->second = std::move(portionNew);
+        OnAfterChangePortion();
+    }
 }
 
 void TGranuleMeta::OnAfterChangePortion() {
+    ModificationLastTime = TMonotonic::Now();
     Owner->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter) {
     HardSummaryCache = {};
+    if (portionBefore) {
+        THashMap<TUnifiedBlobId, ui64> blobIdSize;
+        for (auto&& i : portionBefore->Records) {
+            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
+        }
+        for (auto&& i : blobIdSize) {
+            PortionInfoGuard.OnDropBlob(portionBefore->IsActive() ? portionBefore->Meta.Produced : NPortion::EProduced::INACTIVE, i.second);
+        }
+    }
+    if (portionAfter) {
+        THashMap<TUnifiedBlobId, ui64> blobIdSize;
+        for (auto&& i : portionAfter->Records) {
+            blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
+        }
+        for (auto&& i : blobIdSize) {
+            PortionInfoGuard.OnNewBlob(portionAfter->IsActive() ? portionAfter->Meta.Produced : NPortion::EProduced::INACTIVE, i.second);
+        }
+    }
     if (!!AdditiveSummaryCache) {
+        auto g = AdditiveSummaryCache->StartEdit(Counters);
         if (portionBefore && portionBefore->IsActive()) {
-            AdditiveSummaryCache->RemovePortion(*portionBefore);
+            g.RemovePortion(*portionBefore);
         }
         if (portionAfter && portionAfter->IsActive()) {
-            AdditiveSummaryCache->AddPortion(*portionAfter);
+            g.AddPortion(*portionAfter);
         }
-        OnAdditiveSummaryChange();
     }
 }
 
@@ -81,14 +119,6 @@ void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     Y_VERIFY(Activity.erase(EActivity::InternalCompaction) || Activity.erase(EActivity::SplitCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
     CompactionPriorityInfo.OnCompactionFailed();
-    Owner->UpdateGranuleInfo(*this);
-}
-
-void TGranuleMeta::OnCompactionCanceled(const TString& reason) {
-    AllowInsertionFlag = false;
-    Y_VERIFY(Activity.erase(EActivity::InternalCompaction) || Activity.erase(EActivity::SplitCompaction));
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionCanceled")("reason", reason)("info", DebugString());
-    CompactionPriorityInfo.OnCompactionCanceled();
     Owner->UpdateGranuleInfo(*this);
 }
 
@@ -143,12 +173,14 @@ void TGranuleMeta::RebuildHardMetrics() const {
 
 void TGranuleMeta::RebuildAdditiveMetrics() const {
     TGranuleAdditiveSummary result;
-
-    for (auto&& i : Portions) {
-        if (!i.second.IsActive()) {
-            continue;
+    {
+        auto g = result.StartEdit(Counters);
+        for (auto&& i : Portions) {
+            if (!i.second.IsActive()) {
+                continue;
+            }
+            g.AddPortion(i.second);
         }
-        result.AddPortion(i.second);
     }
     AdditiveSummaryCache = result;
 }
@@ -156,17 +188,17 @@ void TGranuleMeta::RebuildAdditiveMetrics() const {
 const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary() const {
     if (!AdditiveSummaryCache) {
         RebuildAdditiveMetrics();
-        OnAdditiveSummaryChange();
     }
     return *AdditiveSummaryCache;
 }
 
-void TGranuleMeta::OnAdditiveSummaryChange() const {
-    if (AdditiveSummaryCache) {
-        Counters.OnCompactedData(AdditiveSummaryCache->GetOther());
-        Counters.OnInsertedData(AdditiveSummaryCache->GetInserted());
-        Counters.OnFullData(AdditiveSummaryCache->GetOther() + AdditiveSummaryCache->GetInserted());
-    }
+TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
+    : Owner(owner)
+    , Counters(counters)
+    , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
+    , Record(rec)
+{
+
 }
 
 } // namespace NKikimr::NOlap

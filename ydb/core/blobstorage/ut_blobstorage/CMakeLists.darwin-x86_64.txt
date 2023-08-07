@@ -48,17 +48,16 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/incorrect_queries.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/mirror3of4.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/recovery.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/sanitize_groups.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub_fast.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/snapshots.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/space_check.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/sync.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/big_cluster.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/get.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/discover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/multiget.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/patch.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/recovery.cpp
 )
 set_property(
   TARGET

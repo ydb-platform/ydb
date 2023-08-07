@@ -1,0 +1,107 @@
+import "google/protobuf/descriptor.proto";
+
+package NYT;
+
+option go_package = "a.yandex-team.ru/yt/yt_proto/yt/formats";
+
+message EWrapperFieldFlag
+{
+    enum Enum
+    {
+        ANY = 0;
+        OTHER_COLUMNS = 1;
+        ENUM_INT = 2;
+        ENUM_STRING = 3;
+
+        // Fields marked by this flag may correspond to composite types in table,
+        // e.g. message to Struct, repeated to List etc.
+        SERIALIZATION_YT = 4;
+
+        // Message fields marked by this flag correspond to String column in table
+        // (containing serialized representation of the field).
+        SERIALIZATION_PROTOBUF = 5;
+
+        // repeated field corresponds to List<T> type.
+        REQUIRED_LIST = 6;
+
+        // repeated field corresponds to Optional<List<T>> type.
+        OPTIONAL_LIST = 7;
+
+        // map<Key, Value> corresponds to List<Struct<key: Key, value: String>>, i.e.
+        // the type for Value is inferred as if it had SERIALIZATION_PROTOBUF flag.
+        MAP_AS_LIST_OF_STRUCTS_LEGACY = 8;
+
+        // map<Key, Value> corresponds to List<Struct<key: Key, value: Inferred(Value)>>,
+        // where Inferred(Value) is the type inferred as if Value had SERIALIZATION_YT flag,
+        // e.g. Struct for message type.
+        MAP_AS_LIST_OF_STRUCTS = 9;
+
+        // map<Key, Value> corresponds to Dict<Key, Inferred(Value)>.
+        // (the option is experimental, see YT-13314)
+        MAP_AS_DICT = 10;
+
+        // map<Key, Value> corresponds to Optional<Dict<Key, Inferred(Value)>>.
+        // (the option is experimental, see YT-13314)
+        MAP_AS_OPTIONAL_DICT = 11;
+
+        // ignore this field but unfold subfields instead while (de)serializing
+        EMBEDDED = 12;
+
+        // Optional enum fields marked by this flag would not be filled if they hold
+        // a constant, that is missing in protobuf schema. (good for forward compatibility)
+        ENUM_SKIP_UNKNOWN_VALUES = 13;
+
+        // Enum fields marked by this flag could only be filled with constants
+        // that are present in the protobuf schema. (default behaviour)
+        ENUM_CHECK_VALUES = 14;
+    }
+}
+
+message EWrapperMessageFlag
+{
+    enum Enum
+    {
+        DEPRECATED_SORT_FIELDS_AS_IN_PROTO_FILE = 0;
+        SORT_FIELDS_BY_FIELD_NUMBER = 1;
+    }
+}
+
+message EWrapperOneofFlag
+{
+    enum Enum
+    {
+        // Each field inside oneof group corresponds to a regular field of the
+        // parent message.
+        SEPARATE_FIELDS = 12;
+
+        // Oneof group corresponds to Variant over Struct.
+        VARIANT = 13;
+    }
+}
+
+extend google.protobuf.FileOptions
+{
+    repeated EWrapperOneofFlag.Enum file_default_oneof_flags = 56788;
+    repeated EWrapperFieldFlag.Enum file_default_field_flags = 56789;
+    repeated EWrapperMessageFlag.Enum file_default_message_flags = 56790;
+}
+
+extend google.protobuf.FieldOptions
+{
+    repeated EWrapperFieldFlag.Enum flags = 56788;
+    optional string column_name = 56789;
+    optional string key_column_name = 56790;
+}
+
+extend google.protobuf.MessageOptions
+{
+    repeated EWrapperOneofFlag.Enum default_oneof_flags = 56788;
+    repeated EWrapperFieldFlag.Enum default_field_flags = 56789;
+    repeated EWrapperMessageFlag.Enum message_flags = 56790;
+}
+
+extend google.protobuf.OneofOptions
+{
+    repeated EWrapperOneofFlag.Enum oneof_flags = 56788;
+    optional string variant_field_name = 56789;
+}

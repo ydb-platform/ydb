@@ -2,9 +2,14 @@
 
 PROGRAM()
 
-LICENSE(GPL-2.0-or-later)
+LICENSE(
+    GPL-2.0-or-later AND
+    GPL-3.0-or-later
+)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+WITHOUT_LICENSE_TEXTS()
 
 PEERDIR(
     contrib/libs/liburing

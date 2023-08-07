@@ -138,13 +138,14 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableKqpDataQuerySourceRead = false;
     bool EnableKqpScanQueryStreamLookup = false;
     bool EnableKqpDataQueryStreamLookup = false;
-    bool EnableKqpDataQueryStreamPointLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnablePredicateExtractForScanQuery = true;
     bool EnablePredicateExtractForDataQuery = false;
+    bool PredicateExtract20 = false;
     bool EnableKqpImmediateEffects = false;
     bool EnableSequentialReads = false;
     bool EnablePreparedDdl = false;
+    bool EnableSequences = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
 };
 

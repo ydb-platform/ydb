@@ -11,5 +11,17 @@ items:
     include: { mode: link, path: manual/toc_p.yaml }
   - name: Изменение конфигурации актор-системы
     href: manual/change_actorsystem_configs.md
-  - name: Изменение конфигураций через CMS
-    href: manual/cms.md
+  - name: Управление конфигурацией кластера
+    items:
+    - name: Обзор конфигурации
+      href: manual/config-overview.md
+    - name: Статическая конфигурация кластера
+      href: ../deploy/configuration/config.md
+    - name: Динамическая конфигурация кластера
+      href: manual/dynamic-config.md
+    - name: DSL конфигурации кластера
+      href: manual/dynamic-config-selectors.md
+    - name: Временная конфигурация
+      href: manual/dynamic-config-volatile-config.md
+    - name: Изменение конфигураций через CMS
+      href: manual/cms.md

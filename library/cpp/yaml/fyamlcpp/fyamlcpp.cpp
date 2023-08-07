@@ -6,9 +6,6 @@
 
 namespace NFyaml {
 
-#define ENSURE_NODE_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Node")
-#define ENSURE_DOCUMENT_NOT_EMPTY(NODE) Y_ENSURE_EX(NODE, TFyamlEx() << "Expected non-empty Document")
-
 const char* zstr = "";
 
 enum class EErrorType {
@@ -262,264 +259,12 @@ TDocumentIterator::TDocumentIterator(fy_document_iterator* iterator)
     : Iterator_(iterator, fy_document_iterator_destroy)
 {}
 
-TNode TNodeRef::CreateReference() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return TNode(fy_node_create_reference(Node_));
-}
+TNodeRef::TNodeRef(fy_node* node)
+    : Node_(node)
+{}
 
-TNode TNodeRef::Copy() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return TNode(fy_node_copy(fy_node_document(Node_), Node_));
-}
-
-TNode TNodeRef::Copy(TDocument& to) const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    auto* fromDoc = fy_node_document(Node_);
-    auto& fromUserdata = *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(fromDoc));
-    auto& toUserdata = *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(to.Document_.get()));
-    toUserdata.insert(fromUserdata.begin(), fromUserdata.end());
-    return TNode(fy_node_copy(to.Document_.get(), Node_));
-}
-
-TString TNodeRef::Path() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    char* path = fy_node_get_path(Node_);
-
-    if (path) {
-        TString str(path);
-        free(path);
-        return str;
-    }
-
-    return {};
-}
-
-ENodeType TNodeRef::Type() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return static_cast<ENodeType>(fy_node_get_type(Node_));
-}
-
-bool TNodeRef::IsAlias() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return fy_node_is_alias(Node_);
-}
-
-TNodeRef TNodeRef::ResolveAlias() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_VERIFY_DEBUG(IsAlias());
-    return TNodeRef(fy_node_resolve_alias(Node_));
-}
-
-TString TNodeRef::Scalar() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_ENSURE_EX(fy_node_is_scalar(Node_), TFyamlEx() << "Node is not Scalar: " << Path());
-    size_t size;
-    const char* text = fy_node_get_scalar(Node_, &size);
-    return TString(text, size);
-}
-
-TMark TNodeRef::BeginMark() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
-        fy_document_iterator_create(),
-        &fy_document_iterator_destroy);
-    fy_document_iterator_node_start(it.get(), Node_);
-    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
-    std::unique_ptr<fy_event, decltype(deleter)> ev(
-        fy_document_iterator_body_next(it.get()),
-        deleter);
-    auto* mark = fy_event_start_mark(ev.get());
-
-    if (!mark) {
-        ythrow yexception() << "can't get begin mark for a node";
-    }
-
-    return TMark{
-        mark->input_pos,
-        mark->line,
-        mark->column,
-    };
-}
-
-bool IsComplexType(ENodeType type) {
-    return type == ENodeType::Mapping || type == ENodeType::Sequence;
-}
-
-fy_event_type GetOpenEventType(ENodeType type) {
-    switch(type) {
-    case ENodeType::Mapping:
-        return FYET_MAPPING_START;
-    case ENodeType::Sequence:
-        return FYET_SEQUENCE_START;
-    default:
-        Y_FAIL("Not a brackets type");
-    }
-}
-
-fy_event_type GetCloseEventType(ENodeType type) {
-    switch(type) {
-    case ENodeType::Mapping:
-        return FYET_MAPPING_END;
-    case ENodeType::Sequence:
-        return FYET_SEQUENCE_END;
-    default:
-        Y_FAIL("Not a brackets type");
-    }
-}
-
-TMark TNodeRef::EndMark() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
-        fy_document_iterator_create(),
-        &fy_document_iterator_destroy);
-    fy_document_iterator_node_start(it.get(), Node_);
-
-    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
-    std::unique_ptr<fy_event, decltype(deleter)> prevEv(
-        nullptr,
-        deleter);
-    std::unique_ptr<fy_event, decltype(deleter)> ev(
-        fy_document_iterator_body_next(it.get()),
-        deleter);
-
-    if (IsComplexType(Type())) {
-        int openBrackets = 0;
-        if (ev->type == GetOpenEventType(Type())) {
-            ++openBrackets;
-        }
-        if (ev->type == GetCloseEventType(Type())) {
-            --openBrackets;
-        }
-        while (ev->type != GetCloseEventType(Type()) || openBrackets != 0) {
-            std::unique_ptr<fy_event, decltype(deleter)> cur(
-                fy_document_iterator_body_next(it.get()),
-                deleter);
-            if (cur == nullptr) {
-                break;
-            }
-            if (cur->type == GetOpenEventType(Type())) {
-                ++openBrackets;
-            }
-            if (cur->type == GetCloseEventType(Type())) {
-                --openBrackets;
-            }
-            if (fy_event_get_node_style(cur.get()) != FYNS_BLOCK) {
-                prevEv.reset(ev.release());
-                ev.reset(cur.release());
-            }
-        }
-    }
-
-    auto* mark = fy_event_end_mark(ev.get());
-
-    if (!mark && prevEv) {
-        mark = fy_event_end_mark(prevEv.get());
-    }
-
-    if (!mark) {
-        ythrow yexception() << "can't get end mark for a node";
-    }
-
-    return TMark{
-        mark->input_pos,
-        mark->line,
-        mark->column,
-    };
-}
-
-TMapping TNodeRef::Map() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_ENSURE_EX(fy_node_is_mapping(Node_), TFyamlEx() << "Node is not Mapping: " << Path());
-    return TMapping(*this);
-}
-
-TSequence TNodeRef::Sequence() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    Y_ENSURE_EX(fy_node_is_sequence(Node_), TFyamlEx() << "Node is not Sequence: " << Path());
-    return TSequence(*this);
-}
-
-void TNodeRef::Insert(const TNodeRef& node) {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    NDetail::RethrowOnError(fy_node_insert(Node_, node.Node_), Node_);
-}
-
-std::optional<TString> TNodeRef::Tag() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    size_t len = 0;
-    const char* tag = fy_node_get_tag(Node_, &len);
-
-    if (tag) {
-        return TString(tag, len);
-    }
-
-    return std::nullopt;
-}
-
-void TNodeRef::SetTag(const TString& tag) {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    auto* str = new TString(std::move(tag));
-    auto* data = new NDetail::TUserDataHolder(UserData(), str);
-    SetUserData(data);
-    NDetail::RethrowOnError(fy_node_set_tag(Node_, str->c_str(), str->length()), Node_);
-}
-
-bool TNodeRef::RemoveTag() {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    bool ret = fy_node_remove_tag(Node_);
-    ClearUserData();
-    return ret;
-}
-
-bool TNodeRef::HasAnchor() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return fy_node_get_anchor(Node_) != nullptr;
-}
-
-void TNodeRef::SetAnchor(const TString& anchor) {
-    auto* str = new TString(anchor);
-    auto* data = new NDetail::TUserDataHolder(UserData(), str);
-    SetUserData(data);
-    NDetail::RethrowOnError(fy_node_set_anchor(Node_, str->c_str(), str->length()), Node_);
-}
-
-bool TNodeRef::DeepEqual(const TNodeRef& other) {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    ENSURE_NODE_NOT_EMPTY(other.Node_);
-    return fy_node_compare(Node_, other.Node_);
-}
-
-std::unique_ptr<char, void(*)(char*)> TNodeRef::EmitToCharArray() const {
-    std::unique_ptr<char, void(*)(char*)> res(
-        fy_emit_node_to_string(
-            Node_,
-            (fy_emitter_cfg_flags)(FYECF_DEFAULT)), &NDetail::FreeChar);
-    return res;
-}
-
-void TNodeRef::SetStyle(ENodeStyle style) {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    fy_node_set_style(Node_, (enum fy_node_style)style);
-}
-
-ENodeStyle TNodeRef::Style() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return (ENodeStyle)fy_node_get_style(Node_);
-}
-
-void TNodeRef::SetUserData(NDetail::IBasicUserData* data) {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    fy_node_set_meta(Node_, data);
-}
-
-NDetail::IBasicUserData* TNodeRef::UserData() const {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    return reinterpret_cast<NDetail::IBasicUserData* >(fy_node_get_meta(Node_));
-}
-
-void TNodeRef::ClearUserData() {
-    ENSURE_NODE_NOT_EMPTY(Node_);
-    fy_node_clear_meta(Node_);
+fy_node* TNodeRef::NodeRawPointer() const {
+    return Node_;
 }
 
 TNode& TNode::operator=(fy_node* node) {
@@ -598,7 +343,11 @@ size_t TMapping::empty() const {
 TNodePairRef TMapping::at(int index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_mapping_get_by_index(Node_, index);
-    Y_ENSURE_EX(res, TFyamlEx() << "No such child: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such child: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodePairRef(res);
 }
 
@@ -610,14 +359,22 @@ TNodePairRef TMapping::operator[](int index) const {
 TNodeRef TMapping::at(const TString& index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_mapping_lookup_by_string(Node_, index.data(), index.size());
-    Y_ENSURE_EX(res, TFyamlEx() << "No such child: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such child: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodeRef(res);
 }
 
 TNodePairRef TMapping::pair_at(const TString& index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_mapping_lookup_pair_by_string(Node_, index.data(), index.size());
-    Y_ENSURE_EX(res, TFyamlEx() << "No such child: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such child: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodePairRef(res);
 }
 
@@ -741,7 +498,11 @@ size_t TSequence::empty() const {
 TNodeRef TSequence::at(int index) const {
     ENSURE_NODE_NOT_EMPTY(Node_);
     auto res = fy_node_sequence_get_by_index(Node_, index);
-    Y_ENSURE_EX(res, TFyamlEx() << "No such index: " << Path() << "/" << index);
+    Y_ENSURE_EX(res, ({
+        TStringStream ss;
+        ss << "No such index: " << Path() << "/" << index;
+        TFyamlEx(ss.Str());
+    }));
     return TNodeRef(res);
 }
 
@@ -835,7 +596,6 @@ TDocument::TDocument(fy_document* doc, fy_diag* diag)
     RegisterUserDataCleanup();
 }
 
-
 TDocument TDocument::Parse(TString str) {
     const char* cstr = str.empty() ? zstr : str.cbegin();
     fy_diag_cfg dcfg;
@@ -851,11 +611,7 @@ TDocument TDocument::Parse(TString str) {
     };
     fy_document* doc = fy_document_build_from_string(&cfg, cstr, FY_NT);
     if (!doc) {
-        fy_diag_error* err;
-        void *iter = nullptr;
-        while ((err = fy_diag_errors_iterate(diag.get(), &iter)) != nullptr) {
-            ythrow yexception() << err->file << ":" << err->line << ":" << err->column << " " << err->msg;
-        }
+        NDetail::ThrowAllExceptionsIfAny(diag.get());
     }
     return TDocument(std::move(str), doc, diag.release());
 }
@@ -880,17 +636,13 @@ void TDocument::InsertAt(const char* path, const TNodeRef& node) {
 
 TNodeRef TDocument::Buildf(const char* content) {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
-    return fy_node_build_from_string(Document_.get(), content, strlen(content));
+    return TNodeRef(fy_node_build_from_string(Document_.get(), content, strlen(content)));
 }
 
 void TDocument::Resolve() {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
     if (fy_document_resolve(Document_.get()) != 0) {
-        fy_diag_error* err;
-        void *iter = nullptr;
-        while ((err = fy_diag_errors_iterate(Diag_.get(), &iter)) != nullptr) {
-            ythrow yexception() << err->line << ":" << err->column << " " << err->msg;
-        }
+        NDetail::ThrowAllExceptionsIfAny(Diag_.get());
     }
 }
 
@@ -917,7 +669,7 @@ void TDocument::SetParent(const TDocument& doc) {
 
 TNodeRef TDocument::Root() {
     ENSURE_DOCUMENT_NOT_EMPTY(Document_);
-    return fy_document_root(Document_.get());
+    return TNodeRef(fy_document_root(Document_.get()));
 }
 
 void TDocument::SetRoot(const TNodeRef& node) {
@@ -1001,11 +753,7 @@ TParser TParser::Create(TString str)
     };
     auto* parser = fy_parser_create(&cfg);
     if (!parser) {
-        fy_diag_error* err;
-        void *iter = nullptr;
-        while ((err = fy_diag_errors_iterate(diag.get(), &iter)) != nullptr) {
-            ythrow yexception() << err->file << ":" << err->line << ":" << err->column << " " << err->msg;
-        }
+        NDetail::ThrowAllExceptionsIfAny(diag.get());
     }
 
     fy_parser_set_string(parser, stream, -1);
@@ -1024,6 +772,284 @@ std::optional<TDocument> TParser::NextDocument() {
 
 namespace NDetail {
 
+fy_node* TNodeOpsBase::CreateReference(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return fy_node_create_reference(node);
+}
+
+fy_node* TNodeOpsBase::Copy(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return fy_node_copy(fy_node_document(node), node);
+}
+
+fy_node* TNodeOpsBase::Copy(fy_node* node, fy_document* to) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    auto* fromDoc = fy_node_document(node);
+    auto& fromUserdata = *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(fromDoc));
+    auto& toUserdata = *reinterpret_cast<THashSet<TSimpleSharedPtr<TString>, TStringPtrHashT>*>(fy_document_get_userdata(to));
+    toUserdata.insert(fromUserdata.begin(), fromUserdata.end());
+    return fy_node_copy(to, node);
+}
+
+TString TNodeOpsBase::Path(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    char* path = fy_node_get_path(node);
+
+    if (path) {
+        TString str(path);
+        free(path);
+        return str;
+    }
+
+    return {};
+}
+
+ENodeType TNodeOpsBase::Type(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return static_cast<ENodeType>(fy_node_get_type(node));
+}
+
+bool TNodeOpsBase::IsAlias(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return fy_node_is_alias(node);
+}
+
+fy_node* TNodeOpsBase::ResolveAlias(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    Y_VERIFY_DEBUG(IsAlias(node));
+    return fy_node_resolve_alias(node);
+}
+
+TString TNodeOpsBase::Scalar(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    Y_ENSURE_EX(fy_node_is_scalar(node), TFyamlEx() << "Node is not Scalar: " << Path(node));
+    size_t size;
+    const char* text = fy_node_get_scalar(node, &size);
+    return TString(text, size);
+}
+
+TMark TNodeOpsBase::BeginMark(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
+        fy_document_iterator_create(),
+        &fy_document_iterator_destroy);
+    fy_document_iterator_node_start(it.get(), node);
+    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> ev(
+        fy_document_iterator_body_next(it.get()),
+        deleter);
+    auto* mark = fy_event_start_mark(ev.get());
+
+    if (!mark) {
+        ythrow yexception() << "can't get begin mark for a node";
+    }
+
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
+namespace {
+
+fy_event_type GetOpenEventType(ENodeType type) {
+    switch(type) {
+    case ENodeType::Mapping:
+        return FYET_MAPPING_START;
+    case ENodeType::Sequence:
+        return FYET_SEQUENCE_START;
+    default:
+        Y_FAIL("Not a brackets type");
+    }
+}
+
+fy_event_type GetCloseEventType(ENodeType type) {
+    switch(type) {
+    case ENodeType::Mapping:
+        return FYET_MAPPING_END;
+    case ENodeType::Sequence:
+        return FYET_SEQUENCE_END;
+    default:
+        Y_FAIL("Not a brackets type");
+    }
+}
+
+} // anonymous namespace
+
+TMark TNodeOpsBase::EndMark(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    std::unique_ptr<fy_document_iterator, void(*)(fy_document_iterator*)> it(
+        fy_document_iterator_create(),
+        &fy_document_iterator_destroy);
+    fy_document_iterator_node_start(it.get(), node);
+
+    auto deleter = [&](fy_event* fye){ fy_document_iterator_event_free(it.get(), fye); };
+    std::unique_ptr<fy_event, decltype(deleter)> prevEv(
+        nullptr,
+        deleter);
+    std::unique_ptr<fy_event, decltype(deleter)> ev(
+        fy_document_iterator_body_next(it.get()),
+        deleter);
+
+    if (IsComplexType(Type(node))) {
+        int openBrackets = 0;
+        if (ev->type == GetOpenEventType(Type(node))) {
+            ++openBrackets;
+        }
+        if (ev->type == GetCloseEventType(Type(node))) {
+            --openBrackets;
+        }
+        while (ev->type != GetCloseEventType(Type(node)) || openBrackets != 0) {
+            std::unique_ptr<fy_event, decltype(deleter)> cur(
+                fy_document_iterator_body_next(it.get()),
+                deleter);
+            if (cur == nullptr) {
+                break;
+            }
+            if (cur->type == GetOpenEventType(Type(node))) {
+                ++openBrackets;
+            }
+            if (cur->type == GetCloseEventType(Type(node))) {
+                --openBrackets;
+            }
+            if (fy_event_get_node_style(cur.get()) != FYNS_BLOCK) {
+                prevEv.reset(ev.release());
+                ev.reset(cur.release());
+            }
+        }
+    }
+
+    auto* mark = fy_event_end_mark(ev.get());
+
+    if (!mark && prevEv) {
+        mark = fy_event_end_mark(prevEv.get());
+    }
+
+    if (!mark) {
+        ythrow yexception() << "can't get end mark for a node";
+    }
+
+    return TMark{
+        mark->input_pos,
+        mark->line,
+        mark->column,
+    };
+}
+
+fy_node* TNodeOpsBase::Map(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    Y_ENSURE_EX(fy_node_is_mapping(node), TFyamlEx() << "Node is not Mapping: " << Path(node));
+    return node;
+}
+
+fy_node* TNodeOpsBase::Sequence(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    Y_ENSURE_EX(fy_node_is_sequence(node), TFyamlEx() << "Node is not Sequence: " << Path(node));
+    return node;
+}
+
+void TNodeOpsBase::Insert(fy_node* thisNode, fy_node* node) {
+    ENSURE_NODE_NOT_EMPTY(node);
+    RethrowOnError(fy_node_insert(thisNode, node), thisNode);
+}
+
+std::optional<TString> TNodeOpsBase::Tag(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    size_t len = 0;
+    const char* tag = fy_node_get_tag(node, &len);
+
+    if (tag) {
+        return TString(tag, len);
+    }
+
+    return std::nullopt;
+}
+
+void TNodeOpsBase::SetTag(fy_node* node, const TString& tag) {
+    ENSURE_NODE_NOT_EMPTY(node);
+    auto* str = new TString(std::move(tag));
+    auto* data = new TUserDataHolder(UserData(node), str);
+    SetUserData(node, data);
+    RethrowOnError(fy_node_set_tag(node, str->c_str(), str->length()), node);
+}
+
+bool TNodeOpsBase::RemoveTag(fy_node* node) {
+    ENSURE_NODE_NOT_EMPTY(node);
+    bool ret = fy_node_remove_tag(node);
+    ClearUserData(node);
+    return ret;
+}
+
+bool TNodeOpsBase::HasAnchor(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return fy_node_get_anchor(node) != nullptr;
+}
+
+void TNodeOpsBase::SetAnchor(fy_node* node, const TString& anchor) {
+    auto* str = new TString(anchor);
+    auto* data = new TUserDataHolder(UserData(node), str);
+    SetUserData(node, data);
+    RethrowOnError(fy_node_set_anchor(node, str->c_str(), str->length()), node);
+}
+
+bool TNodeOpsBase::DeepEqual(fy_node* thisNode, fy_node* other) {
+    ENSURE_NODE_NOT_EMPTY(thisNode);
+    ENSURE_NODE_NOT_EMPTY(other);
+    return fy_node_compare(thisNode, other);
+}
+
+std::unique_ptr<char, void(*)(char*)> TNodeOpsBase::EmitToCharArray(fy_node* node) const {
+    std::unique_ptr<char, void(*)(char*)> res(
+        fy_emit_node_to_string(
+            node,
+            (fy_emitter_cfg_flags)(FYECF_DEFAULT)), &FreeChar);
+    return res;
+}
+
+void TNodeOpsBase::SetStyle(fy_node* node, ENodeStyle style) {
+    ENSURE_NODE_NOT_EMPTY(node);
+    fy_node_set_style(node, (enum fy_node_style)style);
+}
+
+ENodeStyle TNodeOpsBase::Style(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return (ENodeStyle)fy_node_get_style(node);
+}
+
+void TNodeOpsBase::SetUserData(fy_node* node, IBasicUserData* data) {
+    ENSURE_NODE_NOT_EMPTY(node);
+    fy_node_set_meta(node, data);
+}
+
+IBasicUserData* TNodeOpsBase::UserData(fy_node* node) const {
+    ENSURE_NODE_NOT_EMPTY(node);
+    return reinterpret_cast<IBasicUserData* >(fy_node_get_meta(node));
+}
+
+void TNodeOpsBase::ClearUserData(fy_node* node) {
+    ENSURE_NODE_NOT_EMPTY(node);
+    fy_node_clear_meta(node);
+}
+
+void ThrowAllExceptionsIfAny(fy_diag* diag) {
+    void* iter = nullptr;
+    fy_diag_error* err = fy_diag_errors_iterate(diag, &iter);
+    if (err != nullptr) {
+        TStringStream ss;
+        ss << err->line << ":" << err->column << " " << err->msg;
+        TFyamlEx ex(ss.Str());
+
+        while ((err = fy_diag_errors_iterate(diag, &iter)) != nullptr) {
+            TStringStream ss;
+            ss << err->line << ":" << err->column << " " << err->msg;
+            ex.AddError(ss.Str());
+        }
+
+        ythrow ex;
+    }
+}
+
 void RethrowError(fy_diag* diag) {
     void *iter = nullptr;
     fy_diag_error* err;
@@ -1031,7 +1057,7 @@ void RethrowError(fy_diag* diag) {
     while ((err = fy_diag_errors_iterate(diag, &iter)) != nullptr) {
         ss << err->line << ":" << err->column << " " << err->msg << "\n";
     }
-    ythrow yexception() << ss.Str();
+    ythrow TFyamlEx(ss.Str());
 }
 
 void RethrowOnError(bool isError, fy_node* node) {
@@ -1060,9 +1086,12 @@ void RethrowOnError(bool isError, fy_diag* diag) {
     RethrowError(diag);
 }
 
-
 void FreeChar(char* mem) {
     free(mem);
+}
+
+bool IsComplexType(ENodeType type) {
+    return type == ENodeType::Mapping || type == ENodeType::Sequence;
 }
 
 } // namespace NDetail
@@ -1082,4 +1111,12 @@ void Out<NFyaml::TNodeRef>(IOutputStream& out, const NFyaml::TNodeRef& value) {
 template <>
 void Out<NFyaml::TJsonEmitter>(IOutputStream& out, const NFyaml::TJsonEmitter& value) {
     out << value.EmitToCharArray().get();
+}
+
+bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNodeRef>& node2) {
+     return node2.Node() == node1;
+}
+
+bool operator==(const fy_node* node1, const NFyaml::NDetail::TNodeOps<NFyaml::TNode>& node2) {
+     return node2.Node() == node1;
 }

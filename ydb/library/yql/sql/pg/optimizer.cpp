@@ -3,9 +3,9 @@
 
 #include <iostream>
 #include <ydb/library/yql/parser/pg_wrapper/arena_ctx.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/string/builder.h>
-#include <util/generic/yexception.h>
 
 #ifdef _WIN32
 #define __restrict
@@ -192,21 +192,15 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
         } else if (path->type == T_NestPath) {
             node.Strategy = EJoinStrategy::Loop;
         } else {
-            ythrow yexception() << "Uknown pathtype " << (int)path->type;
+            YQL_ENSURE(false, "Uknown pathtype " << (int)path->type);
         }
 
         JoinPath* jpath = (JoinPath*)path;
 
-        if (list_length(jpath->joinrestrictinfo) != 1) {
-            ythrow yexception() << "Unsupported joinrestrictinfo len";
-        }
+        YQL_ENSURE(list_length(jpath->joinrestrictinfo) == 1, "Unsupported joinrestrictinfo len");
         RestrictInfo* rinfo = (RestrictInfo*)jpath->joinrestrictinfo->elements[0].ptr_value;
-        if (rinfo->left_em->em_expr->type != T_Var) {
-            ythrow yexception() << "Unsupported left em type";
-        }
-        if (rinfo->right_em->em_expr->type != T_Var) {
-            ythrow yexception() << "Unsupported right em type";
-        }
+        YQL_ENSURE(rinfo->left_em->em_expr->type == T_Var, "Unsupported left em type");
+        YQL_ENSURE(rinfo->right_em->em_expr->type == T_Var, "Unsupported right em type");
 
         Var* left = (Var*)rinfo->left_em->em_expr;
         Var* right = (Var*)rinfo->right_em->em_expr;
@@ -216,6 +210,10 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
         node.Inner = MakeOutputJoin(output, jpath->innerjoinpath);
         node.Outer = MakeOutputJoin(output, jpath->outerjoinpath);
+
+        if (!bms_is_member(left->varno, jpath->outerjoinpath->parent->relids)) {
+            std::swap(node.LeftVar, node.RightVar);
+        }
     }
 
     output.Nodes[id] = node;

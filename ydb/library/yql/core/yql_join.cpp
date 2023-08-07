@@ -387,7 +387,7 @@ namespace {
 
     struct TFlattenState {
         TString Table;
-        TVector<const TTypeAnnotationNode*> AllTypes;
+        TTypeAnnotationNode::TListType AllTypes;
     };
 
     void CollectEquiJoinKeyColumnsFromLeaf(const TExprNode& columns, THashMap<TStringBuf, THashSet<TStringBuf>>& tableKeysMap) {
@@ -870,32 +870,12 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
 
     if (options.Flatten) {
         for (auto& x : flattenFields) {
-            bool isOptional = true;
-            const TTypeAnnotationNode* commonType = nullptr;
-            for (auto type : x.second.AllTypes) {
-                if (type->GetKind() != ETypeAnnotationKind::Optional) {
-                    isOptional = false;
-                } else {
-                    type = type->Cast<TOptionalExprType>()->GetItemType();
-                }
-
-                if (!commonType) {
-                    commonType = type;
-                } else {
-                    auto arg1 = ctx.NewArgument(positionHandle, "a");
-                    auto arg2 = ctx.NewArgument(positionHandle, "b");
-                    if (SilentInferCommonType(arg1, *commonType, arg2, *type, ctx, commonType,
-                        TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert)) == IGraphTransformer::TStatus::Error) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
-                }
-            }
-
-            if (isOptional && commonType->GetKind() != ETypeAnnotationKind::Optional) {
-                commonType = ctx.MakeType<TOptionalExprType>(commonType);
-            }
-
-            resultFields.push_back(ctx.MakeType<TItemExprType>(x.first, commonType));
+            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx)) {
+                const bool unwrap = ETypeAnnotationKind::Optional == commonType->GetKind() &&
+                    std::any_of(x.second.AllTypes.cbegin(), x.second.AllTypes.cend(), [](const TTypeAnnotationNode* type) { return ETypeAnnotationKind::Optional != type->GetKind(); });
+                resultFields.emplace_back(ctx.MakeType<TItemExprType>(x.first, unwrap ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType));
+            } else
+                return IGraphTransformer::TStatus::Error;
         }
     }
 

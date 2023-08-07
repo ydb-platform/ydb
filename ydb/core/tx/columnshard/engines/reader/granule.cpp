@@ -1,4 +1,5 @@
 #include "granule.h"
+#include "granule_preparation.h"
 #include "filling_context.h"
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
@@ -8,16 +9,18 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
-    GranuleDataSize.Take(batchInfo.GetRealBatchSizeVerified());
-    GranuleDataSize.Free(batchInfo.GetPredictedBatchSize());
-    RawDataSizeReal += batchInfo.GetRealBatchSizeVerified();
     if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
         return;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
-        ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size());
     Y_VERIFY(!ReadyFlag);
     Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchAddress().GetBatchGranuleIdx()));
+    if (InConstruction) {
+        GranuleDataSize.Take(batchInfo.GetRealBatchSizeVerified());
+        GranuleDataSize.Free(batchInfo.GetPredictedBatchSize());
+        RawDataSizeReal += batchInfo.GetRealBatchSizeVerified();
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
+        ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size())("in_construction", InConstruction);
     if (batch && batch->num_rows()) {
         RecordBatches.emplace_back(batch);
 
@@ -129,11 +132,25 @@ void TGranule::AddNotIndexedBatch(std::shared_ptr<arrow::RecordBatch> batch) {
     Owner->Wakeup(*this);
 }
 
+void TGranule::OnGranuleDataPrepared(std::vector<std::shared_ptr<arrow::RecordBatch>>&& data) {
+    ReadyFlag = true;
+    RecordBatches = data;
+    Owner->OnGranuleReady(GranuleId);
+}
+
 void TGranule::CheckReady() {
     if (WaitBatches.empty() && NotIndexedBatchReadyFlag) {
-        ReadyFlag = true;
-        ACFL_DEBUG("event", "granule_ready")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
-        Owner->OnGranuleReady(GranuleId);
+
+        if (RecordBatches.empty() || !IsDuplicationsAvailable()) {
+            ReadyFlag = true;
+            ACFL_DEBUG("event", "granule_ready")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
+            Owner->OnGranuleReady(GranuleId);
+        } else {
+            ACFL_DEBUG("event", "granule_preparation")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
+            std::vector<std::shared_ptr<arrow::RecordBatch>> inGranule = std::move(RecordBatches);
+            auto processor = Owner->GetTasksProcessor();
+            processor.Add(*Owner, std::make_shared<TTaskGranulePreparation>(std::move(inGranule), std::move(BatchesToDedup), GranuleId, Owner->GetReadMetadata(), processor.GetObject()));
+        }
     }
 }
 

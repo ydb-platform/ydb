@@ -1,6 +1,7 @@
 #include "actors_factory.h"
 #include "executer_actor.h"
 #include "finalizer_actor.h"
+#include "initializer_actor.h"
 #include "resources_cleaner_actor.h"
 #include "result_writer_actor.h"
 #include "status_tracker_actor.h"
@@ -37,6 +38,11 @@ struct TActorFactory : public IActorFactory {
         return CreateConnectorActor(Params);
     }
 
+    std::unique_ptr<NActors::IActor> CreateInitializer(const NActors::TActorId& parent,
+                                                       const NActors::TActorId& pinger) const override {
+        return CreateInitializerActor(Params, parent, pinger, Counters);
+    }
+
     std::unique_ptr<NActors::IActor> CreateExecuter(const NActors::TActorId &parent,
                                                     const NActors::TActorId &connector,
                                                     const NActors::TActorId &pinger) const override {
@@ -53,8 +59,8 @@ struct TActorFactory : public IActorFactory {
     std::unique_ptr<NActors::IActor> CreateResultWriter(const NActors::TActorId& parent,
                                                         const NActors::TActorId& connector,
                                                         const NActors::TActorId& pinger,
-                                                        const TString& executionId) const override {
-        return CreateResultWriterActor(Params, parent, connector, pinger, executionId, Counters);
+                                                        const NKikimr::NOperationId::TOperationId& operationId) const override {
+        return CreateResultWriterActor(Params, parent, connector, pinger, operationId, Counters);
     }
 
     std::unique_ptr<NActors::IActor> CreateResourcesCleaner(const NActors::TActorId& parent,

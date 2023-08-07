@@ -15,24 +15,6 @@
                         "Name"
                     ],
                     "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ],
-                    "type": "Lookup"
                 }
             ]
         }

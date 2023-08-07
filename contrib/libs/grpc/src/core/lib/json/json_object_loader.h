@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef GRPC_CORE_LIB_JSON_JSON_OBJECT_LOADER_H
-#define GRPC_CORE_LIB_JSON_JSON_OBJECT_LOADER_H
+#ifndef GRPC_SRC_CORE_LIB_JSON_JSON_OBJECT_LOADER_H
+#define GRPC_SRC_CORE_LIB_JSON_JSON_OBJECT_LOADER_H
 
 #include <grpc/support/port_platform.h>
 
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
+#include <utility>
 #include <vector>
 
 #include "y_absl/meta/type_traits.h"
@@ -213,6 +215,16 @@ class LoadUnprocessedJsonObject : public LoaderInterface {
   ~LoadUnprocessedJsonObject() = default;
 };
 
+// Loads an unprocessed JSON array value.
+class LoadUnprocessedJsonArray : public LoaderInterface {
+ public:
+  void LoadInto(const Json& json, const JsonArgs& /*args*/, void* dst,
+                ValidationErrors* errors) const override;
+
+ protected:
+  ~LoadUnprocessedJsonArray() = default;
+};
+
 // Load a vector of some type.
 class LoadVector : public LoaderInterface {
  public:
@@ -327,6 +339,11 @@ class AutoLoader<Json::Object> final : public LoadUnprocessedJsonObject {
  private:
   ~AutoLoader() = default;
 };
+template <>
+class AutoLoader<Json::Array> final : public LoadUnprocessedJsonArray {
+ private:
+  ~AutoLoader() = default;
+};
 
 // Specializations of AutoLoader for vectors.
 template <typename T>
@@ -370,7 +387,6 @@ class AutoLoader<std::map<TString, T>> final : public LoadMap {
     return LoaderForType<T>();
   }
 
- private:
   ~AutoLoader() = default;
 };
 
@@ -383,6 +399,26 @@ class AutoLoader<y_absl::optional<T>> final : public LoadOptional {
   }
   void Reset(void* dst) const final {
     static_cast<y_absl::optional<T>*>(dst)->reset();
+  }
+  const LoaderInterface* ElementLoader() const final {
+    return LoaderForType<T>();
+  }
+
+ private:
+  ~AutoLoader() = default;
+};
+
+// Specializations of AutoLoader for std::unique_ptr<>.
+template <typename T>
+class AutoLoader<std::unique_ptr<T>> final : public LoadOptional {
+ public:
+  void* Emplace(void* dst) const final {
+    auto& p = *static_cast<std::unique_ptr<T>*>(dst);
+    p = std::make_unique<T>();
+    return p.get();
+  }
+  void Reset(void* dst) const final {
+    static_cast<std::unique_ptr<T>*>(dst)->reset();
   }
   const LoaderInterface* ElementLoader() const final {
     return LoaderForType<T>();
@@ -596,4 +632,4 @@ y_absl::optional<T> LoadJsonObjectField(const Json::Object& json,
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_LIB_JSON_JSON_OBJECT_LOADER_H
+#endif  // GRPC_SRC_CORE_LIB_JSON_JSON_OBJECT_LOADER_H

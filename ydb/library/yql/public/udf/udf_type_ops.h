@@ -50,8 +50,12 @@ inline THashType GetFloatHash(const TUnboxedValuePod& value) {
     return std::isunordered(x, x) ? ~0ULL : std::hash<T>()(x);
 }
 
+inline THashType GetStringHash(TStringBuf value) {
+    return THash<TStringBuf>{}(value);
+}
+
 inline THashType GetStringHash(const TUnboxedValuePod& value) {
-    return THash<TStringBuf>{}(value.AsStringRef());
+    return GetStringHash(value.AsStringRef());
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>

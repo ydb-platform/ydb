@@ -29,7 +29,7 @@ TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPos
 void FindYdsDbIdsForResolving(
     const TPqState::TPtr& state,
     TExprNode::TPtr input,
-    THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& ids)
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& ids)
 {
     if (auto pqNodes = FindNodes(input, [&](const TExprNode::TPtr& node) {
         if (auto maybePqRead = TMaybeNode<TPqRead>(node)) {
@@ -67,7 +67,7 @@ void FindYdsDbIdsForResolving(
             if (!foundSetting->second.DatabaseId)
                 continue;
             YQL_CLOG(INFO, ProviderPq) << "Resolve YDS id: " << foundSetting->second.DatabaseId;
-            const auto idKey = std::make_pair(foundSetting->second.DatabaseId, NYql::DatabaseType::DataStreams);
+            const auto idKey = std::make_pair(foundSetting->second.DatabaseId, NYql::EDatabaseType::DataStreams);
             const auto foundDbId = state->DatabaseIds.find(idKey);
             if (foundDbId != state->DatabaseIds.end()) {
                 ids[idKey] = foundDbId->second;
@@ -79,7 +79,7 @@ void FindYdsDbIdsForResolving(
 
 void FillSettingsWithResolvedYdsIds(
     const TPqState::TPtr& state,
-    const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>& fullResolvedIds)
+    const TDatabaseResolverResponse::TDatabaseEndpointsMap& fullResolvedIds)
 {
     YQL_CLOG(INFO, ProviderPq) << "FullResolvedIds size: " << fullResolvedIds.size();
     auto& clusters = state->Configuration->ClustersConfigurationSettings;

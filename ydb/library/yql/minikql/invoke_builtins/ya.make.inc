@@ -49,7 +49,6 @@ PEERDIR(
     ydb/library/binary_json
     ydb/library/yql/minikql
     ydb/library/yql/minikql/arrow
-    ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/udf
     contrib/libs/apache/arrow
 )

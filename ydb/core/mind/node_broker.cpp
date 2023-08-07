@@ -32,10 +32,28 @@ bool IsReady(T &t, Ts &...args)
     return t.IsReady() && IsReady(args...);
 }
 
+std::atomic<INodeBrokerHooks*> NodeBrokerHooks{ nullptr };
+
 } // anonymous namespace
+
+void INodeBrokerHooks::OnActivateExecutor(ui64 tabletId) {
+    Y_UNUSED(tabletId);
+}
+
+INodeBrokerHooks* INodeBrokerHooks::Get() {
+    return NodeBrokerHooks.load(std::memory_order_acquire);
+}
+
+void INodeBrokerHooks::Set(INodeBrokerHooks* hooks) {
+    NodeBrokerHooks.store(hooks, std::memory_order_release);
+}
 
 void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
 {
+    if (auto* hooks = INodeBrokerHooks::Get()) {
+        hooks->OnActivateExecutor(TabletID());
+    }
+
     const auto *appData = AppData(ctx);
 
     DomainId = appData->DomainsInfo->GetDomainUidByTabletId(TabletID());
@@ -735,13 +753,6 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
     ProcessTx(0, CreateTxUpdateConfigSubscription(ev), ctx);
 }
 
-void TNodeBroker::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                         const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                          const TActorContext &)
 {
@@ -863,6 +874,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
 {
     ui32 nodeId = ev->Get()->Record.GetNodeId();
     ProcessTx(nodeId, CreateTxExtendLease(ev), ctx);
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
+    Executor()->CompactTables();
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,

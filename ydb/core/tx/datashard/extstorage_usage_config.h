@@ -41,6 +41,10 @@ public:
 
     Aws::S3::Model::StorageClass GetStorageClass() const;
 
+    inline TString GetMetadataKey() const {
+        return NBackupRestoreTraits::MetadataKey(ObjectKeyPattern);
+    }
+
     inline TString GetSchemeKey() const {
         return NBackupRestoreTraits::SchemeKey(ObjectKeyPattern);
     }

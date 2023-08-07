@@ -16,7 +16,7 @@ ENDIF()
 
 REQUIREMENTS(
     cpu:4
-    ram:16
+    ram:32
 )
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")

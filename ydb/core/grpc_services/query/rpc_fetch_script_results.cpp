@@ -70,7 +70,7 @@ public:
             return;
         }
 
-        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_id(), RowsOffset, req->rows_limit() + 1));
+        Register(NKqp::CreateGetScriptExecutionResultActor(SelfId(), DatabaseName, ExecutionId, req->result_set_index(), RowsOffset, req->rows_limit() + 1));
 
         Become(&TFetchScriptResultsRPC::StateFunc);
     }
@@ -128,24 +128,12 @@ private:
     }
 
     bool GetExecutionIdFromRequest() {
-        switch (GetProtoRequest()->execution_case()) {
-        case Ydb::Query::FetchScriptResultsRequest::kExecutionId:
-            ExecutionId = GetProtoRequest()->execution_id();
-            break;
-        case Ydb::Query::FetchScriptResultsRequest::kOperationId:
-        {
-            TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
-            if (!executionId) {
-                Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
-                return false;
-            }
-            ExecutionId = *executionId;
-            break;
-        }
-        case Ydb::Query::FetchScriptResultsRequest::EXECUTION_NOT_SET:
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No execution id");
+        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id());
+        if (!executionId) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid operation id");
             return false;
         }
+        ExecutionId = *executionId;
         return true;
     }
 
@@ -159,10 +147,9 @@ private:
 namespace NQuery {
 
 void DoFetchScriptResults(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {
-    Y_UNUSED(f);
     auto* req = dynamic_cast<TEvFetchScriptResultsRequest*>(p.release());
     Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    TActivationContext::AsActorContext().Register(new TFetchScriptResultsRPC(req));
+    f.RegisterActor(new TFetchScriptResultsRPC(req));
 }
 
 }

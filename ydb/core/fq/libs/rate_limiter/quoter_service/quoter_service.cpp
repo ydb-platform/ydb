@@ -1,6 +1,6 @@
 #include "quoter_service.h"
 
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>

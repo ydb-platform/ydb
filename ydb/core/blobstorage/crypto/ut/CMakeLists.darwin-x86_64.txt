@@ -22,6 +22,8 @@ target_link_options(ydb-core-blobstorage-crypto-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-core-blobstorage-crypto-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_ut.cpp

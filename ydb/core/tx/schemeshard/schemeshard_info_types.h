@@ -2672,6 +2672,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     TSet<TActorId> Subscribers;
 
+    ui64 SnapshotStep = 0;
+    ui64 SnapshotTxId = 0;
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,

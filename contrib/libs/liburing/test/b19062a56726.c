@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
   if (argc > 1)
     return T_EXIT_SKIP;
 
-  mmap((void *) 0x20000000, 0x1000000, 3, 0x32, -1, 0);
+  mmap((void *) 0x20000000, 0x1000000, 3, MAP_ANON|MAP_PRIVATE, -1, 0);
 
   *(uint32_t*)0x20000200 = 0;
   *(uint32_t*)0x20000204 = 0;

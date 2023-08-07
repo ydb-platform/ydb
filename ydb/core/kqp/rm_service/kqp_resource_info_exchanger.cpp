@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
@@ -25,19 +27,30 @@ namespace NRm {
 class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInfoExchangerActor> {
     using TBase = TActorBootstrapped<TKqpResourceInfoExchangerActor>;
 
+    static constexpr ui32 BUCKETS_COUNT = 32;
+
     struct TEvPrivate {
         enum EEv {
-            EvRetrySending = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvSendToNode = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvRegularSending,
             EvRetrySubscriber,
             EvUpdateSnapshotState,
+            EvRetryNode,
         };
 
-        struct TEvRetrySending :
-                public TEventLocal<TEvRetrySending, EEv::EvRetrySending> {
-            ui32 NodeId;
+        struct TEvSendToNode :
+                public TEventLocal<TEvSendToNode, EEv::EvSendToNode> {
+            ui32 BucketInd;
 
-            TEvRetrySending(ui32 nodeId) : NodeId(nodeId) {
+            TEvSendToNode(ui32 bucketInd) : BucketInd(bucketInd) {
+            }
+        };
+
+        struct TEvRetryNode :
+                public TEventLocal<TEvRetryNode, EEv::EvRetryNode> {
+            ui32 BucketInd;
+
+            TEvRetryNode(ui32 bucketInd) : BucketInd(bucketInd) {
             }
         };
 
@@ -54,30 +67,63 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
         };
     };
 
-    struct TRetryState {
+    struct TDelayState {
         bool IsScheduled = false;
         NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
-        TDuration CurrentDelay = TDuration::MilliSeconds(50);
+        TDuration CurrentDelay = TDuration::Zero();
+    };
+
+    struct TDelaySettings {
+        TDuration StartDelayMs = TDuration::MilliSeconds(500);
+        TDuration MaxDelayMs = TDuration::MilliSeconds(2000);
     };
 
     struct TNodeState {
-        TRetryState RetryState;
         NMonotonic::TMonotonic LastUpdateAt = TMonotonic::Zero();
         NKikimrKqp::TResourceExchangeNodeData NodeData;
+    };
+
+    struct TBucketState {
+        TDelayState RetryState;
+        TDelayState SendState;
+        THashSet<ui32> NodeIdsToSend;
+        THashSet<ui32> NodeIdsToRetry;
     };
 
 public:
 
     TKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,
-        std::shared_ptr<TResourceSnapshotState> resourceSnapshotState)
+        std::shared_ptr<TResourceSnapshotState> resourceSnapshotState,
+        const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings)
         : ResourceSnapshotState(std::move(resourceSnapshotState))
         , Counters(counters)
+        , Settings(settings)
     {
-        Y_UNUSED(counters);
+        Buckets.resize(BUCKETS_COUNT);
+
+        const auto& publisherSettings = settings.GetPublisherSettings();
+        const auto& subscriberSettings = settings.GetSubscriberSettings();
+        const auto& exchangerSettings = settings.GetExchangerSettings();
+
+        UpdateBoardRetrySettings(publisherSettings, PublisherSettings);
+        UpdateBoardRetrySettings(subscriberSettings, SubscriberSettings);
+
+        if (exchangerSettings.HasStartDelayMs()) {
+            ExchangerSettings.StartDelayMs = TDuration::MilliSeconds(exchangerSettings.GetStartDelayMs());
+        }
+        if (exchangerSettings.HasMaxDelayMs()) {
+            ExchangerSettings.MaxDelayMs = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
+        }
     }
 
     void Bootstrap() {
         LOG_D("Start KqpResourceInfoExchangerActor at " << SelfId());
+
+        ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
+
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpResourceInfoExchangerActor::WorkState);
 
@@ -85,6 +131,21 @@ public:
     }
 
 private:
+
+    bool UpdateBoardRetrySettings(
+            const NKikimrConfig::TTableServiceConfig::TResourceManager::TRetrySettings& settings,
+            TBoardRetrySettings& retrySetting) {
+        bool ret = false;
+        if (settings.HasStartDelayMs()) {
+            ret = true;
+            retrySetting.StartDelayMs = TDuration::MilliSeconds(settings.GetStartDelayMs());
+        }
+        if (settings.HasMaxDelayMs()) {
+            ret = true;
+            retrySetting.MaxDelayMs = TDuration::MilliSeconds(settings.GetMaxDelayMs());
+        }
+        return ret;
+    }
 
     static TString MakeKqpInfoExchangerBoardPath(TStringBuf database) {
         return TStringBuilder() << "kqpexch+" << database;
@@ -94,8 +155,8 @@ private:
         auto& retryState = BoardState.RetryStateForSubscriber;
 
         auto now = TlsActivationContext->Monotonic();
-        if (now - retryState.LastRetryAt < retryState.CurrentDelay) {
-            auto at = retryState.LastRetryAt + GetRetryDelay(retryState);
+        if (now - retryState.LastRetryAt < GetCurrentDelay(retryState)) {
+            auto at = retryState.LastRetryAt + GetDelay(retryState);
             Schedule(at - now, new TEvPrivate::TEvRetrySubscriber);
             return;
         }
@@ -108,7 +169,8 @@ private:
         BoardState.Subscriber = TActorId();
 
         auto subscriber = CreateBoardLookupActor(
-            BoardState.Path, SelfId(), BoardState.StateStorageGroupId, EBoardLookupMode::Subscription);
+            BoardState.Path, SelfId(), BoardState.StateStorageGroupId, EBoardLookupMode::Subscription,
+            SubscriberSettings);
         BoardState.Subscriber = Register(subscriber);
 
         retryState.LastRetryAt = now;
@@ -123,7 +185,7 @@ private:
         BoardState.Publisher = TActorId();
 
         auto publisher = CreateBoardPublishActor(BoardState.Path, SelfInfo, SelfId(),
-            BoardState.StateStorageGroupId, /* ttlMs */ 0, /* reg */ true);
+            BoardState.StateStorageGroupId, /* ttlMs */ 0, /* reg */ true, PublisherSettings);
         BoardState.Publisher = Register(publisher);
 
         auto& nodeState = NodesState[SelfId().NodeId()];
@@ -132,20 +194,29 @@ private:
         ActorIdToProto(BoardState.Publisher, boardData->MutablePublisher());
     }
 
-    TVector<ui32> UpdateBoardInfo(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infos) {
+    std::pair<TVector<ui32>, bool> UpdateBoardInfo(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infos) {
         auto nodeIds = TVector<ui32>();
+        bool isChanged = false;
 
         auto now = TlsActivationContext->Monotonic();
-        for (const auto& [id, entry] : infos) {
+        for (const auto& [publisherId, entry] : infos) {
             if (entry.Dropped) {
-                auto nodesStateIt = NodesState.find(id.NodeId());
+                auto nodesStateIt = NodesState.find(publisherId.NodeId());
+
                 if (nodesStateIt == NodesState.end()) {
                     continue;
                 }
+
+                auto bucketInd = GetBucketInd(publisherId.NodeId());
+                auto& bucket = Buckets[bucketInd];
+
                 auto& currentBoardData = nodesStateIt->second.NodeData.GetResourceExchangeBoardData();
                 auto currentPublisher = ActorIdFromProto(currentBoardData.GetPublisher());
-                if (currentPublisher == id) {
+                if (currentPublisher == publisherId) {
                     NodesState.erase(nodesStateIt);
+                    isChanged = true;
+                    bucket.NodeIdsToSend.erase(publisherId.NodeId());
+                    bucket.NodeIdsToRetry.erase(publisherId.NodeId());
                 }
                 continue;
             }
@@ -160,11 +231,16 @@ private:
             auto* currentBoardData = currentInfo.MutableResourceExchangeBoardData();
             auto currentUlidString = currentBoardData->GetUlid();
 
+            auto bucketInd = GetBucketInd(owner.NodeId());
+            auto& bucket = Buckets[bucketInd];
+
             if (currentUlidString.empty()) {
                 *currentBoardData = std::move(boardData);
-                ActorIdToProto(id, currentBoardData->MutablePublisher());
+                ActorIdToProto(publisherId, currentBoardData->MutablePublisher());
                 nodeIds.push_back(owner.NodeId());
+                isChanged = true;
                 nodeState.LastUpdateAt = now;
+                bucket.NodeIdsToSend.insert(owner.NodeId());
                 continue;
             }
 
@@ -173,19 +249,25 @@ private:
 
             if (currentUlid < ulid) {
                 *currentBoardData = std::move(boardData);
-                ActorIdToProto(id, currentBoardData->MutablePublisher());
+                ActorIdToProto(publisherId, currentBoardData->MutablePublisher());
                 currentInfo.SetRound(0);
+                isChanged = true;
                 (*currentInfo.MutableResources()) = NKikimrKqp::TKqpNodeResources();
                 nodeIds.push_back(owner.NodeId());
                 nodeState.LastUpdateAt = now;
+                bucket.NodeIdsToSend.insert(owner.NodeId());
                 continue;
             }
         }
 
-        return nodeIds;
+        Counters->RmNodeNumberInSnapshot->Set(NodesState.size());
+
+        return {nodeIds, isChanged};
     }
 
-    void UpdateResourceInfo(const TVector<NKikimrKqp::TResourceExchangeNodeData>& infos) {
+    bool UpdateResourceInfo(const TVector<NKikimrKqp::TResourceExchangeNodeData>& infos) {
+        bool isChanged = false;
+
         auto now = TlsActivationContext->Monotonic();
 
         for (const auto& info : infos) {
@@ -214,9 +296,12 @@ private:
                 auto latency = now - nodeState.LastUpdateAt;
                 Counters->RmSnapshotLatency->Collect(latency.MilliSeconds());
                 nodeState.LastUpdateAt = now;
+                isChanged = true;
                 continue;
             }
         }
+
+        return isChanged;
     }
 
     void UpdateResourceSnapshotState() {
@@ -224,8 +309,8 @@ private:
             return;
         }
         auto now = TlsActivationContext->Monotonic();
-        if (now - ResourceSnapshotRetryState.LastRetryAt < ResourceSnapshotRetryState.CurrentDelay) {
-            auto at = ResourceSnapshotRetryState.LastRetryAt + GetRetryDelay(ResourceSnapshotRetryState);
+        if (now - ResourceSnapshotRetryState.LastRetryAt < GetCurrentDelay(ResourceSnapshotRetryState)) {
+            auto at = ResourceSnapshotRetryState.LastRetryAt + GetDelay(ResourceSnapshotRetryState);
             ResourceSnapshotRetryState.IsScheduled = true;
             Schedule(at - now, new TEvPrivate::TEvUpdateSnapshotState);
             return;
@@ -233,10 +318,10 @@ private:
         TVector<NKikimrKqp::TKqpNodeResources> resources;
         resources.reserve(NodesState.size());
 
-        for (const auto& [id, state] : NodesState) {
-            auto currentResources = state.NodeData.GetResources();
-            if (currentResources.GetNodeId()) {
-                resources.push_back(currentResources);
+        for (const auto& [nodeId, state] : NodesState) {
+            const auto& currentResources = state.NodeData.GetResources();
+            if (currentResources.HasNodeId()) {
+                resources.push_back(std::move(currentResources));
             }
         }
 
@@ -248,39 +333,91 @@ private:
         ResourceSnapshotRetryState.LastRetryAt = now;
     }
 
-    void SendInfos(TVector<ui32> infoNodeIds, TVector<ui32> nodeIds = {}) {
+    void SendInfos(TVector<ui32> infoNodeIds, bool resending = false, TVector<ui32> nodeIds = {}) {
         auto& nodeState = NodesState[SelfId().NodeId()];
         nodeState.NodeData.SetRound(Round++);
 
         if (!nodeIds.empty()) {
-            auto snapshotMsg = CreateSnapshotMessage(infoNodeIds, true);
+            auto snapshotMsg = CreateSnapshotMessage(infoNodeIds, resending);
 
             for (const auto& nodeId : nodeIds) {
                 auto nodesStateIt = NodesState.find(nodeId);
 
                 if (nodesStateIt == NodesState.end()) {
-                    return;
+                    continue;
                 }
-                SendingToNode(nodesStateIt->second, true, {}, snapshotMsg);
+
+                auto owner = ActorIdFromProto(nodesStateIt->second.NodeData.GetResourceExchangeBoardData().GetOwner());
+                if (owner != SelfId()) {
+                    auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
+                    msg->Record = snapshotMsg;
+                    Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
+                }
             }
         } else {
             auto snapshotMsg = CreateSnapshotMessage(infoNodeIds, false);
 
-            TDuration currentLatency = TDuration::MilliSeconds(0);
-            auto nowMonotic = TlsActivationContext->Monotonic();
-
-            for (auto& [id, state] : NodesState) {
-                SendingToNode(state, true, {}, snapshotMsg);
-                if (id != SelfId().NodeId()) {
-                    currentLatency = Max(currentLatency, nowMonotic - state.LastUpdateAt);
+            for (size_t idx = 0; idx < BUCKETS_COUNT; idx++) {
+                auto& bucket = Buckets[idx];
+                if (!bucket.NodeIdsToSend.empty()) {
+                    SendingToBucketNodes(idx, bucket, false, {}, snapshotMsg);
                 }
             }
-
-            Counters->RmMaxSnapshotLatency->Set(currentLatency.MilliSeconds());
         }
     }
 
 private:
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
+        LOG_D("Subscribed for config changes.");
+    }
+
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+        auto &event = ev->Get()->Record;
+
+        NKikimrConfig::TTableServiceConfig tableServiceConfig;
+
+        tableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
+        LOG_D("Updated table service config.");
+
+        const auto& infoExchangerSettings = tableServiceConfig.GetResourceManager().GetInfoExchangerSettings();
+        const auto& publisherSettings = infoExchangerSettings.GetPublisherSettings();
+        const auto& subscriberSettings = infoExchangerSettings.GetSubscriberSettings();
+        const auto& exchangerSettings = infoExchangerSettings.GetExchangerSettings();
+
+        if (UpdateBoardRetrySettings(publisherSettings, PublisherSettings)) {
+            CreatePublisher();
+        }
+
+        if (UpdateBoardRetrySettings(subscriberSettings, SubscriberSettings)) {
+            CreateSubscriber();
+        }
+
+        if (exchangerSettings.HasStartDelayMs()) {
+            ExchangerSettings.StartDelayMs = TDuration::MilliSeconds(exchangerSettings.GetStartDelayMs());
+        }
+        if (exchangerSettings.HasMaxDelayMs()) {
+            ExchangerSettings.MaxDelayMs = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
+        }
+
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        switch (ev->Get()->SourceType) {
+            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+                LOG_C("Failed to deliver subscription request to config dispatcher.");
+                break;
+
+            case NConsole::TEvConsole::EvConfigNotificationResponse:
+                LOG_E("Failed to deliver config notification response.");
+                break;
+
+            default:
+                break;
+        }
+    }
 
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev) {
         TString tenant;
@@ -332,8 +469,6 @@ private:
         LOG_I("Received tenant pool status for exchanger, serving tenant: " << BoardState.Tenant
             << ", board: " << BoardState.Path
             << ", ssGroupId: " << BoardState.StateStorageGroupId);
-
-        Schedule(TDuration::Seconds(2), new TEvPrivate::TEvRegularSending);
     }
 
 
@@ -351,11 +486,15 @@ private:
                 << ", ssGroupId: " << BoardState.StateStorageGroupId
                 << ", with size: " << ev->Get()->InfoEntries.size());
 
-        auto nodeIds = UpdateBoardInfo(ev->Get()->InfoEntries);
+        auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->InfoEntries);
 
-        SendInfos({SelfId().NodeId()}, std::move(nodeIds));
+        if (!nodeIds.empty()) {
+            SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
+        }
 
-        UpdateResourceSnapshotState();
+        if (isChanged) {
+            UpdateResourceSnapshotState();
+        }
     }
 
     void Handle(TEvStateStorage::TEvBoardInfoUpdate::TPtr& ev) {
@@ -371,11 +510,15 @@ private:
                 << ", ssGroupId: " << BoardState.StateStorageGroupId
                 << ", with size: " << ev->Get()->Updates.size());
 
-        auto nodeIds = UpdateBoardInfo(ev->Get()->Updates);
+        auto [nodeIds, isChanged] = UpdateBoardInfo(ev->Get()->Updates);
 
-        SendInfos({SelfId().NodeId()}, std::move(nodeIds));
+        if (!nodeIds.empty()) {
+            SendInfos({SelfId().NodeId()}, true, std::move(nodeIds));
+        }
 
-        UpdateResourceSnapshotState();
+        if (isChanged) {
+            UpdateResourceSnapshotState();
+        }
     }
 
     void Handle(TEvKqpResourceInfoExchanger::TEvPublishResource::TPtr& ev) {
@@ -395,40 +538,56 @@ private:
         const TVector<NKikimrKqp::TResourceExchangeNodeData> resourceInfos(
             ev->Get()->Record.GetSnapshot().begin(), ev->Get()->Record.GetSnapshot().end());
 
-        UpdateResourceInfo(resourceInfos);
+        bool isChanged = UpdateResourceInfo(resourceInfos);
 
         if (ev->Get()->Record.GetNeedResending()) {
             auto nodesStateIt = NodesState.find(nodeId);
 
-            if (nodesStateIt == NodesState.end()) {
-                return;
+            if (nodesStateIt != NodesState.end()) {
+                SendInfos({SelfId().NodeId()}, false, {nodesStateIt->first});
             }
-            SendingToNode(nodesStateIt->second, false, {SelfId().NodeId()});
         }
 
-        UpdateResourceSnapshotState();
+        if (isChanged) {
+            UpdateResourceSnapshotState();
+        }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const auto& nodeId = ev->Get()->NodeId;
-        auto nodesStateIt = NodesState.find(nodeId);
 
-        if (nodesStateIt == NodesState.end()) {
+        if (NodesState.find(nodeId) == NodesState.end()) {
             return;
         }
-        SendingToNode(nodesStateIt->second, true, {SelfId().NodeId()});
+
+        auto bucketInd = GetBucketInd(nodeId);
+        auto& bucket = Buckets[bucketInd];
+
+        bucket.NodeIdsToRetry.insert(nodeId);
+
+        SendingToBucketNodes(bucketInd, bucket, true, {SelfId().NodeId()});
     }
 
-    void Handle(TEvPrivate::TEvRetrySending::TPtr& ev) {
-        const auto& nodeId = ev->Get()->NodeId;
-        auto nodesStateIt = NodesState.find(nodeId);
+    void Handle(TEvPrivate::TEvSendToNode::TPtr& ev) {
+        const auto& bucketInd = ev->Get()->BucketInd;
+        auto& bucket = Buckets[bucketInd];
 
-        if (nodesStateIt == NodesState.end()) {
-            return;
+        bucket.SendState.IsScheduled = false;
+
+        if (!bucket.NodeIdsToSend.empty()) {
+            SendingToBucketNodes(bucketInd, bucket, false, {SelfId().NodeId()});
         }
-        nodesStateIt->second.RetryState.IsScheduled = false;
+    }
 
-        SendingToNode(nodesStateIt->second, true, {SelfId().NodeId()});
+    void Handle(TEvPrivate::TEvRetryNode::TPtr& ev) {
+        const auto& bucketInd = ev->Get()->BucketInd;
+        auto& bucket = Buckets[bucketInd];
+
+        bucket.RetryState.IsScheduled = false;
+
+        if (!bucket.NodeIdsToRetry.empty()) {
+            SendingToBucketNodes(bucketInd, bucket, true, {SelfId().NodeId()});
+        }
     }
 
     void Handle(TEvPrivate::TEvRetrySubscriber::TPtr&) {
@@ -456,12 +615,16 @@ private:
     STATEFN(WorkState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvStateStorage::TEvBoardInfoUpdate, Handle);
             hFunc(TEvTenantPool::TEvTenantPoolStatus, Handle);
             hFunc(TEvKqpResourceInfoExchanger::TEvPublishResource, Handle);
             hFunc(TEvKqpResourceInfoExchanger::TEvSendResources, Handle);
             hFunc(TEvPrivate::TEvRetrySubscriber, Handle);
-            hFunc(TEvPrivate::TEvRetrySending, Handle);
+            hFunc(TEvPrivate::TEvSendToNode, Handle);
+            hFunc(TEvPrivate::TEvRetryNode, Handle);
             hFunc(TEvPrivate::TEvRegularSending, Handle);
             hFunc(TEvPrivate::TEvUpdateSnapshotState, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -478,47 +641,84 @@ private:
         TActor::PassAway();
     }
 
-    TDuration GetRetryDelay(TRetryState& state) {
+    const TDuration& GetCurrentDelay(TDelayState& state) {
+        if (state.CurrentDelay == TDuration::Zero()) {
+            state.CurrentDelay = ExchangerSettings.StartDelayMs;
+        }
+        return state.CurrentDelay;
+    }
+
+    TDuration GetDelay(TDelayState& state) {
         auto newDelay = state.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > TDuration::Seconds(2)) {
-            newDelay = TDuration::Seconds(2);
+        if (newDelay > ExchangerSettings.MaxDelayMs) {
+            newDelay = ExchangerSettings.MaxDelayMs;
         }
-        newDelay *= AppData()->RandomProvider->Uniform(10, 200);
+        newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;
         state.CurrentDelay = newDelay;
         return state.CurrentDelay;
     }
 
-    void SendingToNode(TNodeState& state, bool retry,
+    ui32 GetBucketInd(ui32 nodeId) {
+        return nodeId & (BUCKETS_COUNT - 1);
+    }
+
+    void SendingToBucketNodes(ui32 bucketInd, TBucketState& bucketState, bool retry,
             TVector<ui32> nodeIdsForSnapshot = {}, NKikimrKqp::TResourceExchangeSnapshot snapshotMsg = {}) {
-        auto& retryState = state.RetryState;
-        if (retryState.IsScheduled) {
-            return;
+        TDelayState* retryState;
+        if (retry) {
+            retryState = &bucketState.RetryState;
+        } else {
+            retryState = &bucketState.SendState;
         }
 
-        auto owner = ActorIdFromProto(state.NodeData.GetResourceExchangeBoardData().GetOwner());
-        auto nodeId = owner.NodeId();
+        if (retryState->IsScheduled) {
+            return;
+        }
 
         auto now = TlsActivationContext->Monotonic();
-        if (retry && now - retryState.LastRetryAt < retryState.CurrentDelay) {
-            auto at = retryState.LastRetryAt + GetRetryDelay(retryState);
-            retryState.IsScheduled = true;
-            Schedule(at - now, new TEvPrivate::TEvRetrySending(nodeId));
+        if (now - retryState->LastRetryAt < GetCurrentDelay(*retryState)) {
+            auto at = retryState->LastRetryAt + GetDelay(*retryState);
+            retryState->IsScheduled = true;
+            if (retry) {
+                Schedule(at - now, new TEvPrivate::TEvRetryNode(bucketInd));
+            } else {
+                Schedule(at - now, new TEvPrivate::TEvSendToNode(bucketInd));
+            }
             return;
         }
 
-        if (owner != SelfId()) {
-            auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
-            if (nodeIdsForSnapshot.empty()) {
-                msg->Record = std::move(snapshotMsg);
-            } else {
-                msg->Record = CreateSnapshotMessage(nodeIdsForSnapshot);
-            }
-            Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
+        if (!nodeIdsForSnapshot.empty()) {
+            snapshotMsg = CreateSnapshotMessage(nodeIdsForSnapshot);
         }
 
-        retryState.LastRetryAt = now;
+        THashSet<ui32>* nodeIds;
+        if (retry) {
+            nodeIds = &bucketState.NodeIdsToRetry;
+        } else {
+            nodeIds = &bucketState.NodeIdsToSend;
+        }
+
+        for (const auto& nodeId: *nodeIds) {
+            auto nodesStateIt = NodesState.find(nodeId);
+            if (nodesStateIt == NodesState.end()) {
+                continue;
+            }
+            auto& nodeState = nodesStateIt->second;
+            auto owner = ActorIdFromProto(nodeState.NodeData.GetResourceExchangeBoardData().GetOwner());
+            if (owner != SelfId()) {
+                auto msg = MakeHolder<TEvKqpResourceInfoExchanger::TEvSendResources>();
+                msg->Record = snapshotMsg;
+                Send(owner, msg.Release(), IEventHandle::FlagSubscribeOnSession);
+            }
+        }
+
+        if (retry) {
+            bucketState.NodeIdsToRetry.clear();
+        }
+
+        retryState->LastRetryAt = now;
     }
 
     NKikimrKqp::TResourceExchangeSnapshot CreateSnapshotMessage(const TVector<ui32>& nodeIds,
@@ -530,7 +730,13 @@ private:
 
         for (const auto& nodeId: nodeIds) {
             auto* el = snapshot->Add();
-            *el = NodesState[nodeId].NodeData;
+
+            auto nodesStateIt = NodesState.find(nodeId);
+            if (nodesStateIt == NodesState.end()) {
+                continue;
+            }
+
+            *el = nodesStateIt->second.NodeData;
         }
 
         return snapshotMsg;
@@ -550,23 +756,30 @@ private:
         ui32 StateStorageGroupId = std::numeric_limits<ui32>::max();
         TActorId Publisher = TActorId();
         TActorId Subscriber = TActorId();
-        TRetryState RetryStateForSubscriber;
+        TDelayState RetryStateForSubscriber;
         std::optional<TInstant> LastPublishTime;
     };
     TBoardState BoardState;
 
-    TRetryState ResourceSnapshotRetryState;
+    TDelayState ResourceSnapshotRetryState;
 
+    TVector<TBucketState> Buckets;
     THashMap<ui32, TNodeState> NodesState;
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
 
+    TBoardRetrySettings PublisherSettings;
+    TBoardRetrySettings SubscriberSettings;
+    TDelaySettings ExchangerSettings;
+
     TIntrusivePtr<TKqpCounters> Counters;
+    NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings Settings;
 };
 
 NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,
-    std::shared_ptr<TResourceSnapshotState> resourceSnapshotState)
+    std::shared_ptr<TResourceSnapshotState> resourceSnapshotState,
+    const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings)
 {
-    return new TKqpResourceInfoExchangerActor(counters, std::move(resourceSnapshotState));
+    return new TKqpResourceInfoExchangerActor(counters, std::move(resourceSnapshotState), settings);
 }
 
 } // namespace NRm

@@ -12,6 +12,7 @@ PEERDIR(
     contrib/libs/llvm16/lib/Support
     contrib/libs/llvm16/lib/TableGen
     contrib/libs/llvm16/utils/TableGen/GlobalISel
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

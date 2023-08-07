@@ -1,37 +1,13 @@
 #include "table_client.h"
 
-
 namespace NYdb {
+
 namespace NTable {
 
 using namespace NThreading;
 
-
 const TKeepAliveSettings TTableClient::TImpl::KeepAliveSettings = TKeepAliveSettings().ClientTimeout(KEEP_ALIVE_CLIENT_TIMEOUT);
 
-
-bool IsSessionCloseRequested(const TStatus& status) {
-    const auto& meta = status.GetResponseMetadata();
-    auto hints = meta.equal_range(NYdb::YDB_SERVER_HINTS);
-    for(auto it = hints.first; it != hints.second; ++it) {
-        if (it->second == NYdb::YDB_SESSION_CLOSE) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-TDuration RandomizeThreshold(TDuration duration) {
-    TDuration::TValue value = duration.GetValue();
-    if (KEEP_ALIVE_RANDOM_FRACTION) {
-        const i64 randomLimit = value / KEEP_ALIVE_RANDOM_FRACTION;
-        if (randomLimit < 2)
-            return duration;
-        value += static_cast<i64>(RandomNumber<ui64>(randomLimit));
-    }
-    return TDuration::FromValue(value);
-}
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
     return Min(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
@@ -39,14 +15,6 @@ TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings) {
 
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
     return Max(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
-}
-
-TStatus GetStatus(const TOperation& operation) {
-    return operation.Status();
-}
-
-TStatus GetStatus(const TStatus& status) {
-    return status;
 }
 
 ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber) {
@@ -102,10 +70,10 @@ void TTableClient::TImpl::InitStopper() {
 }
 
 NThreading::TFuture<void> TTableClient::TImpl::Drain() {
-    TVector<std::unique_ptr<TSession::TImpl>> sessions;
+    TVector<std::unique_ptr<TKqpSessionCommon>> sessions;
     // No realocations under lock
     sessions.reserve(Settings_.SessionPoolSettings_.MaxActiveSessions_);
-    auto drainer = [&sessions](std::unique_ptr<TSession::TImpl>&& impl) mutable {
+    auto drainer = [&sessions](std::unique_ptr<TKqpSessionCommon>&& impl) mutable {
         sessions.push_back(std::move(impl));
         return true;
     };
@@ -145,11 +113,11 @@ void TTableClient::TImpl::AsyncBackoff(const TBackoffSettings& settings, ui32 re
 }
 
 void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
+    // Session pool guarantees than client is alive during call callbacks
+    auto deletePredicate = [this](TKqpSessionCommon* s, size_t sessionsCount) {
 
-    auto deletePredicate = [](TSession::TImpl* session, TTableClient::TImpl* client, size_t sessionsCount) {
-
-        const auto sessionPoolSettings = client->Settings_.SessionPoolSettings_;
-        const auto spentTime = session->GetTimeToTouchFast() - session->GetTimeInPastFast();
+        const auto& sessionPoolSettings = Settings_.SessionPoolSettings_;
+        const auto spentTime = s->GetTimeToTouchFast() - s->GetTimeInPastFast();
 
         if (spentTime >= sessionPoolSettings.CloseIdleThreshold_) {
             if (sessionsCount > sessionPoolSettings.MinPoolSize_) {
@@ -160,7 +128,14 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
         return false;
     };
 
-    auto keepAliveCmd = [](TSession session) {
+    auto keepAliveCmd = [this](TKqpSessionCommon* s) {
+        auto strongClient = shared_from_this();
+        TSession session(
+            strongClient,
+            std::shared_ptr<TSession::TImpl>(
+                static_cast<TSession::TImpl*>(s),
+                TSession::TImpl::GetSmartDeleter(strongClient)
+            ));
 
         Y_VERIFY(session.GetId());
 
@@ -199,7 +174,7 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
 
         auto timeToNextTouch = calcTimeToNextTouch(spentTime);
         session.SessionImpl_->ScheduleTimeToTouchFast(
-            RandomizeThreshold(timeToNextTouch),
+            NSessionPool::RandomizeThreshold(timeToNextTouch),
             spentTime >= maxTimeToTouch
         );
     };
@@ -210,7 +185,7 @@ void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
             weak,
             std::move(keepAliveCmd),
             std::move(deletePredicate)
-        ), PERIODIC_ACTION_INTERVAL);
+        ), NSessionPool::PERIODIC_ACTION_INTERVAL);
 }
 
 ui64 TTableClient::TImpl::ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client) {
@@ -341,7 +316,63 @@ void TTableClient::TImpl::StartPeriodicHostScanTask() {
 }
 
 TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSettings& settings) {
-    return SessionPool_.GetSession(shared_from_this(), settings);
+    using namespace NSessionPool;
+
+    class TTableClientGetSessionCtx : public IGetSessionCtx {
+    public:
+        TTableClientGetSessionCtx(std::shared_ptr<TTableClient::TImpl> client, TDuration clientTimeout)
+            : Promise(NewPromise<TCreateSessionResult>())
+            , Client(client)
+            , ClientTimeout(clientTimeout)
+        {}
+
+        TAsyncCreateSessionResult GetFuture() {
+            return Promise.GetFuture();
+        }
+
+        void ReplyError(TStatus status) override {
+            TSession session(Client, "", "", false);
+            ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
+        }
+
+        void ReplySessionToUser(TKqpSessionCommon* session) override {
+            TCreateSessionResult val(
+                TStatus(TPlainStatus()),
+                TSession(
+                    Client,
+                    std::shared_ptr<TSession::TImpl>(
+                        static_cast<TSession::TImpl*>(session),
+                        TSession::TImpl::GetSmartDeleter(Client)
+                    )
+                )
+            );
+
+            ScheduleReply(std::move(val));
+        }
+
+        void ReplyNewSession() override {
+            TCreateSessionSettings settings;
+            settings.ClientTimeout(ClientTimeout);
+            const auto& sessionResult = Client->CreateSession(settings, false);
+            sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(Promise, Client, settings, 0, true));
+        }
+
+    private:
+        void ScheduleReply(TCreateSessionResult val) {
+            //TODO: Do we realy need it?
+            Client->ScheduleTaskUnsafe([promise{std::move(Promise)}, val{std::move(val)}]() mutable {
+                promise.SetValue(std::move(val));
+            }, TDuration());
+        }
+        NThreading::TPromise<TCreateSessionResult> Promise;
+        std::shared_ptr<TTableClient::TImpl> Client;
+        const TDuration ClientTimeout;
+    };
+
+    auto ctx = std::make_unique<TTableClientGetSessionCtx>(shared_from_this(), settings.ClientTimeout_);
+    auto future = ctx->GetFuture();
+    SessionPool_.GetSession(std::move(ctx));
+    return future;
 }
 
 i64 TTableClient::TImpl::GetActiveSessionCount() const {
@@ -357,13 +388,13 @@ i64 TTableClient::TImpl::GetCurrentPoolSize() const {
 }
 
 TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessionSettings& settings, bool standalone,
-    TString preferedLocation)
+    TString preferredLocation)
 {
     auto request = MakeOperationRequest<Ydb::Table::CreateSessionRequest>(settings);
 
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
-    auto rpcSettings = TRpcRequestSettings::Make(settings);
+    auto rpcSettings = TRpcRequestSettings::Make(settings, TEndpointKey(preferredLocation, 0));
     rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
 
     auto createSessionExtractor = [createSessionPromise, self, standalone]
@@ -374,9 +405,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
             }
             auto session = TSession(self, result.session_id(), status.Endpoint, !standalone);
             if (status.Ok()) {
-                if (standalone) {
-                    session.SessionImpl_->MarkStandalone();
-                } else {
+                if (!standalone) {
                     session.SessionImpl_->MarkActive();
                 }
                 self->DbDriverState_->StatCollector.IncSessionsOnHost(status.Endpoint);
@@ -394,8 +423,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
         &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        rpcSettings,
-        TEndpointKey(preferedLocation, 0));
+        rpcSettings);
 
     std::weak_ptr<TDbDriverState> state = DbDriverState_;
 
@@ -437,8 +465,8 @@ TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* sess
         &Ydb::Table::V1::TableService::Stub::AsyncKeepAlive,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session->GetEndpointKey())
+        );
 
     return keepAliveResultPromise.GetFuture();
 }
@@ -590,8 +618,8 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
         &Ydb::Table::V1::TableService::Stub::AsyncPrepareDataQuery,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -638,8 +666,8 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
         &Ydb::Table::V1::TableService::Stub::AsyncBeginTransaction,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -676,8 +704,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
         &Ydb::Table::V1::TableService::Stub::AsyncCommitTransaction,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -692,8 +720,8 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
         std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncRollbackTransaction,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 }
 
 TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, const TString& query,
@@ -726,8 +754,8 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
         &Ydb::Table::V1::TableService::Stub::AsyncExplainDataQuery,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        TRpcRequestSettings::Make(settings),
-        session.SessionImpl_->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
+        );
 
     return promise.GetFuture();
 }
@@ -817,24 +845,23 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&&
         responseCb,
         &Ydb::Table::V1::TableService::Stub::AsyncReadRows,
         DbDriverState_,
-        TRpcRequestSettings::Make(settings), // requestSettings
-        TEndpointKey() // preferredEndpoint
+        TRpcRequestSettings::Make(settings)
         );
 
     return promise.GetFuture();
 }
 
-TAsyncStatus TTableClient::TImpl::Close(const TSession::TImpl* sessionImpl, const TCloseSessionSettings& settings) {
+TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
     request.set_session_id(sessionImpl->GetId());
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
         std::move(request),
         &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
-        TRpcRequestSettings::Make(settings),
-        sessionImpl->GetEndpointKey());
+        TRpcRequestSettings::Make(settings, sessionImpl->GetEndpointKey())
+        );
 }
 
-TAsyncStatus TTableClient::TImpl::CloseInternal(const TSession::TImpl* sessionImpl) {
+TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* sessionImpl) {
     static const auto internalCloseSessionSettings = TCloseSessionSettings()
             .ClientTimeout(TDuration::Seconds(2));
 
@@ -847,7 +874,7 @@ TAsyncStatus TTableClient::TImpl::CloseInternal(const TSession::TImpl* sessionIm
         });
 }
 
-bool TTableClient::TImpl::ReturnSession(TSession::TImpl* sessionImpl) {
+bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {
     Y_VERIFY(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
             sessionImpl->GetState() == TSession::TImpl::S_IDLE);
 
@@ -860,17 +887,17 @@ bool TTableClient::TImpl::ReturnSession(TSession::TImpl* sessionImpl) {
     // Also removes NeedUpdateActiveCounter flag
     sessionImpl->MarkIdle();
     sessionImpl->SetTimeInterval(TDuration::Zero());
-    if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter, shared_from_this())) {
+    if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
         sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
         return false;
     }
     return true;
 }
 
-void TTableClient::TImpl::DeleteSession(TSession::TImpl* sessionImpl) {
+void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     // Closing not owned by session pool session should not fire getting new session
     if (sessionImpl->IsOwnedBySessionPool()) {
-        if (SessionPool_.CheckAndFeedWaiterNewSession(shared_from_this(), sessionImpl->NeedUpdateActiveCounter())) {
+        if (SessionPool_.CheckAndFeedWaiterNewSession(sessionImpl->NeedUpdateActiveCounter())) {
             // We requested new session for waiter which already incremented
             // active session counter and old session will be deleted
             // - skip update active counter in this case

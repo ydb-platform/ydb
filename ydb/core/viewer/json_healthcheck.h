@@ -143,7 +143,8 @@ public:
                 e->OnMetricBegin(EMetricType::IGAUGE);
                 {
                     e->OnLabelsBegin();
-                    e->OnLabel("sensor", "HC_" + domain->Name);
+                    e->OnLabel("sensor", "ydb_healthcheck");
+                    e->OnLabel("DOMAIN", domain->Name);
                     e->OnLabel("DATABASE", recordCounter.first.Database ? recordCounter.first.Database : filterDatabase);
                     e->OnLabel("MESSAGE", recordCounter.first.Message);
                     e->OnLabel("STATUS", recordCounter.first.Status);
@@ -159,7 +160,8 @@ public:
             e->OnMetricBegin(EMetricType::IGAUGE);
             {
                 e->OnLabelsBegin();
-                e->OnLabel("sensor", "HC_" + domain->Name);
+                e->OnLabel("sensor", "ydb_healthcheck");
+                e->OnLabel("DOMAIN", domain->Name);
                 e->OnLabel("DATABASE", filterDatabase);
                 e->OnLabel("MESSAGE", result);
                 e->OnLabel("STATUS", result);

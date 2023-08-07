@@ -126,6 +126,17 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, NYson::
     visitor.Visit(node);
 }
 
+bool TryNodeFromJsonString(const TStringBuf input, TNode& dst)
+{
+    TMemoryInput stream(input);
+    TNodeBuilder builder(&dst);
+    TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ false);
+    NJson::TJsonReaderConfig config;
+    config.DontValidateUtf8 = true;
+    NJson::ReadJson(&stream, &config, &callbacks);
+    return !callbacks.GetHaveErrors();
+}
+
 TNode NodeFromJsonString(const TStringBuf input)
 {
     TMemoryInput stream(input);

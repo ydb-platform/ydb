@@ -9,10 +9,14 @@ namespace NKikimr::NPQ {
         , MaxBurst(maxBurst)
     {}
 
-    void TQuotaTracker::UpdateConfig(const ui64 maxBurst, const ui64 speedPerSecond) {
-        SpeedPerSecond = speedPerSecond;
-        MaxBurst = maxBurst;
-        AvailableSize = maxBurst;
+    bool TQuotaTracker::UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond) {
+        if (maxBurst != MaxBurst || speedPerSecond != SpeedPerSecond) {
+            SpeedPerSecond = speedPerSecond;
+            MaxBurst = maxBurst;
+            AvailableSize = maxBurst;
+            return true;
+        }
+        return false;
     }
 
     void TQuotaTracker::Update(const TInstant timestamp) {

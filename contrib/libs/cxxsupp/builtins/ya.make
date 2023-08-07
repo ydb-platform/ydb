@@ -44,8 +44,6 @@ NO_PLATFORM()
 
 NO_COMPILER_WARNINGS()
 
-NO_SANITIZE_HEADERS()
-
 IF (GCC OR CLANG)
     # Clang (maybe GCC too) LTO code generator leaves the builtin calls unresolved
     # even if they are available. After the code generation pass is done

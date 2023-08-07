@@ -28,6 +28,11 @@ namespace NKikimr::NOlap::NIndexedReader {
         virtual bool DoApply(TGranulesFillingContext& owner) const override;
         virtual bool DoExecuteImpl() override;
     public:
+
+        virtual TString GetTaskClassIdentifier() const override {
+            return "Reading::TAssembleFilter";
+        }
+
         TAssembleFilter(TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
             TBatch& batch, const std::set<ui32>& filterColumnIds, NColumnShard::IDataTasksProcessor::TPtr processor,
             IOrderPolicy::TPtr batchesOrderPolicy)

@@ -25,6 +25,9 @@ def is_extended_source_search_enabled(path, unit):
         return False
     if unit.get('NO_EXTENDED_SOURCE_SEARCH') == 'yes':
         return False
+    # contrib is unfriendly to extended source search
+    if unit.resolve_arc_path(path).startswith('$S/contrib/'):
+        return False
     return True
 
 
@@ -608,8 +611,12 @@ def onpy_srcs(unit, *args):
     if fbss:
         unit.onpeerdir(unit.get('_PY_FBS_DEPS').split())
         pysrc_base_name = listid(fbss)
-        unit.onfbs_to_pysrc([pysrc_base_name] + [path for path, _ in fbss])
-        unit.onsrcs(['GLOBAL', '{}.fbs.pysrc'.format(pysrc_base_name)])
+        if py3:
+            unit.onfbs_to_pysrc([pysrc_base_name] + [path for path, _ in fbss])
+            unit.onsrcs(['GLOBAL', '{}.py3.fbs.pysrc'.format(pysrc_base_name)])
+        else:
+            unit.onfbs_to_py2src([pysrc_base_name] + [path for path, _ in fbss])
+            unit.onsrcs(['GLOBAL', '{}.py2.fbs.pysrc'.format(pysrc_base_name)])
 
 
 def _check_test_srcs(*args):

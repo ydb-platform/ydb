@@ -25,28 +25,14 @@ ENV GIT_REPO=$GIT_REPO
 ENV GIT_REF=$GIT_REF
 
 RUN mkdir ydb \
-    && cd ydb \
-    && git init -b main \
-    && git remote add origin $GIT_REPO \
-    && git fetch --depth=1 origin $GIT_REF \
-    && git reset --hard FETCH_HEAD
-
-COPY files/cmake_common.patch /tmp
-COPY files/make-vcs-info.py /tmp
-
-RUN cd ydb \
-    && python3 /tmp/make-vcs-info.py . vcs-info.json \
-    && cat vcs-info.json
-
-
-RUN cd ydb/ && patch -p1 < /tmp/cmake_common.patch
+    && git clone --depth=1 -b "${GIT_REF?}" ${GIT_REPO?}
 
 RUN --mount=type=secret,id=ccache_remote_storage \
     mkdir build && cd build \
     && export CONAN_USER_HOME=/ydbwork/build \
     && export CCACHE_BASEDIR=/ydbwork/ \
     && export CCACHE_SLOPPINESS=locale \
-    && export CCACHE_REMOTE_STORAGE="$( cat /run/secrets/ccache_remote_storage)" \
+    && export CCACHE_REMOTE_STORAGE="$(cat /run/secrets/ccache_remote_storage)" \
     && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \

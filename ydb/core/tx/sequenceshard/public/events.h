@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/tx_sequenceshard.pb.h>
 
 namespace NKikimr {

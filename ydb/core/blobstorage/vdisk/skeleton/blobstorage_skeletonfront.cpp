@@ -20,7 +20,7 @@
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>

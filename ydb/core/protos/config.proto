@@ -12,6 +12,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/hive.proto";
 import "ydb/core/protos/kqp.proto";
+import "ydb/core/protos/local.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
@@ -609,6 +610,7 @@ message TConveyorConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 WorkersCount = 2;
     optional uint32 QueueSizeLimit = 3;
+    optional double DefaultFractionOfThreadsCount = 4;
 }
 
 message TExternalIndexConfig {
@@ -700,6 +702,7 @@ message TDynamicNodeConfig {
     optional NKikimrNodeBroker.TNodeInfo NodeInfo = 4;
     optional string NodeAddress = 5; //DEPRECATED
     optional string NodeHost = 6; //DEPRECATED
+    repeated NKikimrLocal.TTabletAvailability TabletAvailability = 7;
 }
 
 message TFeatureFlags {
@@ -787,7 +790,7 @@ message TFeatureFlags {
     optional bool EnableGrpcAudit = 74 [default = false];
     reserved 75; // EnableKqpDataQueryStreamLookup
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
-    optional bool EnableChangefeedInitialScan = 77 [default = false];
+    optional bool EnableChangefeedInitialScan = 77 [default = true];
     reserved 78; // EnableKqpScanQuerySourceRead
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
     reserved 80; // EnableKqpImmediateEffect
@@ -808,11 +811,12 @@ message TFeatureFlags {
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
-    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
+    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = false];
+    optional bool EnableIcNodeCache = 101 [default = true];
 }
 
 message THttpProxyConfig {
@@ -1109,6 +1113,15 @@ message TTableServiceConfig {
     }
 
     message TResourceManager {
+        message TRetrySettings {
+            optional uint32 StartDelayMs = 1;
+            optional uint32 MaxDelayMs = 2;
+        }
+        message TInfoExchangerSettings {
+            optional TRetrySettings PublisherSettings = 1;
+            optional TRetrySettings SubscriberSettings = 2;
+            optional TRetrySettings ExchangerSettings = 3;
+        }
         optional uint32 ComputeActorsCount = 1 [default = 1000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
@@ -1121,13 +1134,14 @@ message TTableServiceConfig {
         reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
-        optional uint64 MinChannelBufferSize = 12 [default = 2097152];          // 2 MB
+        optional uint64 MinChannelBufferSize = 12 [default = 2048];          // 2 KB
 
         reserved 13;
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
         optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
         optional bool EnablePublishResourcesByExchanger = 18 [default = true];
+        optional TInfoExchangerSettings InfoExchangerSettings = 19;
     }
 
     message TSpillingServiceConfig {
@@ -1268,6 +1282,11 @@ message TTableServiceConfig {
         optional uint32 MaxTotalRetries = 7;
     }
 
+    message TIteratorReadQuotaSettings {
+        optional uint32 MaxRows = 1;
+        optional uint32 MaxBytes = 2;
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1294,21 +1313,22 @@ message TTableServiceConfig {
     reserved 24; // optional bool EnableKqpPatternCacheLiteral = 24 [default = false];
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
-    optional bool EnableKqpScanQuerySourceRead = 26 [default = true];
+    optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
     optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
     optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
-    optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
-    optional bool EnablePublishKqpProxyByRM = 34 [default = false];
+    reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
+    optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
-    optional bool EnableSequentialReads = 38 [default = false];
-    optional bool EnableKqpImmediateEffects = 39 [default = true];
+    optional bool EnableKqpImmediateEffects = 38 [default = true];
+    optional bool EnableSequentialReads = 39 [default = false];
     optional bool EnablePreparedDdl = 42 [default = false];
+    optional bool EnableSequences = 43 [default = true];
 
     enum EBindingsMode {
         BM_ENABLED = 0;
@@ -1319,6 +1339,8 @@ message TTableServiceConfig {
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
+    optional bool PredicateExtract20 = 44 [default = true];
+    optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 };
 
 // Config describes immediate controls and allows
@@ -1475,6 +1497,11 @@ message TImmediateControlsConfig {
             MinValue: 1000,
             MaxValue: 5000000,
             DefaultValue: 250000 }];
+        optional uint64 VolatilePlanLeaseMs = 3 [(ControlOptions) = {
+            Description: "Lease in milliseconds for faster volatile transaction planning",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 250 }];
     }
 
     message TSchemeShardControls {
@@ -1559,7 +1586,7 @@ message TAuditConfig {
 
 message THiveTabletLimit {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
-    optional uint64 MaxCount = 2;
+    optional uint64 MaxCount = 2 [default = 1000000]; // Default value here should match the one in NkikimrLocal.TTabletAvailability
 }
 
 message THiveTabletPreference {
@@ -1653,10 +1680,10 @@ message THiveConfig {
     repeated NKikimrTabletBase.TTabletTypes.EType BalancerIgnoreTabletTypes = 49;
     optional double SpaceUsagePenaltyThreshold = 53 [default  = 1.1]; // number > 1
     optional double SpaceUsagePenalty = 54 [default = 0.2]; // number <= 1
-    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 1500]; // milliseconds
+    optional uint64 WarmUpBootWaitingPeriod = 50  [default = 5000]; // milliseconds
     optional uint64 NodeRestartsToIgnoreInWarmup = 51 [default = 10];
     optional double MaxWarmUpPeriod = 52 [default = 30.0]; // seconds
-    optional bool WarmUpEnabled = 55 [default = false];
+    optional bool WarmUpEnabled = 55 [default = true];
     optional uint64 EmergencyBalancerInflight = 56 [default = 1]; // tablets
     optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
     optional bool ContinueEmergencyBalancer = 58 [default = true];
@@ -1923,11 +1950,12 @@ message TAppConfig {
     optional TClientCertificateAuthorization ClientCertificateAuthorization = 62;
     optional TExternalIndexConfig ExternalIndexConfig = 63;
     optional bool YamlConfigEnabled = 64;
-    optional TConveyorConfig ConveyorConfig = 65;
+    optional TConveyorConfig ScanConveyorConfig = 65;
     optional TColumnShardConfig ColumnShardConfig = 66;
     optional TLocalPgWireConfig LocalPgWireConfig = 69;
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
+    optional TConveyorConfig CompConveyorConfig = 72;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -1952,6 +1980,7 @@ message TCompatibilityRule {
         PDisk = 4;
         VDisk = 5;
         BlobStorageController = 6;
+        ComponentsCount = 7;
     }
 
     optional string Build = 1;

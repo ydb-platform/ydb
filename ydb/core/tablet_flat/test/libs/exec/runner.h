@@ -163,7 +163,7 @@ namespace NFake {
             { /*_ Resource broker service, used for generic scans */
                 using namespace NResourceBroker;
 
-                auto *actor = CreateResourceBrokerActor(MakeDefaultConfig(),  Env.GetDynamicCounters(0));
+                auto *actor = CreateResourceBrokerActor(MakeDefaultConfig(), Env.GetDynamicCounters());
 
                 AddService(MakeResourceBrokerID(), actor, EMail::Revolving);
             }
@@ -183,8 +183,9 @@ namespace NFake {
                 config->CacheConfig = new TCacheCacheConfig(conf.Shared, nullptr, nullptr, nullptr);
                 config->TotalAsyncQueueInFlyLimit = conf.AsyncQueue;
                 config->TotalScanQueueInFlyLimit = conf.ScanQueue;
+                config->Counters = MakeIntrusive<TSharedPageCacheCounters>(Env.GetDynamicCounters());
 
-                auto *actor =  CreateSharedPageCache(std::move(config));
+                auto *actor = CreateSharedPageCache(std::move(config), Env.GetMemObserver());
 
                 RunOn(3, MakeSharedPageCacheId(0), actor, EMail::ReadAsFilled);
             }

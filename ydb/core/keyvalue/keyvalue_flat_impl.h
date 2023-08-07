@@ -163,6 +163,33 @@ protected:
         }
     };
 
+    struct TTxDropRefCountsOnError : NTabletFlatExecutor::ITransaction {
+        std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
+        const ui64 RequestUid;
+        TKeyValueFlat *Self;
+
+        TTxDropRefCountsOnError(std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr, ui64 requestUid, TKeyValueFlat *self)
+            : RefCountsIncr(std::move(refCountsIncr))
+            , RequestUid(requestUid)
+            , Self(self)
+        {}
+
+        TTxType GetTxType() const override { return TXTYPE_DROP_REF_COUNTS_ON_ERROR; }
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Execute");
+            if (!Self->State.GetIsDamaged()) {
+                TSimpleDbFlat db(txc.DB);
+                Self->State.DropRefCountsOnErrorInTx(std::move(RefCountsIncr), db, ctx, RequestUid);
+            }
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID() << " TTxDropRefCountsOnError Complete");
+        }
+    };
+
     struct TTxMonitoring : public NTabletFlatExecutor::ITransaction {
         const THolder<NMon::TEvRemoteHttpInfo> Event;
         const TActorId RespondTo;
@@ -203,7 +230,7 @@ protected:
     };
 
     using TExecuteMethod = void (TKeyValueState::*)(ISimpleDb &db, const TActorContext &ctx);
-    using TCompleteMethod = void (TKeyValueState::*)(const TActorContext &ctx);
+    using TCompleteMethod = void (TKeyValueState::*)(const TActorContext &ctx, const TTabletStorageInfo *info);
 
     template <typename TDerived, TExecuteMethod ExecuteMethod, TCompleteMethod CompleteMethod>
     struct TTxUniversal : NTabletFlatExecutor::ITransaction {
@@ -223,7 +250,7 @@ protected:
         void Complete(const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
                     << ' ' << TDerived::Name << " Complete");
-            (Self->State.*CompleteMethod)(ctx);
+            (Self->State.*CompleteMethod)(ctx, Self->Info());
         }
     };
 
@@ -240,11 +267,8 @@ protected:
     }
 #endif
 
-    KV_SIMPLE_TX(StoreCollect);
-    KV_SIMPLE_TX(EraseCollect);
     KV_SIMPLE_TX(RegisterInitialGCCompletion);
     KV_SIMPLE_TX(CompleteGC);
-    KV_SIMPLE_TX(PartialCompleteGC);
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -259,6 +283,10 @@ protected:
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " OnTabletDead " << ev->Get()->ToString());
         HandleDie(ctx);
+    }
+
+    void DefaultSignalTabletActive(const TActorContext &) final {
+        // must be empty
     }
 
     void OnActivateExecutor(const TActorContext &ctx) override {
@@ -303,25 +331,11 @@ protected:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state
-    void Handle(TEvKeyValue::TEvEraseCollect::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvEraseCollect " << ev->Get()->ToString());
-        State.OnEvEraseCollect(ctx);
-        Execute(new TTxEraseCollect(this), ctx);
-    }
-
     void Handle(TEvKeyValue::TEvCompleteGC::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvCompleteGC " << ev->Get()->ToString());
         State.OnEvCompleteGC();
         Execute(new TTxCompleteGC(this), ctx);
-    }
-
-    void  Handle(TEvKeyValue::TEvPartialCompleteGC::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvPartitialCompleteGC " << ev->Get()->ToString());
-        State.OnEvPartialCompleteGC(ev->Get());
-        Execute(new TTxPartialCompleteGC(this), ctx);
     }
 
     void Handle(TEvKeyValue::TEvCollect::TPtr &ev, const TActorContext &ctx) {
@@ -345,12 +359,6 @@ protected:
             Become(&TThis::StateBroken);
             ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
         }
-    }
-
-    void Handle(TEvKeyValue::TEvStoreCollect::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                << " Handle TEvStoreCollect " << ev->Get()->ToString());
-        Execute(new TTxStoreCollect(this), ctx);
     }
 
     void CheckYellowChannels(TRequestStat& stat) {
@@ -377,6 +385,10 @@ protected:
 
         CheckYellowChannels(ev->Get()->Stat);
         State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
+        State.DropRefCountsOnError(event.RefCountsIncr, true, ctx);
+        if (!event.RefCountsIncr.empty()) {
+            Execute(new TTxDropRefCountsOnError(std::move(event.RefCountsIncr), event.RequestUid, this), ctx);
+        }
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
@@ -484,7 +496,7 @@ public:
 
     virtual void CreatedHook(const TActorContext &ctx)
     {
-        Y_UNUSED(ctx);
+        SignalTabletActive(ctx);
     }
 
     virtual bool HandleHook(STFUNC_SIG)
@@ -512,11 +524,8 @@ public:
             hFunc(TEvKeyValue::TEvGetStorageChannelStatus, Handle);
             hFunc(TEvKeyValue::TEvAcquireLock, Handle);
 
-            HFunc(TEvKeyValue::TEvEraseCollect, Handle);
             HFunc(TEvKeyValue::TEvCompleteGC, Handle);
-            HFunc(TEvKeyValue::TEvPartialCompleteGC, Handle);
             HFunc(TEvKeyValue::TEvCollect, Handle);
-            HFunc(TEvKeyValue::TEvStoreCollect, Handle);
             HFunc(TEvKeyValue::TEvRequest, Handle);
             HFunc(TEvKeyValue::TEvIntermediate, Handle);
             HFunc(TEvKeyValue::TEvNotify, Handle);

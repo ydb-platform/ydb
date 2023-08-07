@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 add_subdirectory(ut)
 
 add_library(ydb-core-scheme)
@@ -17,12 +18,13 @@ target_link_libraries(ydb-core-scheme PUBLIC
   cpp-containers-bitseq
   cpp-deprecated-enum_codegen
   library-cpp-yson
-  ydb-core-base
+  core-scheme-protos
   ydb-core-scheme_types
-  ydb-core-util
   ydb-library-aclib
   parser-pg_wrapper-interface
   public-lib-scheme_types
+  library-pretty_types_print-protobuf
+  cpp-lwtrace-mon
 )
 target_sources(ydb-core-scheme PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_borders.cpp
@@ -31,4 +33,5 @@ target_sources(ydb-core-scheme PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_types_defs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_type_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_types_proto.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_pathid.cpp
 )

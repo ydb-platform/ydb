@@ -54,7 +54,7 @@
                                                                     {
                                                                         "Limit": "10 + 1000",
                                                                         "Name": "TopSort",
-                                                                        "TopSortBy": "$17.Minute"
+                                                                        "TopSortBy": "argument.Minute"
                                                                     },
                                                                     {
                                                                         "Name": "Aggregate"

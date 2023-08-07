@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef GRPC_CORE_EXT_XDS_XDS_API_H
-#define GRPC_CORE_EXT_XDS_XDS_API_H
+#ifndef GRPC_SRC_CORE_EXT_XDS_XDS_API_H
+#define GRPC_SRC_CORE_EXT_XDS_XDS_API_H
 
 #include <grpc/support/port_platform.h>
 
@@ -148,12 +148,11 @@ class XdsApi {
                 "");
 
   XdsApi(XdsClient* client, TraceFlag* tracer, const XdsBootstrap::Node* node,
-         upb::SymbolTable* symtab);
+         upb::SymbolTable* symtab, TString user_agent_name,
+         TString user_agent_version);
 
   // Creates an ADS request.
-  // Takes ownership of \a error.
-  TString CreateAdsRequest(const XdsBootstrap::XdsServer& server,
-                               y_absl::string_view type_url,
+  TString CreateAdsRequest(y_absl::string_view type_url,
                                y_absl::string_view version,
                                y_absl::string_view nonce,
                                const std::vector<TString>& resource_names,
@@ -161,12 +160,11 @@ class XdsApi {
 
   // Returns non-OK when failing to deserialize response message.
   // Otherwise, all events are reported to the parser.
-  y_absl::Status ParseAdsResponse(const XdsBootstrap::XdsServer& server,
-                                y_absl::string_view encoded_response,
+  y_absl::Status ParseAdsResponse(y_absl::string_view encoded_response,
                                 AdsResponseParserInterface* parser);
 
   // Creates an initial LRS request.
-  TString CreateLrsInitialRequest(const XdsBootstrap::XdsServer& server);
+  TString CreateLrsInitialRequest();
 
   // Creates an LRS request sending a client-side load report.
   TString CreateLrsRequest(ClusterLoadReportMap cluster_load_report_map);
@@ -187,11 +185,10 @@ class XdsApi {
   TraceFlag* tracer_;
   const XdsBootstrap::Node* node_;  // Do not own.
   upb::SymbolTable* symtab_;        // Do not own.
-  const TString build_version_;
   const TString user_agent_name_;
   const TString user_agent_version_;
 };
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_EXT_XDS_XDS_API_H
+#endif  // GRPC_SRC_CORE_EXT_XDS_XDS_API_H

@@ -17,7 +17,7 @@ message TCommonConfig {
     string YdbMvpCloudEndpoint = 2;
     string MdbGateway = 3;
     bool UseBearerForYdb = 4;
-    bool MdbTransformHost = 5;
+    bool MdbTransformHost = 5 [deprecated = true]; // TODO: remove it in https://st.yandex-team.ru/YQ-2229
     string ObjectStorageEndpoint = 6;
     string IdsPrefix = 7;
     uint64 MaxTasksPerOperation = 8;

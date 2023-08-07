@@ -17,6 +17,7 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/protos
+    library/cpp/string_utils/base64
     ydb/core/base
     ydb/core/protos
     ydb/core/raw_socket

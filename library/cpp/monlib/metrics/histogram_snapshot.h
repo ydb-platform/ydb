@@ -203,7 +203,7 @@ namespace NMonitoring {
     static_assert(alignof(TExplicitHistogramSnapshot) == alignof(TBucket),
                   "mismatched alingments of THistogramSnapshot and TBucket");
 
-    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values);
+    IHistogramSnapshotPtr ExplicitHistogramSnapshot(TConstArrayRef<TBucketBound> bounds, TConstArrayRef<TBucketValue> values, bool shrinkBuckets = false);
 
 } // namespace NMonitoring
 

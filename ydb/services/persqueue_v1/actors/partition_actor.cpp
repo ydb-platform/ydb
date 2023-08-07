@@ -423,7 +423,7 @@ bool FillBatchedData(
                 ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
 
             message->set_message_group_id(GetBatchSourceId(currentBatch));
-            auto* msgMeta = message->mutable_message_meta();
+            auto* msgMeta = message->mutable_metadata_items();
             *msgMeta = (proto.GetMessageMeta());
         }
         hasData = true;

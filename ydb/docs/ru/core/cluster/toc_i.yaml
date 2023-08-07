@@ -23,5 +23,17 @@ items:
 #   href: ../administration/rolling-restart.md
 - name: Изменение конфигурации актор-системы
   href: ../maintenance/manual/change_actorsystem_configs.md
-- name: Изменение конфигураций через CMS
-  href: ../maintenance/manual/cms.md
+- name: Управление конфигурацией кластера
+  items:
+  - name: Обзор конфигурации
+    href: ../maintenance/manual/config-overview.md
+  - name: Статическая конфигурация кластера
+    href: ../deploy/configuration/config.md
+  - name: Динамическая конфигурация кластера
+    href: ../maintenance/manual/dynamic-config.md
+  - name: DSL конфигурации кластера
+    href: ../maintenance/manual/dynamic-config-selectors.md
+  - name: Временная конфигурация
+    href: ../maintenance/manual/dynamic-config-volatile-config.md
+  - name: Изменение конфигураций через CMS
+    href: ../maintenance/manual/cms.md

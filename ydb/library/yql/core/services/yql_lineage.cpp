@@ -131,6 +131,15 @@ private:
     struct TFieldsLineage {
         TFieldLineageSet Items;
         TMaybe<THashMap<TString, TFieldLineageSet>> StructItems;
+
+        void MergeFrom(const TFieldsLineage& from) {
+            Items.insert(from.Items.begin(), from.Items.end());
+            if (StructItems && from.StructItems) {
+                for (const auto& i : *from.StructItems) {
+                    (*StructItems)[i.first].insert(i.second.begin(), i.second.end());
+                }
+            }
+        }
     };
 
     static TFieldLineageSet ReplaceTransforms(const TFieldLineageSet& src, const TString& newTransforms) {
@@ -215,61 +224,83 @@ private:
         }
     }
 
+    TMaybe<TFieldsLineage> ScanExprLineage(const TExprNode& node, const TExprNode& arg, const TLineage& src, const TNodeMap<bool>& argDeps,
+        TNodeMap<TMaybe<TFieldsLineage>>& visited) {
+        if (&node == &arg) {
+            return Nothing();
+        }
+
+        auto [it, inserted] = visited.emplace(&node, Nothing());
+        if (!inserted) {
+            return it->second;
+        }
+
+        if (auto depIt = argDeps.find(&node); depIt != argDeps.end() && !depIt->second) {
+            return it->second = TFieldsLineage();
+        }
+
+        if (node.IsCallable("Member")) {
+            if (&node.Head() == &arg) {
+                return it->second = *(*src.Fields).FindPtr(node.Tail().Content());
+            }
+
+            auto inner = ScanExprLineage(node.Head(), arg, src, argDeps, visited);
+            if (!inner || !inner->StructItems) {
+                return Nothing();
+            }
+
+            TFieldsLineage result; 
+            result.Items = *(*inner->StructItems).FindPtr(node.Tail().Content());
+            return it->second = result;
+        }
+
+        std::vector<TFieldsLineage> results;
+        bool hasStructItems = true;
+        for (ui32 index = 0; index < node.ChildrenSize(); ++index) {
+            if (index == 0 && node.IsCallable("If")) {
+                continue;
+            }
+
+            auto inner = ScanExprLineage(*node.Child(index), arg, src, argDeps, visited);
+            if (!inner) {
+                return Nothing();
+            }
+
+            hasStructItems = hasStructItems && inner->StructItems.Defined();
+            results.emplace_back(std::move(*inner));
+        }
+
+        TFieldsLineage result;
+        if (hasStructItems) {
+            result.StructItems.ConstructInPlace();
+        }
+
+        for (const auto& r : results) {
+            result.MergeFrom(r);
+        }
+
+        return it->second = result;
+    }
+
     void MergeLineageFromUsedFields(const TExprNode& expr, const TExprNode& arg, const TLineage& src, 
         TFieldLineageSet& dst, const TString& newTransforms = "") {
 
-        if (!IsDepended(expr, arg)) {
+        TNodeMap<bool> argDeps;
+        if (!MarkDepended(expr, arg, argDeps)) {
             return;
         }
 
-        TParentsMap parentsMap;
-        GatherParents(expr, parentsMap);
-
-        bool needAllFields = false;
-        auto parentsIt = parentsMap.find(&arg);
-        if (parentsIt == parentsMap.end()) {
-            needAllFields = true;
-        } else {
-            for (const auto& p : parentsIt->second) {
-                if (p->IsCallable("Member")) {
-                    auto name = TString(p->Tail().Content());
-                    const auto& f = (*src.Fields).FindPtr(name);
-                    bool addAll = true;
-                    if (f->StructItems) {
-                        auto grandParentsIt = parentsMap.find(p);
-                        if (grandParentsIt != parentsMap.end()) {
-                            addAll = false;
-                            for (const auto& q : grandParentsIt->second) {
-                                if (q->IsCallable("Member")) {
-                                    const auto& s = f->StructItems->FindPtr(q->Tail().Content());
-                                    for (const auto& i : *s) {
-                                        dst.insert(ReplaceTransforms(i, newTransforms));
-                                    }
-                                } else {
-                                    addAll = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (addAll) {
-                        for (const auto& i: (*src.Fields).FindPtr(name)->Items) {
-                            dst.insert(ReplaceTransforms(i, newTransforms));
-                        }
-                    }
-                } else {
-                    needAllFields = true;
-                    break;
-                }
-            }
-        }
-
-        if (needAllFields) {
+        TNodeMap<TMaybe<TFieldsLineage>> visited;
+        auto res = ScanExprLineage(expr, arg, src, argDeps, visited);
+        if (!res) {
             for (const auto& f : *src.Fields) {
                 for (const auto& i: f.second.Items) {
                     dst.insert(ReplaceTransforms(i, newTransforms));
                 }
+            }
+        } else {
+            for (const auto& i: res->Items) {
+                dst.insert(ReplaceTransforms(i, newTransforms));
             }
         }
     }
@@ -294,10 +325,83 @@ private:
                     auto& s = (*dst.StructItems)[fieldName];
                     MergeLineageFromUsedFields(x->Tail(), arg, src, s, newTransforms);
                 }
+            } else if (root->IsCallable("Member") && &root->Head() == &arg) {
+                auto fieldName = root->Tail().Content();
+                const auto& in = *(*src.Fields).FindPtr(fieldName);
+                dst.StructItems = in.StructItems;
             }
         }
 
         MergeLineageFromUsedFields(expr, arg, src, dst.Items, newTransforms);
+    }
+
+    void FillStructLineage(TLineage& lineage, const TExprNode* value, const TExprNode& arg, const TLineage& innerLineage) {
+        if (value->IsCallable("Member") && &value->Head() == &arg) {
+            TString field(value->Tail().Content());
+            auto f = innerLineage.Fields->FindPtr(field);
+            if (f->StructItems) {
+                for (const auto& x : *f->StructItems) {
+                    auto& res = (*lineage.Fields)[x.first];
+                    res.Items = x.second;
+                }
+
+                return;
+            }
+
+            // fallback
+        }
+
+        if (value->IsCallable("If")) {
+            TLineage left, right;
+            left.Fields.ConstructInPlace();
+            right.Fields.ConstructInPlace();
+            FillStructLineage(left, value->Child(1), arg, innerLineage);
+            FillStructLineage(right, value->Child(2), arg, innerLineage);
+            for (const auto& f : *left.Fields) {
+                auto& res = (*lineage.Fields)[f.first];
+                res.Items.insert(f.second.Items.begin(), f.second.Items.end());
+            }
+
+            for (const auto& f : *right.Fields) {
+                auto& res = (*lineage.Fields)[f.first];
+                res.Items.insert(f.second.Items.begin(), f.second.Items.end());
+            }
+
+            return;
+        }
+        
+        if (value->IsCallable("AsStruct")) {
+            for (const auto& child : value->Children()) {
+                TString field(child->Head().Content());
+                auto& res = (*lineage.Fields)[field];
+                const auto& expr = child->Tail();
+                TString newTransforms;
+                auto root = &expr;
+                while (root->IsCallable("Just")) {
+                    root = &root->Head();
+                }
+
+                if (root->IsCallable("Member") && &root->Head() == &arg) {
+                    newTransforms = "Copy";
+                }
+
+                MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, newTransforms);
+            }
+
+            return;
+        }
+
+        auto structType = value->GetTypeAnn()->Cast<TStructExprType>();
+        TFieldLineageSet allLineage;
+        for (const auto& f : *innerLineage.Fields) {
+            allLineage.insert(f.second.Items.begin(), f.second.Items.end());
+        }
+
+        for (const auto& i : structType->GetItems()) {
+            TString field(i->GetName());
+            auto& res = (*lineage.Fields)[field];
+            res.Items = allLineage;
+        }
     }
 
     void HandleFlatMap(TLineage& lineage, const TExprNode& node) {
@@ -323,41 +427,12 @@ private:
             return;
         }
 
-        if (value->IsCallable("Member") && &value->Head() == &arg) {
-            TString field(value->Tail().Content());
-            auto f = innerLineage.Fields->FindPtr(field);
-            if (f->StructItems) {
-                lineage.Fields.ConstructInPlace();
-                for (const auto& x : *f->StructItems) {
-                    auto& res = (*lineage.Fields)[x.first];
-                    res.Items = x.second;
-                }
-
-                return;
-            }
-        }
-
-        if (!value->IsCallable("AsStruct")) {
+        if (value->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
             return;
         }
 
         lineage.Fields.ConstructInPlace();
-        for (const auto& child : value->Children()) {
-            TString field(child->Head().Content());
-            auto& res = (*lineage.Fields)[field];
-            const auto& expr = child->Tail();
-            TString newTransforms;
-            auto root = &expr;
-            while (root->IsCallable("Just")) {
-                root = &root->Head();
-            }
-
-            if (root->IsCallable("Member") && &root->Head() == &arg) {
-                newTransforms = "Copy";
-            }
-
-            MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, newTransforms);
-        }
+        FillStructLineage(lineage, value, arg, innerLineage);
     }
 
     void HandleAggregate(TLineage& lineage, const TExprNode& node) {

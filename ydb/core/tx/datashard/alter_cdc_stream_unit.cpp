@@ -41,18 +41,25 @@ public:
         TUserTable::TPtr tableInfo;
         switch (state) {
         case NKikimrSchemeOp::ECdcStreamStateDisabled:
+            tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
+            DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
+            break;
+
         case NKikimrSchemeOp::ECdcStreamStateReady:
             tableInfo = DataShard.AlterTableSwitchCdcStreamState(ctx, txc, pathId, version, streamPathId, state);
-            if (state == NKikimrSchemeOp::ECdcStreamStateReady) {
-                if (params.HasDropSnapshot()) {
-                    const auto& snapshot = params.GetDropSnapshot();
-                    Y_VERIFY(snapshot.GetStep() != 0);
 
-                    const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
-                    DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
-                } else {
-                    Y_VERIFY_DEBUG(false, "Absent snapshot");
-                }
+            if (params.HasDropSnapshot()) {
+                const auto& snapshot = params.GetDropSnapshot();
+                Y_VERIFY(snapshot.GetStep() != 0);
+
+                const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
+                DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+            } else {
+                Y_VERIFY_DEBUG(false, "Absent snapshot");
+            }
+
+            if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
+                DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
             }
             break;
 
@@ -81,7 +88,8 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
+    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+        DataShard.EmitHeartbeats(ctx);
     }
 };
 

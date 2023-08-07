@@ -9,6 +9,7 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -858,9 +859,21 @@ Y_UNIT_TEST_SUITE(Yq_1) {
 Y_UNIT_TEST_SUITE(Yq_2) {
     // use fork for data test due to ch initialization problem
     Y_UNIT_TEST(Test_HostNameTrasformation) {
-        UNIT_ASSERT_VALUES_EQUAL(::NFq::TransformMdbHostToCorrectFormat("rc1c-p5waby2y5y1kb5ue.mdb.yandexcloud.net"), "rc1c-p5waby2y5y1kb5ue.db.yandex.net:8443");
-        UNIT_ASSERT_VALUES_EQUAL(::NFq::TransformMdbHostToCorrectFormat("xxx.xxx"), "xxx.db.yandex.net:8443");
-        UNIT_ASSERT_VALUES_EQUAL(::NFq::TransformMdbHostToCorrectFormat("host."), "host.db.yandex.net:8443");
+        {
+            auto transformer = ::NFq::MakeTMdbHostTransformerLegacy();
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net"),
+                                    "rc1c-p5waby2y5y1kb5ue.db.yandex.net:8443");
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru"),
+                                    "ya.db.yandex.net:8443");
+        }
+
+        {
+            auto transformer = ::NFq::MakeTMdbHostTransformerGeneric();
+            UNIT_ASSERT_VALUES_EQUAL(::NFq::MakeTMdbHostTransformerGeneric()->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
+                                    "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net:9000");
+            UNIT_ASSERT_VALUES_EQUAL(::NFq::MakeTMdbHostTransformerGeneric()->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
+                                    "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net:6432");
+        }
     }
 
     SIMPLE_UNIT_FORKED_TEST(ReadFromYdbOverYq) {

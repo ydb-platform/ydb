@@ -16,8 +16,8 @@
 //
 //
 
-#ifndef GRPC_CORE_EXT_XDS_XDS_CERTIFICATE_PROVIDER_H
-#define GRPC_CORE_EXT_XDS_XDS_CERTIFICATE_PROVIDER_H
+#ifndef GRPC_SRC_CORE_EXT_XDS_XDS_CERTIFICATE_PROVIDER_H
+#define GRPC_SRC_CORE_EXT_XDS_XDS_CERTIFICATE_PROVIDER_H
 
 #include <grpc/support/port_platform.h>
 
@@ -30,8 +30,8 @@
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/strings/string_view.h"
 
+#include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
-#include <grpc/impl/codegen/grpc_types.h>
 
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
@@ -181,4 +181,4 @@ class XdsCertificateProvider : public grpc_tls_certificate_provider {
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_EXT_XDS_XDS_CERTIFICATE_PROVIDER_H
+#endif  // GRPC_SRC_CORE_EXT_XDS_XDS_CERTIFICATE_PROVIDER_H

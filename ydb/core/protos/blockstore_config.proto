@@ -127,6 +127,12 @@ message TVolumeConfig {
 
     // Is partitions PoolKind set manually or by config.
     optional bool IsPartitionsPoolKindSetManually = 48;
+
+    // Is disk filling finished.
+    optional bool IsFillFinished = 49;
+
+    // Mount requests with incorrect FillToken will be rejected unless filling is finished.
+    optional string FillToken = 50;
 }
 
 message TUpdateVolumeConfig {

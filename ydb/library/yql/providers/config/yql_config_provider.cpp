@@ -146,11 +146,15 @@ namespace {
         }
 
         bool Initialize(TExprContext& ctx) override {
-            auto filter = [this](const TCoreAttr& attr) {
+            std::unordered_set<std::string_view> groups;
+            if (Types.Credentials != nullptr) {
+                groups.insert(Types.Credentials->GetGroups().begin(), Types.Credentials->GetGroups().end());
+            }
+            auto filter = [this, groups = std::move(groups)](const TCoreAttr& attr) {
                 if (!attr.HasActivation() || !Username) {
                     return true;
                 }
-                if (NConfig::Allow(attr.GetActivation(), Username)) {
+                if (NConfig::Allow(attr.GetActivation(), Username, groups)) {
                     Statistics.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                     return true;
                 }

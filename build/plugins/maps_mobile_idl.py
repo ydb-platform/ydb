@@ -159,7 +159,10 @@ class OutputNameGenerator:
         self._objc_name = self._framework.objc_framework_prefix + self._objc_name_core
 
     def set_objc_infix(self, objc_infix):
-        self._objc_name = self._framework.objc_framework_prefix + objc_infix + self._objc_name_core
+        if self._objc_name_core.startswith(objc_infix):
+            self._objc_name = self._framework.objc_framework_prefix + self._objc_name_core
+        else:
+            self._objc_name = self._framework.objc_framework_prefix + objc_infix + self._objc_name_core
 
     def is_header(self, output_type):
         return output_type in [
@@ -360,7 +363,14 @@ class DefaultRule(BaseRule):
             result.add(self.context.runtime_include('bindings/flutter/exception.h'))
             result.add(self.context.runtime_include('bindings/flutter/export.h'))
             result.add(self.context.runtime_include('bindings/flutter/to_native.h'))
+            result.add(self.context.runtime_include('bindings/flutter/to_native_fwd.h'))
             result.add(self.context.runtime_include('bindings/flutter/to_platform.h'))
+            result.add(self.context.runtime_include('bindings/flutter/to_platform_fwd.h'))
+            result.add(self.context.runtime_include('bindings/flutter/vector.h'))
+            result.add(self.context.runtime_include('bindings/flutter/string_map.h'))
+            result.add(self.context.runtime_include('bindings/flutter/helper.h'))
+            result.add(self.context.runtime_include('bindings/flutter/meta_type.h'))
+            result.add(self.context.runtime_include('bindings/flutter/native.h'))
             return result
 
         result.add('yandex/maps/export.h')

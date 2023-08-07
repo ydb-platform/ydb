@@ -17,7 +17,7 @@ namespace {
 using namespace NNodes;
 
 class TYdbIODiscoveryTransformer : public TGraphTransformerBase {
-using TDbId2Endpoint = THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDbResolverResponse::TEndpoint>;
+using TDbId2Endpoint = THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseResolverResponse::TEndpoint>;
 public:
     TYdbIODiscoveryTransformer(TYdbState::TPtr state)
         : State_(std::move(state))
@@ -32,7 +32,7 @@ public:
         if (!State_->DbResolver)
             return TStatus::Ok;
 
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> ids;
+        THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> ids;
         if (auto reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
             const TExprBase nodeExpr(node);
             if (!nodeExpr.Maybe<TYdbRead>())
@@ -47,7 +47,7 @@ public:
                 const TYdbRead read(node);
                 const auto& cluster = read.DataSource().Cluster().StringValue();
                 const auto& dbId = State_->Configuration->Clusters[cluster].DatabaseId;
-                const auto idKey = std::make_pair(dbId, NYql::DatabaseType::Ydb);
+                const auto idKey = std::make_pair(dbId, NYql::EDatabaseType::Ydb);
                 const auto iter = State_->DatabaseIds.find(idKey);
                 if (iter != State_->DatabaseIds.end()) {
                     ids[idKey] = iter->second;
@@ -57,7 +57,7 @@ public:
         if (ids.empty()) {
             return TStatus::Ok;
         }
-        const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
+        const std::weak_ptr<NYql::TDatabaseResolverResponse> response = DbResolverResponse_;
         AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future)
         {
             if (const auto res = response.lock())
@@ -78,7 +78,7 @@ public:
             return TStatus::Error;
         }
         FullResolvedIds_.insert(DbResolverResponse_->DatabaseId2Endpoint.begin(), DbResolverResponse_->DatabaseId2Endpoint.end());
-        DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
+        DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
         auto& clusters = State_->Configuration->Clusters;
         const auto& id2Clusters = State_->Configuration->DbId2Clusters;
         for (const auto& [dbIdWithType, info] : FullResolvedIds_) {
@@ -100,14 +100,14 @@ public:
     void Rewind() final {
         AsyncFuture_ = {};
         FullResolvedIds_.clear();
-        DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
+        DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
     }
 private:
     const TYdbState::TPtr State_;
 
     NThreading::TFuture<void> AsyncFuture_;
     TDbId2Endpoint FullResolvedIds_;
-    std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
+    std::shared_ptr<NYql::TDatabaseResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
 };
 }
 

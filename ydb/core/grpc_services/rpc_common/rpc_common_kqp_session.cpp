@@ -21,8 +21,14 @@ using namespace NActors;
 using namespace Ydb;
 using namespace NKqp;
 
-using TEvCreateSessionRequest = TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
+using TEvCreateSessionTableRequest = TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest,
     Ydb::Table::CreateSessionResponse>;
+
+using TEvDeleteSessionTableRequest = TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
+    Ydb::Table::DeleteSessionResponse>;
+
+using TEvDeleteSessionQueryRequest = TGrpcRequestOperationCall<Ydb::Query::DeleteSessionRequest,
+    Ydb::Query::DeleteSessionResponse>;
 
 class TCreateSessionRPC : public TActorBootstrapped<TCreateSessionRPC> {
 public:
@@ -203,19 +209,96 @@ private:
     };
 };
 
+class TDeleteSessionRPC : public TActorBootstrapped<TDeleteSessionRPC> {
+public:
+    TDeleteSessionRPC(IRequestCtx* msg)
+        : Request(msg) {}
+
+    void Bootstrap(const TActorContext&) {
+        DeleteSessionImpl();
+    }
+
+private:
+    void DeleteSessionImpl() {
+        const auto sessionId = GetSessionId();
+
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+
+        if (CheckSession(sessionId, Request.get())) {
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+        } else {
+            return Reply(Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release()); //no respose will be sended, so don't wait for anything
+        Reply(Ydb::StatusIds::SUCCESS);
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status) {
+        Request->ReplyWithYdbStatus(status);
+        this->PassAway();
+    }
+
+    virtual const TString& GetSessionId() const = 0;
+
+protected:
+    std::shared_ptr<IRequestCtx> Request;
+};
+
+class TDeleteSessionTableService : public TDeleteSessionRPC {
+    using TCtx = IRequestOpCtx;
+
+public:
+    using TDeleteSessionRPC::TDeleteSessionRPC;
+    static TDeleteSessionRPC* New(TCtx* ctx) {
+        return new TDeleteSessionTableService(ctx);
+    }
+
+private:
+    const TString& GetSessionId() const override {
+        return TEvDeleteSessionTableRequest::GetProtoRequest(Request)->session_id();
+    };
+};
+
+class TDeleteSessionQueryService : public TDeleteSessionRPC {
+public:
+    using TDeleteSessionRPC::TDeleteSessionRPC;
+    static TDeleteSessionRPC* New(IRequestNoOpCtx* ctx) {
+        return new TDeleteSessionQueryService(ctx);
+    }
+
+private:
+    const TString& GetSessionId() const override {
+        return TEvDeleteSessionQueryRequest::GetProtoRequest(Request)->session_id();
+    };
+};
+
 void DoCreateSessionRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& provider) {
     provider.RegisterActor(TCreateSessionTableService::New(ctx.release()));
 }
 
 template<>
-IActor* TEvCreateSessionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+IActor* TEvCreateSessionTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return TCreateSessionTableService::New(msg);
+}
+
+void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& provider) {
+    provider.RegisterActor(TDeleteSessionTableService::New(p.release()));
+}
+
+template<>
+IActor* TEvDeleteSessionTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return TDeleteSessionTableService::New(msg);
 }
 
 namespace NQuery {
 
 void DoCreateSession(std::unique_ptr<IRequestNoOpCtx> ctx, const IFacilityProvider& provider) {
     provider.RegisterActor(TCreateSessionQueryService::New(ctx.release()));
+}
+
+void DoDeleteSession(std::unique_ptr<IRequestNoOpCtx> ctx, const IFacilityProvider& provider) {
+    provider.RegisterActor(TDeleteSessionQueryService::New(ctx.release()));
 }
 
 }

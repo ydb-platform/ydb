@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_host_transformer.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -105,29 +106,29 @@ struct TEvents {
     };
 
     struct TEvEndpointResponse : NActors::TEventLocal<TEvEndpointResponse, TEventIds::EvEndpointResponse> {
-        NYql::TDbResolverResponse DbResolverResponse;
-        explicit TEvEndpointResponse(NYql::TDbResolverResponse&& response) noexcept : DbResolverResponse(std::move(response)) {}
+        NYql::TDatabaseResolverResponse DbResolverResponse;
+        explicit TEvEndpointResponse(NYql::TDatabaseResolverResponse&& response) noexcept : DbResolverResponse(std::move(response)) {}
     };
 
 
     struct TEvEndpointRequest : NActors::TEventLocal<TEvEndpointRequest, TEventIds::EvEndpointRequest> {
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> DatabaseIds; // DbId, DatabaseType => database auth
+        const NYql::IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseIds; 
         TString YdbMvpEndpoint;
         TString MdbGateway;
         TString TraceId;
-        bool MdbTransformHost;
+        const NYql::IMdbHostTransformer::TPtr MdbHostTransformer;
 
         TEvEndpointRequest(
-            const THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds,
+            const NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseIds,
             const TString& ydbMvpEndpoint,
             const TString& mdbGateway,
             const TString& traceId,
-            bool mdbTransformHost)
+            const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer)
             : DatabaseIds(databaseIds)
             , YdbMvpEndpoint(ydbMvpEndpoint)
             , MdbGateway(mdbGateway)
             , TraceId(traceId)
-            , MdbTransformHost(mdbTransformHost)
+            , MdbHostTransformer(mdbHostTransformer)
         { }
     };
 

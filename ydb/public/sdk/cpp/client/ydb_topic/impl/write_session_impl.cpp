@@ -244,35 +244,27 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
 }
 
 // Client method.
-void TWriteSessionImpl::WriteInternal(
-            TContinuationToken&&, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp
-        ) {
-    TInstant createdAtValue = createTimestamp.Defined() ? *createTimestamp : TInstant::Now();
+void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
+    TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
-    size_t bufferSize = data.size();
+    size_t bufferSize = message.Data.size();
     with_lock(Lock) {
-        //ToDo[message-meta] - Pass message meta here.
-        CurrentBatch.Add(GetNextSeqNoImpl(seqNo), createdAtValue, data, codec, originalSize, {});
+        CurrentBatch.Add(
+                GetNextSeqNoImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
+                message.MessageMeta_
+        );
 
         FlushWriteIfRequiredImpl();
         readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
     }
     if (readyToAccept) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
     }
 }
 
 // Client method.
-void TWriteSessionImpl::WriteEncoded(
-            TContinuationToken&& token, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp
-        ) {
-    WriteInternal(std::move(token), data, codec, originalSize, seqNo, createTimestamp);
-}
-
-void TWriteSessionImpl::Write(
-            TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp
-        ) {
-    WriteInternal(std::move(token), data, {}, 0, seqNo, createTimestamp);
+void TWriteSessionImpl::Write(TContinuationToken&& token, TWriteMessage&& message) {
+    WriteInternal(std::move(token), std::move(message));
 }
 
 
@@ -448,7 +440,7 @@ void TWriteSessionImpl::InitImpl() {
     auto* init = req.mutable_init_request();
     init->set_path(Settings.Path_);
     init->set_producer_id(Settings.ProducerId_);
-    
+
     if (Settings.PartitionId_.Defined())
         init->set_partition_id(*Settings.PartitionId_);
     else
@@ -569,31 +561,31 @@ TStringBuilder TWriteSessionImpl::LogPrefix() const {
     return TStringBuilder() << "ProducerId [" << Settings.ProducerId_ << "] MessageGroupId [" << Settings.MessageGroupId_ << "] SessionId [" << SessionId << "] ";
 }
 
-TString TWriteSessionEvent::TAcksEvent::DebugString() const {
-    TStringBuilder res;
+template<>
+void TPrintable<TWriteSessionEvent::TAcksEvent>::DebugString(TStringBuilder& res, bool) const {
+    const auto* self = static_cast<const TWriteSessionEvent::TAcksEvent*>(this);
     res << "AcksEvent:";
-    for (auto& ack : Acks) {
+    for (auto& ack : self->Acks) {
         res << " { seqNo : " << ack.SeqNo << ", State : " << ack.State;
         if (ack.Details) {
             res << ", offset : " << ack.Details->Offset << ", partitionId : " << ack.Details->PartitionId;
         }
         res << " }";
     }
-    if (!Acks.empty() && Acks.back().Stat) {
-        auto& stat = Acks.back().Stat;
+    if (!self->Acks.empty() && self->Acks.back().Stat) {
+        auto& stat = self->Acks.back().Stat;
         res << " write stat: Write time " << stat->WriteTime
             << " minimal time in partition queue " << stat->MinTimeInPartitionQueue
             << " maximal time in partition queue " << stat->MaxTimeInPartitionQueue
             << " partition quoted time " << stat->PartitionQuotedTime
             << " topic quoted time " << stat->TopicQuotedTime;
     }
-    return res;
 }
 
-TString TWriteSessionEvent::TReadyToAcceptEvent::DebugString() const {
-    return "ReadyToAcceptEvent";
+template<>
+void TPrintable<TWriteSessionEvent::TReadyToAcceptEvent>::DebugString(TStringBuilder& res, bool) const {
+    res << "ReadyToAcceptEvent";
 }
-
 
 TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMessageImpl() {
     Y_VERIFY(Lock.IsLocked());
@@ -633,7 +625,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             OnErrorResolved();
 
             if (!FirstTokenSent) {
-                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+                result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
                 FirstTokenSent = true;
             }
             // Kickstart send after session reestablishment
@@ -685,7 +677,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 });
 
                 if (CleanupOnAcknowledged(sequenceNumber - SeqNoShift)) {
-                    result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+                    result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
                 }
             }
             //EventsQueue->PushEvent(std::move(acksEvent));
@@ -824,7 +816,7 @@ void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
         memoryUsage = OnCompressedImpl(std::move(block));
     }
     if (memoryUsage.NowOk && !memoryUsage.WasOk) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{TContinuationToken{}});
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{{}, TContinuationToken{}});
     }
 }
 
@@ -1021,9 +1013,10 @@ void TWriteSessionImpl::SendImpl() {
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
                 if (!message.MessageMeta.empty()) {
-                    auto* meta = msgData->mutable_message_meta();
                     for (auto& [k, v] : message.MessageMeta) {
-                        (*meta)[k] = v;
+                        auto* pair = msgData->add_metadata_items();
+                        pair->set_key(k);
+                        pair->set_value(v);
                     }
                 }
                 SentOriginalMessages.emplace(std::move(message));

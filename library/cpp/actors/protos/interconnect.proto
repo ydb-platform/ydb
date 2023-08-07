@@ -74,6 +74,7 @@ message THandshakeRequest {
     optional bool RequestExtendedTraceFmt = 20;
     optional bool RequestExternalDataChannel = 21;
     optional bool RequestXxhash = 24;
+    optional bool RequestXdcShuffle = 25;
 
     optional bytes CompatibilityInfo = 22;
 
@@ -102,6 +103,7 @@ message THandshakeSuccess {
     optional bool UseExtendedTraceFmt = 13;
     optional bool UseExternalDataChannel = 14;
     optional bool UseXxhash = 16;
+    optional bool UseXdcShuffle = 17;
 
     optional bytes CompatibilityInfo = 15;
 }

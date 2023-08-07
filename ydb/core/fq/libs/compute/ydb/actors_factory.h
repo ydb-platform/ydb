@@ -16,6 +16,8 @@ struct IActorFactory : public TThrRefBase {
     virtual std::unique_ptr<NActors::IActor> CreatePinger(const NActors::TActorId& parent) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateConnector() const = 0;
 
+    virtual std::unique_ptr<NActors::IActor> CreateInitializer(const NActors::TActorId& parent,
+                                                               const NActors::TActorId& pinger) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateExecuter(const NActors::TActorId &parent,
                                                             const NActors::TActorId &connector,
                                                             const NActors::TActorId &pinger) const = 0;
@@ -26,7 +28,7 @@ struct IActorFactory : public TThrRefBase {
     virtual std::unique_ptr<NActors::IActor> CreateResultWriter(const NActors::TActorId& parent,
                                                                 const NActors::TActorId& connector,
                                                                 const NActors::TActorId& pinger,
-                                                                const TString& executionId) const = 0;
+                                                                const NKikimr::NOperationId::TOperationId& operationId) const = 0;
     virtual std::unique_ptr<NActors::IActor> CreateResourcesCleaner(const NActors::TActorId& parent,
                                                                     const NActors::TActorId& connector,
                                                                     const NYdb::TOperation::TOperationId& operationId) const = 0;

@@ -2,7 +2,8 @@
 #include "blob_cache.h"
 
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
+#include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 using NKikimr::NOlap::TBlobRange;
 
@@ -14,43 +15,40 @@ private:
     const TIndexationCounters InternalCounters = TIndexationCounters("InternalCompaction");
     const TIndexationCounters SplitCounters = TIndexationCounters("SplitCompaction");
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_COMPACTION_ACTOR;
-    }
-
     TCompactionActor(ui64 tabletId, const TActorId& parent)
         : TabletId(tabletId)
         , Parent(parent)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId()) {
     }
 
-    void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
+    void Handle(TEvPrivate::TEvCompaction::TPtr& ev) {
         Y_VERIFY(!TxEvent);
         Y_VERIFY(Blobs.empty() && !NumRead);
         LastActivationTime = TAppData::TimeProvider->Now();
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
-        IsSplitCurrently = NOlap::TCompactionLogic::IsSplit(TxEvent->IndexChanges);
+        auto compactChanges = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(TxEvent->IndexChanges);
+        Y_VERIFY(compactChanges);
+        IsSplitCurrently = compactChanges->IsSplit();
 
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
-        Y_VERIFY(indexChanges->CompactionInfo);
-
         LOG_S_DEBUG("Granules compaction: " << *indexChanges << " at tablet " << TabletId);
 
         for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
-            Y_VERIFY(!ranges.empty());
+            Y_VERIFY(ranges.size());
 
             for (const auto& blobRange : ranges) {
                 Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
                 GetCurrentCounters().ReadBytes->Add(blobRange.Size);
             }
-            SendReadRequest(std::move(ranges), event.Externals.contains(blobId));
+            NBlobCache::TReadBlobRangeOptions readOpts{ .CacheAfterRead = false, .ForceFallback = event.Externals.contains(blobId), .IsBackgroud = true };
+            Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
         }
     }
 
-    void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) {
         LOG_S_TRACE("TEvReadBlobRangeResult (got " << NumRead << " of " << Blobs.size() << ") at tablet " << TabletId
                                                    << " (compaction)");
 
@@ -72,6 +70,7 @@ public:
             LOG_S_WARN("TEvReadBlobRangeResult cannot get blob "
                 << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
                 << TabletId << " (compaction)");
+            TxEvent->SetPutStatus(NKikimrProto::ERROR);
         } else {
             LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob "
                         << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
@@ -84,20 +83,21 @@ public:
         }
 
         if (++NumRead == Blobs.size()) {
-            CompactGranules(ctx);
+            CompactGranules();
             Clear();
         }
     }
 
-    void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+    void Bootstrap() {
         Become(&TThis::StateWait);
     }
 
     STFUNC(StateWait) {
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId));
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvCompaction, Handle);
-            HFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            hFunc(TEvPrivate::TEvCompaction, Handle);
+            hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            hFunc(NConveyor::TEvExecution::TEvTaskProcessedResult, Handle);
             default:
                 break;
         }
@@ -127,40 +127,67 @@ private:
         }
     }
 
-    void SendReadRequest(std::vector<NBlobCache::TBlobRange>&& ranges, bool isExternal) {
-        Y_VERIFY(!ranges.empty());
+    class TConveyorTask: public NConveyor::ITask {
+    private:
+        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+        const TIndexationCounters Counters;
+    protected:
+        virtual bool DoExecute() override {
+            auto guard = TxEvent->PutResult->StartCpuGuard();
 
-        NBlobCache::TReadBlobRangeOptions readOpts{.CacheAfterRead = false, .ForceFallback = isExternal, .IsBackgroud = true};
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), std::move(readOpts)));
-    }
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
+            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
+            return true;
+        }
+    public:
+        virtual TString GetTaskClassIdentifier() const override {
+            return "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
+        }
 
-    void CompactGranules(const TActorContext& ctx) {
+        std::unique_ptr<TEvPrivate::TEvWriteIndex> ExtractEvent() {
+            Y_VERIFY(TxEvent);
+            return std::move(TxEvent);
+        }
+
+        TConveyorTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters)
+            : TxEvent(std::move(txEvent))
+            , Counters(counters)
+        {
+            Y_VERIFY(TxEvent);
+        }
+    };
+
+    void CompactGranules() {
         Y_VERIFY(TxEvent);
         if (TxEvent->GetPutStatus() != NKikimrProto::EReplyStatus::UNKNOWN) {
             LOG_S_INFO("Granules compaction not started at tablet " << TabletId);
-            ctx.Send(Parent, TxEvent.release());
+            Send(Parent, TxEvent.release());
             return;
         }
-
         LOG_S_DEBUG("Granules compaction started at tablet " << TabletId);
+        TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
         {
-            TCpuGuard guard(TxEvent->ResourceUsage);
-
-            TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-            {
-                NOlap::TCompactionLogic compactionLogic(TxEvent->IndexInfo, TxEvent->Tiering, GetCurrentCounters());
-                TxEvent->Blobs = std::move(compactionLogic.Apply(TxEvent->IndexChanges).DetachResult());
-            }
-            if (TxEvent->Blobs.empty()) {
-                TxEvent->SetPutStatus(NKikimrProto::OK); // nothing to write, commit
-            }
+            std::shared_ptr<TConveyorTask> task = std::make_shared<TConveyorTask>(std::move(TxEvent), GetCurrentCounters());
+            NConveyor::TCompServiceOperator::SendTaskToExecute(task);
         }
-        TxEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
-        ui32 blobsSize = TxEvent->Blobs.size();
-        ctx.Send(Parent, TxEvent.release());
+    }
 
-        LOG_S_DEBUG("Granules compaction finished (" << blobsSize << " new blobs) at tablet " << TabletId);
-        // Die(ctx); // It's alive till tablet's death
+    void Handle(NConveyor::TEvExecution::TEvTaskProcessedResult::TPtr& ev) {
+        auto t = static_pointer_cast<TConveyorTask>(ev->Get()->GetResult());
+        Y_VERIFY_DEBUG(dynamic_pointer_cast<TConveyorTask>(ev->Get()->GetResult()));
+        auto txEvent = t->ExtractEvent();
+        if (t->HasError()) {
+            ACFL_ERROR("event", "task_error")("message", ev->Get()->GetErrorMessage());
+            txEvent->SetPutStatus(NKikimrProto::ERROR);
+            Send(Parent, txEvent.release());
+        } else {
+            ACFL_DEBUG("event", "task_finished")("new_blobs", txEvent->Blobs.size());
+            if (txEvent->Blobs.empty()) {
+                txEvent->SetPutStatus(NKikimrProto::OK); // nothing to write, commit
+            }
+            txEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;
+            Send(Parent, txEvent.release());
+        }
     }
 };
 
@@ -173,39 +200,39 @@ public:
     {
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         Become(&TThis::StateWait);
 
         for (auto& worker : Idle) {
-            worker = ctx.Register(new TCompactionActor(TabletId, ctx.SelfID));
+            worker = Register(new TCompactionActor(TabletId, SelfId()));
         }
     }
 
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
-            HFunc(TEvPrivate::TEvWriteIndex, Handle);
-            HFunc(TEvPrivate::TEvCompaction, Handle);
+            hFunc(TEvents::TEvPoisonPill, Handle);
+            hFunc(TEvPrivate::TEvWriteIndex, Handle);
+            hFunc(TEvPrivate::TEvCompaction, Handle);
             default:
                 break;
         }
     }
 
 private:
-    void Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    void Handle(TEvents::TEvPoisonPill::TPtr&) {
         for (const auto& worker : Active) {
-            ctx.Send(worker, new TEvents::TEvPoisonPill);
+            Send(worker, new TEvents::TEvPoisonPill);
         }
         for (const auto& worker : Idle) {
-            ctx.Send(worker, new TEvents::TEvPoisonPill);
+            Send(worker, new TEvents::TEvPoisonPill);
         }
 
-        Die(ctx);
+        PassAway();
     }
 
-    void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev) {
         if (auto ai = Active.find(ev->Sender); ai != Active.end()) {
-            ctx.Send(ev->Forward(Parent));
+            Send(ev->Forward(Parent));
             Idle.push_back(*ai);
             Active.erase(ai);
         } else {
@@ -213,10 +240,10 @@ private:
         }
     }
 
-    void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvCompaction::TPtr& ev) {
         Y_VERIFY(!Idle.empty());
 
-        ctx.Send(ev->Forward(Idle.back()));
+        Send(ev->Forward(Idle.back()));
 
         Active.insert(Idle.back());
         Idle.pop_back();

@@ -103,6 +103,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
@@ -734,12 +735,12 @@ namespace Tests {
         }
         if (Settings->IsEnableMetadataProvider()) {
             auto* actor = NMetadata::NProvider::CreateService(NMetadata::NProvider::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableBackgroundTasks()) {
             auto* actor = NBackgroundTasks::CreateService(NBackgroundTasks::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NBackgroundTasks::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         if (Settings->IsEnableExternalIndex()) {
@@ -748,9 +749,14 @@ namespace Tests {
             Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NConveyor::TScanServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyor::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
+        {
+            auto* actor = NConveyor::TCompServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NConveyor::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
@@ -797,6 +803,7 @@ namespace Tests {
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
                                                                   Settings->AppConfig.GetTableServiceConfig(),
+                                                                  Settings->AppConfig.GetAuthConfig().GetTokenAccessorConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources));
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
@@ -844,13 +851,23 @@ namespace Tests {
                 }
             }
         }
-
+        {
+            IActor* icNodeCache = NIcNodeCache::CreateICNodesInfoCacheService(Runtime->GetDynamicCounters());
+            TActorId icCacheId = Runtime->Register(icNodeCache, nodeIdx);
+            Runtime->RegisterService(NIcNodeCache::CreateICNodesInfoCacheServiceId(), icCacheId, nodeIdx);
+        }
         {
             auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
             if (!Driver) {
                 Driver.Reset(new NYdb::TDriver(driverConfig));
             }
             Runtime->GetAppData(nodeIdx).YdbDriver = Driver.Get();
+        }
+
+        {
+            IActor* pqClusterTracker = NPQ::NClusterTracker::CreateClusterTracker();
+            TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx);
+            Runtime->RegisterService(NPQ::NClusterTracker::MakeClusterTrackerID(), pqClusterTrackerId, nodeIdx);
         }
 
         {
@@ -884,12 +901,6 @@ namespace Tests {
             IActor* kesusService = NKesus::CreateKesusProxyService();
             TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx);
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);
-        }
-
-        {
-            IActor* pqClusterTracker = NPQ::NClusterTracker::CreateClusterTracker();
-            TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx);
-            Runtime->RegisterService(NPQ::NClusterTracker::MakeClusterTrackerID(), pqClusterTrackerId, nodeIdx);
         }
 
         {
@@ -1034,7 +1045,7 @@ namespace Tests {
         //Runtime->SetLogPriority(NKikimrServices::LOCAL, NActors::NLog::PRI_DEBUG);
 
         Runtime->SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_WARN);
-        Runtime->SetLogPriority(NKikimrServices::MSGBUS_REQUEST, NLog::PRI_WARN);
+        Runtime->SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_WARN);
 
         //Runtime->SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_DEBUG);
         //Runtime->SetLogPriority(NKikimrServices::TX_MEDIATOR, NLog::PRI_DEBUG);

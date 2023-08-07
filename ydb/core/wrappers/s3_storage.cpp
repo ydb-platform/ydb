@@ -270,7 +270,7 @@ void TS3ExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
 
 void TS3ExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const {
     Call<TEvCheckObjectExistsRequest, TEvCheckObjectExistsResponse, TContextBase>(
-        ev, &S3Client::ListObjectsAsync);
+        ev, &S3Client::HeadObjectAsync);
 }
 
 void TS3ExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev) const {
@@ -317,6 +317,12 @@ void TS3ExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const
     Call<TEvAbortMultipartUploadRequest, TEvAbortMultipartUploadResponse, TContextBase>(
         ev, &S3Client::AbortMultipartUploadAsync);
 }
+
+void TS3ExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
+    Call<TEvUploadPartCopyRequest, TEvUploadPartCopyResponse, TContextBase>(
+        ev, &S3Client::UploadPartCopyAsync);
+}
+
 }
 
 #endif // KIKIMR_DISABLE_S3_OPS

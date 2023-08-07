@@ -8,14 +8,11 @@ SRCS(
     column_engine_logs.cpp
     column_engine.cpp
     column_features.cpp
-    compaction_info.cpp
     db_wrapper.cpp
     index_info.cpp
     indexed_read_data.cpp
-    index_logic_logs.cpp
     filter.cpp
     portion_info.cpp
-    scalars.cpp
     tier_info.cpp
 )
 
@@ -31,6 +28,8 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/predicate
     ydb/core/tx/columnshard/engines/storage
     ydb/core/tx/columnshard/engines/insert_table
+    ydb/core/tx/columnshard/engines/changes
+    ydb/core/tx/columnshard/engines/portions
     ydb/core/formats/arrow/compression
     ydb/core/tx/program
 
@@ -38,7 +37,6 @@ PEERDIR(
     ydb/library/yql/public/udf/service/exception_policy
 )
 
-GENERATE_ENUM_SERIALIZATION(portion_info.h)
 YQL_LAST_ABI_VERSION()
 
 END()

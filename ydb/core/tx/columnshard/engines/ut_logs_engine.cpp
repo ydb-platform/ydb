@@ -1,7 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "column_engine_logs.h"
 #include "predicate/predicate.h"
-#include "index_logic_logs.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 
@@ -19,7 +18,7 @@ class TTestDbWrapper : public IDbWrapper {
 public:
     struct TIndex {
         THashMap<ui64, std::vector<TGranuleRecord>> Granules; // pathId -> granule
-        THashMap<ui64, std::vector<TColumnRecord>> Columns; // granule -> columns
+        THashMap<ui64, THashMap<ui64, TPortionInfo>> Columns; // granule -> portions
         THashMap<ui32, ui64> Counters;
     };
 
@@ -103,40 +102,52 @@ public:
         return true;
     }
 
-    void WriteColumn(ui32 index, const TColumnRecord& row) override {
-        auto& columns = Indices[index].Columns[row.Granule];
+    void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
+        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto it = data.find(portion.GetPortion());
+        if (it == data.end()) {
+            it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
+        } else {
+            Y_VERIFY(portion.GetGranule() == it->second.GetGranule() && portion.GetPortion() == it->second.GetPortion());
+        }
+        it->second.SetMinSnapshot(portion.GetMinSnapshot());
+        it->second.SetRemoveSnapshot(portion.GetRemoveSnapshot());
 
         bool replaced = false;
-        for (auto& rec : columns) {
-            if (rec == row) {
+        for (auto& rec : it->second.Records) {
+            if (rec.IsEqualTest(row)) {
                 rec = row;
                 replaced = true;
                 break;
             }
         }
         if (!replaced) {
-            columns.push_back(row);
+            it->second.Records.push_back(row);
         }
     }
 
-    void EraseColumn(ui32 index, const TColumnRecord& row) override {
-        auto& columns = Indices[index].Columns[row.Granule];
+    void EraseColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
+        auto& data = Indices[index].Columns[portion.GetGranule()];
+        auto it = data.find(portion.GetPortion());
+        Y_VERIFY(it != data.end());
+        auto& portionLocal = it->second;
 
         std::vector<TColumnRecord> filtered;
-        filtered.reserve(columns.size());
-        for (auto& rec : columns) {
-            if (rec != row) {
+        for (auto& rec : portionLocal.Records) {
+            if (!rec.IsEqualTest(row)) {
                 filtered.push_back(rec);
             }
         }
-        columns.swap(filtered);
+        portionLocal.Records.swap(filtered);
     }
 
-    bool LoadColumns(ui32 index, const std::function<void(const TColumnRecord&)>& callback) override {
+    bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnRecord&)>& callback) override {
         auto& columns = Indices[index].Columns;
-        for (auto& [granule, vec] : columns) {
-            for (const auto& rec : vec) {
-                callback(rec);
+        for (auto& [granule, portions] : columns) {
+            for (auto& [portionId, portionLocal] : portions) {
+                for (const auto& rec : portionLocal.Records) {
+                    callback(portionLocal, rec);
+                }
             }
         }
         return true;
@@ -254,27 +265,32 @@ void AddIdsToBlobs(const std::vector<TString>& srcBlobs, std::vector<TPortionInf
 TCompactionLimits TestLimits() {
     TCompactionLimits limits;
     limits.GranuleBlobSplitSize = 1024;
-    limits.GranuleExpectedSize = 400 * 1024;
+    limits.GranuleSizeForOverloadPrevent = 400 * 1024;
     limits.GranuleOverloadSize = 800 * 1024;
     return limits;
 }
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
             std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartInsert(TestLimits(), std::move(dataToIndex));
+    std::shared_ptr<TInsertColumnEngineChanges> changes = engine.StartInsert(std::move(dataToIndex));
     if (!changes) {
         return false;
     }
 
     changes->Blobs.insert(blobs.begin(), blobs.end());
+    changes->StartEmergency();
 
-    TIndexationLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
-    std::vector<TString> newBlobs = std::move(logic.Apply(changes).DetachResult());
+    NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
+    std::vector<TString> newBlobs = std::move(changes->ConstructBlobs(context).DetachResult());
+
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
 
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, blobs, step);
-    return engine.ApplyChanges(db, changes, snap);
+
+    const bool result = engine.ApplyChanges(db, changes, snap);
+    changes->AbortEmergency();
+    return result;
 }
 
 struct TExpected {
@@ -285,41 +301,51 @@ struct TExpected {
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
              const TExpected& expected) {
-    auto compactionInfo = engine.Compact(TestLimits());
+    auto compactionInfo = engine.Compact(TestLimits(), {});
     UNIT_ASSERT(!!compactionInfo);
-    UNIT_ASSERT(!compactionInfo->InGranule());
 
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TSnapshot::Zero(), TestLimits());
+    std::shared_ptr<TCompactColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
+    UNIT_ASSERT(changes->IsSplit());
     UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
+    changes->StartEmergency();
+    NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
+    std::vector<TString> newBlobs = std::move(changes->ConstructBlobs(context).DetachResult());
 
-    TCompactionLogic logic(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
-    std::vector<TString> newBlobs = std::move(logic.Apply(changes).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
     AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
 
-    auto logsChanges = std::static_pointer_cast<TColumnEngineForLogs::TChanges>(changes);
-    UNIT_ASSERT_VALUES_EQUAL(logsChanges->TmpGranuleIds.size(), expected.NewGranules);
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
-    return engine.ApplyChanges(db, changes, snap);
+    const bool result = engine.ApplyChanges(db, changes, snap);
+    changes->AbortEmergency();
+    return result;
 }
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartCleanup(snap, TestLimits(), pathsToDrop, 1000);
+    std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
-    return engine.ApplyChanges(db, changes, snap);
+
+    changes->StartEmergency();
+    const bool result = engine.ApplyChanges(db, changes, snap);
+    changes->AbortEmergency();
+    return result;
 }
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TColumnEngineChanges> changes = engine.StartTtl(pathEviction, engine.GetIndexInfo().ArrowSchema());
+    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction);
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
-    return engine.ApplyChanges(db, changes, TSnapshot(1,0));
+
+    changes->StartEmergency();
+    const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,0));
+    changes->AbortEmergency();
+    return result;
 }
 
 std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NArrow::EOperation op) {
@@ -484,7 +510,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         planStep = 3;
 
-        const TIndexInfo& indexInfo = engine.GetIndexInfo();
+        const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(key[0].first) };
 
         { // full scan
@@ -662,7 +688,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // read
         planStep = 3;
 
-        const TIndexInfo& indexInfo = engine.GetIndexInfo();
+        const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(testColumns[0].first) };
 
         { // full scan
@@ -686,7 +712,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
         THashMap<ui64, NOlap::TTiering> pathTtls;
         NOlap::TTiering tiering;
-        tiering.Ttl = NOlap::TTierInfo::MakeTtl(TInstant::MicroSeconds(10000), "timestamp");
+        tiering.Ttl = NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp");
         pathTtls.emplace(pathId, std::move(tiering));
         Ttl(engine, db, pathTtls, 2);
 

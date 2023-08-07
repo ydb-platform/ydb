@@ -59,6 +59,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.h>
 #include <ydb/core/fq/libs/gateway/empty_gateway.h>
 #include <ydb/core/fq/libs/private_client/events.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
@@ -1558,6 +1559,8 @@ private:
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
         apply("WatermarksIdlePartitions", "true");
+        apply("EnableChannelStats", "true");
+        apply("ExportStats", "true");
 
         switch (Params.QueryType) {
         case FederatedQuery::QueryContent::STREAMING: {
@@ -1824,8 +1827,14 @@ private:
             clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
-        const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(NActors::TActivationContext::ActorSystem(), Params.DatabaseResolver,
-            Params.Config.GetCommon().GetYdbMvpCloudEndpoint(), Params.Config.GetCommon().GetMdbGateway(), Params.Config.GetCommon().GetMdbTransformHost(), Params.QueryId);
+        const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
+            NActors::TActivationContext::ActorSystem(),
+            Params.DatabaseResolver,
+            Params.Config.GetCommon().GetYdbMvpCloudEndpoint(),
+            Params.Config.GetCommon().GetMdbGateway(),
+            NFq::MakeTMdbHostTransformerGeneric(),
+            // Params.Config.GetCommon().GetMdbTransformHost(),
+            Params.QueryId);
         {
             // TBD: move init to better place
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
@@ -2031,6 +2040,9 @@ private:
                     break;
                 case FederatedQuery::ConnectionSetting::kMonitoring:
                     html << "MONITORING";
+                    break;
+                case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+                    html << "POSTGRESQL";
                     break;
                 default:
                     html << "UNDEFINED";

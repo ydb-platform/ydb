@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
 #include <library/cpp/actors/core/actorid.h>
@@ -29,7 +30,8 @@ struct TKqpWorkerSettings {
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters);
+    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
 
 }  // namespace NKikimr::NKqp

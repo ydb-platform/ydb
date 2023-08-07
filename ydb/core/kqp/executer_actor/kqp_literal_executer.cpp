@@ -9,7 +9,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -108,7 +108,8 @@ public:
         } catch (...) {
             auto msg = CurrentExceptionMessage();
             LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);
-            InternalError(TStringBuilder() << "Unexpected exception: " << msg);
+            CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
+                YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, msg));
         }
 
         return std::move(ResponseEv);
@@ -244,7 +245,8 @@ public:
                     auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
                     NYql::NDq::TDqSerializedBatch outputData;
                     while (outputChannel->Pop(outputData)) {
-                        ResponseEv->TakeResult(channelDesc.DstInputIndex, outputData);
+                        ResponseEv->TakeResult(channelDesc.DstInputIndex, std::move(outputData));
+                        outputData = {};
                     }
                     YQL_ENSURE(outputChannel->IsFinished());
                 }

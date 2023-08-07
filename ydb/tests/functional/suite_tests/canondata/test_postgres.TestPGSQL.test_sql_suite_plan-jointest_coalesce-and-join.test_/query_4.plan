@@ -29,7 +29,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.yy_pkyy"
+                                                "TopSortBy": "argument.yy.pkyy"
                                             },
                                             {
                                                 "Name": "LeftJoin (MapJoin)"
@@ -104,7 +104,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "yy_pkyy (Asc)"
+                                    "yy.pkyy (Asc)"
                                 ]
                             }
                         ]

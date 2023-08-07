@@ -19,7 +19,7 @@ target_link_libraries(core-tx-mediator PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
   ydb-core-tx
-  core-tx-coordinator
+  tx-coordinator-public
   core-tx-time_cast
   ydb-core-util
 )

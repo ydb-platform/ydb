@@ -8,7 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/libs/apache/arrow
-    contrib/libs/python/Include
+    contrib/libs/python
     contrib/python/numpy
 )
 

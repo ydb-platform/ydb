@@ -1,6 +1,6 @@
 #include "local_rate_limiter_allocator.h"
 
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 
 #include <util/generic/hash_multi_map.h>
 #include <util/system/guard.h>

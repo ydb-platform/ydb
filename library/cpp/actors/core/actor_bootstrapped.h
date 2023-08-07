@@ -40,5 +40,9 @@ namespace NActors {
         TActorBootstrapped(const TEnum activityType)
             : TActor<TDerived>(&TDerived::StateBootstrap, activityType) {
         }
+
+        TActorBootstrapped(const TString& activityName)
+            : TActor<TDerived>(&TDerived::StateBootstrap, activityName) {
+        }
     };
 }

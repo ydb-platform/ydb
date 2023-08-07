@@ -134,9 +134,14 @@ void TSearchEventsProcessor::RunQueuesListQuery(const TActorContext& ctx) {
     request->SetKeepSession(false);
     request->SetPreparedQuery(SelectQueuesQuery);
 
-    NClient::TParameters params;
-    params["$Account"] = LastQueuesKey.Account;
-    params["$QueueName"] = LastQueuesKey.QueueName;
+    NYdb::TParams params = NYdb::TParamsBuilder()
+        .AddParam("$Account")
+            .Utf8(LastQueuesKey.Account)
+            .Build()
+        .AddParam("$QueueName")
+            .Utf8(LastQueuesKey.QueueName)
+            .Build()
+        .Build();
 
     RunQuery(SelectQueuesQuery, &params, true, ctx);
 }
@@ -209,16 +214,29 @@ void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse:
 void TSearchEventsProcessor::RunEventsCleanup(const TActorContext& ctx) {
     State = EState::CleanupExecute;
 
-    NClient::TParameters params;
-    auto param = params["$Events"];
+    NYdb::TParamsBuilder paramsBuilder;
+    
+    auto& param = paramsBuilder.AddParam("$Events");
+    param.BeginList();
+
     for (const auto&[qName, events] : QueuesEvents) {
         for (const auto&[_, event]: events) {
-            auto item = param.AddListItem();
-            item["Account"] = event.CloudId;
-            item["QueueName"] = qName;
-            item["EventType"] = static_cast<ui64>(event.Type);
+            param.AddListItem()
+                .BeginStruct()
+                .AddMember("Account")
+                    .Utf8(event.CloudId)
+                .AddMember("QueueName")
+                    .Utf8(qName)
+                .AddMember("EventType")
+                    .Uint64(static_cast<ui64>(event.Type))
+                .EndStruct();
         }
     }
+    param.EndList();
+    param.Build();
+
+    auto params = paramsBuilder.Build();
+
     RunQuery(DeleteEventQuery, &params, false, ctx);
 }
 
@@ -301,7 +319,7 @@ void TSearchEventsProcessor::StopSession(const TActorContext& ctx) {
     }
 }
 
-void TSearchEventsProcessor::RunQuery(const TString& query, NKikimr::NClient::TParameters* params, bool readonly,
+void TSearchEventsProcessor::RunQuery(const TString& query, NYdb::TParams* params, bool readonly,
                                       const TActorContext& ctx) {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     auto* request = ev->Record.MutableRequest();
@@ -326,7 +344,7 @@ void TSearchEventsProcessor::RunQuery(const TString& query, NKikimr::NClient::TP
     }
     request->MutableTxControl()->set_commit_tx(true);
     if (params != nullptr) {
-        request->MutableParameters()->Swap(params);
+        request->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(*params)));
     }
     Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 

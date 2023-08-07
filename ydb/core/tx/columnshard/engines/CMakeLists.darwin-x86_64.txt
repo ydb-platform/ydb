@@ -6,19 +6,15 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(changes)
 add_subdirectory(insert_table)
+add_subdirectory(portions)
 add_subdirectory(predicate)
 add_subdirectory(reader)
 add_subdirectory(scheme)
 add_subdirectory(storage)
 add_subdirectory(ut)
 add_subdirectory(writer)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(tx-columnshard-engines)
 target_compile_options(tx-columnshard-engines PRIVATE
@@ -38,27 +34,20 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-predicate
   columnshard-engines-storage
   columnshard-engines-insert_table
+  columnshard-engines-changes
+  columnshard-engines-portions
   formats-arrow-compression
   core-tx-program
   udf-service-exception_policy
-  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-engines PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_features.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/compaction_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/indexed_read_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_logic_logs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/filter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scalars.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/tier_info.cpp
-)
-generate_enum_serilization(tx-columnshard-engines
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portion_info.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/engines/portion_info.h
 )

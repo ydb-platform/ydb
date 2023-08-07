@@ -4,7 +4,7 @@
 #include "helpers.h"
 #include "two_part_description.h"
 
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/scheme_board.pb.h>

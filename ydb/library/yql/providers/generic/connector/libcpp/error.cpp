@@ -30,9 +30,26 @@ namespace NYql::NConnector {
         issues.AddIssue(TIssue(error.message()));
 
         // convert detailed errors
-        IssuesFromMessage(error.get_arr_issues(), issues);
+        for (auto& subIssue : error.get_arr_issues()) {
+            issues.AddIssue(IssueFromMessage(subIssue));
+        }
 
         return issues;
+    }
+
+    NDqProto::StatusIds::StatusCode ErrorToDqStatus(const NApi::TError& error) {
+        switch (error.status()) {
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNSUPPORTED:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSUPPORTED;
+            case ::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_NOT_FOUND:
+                return NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST;
+            default:
+                ythrow yexception() << "Unexpected YDB status code: " << ::Ydb::StatusIds::StatusCode_Name(error.status());
+        }
     }
 
     void ErrorToExprCtx(const NApi::TError& error, TExprContext& ctx, const TPosition& position, const TString& summary) {

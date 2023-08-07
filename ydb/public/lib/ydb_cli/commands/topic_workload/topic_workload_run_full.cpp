@@ -45,6 +45,9 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.Opts->AddLongOption('t', "consumer-threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerThreadCount);
+    config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")
+        .DefaultValue(CONSUMER_PREFIX)
+        .StoreResult(&Scenario.ConsumerPrefix);
     config.Opts->AddLongOption('c', "consumers", "Number of consumers in a topic.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerCount);
@@ -67,7 +70,7 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
     config.IsNetworkIntensive = true;
 }
 
-void TCommandWorkloadTopicRunFull::Parse(TConfig& config) 
+void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
 {
     TClientCommand::Parse(config);
 

@@ -80,22 +80,24 @@ public:
         , WarmWeight(0)
     {}
 
-    // returns evicted elements as list
-    TIntrusiveList<TItem> EnsureLimits() {
-        TIntrusiveList<TItem> evictedList;
-        LimitFresh(evictedList);
-        LimitWarm(evictedList);
-        LimitStaging(evictedList);
+    TItem* EvictNext() {
+        TItem* ret = nullptr;
 
-        // Note: levels may be rearranged even if nothing was evicted
-        if (Config.ReportedFresh)
-            *Config.ReportedFresh = FreshWeight;
-        if (Config.ReportedWarm)
-            *Config.ReportedWarm = WarmWeight;
-        if (Config.ReportedStaging)
-            *Config.ReportedStaging = StagingWeight;
+        if (!StagingList.Empty()) {
+            ret = EvictNext(StagingList, StagingWeight);
+            if (Config.ReportedStaging)
+                *Config.ReportedStaging = StagingWeight;
+        } else if (!FreshList.Empty()) {
+            ret = EvictNext(FreshList, FreshWeight);
+            if (Config.ReportedFresh)
+                *Config.ReportedFresh = FreshWeight;
+        } else if (!WarmList.Empty()) {
+            ret = EvictNext(WarmList, WarmWeight);
+            if (Config.ReportedWarm)
+                *Config.ReportedWarm = WarmWeight;
+        }
 
-        return evictedList;
+        return ret;
     }
 
     // returns evicted elements as list
@@ -262,6 +264,16 @@ private:
             GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenEvicted);
             evictedList.PushBack(evicted);
         }
+    }
+
+    TItem* EvictNext(TIntrusiveList<TItem>& list, ui64& weight) {
+        Y_VERIFY_DEBUG(!list.Empty());
+
+        TItem *evicted = list.PopBack();
+        Unlink(evicted, weight);
+        GenerationOp.Set(evicted, TCacheCacheConfig::CacheGenEvicted);
+
+        return evicted;
     }
 
 private:

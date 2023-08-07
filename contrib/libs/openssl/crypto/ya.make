@@ -22,6 +22,7 @@ OPENSOURCE_EXPORT_REPLACEMENT(
 
 PEERDIR(
     contrib/libs/zlib
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

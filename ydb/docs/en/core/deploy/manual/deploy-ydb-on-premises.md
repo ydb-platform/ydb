@@ -77,7 +77,7 @@ sudo usermod -aG disk ydb
 
    ```bash
    mkdir ydbd-stable-linux-amd64
-   curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
+   curl -L {{ ydb-binaries-url }}/{{ ydb-stable-binary-archive }} | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
    ```
 
 1. Create directories for {{ ydb-short-name }} software:

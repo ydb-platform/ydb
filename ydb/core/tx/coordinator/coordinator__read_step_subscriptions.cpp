@@ -230,8 +230,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
             // We currently have to force a read/write transaction.
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::State>().Key(Schema::State::AcquireReadStepLast).Update(
-                NIceDb::TUpdate<Schema::State::StateValue>(LastAcquiredStep));
+            Schema::SaveState(db, Schema::State::AcquireReadStepLast, LastAcquiredStep);
 
             return true;
         }

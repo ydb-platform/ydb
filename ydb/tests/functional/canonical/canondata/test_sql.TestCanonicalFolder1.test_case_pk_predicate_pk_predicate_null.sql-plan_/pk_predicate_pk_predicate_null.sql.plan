@@ -19,7 +19,7 @@
                         "Group (0)"
                     ],
                     "scan_by": [
-                        "Name (-\u221e, \u00abName2\u00bb)"
+                        "Name (\u00ab\u00bb, \u00abName2\u00bb)"
                     ],
                     "type": "Lookup"
                 }

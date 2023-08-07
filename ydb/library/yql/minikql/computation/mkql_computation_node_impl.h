@@ -226,9 +226,8 @@ class TFlowSourceBaseComputationNode: public TStatefulComputationNode<IFlowInter
 {
     using TBase = TStatefulComputationNode<IFlowInterface>;
 protected:
-    TFlowSourceBaseComputationNode(TComputationMutables& mutables, EValueRepresentation kind, EValueRepresentation stateKind)
+    TFlowSourceBaseComputationNode(TComputationMutables& mutables, EValueRepresentation stateKind)
         : TBase(mutables, stateKind)
-        , RepresentationKind(kind)
     {}
 
     TString DebugString() const override {
@@ -248,8 +247,6 @@ protected:
             node->SetOwner(this);
         }
     }
-
-    const EValueRepresentation RepresentationKind;
 private:
     bool IsTemporaryValue() const final {
         return true;
@@ -276,24 +273,25 @@ private:
     mutable std::unordered_set<const IComputationNode*> Sources; // TODO: remove const and mutable.
 };
 
-
 template <typename TDerived>
 class TFlowSourceComputationNode: public TFlowSourceBaseComputationNode<TDerived, IComputationNode>
 {
     using TBase = TFlowSourceBaseComputationNode<TDerived, IComputationNode>;
 protected:
     TFlowSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind, EValueRepresentation stateKind)
-        : TBase(mutables, kind, stateKind)
+        : TBase(mutables, stateKind), RepresentationKind(kind)
     {}
 
 private:
     EValueRepresentation GetRepresentation() const final {
-        return this->RepresentationKind;
+        return RepresentationKind;
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final {
         return static_cast<const TDerived*>(this)->DoCalculate(this->ValueRef(compCtx), compCtx);
     }
+private:
+    const EValueRepresentation RepresentationKind;
 };
 
 template <typename TDerived>
@@ -302,9 +300,8 @@ class TWideFlowSourceComputationNode: public TFlowSourceBaseComputationNode<TDer
     using TBase = TFlowSourceBaseComputationNode<TDerived, IComputationWideFlowNode>;
 protected:
     TWideFlowSourceComputationNode(TComputationMutables& mutables, EValueRepresentation stateKind)
-        : TBase(mutables, EValueRepresentation::Any, stateKind)
+        : TBase(mutables, stateKind)
     {}
-
 private:
     EValueRepresentation GetRepresentation() const final {
         THROW yexception() << "Failed to get representation kind.";

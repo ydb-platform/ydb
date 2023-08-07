@@ -1665,6 +1665,9 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
     desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
+    if (streamDesc.ResolvedTimestamps) {
+        desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
+    }
     if (streamDesc.InitialState) {
         desc.MutableStreamDescription()->SetState(*streamDesc.InitialState);
     }

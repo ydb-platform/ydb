@@ -188,8 +188,7 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxLoadState Complete");
 
-        Self->Become(&TTenantSlotBroker::StateWork);
-        Self->ProcessEnqueuedEvents(ctx);
+        Self->SwitchToWork(ctx);
         Self->TxCompleted(this, ctx);
     }
 

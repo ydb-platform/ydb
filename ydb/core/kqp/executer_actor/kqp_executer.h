@@ -37,8 +37,8 @@ struct TEvKqpExecuter {
         TVector<TKqpPhyTxHolder::TConstPtr>& GetTxHolders() { return TxHolders; }
         TVector<TKqpExecuterTxResult>& GetTxResults() { return TxResults; }
         void InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx);
-        void TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector& rows);
-        void TakeResult(ui32 idx, const NYql::NDq::TDqSerializedBatch& rows);
+        void TakeResult(ui32 idx, NKikimr::NMiniKQL::TUnboxedValueVector&& rows);
+        void TakeResult(ui32 idx, NYql::NDq::TDqSerializedBatch&& rows);
 
         ui64 GetResultRowsCount() const {
             return ResultRowsCount;
@@ -61,6 +61,10 @@ struct TEvKqpExecuter {
 
     struct TEvStreamProfile : public TEventPB<TEvStreamProfile, NKikimrKqp::TEvExecuterStreamProfile,
         TKqpExecuterEvents::EvStreamProfile> {};
+
+    // deprecated event, remove in the future releases.
+    struct TEvExecuterProgress : public TEventPB<TEvExecuterProgress, NKikimrKqp::TEvExecuterProgress,
+            TKqpExecuterEvents::EvProgress> {};
 
     struct TEvTableResolveStatus : public TEventLocal<TEvTableResolveStatus,
         TKqpExecuterEvents::EvTableResolveStatus>

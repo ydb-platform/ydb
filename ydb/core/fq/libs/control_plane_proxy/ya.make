@@ -14,9 +14,11 @@ PEERDIR(
     ydb/core/fq/libs/compute/ydb
     ydb/core/fq/libs/compute/ydb/control_plane
     ydb/core/fq/libs/control_plane_config
+    ydb/core/fq/libs/control_plane_proxy/actors
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/rate_limiter/events
+    ydb/core/fq/libs/result_formatter
     ydb/core/mon
     ydb/library/folder_service
     ydb/library/security
@@ -29,6 +31,7 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
+    actors
     events
 )
 

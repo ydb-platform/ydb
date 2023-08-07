@@ -20,6 +20,70 @@ const static TString TOPIC_NAME = "rt3.dc1--topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
+Y_UNIT_TEST(TestPartitionTotalQuota) { 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1); //total partition quota is equal to quota per consumer. Very low.
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+        TVector<std::pair<ui64, TString>> data;
+        TString s{2_MB, 'c'};
+        data.push_back({1, s});
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+        
+        //check throttling on total partition quota
+        auto startTime = tc.Runtime->GetTimeProvider()->Now();
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user2");
+        auto diff = (tc.Runtime->GetTimeProvider()->Now() - startTime).Seconds();
+        UNIT_ASSERT(diff >= 9); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota
+    });
+}
+
+Y_UNIT_TEST(TestPartitionPerConsumerQuota) { 
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1000); //total partition quota is 1 consumer quota * 1000. Very high.
+        
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
+        TVector<std::pair<ui64, TString>> data;
+        TString s{2_MB, 'c'};
+        data.push_back({1, s});
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+
+        //check throttling on per consumer quota
+        auto startTimeReadWithSameConsumer = tc.Runtime->GetTimeProvider()->Now();
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
+        auto diffReadWithSameConsumers = (tc.Runtime->GetTimeProvider()->Now() - startTimeReadWithSameConsumer).Seconds();
+        UNIT_ASSERT(diffReadWithSameConsumers >= 9); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota
+        
+        //check not throttling on total partition quota
+        auto startTimeReadWithDifferentConsumers = tc.Runtime->GetTimeProvider()->Now();
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user2");
+        CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user3");
+        auto diffReadWithDifferentConsumers = (tc.Runtime->GetTimeProvider()->Now() - startTimeReadWithDifferentConsumers).Seconds();
+        UNIT_ASSERT(diffReadWithDifferentConsumers <= 1); //different consumers. No throttling
+    });
+}
+
 Y_UNIT_TEST(TestGroupsBalancer) {
     TTestContext tc;
     TFinalizer finalizer(tc);
@@ -1056,7 +1120,7 @@ void TestWritePQImpl(bool fast) {
         tc.Runtime->SetScheduledLimit(100);
 
         // Important client, lifetimeseconds=0 - never delete
-        PQTabletPrepare({.partitions = 2, .speed = 200000000}, {{"user", true}}, tc);
+        PQTabletPrepare({.partitions = 2, .writeSpeed = 200000000}, {{"user", true}}, tc);
 
         TVector<std::pair<ui64, TString>> data, data1, data2;
         activeZone = PlainOrSoSlow(true, false) && fast;
@@ -1318,42 +1382,6 @@ Y_UNIT_TEST(TestLowWatermark) {
         PQGetPartInfo(9, 13, tc);
     });
 }
-
-
-
-Y_UNIT_TEST(TestWriteToFullPartition) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        activeZone = false;
-        tc.Prepare(dispatchName, setup, activeZone);
-
-        tc.Runtime->SetScheduledLimit(100);
-
-        PQTabletPrepare({.maxCountInPartition=11}, {}, tc);
-
-        TVector<std::pair<ui64, TString>> data;
-        activeZone = PlainOrSoSlow(true, false);
-
-        TString s{32, 'c'};
-        ui32 pp = 8 + 4 + 2 + 9;
-        for (ui32 i = 0; i < 10; ++i) {
-            data.push_back({i + 1, s.substr(pp)});
-        }
-        CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
-        PQTabletPrepare({.maxCountInPartition=10}, {}, tc);
-        PQGetPartInfo(0, 10, tc);
-        data.resize(1);
-        CmdWrite(0, "sourceid1", data, tc, true);
-        PQTabletPrepare({.maxCountInPartition=12}, {}, tc);
-        CmdWrite(0, "sourceid1", data, tc);
-        PQTabletPrepare({.maxCountInPartition=12, .maxSizeInPartition=100}, {}, tc);
-        CmdWrite(0, "sourceid1", data, tc, true);
-    });
-}
-
 
 Y_UNIT_TEST(TestTimeRetention) {
     TTestContext tc;
@@ -1772,7 +1800,7 @@ Y_UNIT_TEST(TestChangeConfig) {
         PQTabletPrepare({.maxCountInPartition=5, .maxSizeInPartition=1_MB,
                 .deleteTime=TDuration::Days(1).Seconds(), .partitions=10}, {{"bbb", true}, {"ccc", true}}, tc);
         data.pop_back(); //to be sure that after write partition will no be full
-        CmdWrite(0, "sourceid1", data, tc, true); //partition is full
+        CmdWrite(0, "sourceid1", data, tc);
         CmdWrite(1, "sourceid2", data, tc);
         CmdWrite(9, "sourceid3", data, tc); //now 1 blob
     });

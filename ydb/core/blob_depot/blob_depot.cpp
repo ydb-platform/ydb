@@ -72,8 +72,6 @@ namespace NKikimr::NBlobDepot {
             };
 
             switch (const ui32 type = ev->GetTypeRewrite()) {
-                cFunc(TEvents::TSystem::Poison, HandlePoison);
-
                 hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
 
                 fFunc(TEvBlobDepot::EvRegisterAgent, handleFromAgentPipe);

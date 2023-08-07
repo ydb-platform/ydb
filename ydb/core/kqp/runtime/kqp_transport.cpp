@@ -47,7 +47,7 @@ TKqpProtoBuilder::~TKqpProtoBuilder() {
 }
 
 Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
-    const TVector<NYql::NDq::TDqSerializedBatch>& data,
+    TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
     const TVector<ui32>* columnOrder)
 {
@@ -76,7 +76,7 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
     for (auto& part : data) {
         if (part.RowCount()) {
             TUnboxedValueBatch rows(mkqlSrcRowType);
-            dataSerializer.Deserialize(part, mkqlSrcRowType, rows);
+            dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
             rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
                 ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
             });

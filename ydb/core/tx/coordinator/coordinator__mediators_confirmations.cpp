@@ -8,12 +8,12 @@ namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoordinator> {
-    TAutoPtr<TMediatorConfirmations> Confirmations;
+    std::unique_ptr<TMediatorConfirmations> Confirmations;
     i64 CompleteTransactions;
 
-    TTxMediatorConfirmations(TAutoPtr<TMediatorConfirmations> &confirmations, TSelf *coordinator)
+    TTxMediatorConfirmations(std::unique_ptr<TMediatorConfirmations> &&confirmations, TSelf *coordinator)
         : TBase(coordinator)
-        , Confirmations(confirmations)
+        , Confirmations(std::move(confirmations))
         , CompleteTransactions(0)
     {}
 
@@ -82,8 +82,8 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
     }
 };
 
-ITransaction* TTxCoordinator::CreateTxMediatorConfirmations(TAutoPtr<TMediatorConfirmations> &confirmations) {
-    return new TTxMediatorConfirmations(confirmations, this);
+ITransaction* TTxCoordinator::CreateTxMediatorConfirmations(std::unique_ptr<TMediatorConfirmations> &&confirmations) {
+    return new TTxMediatorConfirmations(std::move(confirmations), this);
 }
 
 }

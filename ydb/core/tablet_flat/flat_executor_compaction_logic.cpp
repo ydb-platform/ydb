@@ -17,12 +17,14 @@ TCompactionLogicState::TSnapRequest::~TSnapRequest()
 TCompactionLogicState::TTableInfo::~TTableInfo()
 {}
 
-TCompactionLogic::TCompactionLogic(NUtil::ILogger *logger,
+TCompactionLogic::TCompactionLogic(THolder<NSharedCache::ISharedPageCacheMemTableObserver> sharedPageCacheMemTableObserver,
+                                   NUtil::ILogger *logger,
                                    NTable::IResourceBroker *broker,
                                    NTable::ICompactionBackend *backend,
                                    TAutoPtr<TCompactionLogicState> state,
                                    TString taskNameSuffix)
-    : Logger(logger)
+    : SharedPageCacheMemTableObserver(std::move(sharedPageCacheMemTableObserver))
+    , Logger(logger)
     , Broker(broker)
     , Backend(backend)
     , Time(TAppData::TimeProvider.Get())
@@ -192,6 +194,31 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
     return tableInfo->CurrentForcedMemCompactionId;
 }
 
+void TCompactionLogic::TriggerSharedPageCacheMemTableCompaction(ui32 table, ui64 expectedSize) {
+    TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
+    if (!tableInfo)
+        return;
+
+    auto &inMem = tableInfo->InMem;
+    auto &policy = tableInfo->Policy->BackgroundSnapshotPolicy;
+
+    if (inMem.State == ECompactionState::Free) {
+        if (inMem.EstimatedSize >= expectedSize) {
+            auto priority = tableInfo->ComputeBackgroundPriority(inMem.CompactionTask, policy, 100, Time->Now());
+            SubmitCompactionTask(table, 0, policy.ResourceBrokerTask,
+                                priority, inMem.CompactionTask);
+            inMem.State = ECompactionState::PendingBackground;
+        } else {
+            // there was a race and we finished some compaction while our message was waiting
+            // so let's notify that we completed it
+            Y_VERIFY_DEBUG(tableInfo->SharedPageCacheMemTableRegistration);
+            if (auto& registration = tableInfo->SharedPageCacheMemTableRegistration) {
+                SharedPageCacheMemTableObserver->CompactionComplete(registration);
+            }
+        }
+    }    
+}
+
 TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) {
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
     if (!tableInfo || !tableInfo->Strategy)
@@ -259,6 +286,10 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
             if (table.AllowBorrowedGarbageCompaction) {
                 table.Strategy->AllowBorrowedGarbageCompaction();
             }
+
+            if (!table.SharedPageCacheMemTableRegistration) {
+                SharedPageCacheMemTableObserver->Register(info.Id);
+            }
         } else {
             Y_VERIFY(table.Strategy);
             table.Strategy->ReflectSchema();
@@ -275,6 +306,17 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     }
 
     return result;
+}
+
+void TCompactionLogic::ProvideSharedPageCacheMemTableRegistration(ui32 table, TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration)
+{
+    auto *tableInfo = State->Tables.FindPtr(table);
+    if (tableInfo) {
+        registration->SetConsumption(tableInfo->InMem.EstimatedSize);
+
+        Y_VERIFY_DEBUG(!tableInfo->SharedPageCacheMemTableRegistration);
+        tableInfo->SharedPageCacheMemTableRegistration = std::move(registration);
+    }
 }
 
 void TCompactionLogic::ReflectRemovedRowVersions(ui32 table)
@@ -305,6 +347,9 @@ THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
 
 void TCompactionLogic::StopTable(TCompactionLogicState::TTableInfo &table)
 {
+    // Note: should be called even without table.SharedPageCacheMemTableRegistration
+    SharedPageCacheMemTableObserver->Unregister(table.TableId);
+
     if (table.Strategy) {
         // Strategy will cancel all pending and running compactions
         table.Strategy->Stop();
@@ -388,6 +433,13 @@ void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
     auto &mem = info->InMem;
     mem.EstimatedSize = size;
     mem.Steps += steps;
+
+    if (auto& registration = info->SharedPageCacheMemTableRegistration) {
+        registration->SetConsumption(size);
+        if (steps == 0) {
+            SharedPageCacheMemTableObserver->CompactionComplete(registration);
+        }
+    }
 
     CheckInMemStats(table);
 }

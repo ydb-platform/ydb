@@ -186,15 +186,25 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(TExportToS3Tests) {
-    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& request) {
+    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
+        auto request = Sprintf(requestTpl.c_str(), port);
+
         TTestEnv env(runtime);
-        Run(runtime, env, tables, Sprintf(request.c_str(), port), Ydb::StatusIds::SUCCESS, "/MyRoot", false);
+        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false);
+
+        for (auto &path : GetExportTargetPaths(request)) {
+            auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;
+            auto it = s3Mock.GetData().find(canonPath + "/metadata.json");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+            it = s3Mock.GetData().find(canonPath + "/scheme.pb");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+        }
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
@@ -284,16 +294,6 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        TString scheme;
-        runtime.SetObserverFunc([&scheme](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (!scheme && ev->GetTypeRewrite() == NWrappers::NExternalStorage::EvPutObjectRequest) {
-                const auto* msg = ev->Get<NWrappers::NExternalStorage::TEvPutObjectRequest>();
-                scheme = msg->Body;
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
         const TVector<TString> tables = {R"(
             Name: "Table"
             Columns { Name: "key" Type: "Utf8" }
@@ -331,6 +331,11 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             }
         )", port));
 
+        auto schemeIt = s3Mock.GetData().find("/scheme.pb");
+        UNIT_ASSERT(schemeIt != s3Mock.GetData().end());
+
+        TString scheme = schemeIt->second;
+
         UNIT_ASSERT_NO_DIFF(scheme, R"(columns {
   name: "key"
   type {
@@ -340,6 +345,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
       }
     }
   }
+  not_null: false
 }
 columns {
   name: "value"
@@ -350,6 +356,7 @@ columns {
       }
     }
   }
+  not_null: false
 }
 primary_key: "key"
 storage_settings {
@@ -1039,7 +1046,7 @@ partitioning_settings {
             });
             runtime.DispatchEvents(opts);
         }
-        
+
         THolder<IEventHandle> proposeTxResult;
         runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {

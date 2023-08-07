@@ -250,6 +250,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .Inputs(ctx.ReplaceNodes(stage.Inputs().Ptr(), stagesMap))
             .Program(ctx.DeepCopyLambda(TKqpProgram(newProgram).Lambda().Ref()))
             .Settings(stage.Settings())
+            .Outputs(stage.Outputs())
             .Done();
 
         stages.emplace_back(newStage);

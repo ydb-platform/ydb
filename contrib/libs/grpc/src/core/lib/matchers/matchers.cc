@@ -16,13 +16,14 @@
 
 #include "src/core/lib/matchers/matchers.h"
 
+#include <initializer_list>
 #include <utility>
 
-#include "y_absl/memory/memory.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/numbers.h"
+#include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
 
 namespace grpc_core {
@@ -35,10 +36,11 @@ y_absl::StatusOr<StringMatcher> StringMatcher::Create(Type type,
                                                     y_absl::string_view matcher,
                                                     bool case_sensitive) {
   if (type == Type::kSafeRegex) {
-    auto regex_matcher = y_absl::make_unique<RE2>(TString(matcher));
+    auto regex_matcher = std::make_unique<RE2>(TString(matcher));
     if (!regex_matcher->ok()) {
       return y_absl::InvalidArgumentError(
-          "Invalid regex string specified in matcher.");
+          y_absl::StrCat("Invalid regex string specified in matcher: ",
+                       regex_matcher->error()));
     }
     return StringMatcher(std::move(regex_matcher));
   } else {
@@ -56,7 +58,7 @@ StringMatcher::StringMatcher(std::unique_ptr<RE2> regex_matcher)
 StringMatcher::StringMatcher(const StringMatcher& other)
     : type_(other.type_), case_sensitive_(other.case_sensitive_) {
   if (type_ == Type::kSafeRegex) {
-    regex_matcher_ = y_absl::make_unique<RE2>(other.regex_matcher_->pattern());
+    regex_matcher_ = std::make_unique<RE2>(other.regex_matcher_->pattern());
   } else {
     string_matcher_ = other.string_matcher_;
   }
@@ -65,7 +67,7 @@ StringMatcher::StringMatcher(const StringMatcher& other)
 StringMatcher& StringMatcher::operator=(const StringMatcher& other) {
   type_ = other.type_;
   if (type_ == Type::kSafeRegex) {
-    regex_matcher_ = y_absl::make_unique<RE2>(other.regex_matcher_->pattern());
+    regex_matcher_ = std::make_unique<RE2>(other.regex_matcher_->pattern());
   } else {
     string_matcher_ = other.string_matcher_;
   }

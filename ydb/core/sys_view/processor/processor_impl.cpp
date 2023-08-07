@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NSysView {
 
-TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
+TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 1 : 60))
@@ -386,11 +386,6 @@ void TSysViewProcessor::IgnoreFailure(TNodeId nodeId) {
     NodesInFlight.erase(nodeId);
 }
 
-void TSysViewProcessor::Handle(TEvents::TEvPoisonPill::TPtr&) {
-    Become(&TThis::StateBroken);
-    Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void TSysViewProcessor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     auto nodeId = (TNodeId)ev.Get()->Cookie;
     SVLOG_W("[" << TabletID() << "] TEvUndelivered: node id# " << nodeId);
@@ -490,7 +485,7 @@ void TSysViewProcessor::EntryToProto(NKikimrSysView::TTopPartitionsEntry& dst, c
 }
 
 template <typename TResponse>
-void TSysViewProcessor::ReplyOverloaded(const TActorId& sender) {
+void TSysViewProcessor::ReplyOverloaded(const NActors::TActorId& sender) {
     auto response = MakeHolder<TResponse>();
     response->Record.SetOverloaded(true);
     Send(sender, std::move(response));

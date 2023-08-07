@@ -1,0 +1,17 @@
+package NYT.NProto;
+
+option java_package = "tech.ytsaurus";
+option java_multiple_files = true;
+
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/misc";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TGuid
+{
+    required fixed64 first = 1;
+    required fixed64 second = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

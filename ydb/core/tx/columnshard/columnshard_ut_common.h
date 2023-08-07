@@ -106,6 +106,7 @@ struct TTestSchema {
     struct TTableSpecials : public TStorageTier {
         std::vector<TStorageTier> Tiers;
         bool CompositeMarks = false;
+        bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
 
@@ -411,16 +412,28 @@ struct TTestSchema {
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
 void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
-bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
-               const TString& data, std::shared_ptr<arrow::Schema> schema = {}, bool waitResult = true);
+
+void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
+
+bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, std::vector<ui64>* writeIds);
+
+bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr);
+
 std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId,
-                              ui64 tableId, const TString& dedupId, const TString& data,
-                              std::shared_ptr<arrow::Schema> schema = {});
-ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 metaShard);
+                              ui64 tableId, const ui64 writePartId, const TString& data,
+                              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema);
+
+ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
+
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds,
                     NOlap::TSnapshot snap, ui64 scanId = 0);
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 txId, const std::vector<ui64>& writeIds);
+
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds);
 void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds);
+
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds);
 void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);
 
 inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
@@ -468,7 +481,7 @@ namespace NKikimr::NColumnShard {
                 Y_VERIFY(Index < Owner.Builders.size());
                 auto& builder = Owner.Builders[Index];
                 auto type = builder->type();
-                
+
                 NArrow::SwitchType(type->id(), [&](const auto& t) {
                     using TWrap = std::decay_t<decltype(t)>;
                     using T = typename TWrap::T;

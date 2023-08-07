@@ -211,37 +211,6 @@ enum class EScope {
     DoubleQuestion
 };
 
-THashSet<TString> GetKeywords() {
-    TString grammar;
-    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
-    THashSet<TString> res;
-    TVector<TString> lines;
-    Split(grammar, "\n", lines);
-    for (auto s : lines) {
-        s = StripString(s);
-        if (s.StartsWith("//")) {
-            continue;
-        }
-
-        auto pos1 = s.find(':');
-        auto pos2 = s.find(';');
-        if (pos1 == TString::npos || pos2 == TString::npos || pos2 < pos1 + 2) {
-            continue;
-        }
-
-        auto before = s.substr(0, pos1);
-        auto after = s.substr(pos1 + 1, pos2 - pos1 - 1);
-        SubstGlobal(after, " ", "");
-        SubstGlobal(after, "'", "");
-        if (after == before) {
-            //Cerr << before << "\n";
-            res.insert(before);
-        }
-    }
-
-    return res;
-}
-
 class TVisitor;
 using TFunctor = std::function<void(TVisitor&, const NProtoBuf::Message& msg)>;
 
@@ -354,6 +323,7 @@ private:
             Scopes.push_back(*scopePtr);
         }
 
+        bool suppressExpr = false;
         if (descr == TToken::GetDescriptor()) {
             const auto& token = dynamic_cast<const TToken&>(msg);
             MarkToken(token);
@@ -366,17 +336,40 @@ private:
         } else if (descr == TRule_in_atom_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_in_atom_expr&>(msg);
             if (value.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
-                AfterInAtom = true;
+                suppressExpr = true;
+            }
+        } else if (descr == TRule_select_kind_parenthesis::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_select_kind_parenthesis&>(msg);
+            if (value.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis2) {
+                suppressExpr = true;
             }
         }
 
+        const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor());
+        if (expr) {
+            ++InsideExpr;
+        }
+
+        ui64 prevInsideExpr = InsideExpr;
+        if (suppressExpr) {
+            InsideExpr = 0;
+        }
+
         VisitAllFieldsImpl<&TVisitor::MarkTokens>(descr, msg);
+        if (suppressExpr) {
+            InsideExpr = prevInsideExpr;
+        }
+
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
                 --InsideType;
             }
 
             Scopes.pop_back();
+        }
+
+        if (expr) {
+            --InsideExpr;
         }
     }
 
@@ -390,7 +383,7 @@ private:
         if (str == "(" || str == "[" || str == "{" || str == "<|" || (InsideType && str == "<")) {
             MarkTokenStack.push_back(TokenIndex);
             auto& info = MarkedTokens[TokenIndex];
-            info.OpeningBracket = true;
+            info.OpeningBracket = (InsideExpr > 0);
         } else if (str == ")") {
             PopBracket("(");
         } else if (str == "]") {
@@ -401,12 +394,6 @@ private:
             PopBracket("<|");
         } else if (InsideType && str == ">") {
             PopBracket("<");
-        }
-
-        if (AfterInAtom) {
-            auto& info = MarkedTokens[TokenIndex];
-            info.OpeningBracket = false;
-            AfterInAtom = false;
         }
 
         TokenIndex++;
@@ -2019,7 +2006,7 @@ private:
     ui32 TokenIndex = 0;
     TMarkTokenStack MarkTokenStack;
     TVector<TTokenInfo> MarkedTokens;
-    bool AfterInAtom = false;
+    ui64 InsideExpr = 0;
 };
 
 template <typename T>
@@ -2306,6 +2293,37 @@ bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& err
         error = e.what();
         return false;
     }
+}
+
+THashSet<TString> GetKeywords() {
+    TString grammar;
+    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
+    THashSet<TString> res;
+    TVector<TString> lines;
+    Split(grammar, "\n", lines);
+    for (auto s : lines) {
+        s = StripString(s);
+        if (s.StartsWith("//")) {
+            continue;
+        }
+
+        auto pos1 = s.find(':');
+        auto pos2 = s.find(';');
+        if (pos1 == TString::npos || pos2 == TString::npos || pos2 < pos1 + 2) {
+            continue;
+        }
+
+        auto before = s.substr(0, pos1);
+        auto after = s.substr(pos1 + 1, pos2 - pos1 - 1);
+        SubstGlobal(after, " ", "");
+        SubstGlobal(after, "'", "");
+        if (after == before) {
+            //Cerr << before << "\n";
+            res.insert(before);
+        }
+    }
+
+    return res;
 }
 
 } // namespace NSQLFormat

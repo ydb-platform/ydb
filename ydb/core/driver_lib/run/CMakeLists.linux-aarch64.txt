@@ -88,6 +88,7 @@ target_link_libraries(run PUBLIC
   ydb-core-scheme
   ydb-core-scheme_types
   ydb-core-security
+  ydb-core-statistics
   core-sys_view-processor
   core-sys_view-service
   ydb-core-tablet
@@ -131,6 +132,7 @@ target_link_libraries(run PUBLIC
   ydb-services-discovery
   ydb-services-fq
   ydb-services-kesus
+  ydb-services-keyvalue
   ydb-services-local_discovery
   ydb-services-maintenance
   services-metadata-ds_table

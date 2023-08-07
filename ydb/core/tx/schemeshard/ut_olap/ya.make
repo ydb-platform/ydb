@@ -29,6 +29,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_olap.cpp
+    ydb/core/tx/columnshard/columnshard_ut_common.cpp
 )
 
 END()

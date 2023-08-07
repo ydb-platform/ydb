@@ -1,5 +1,6 @@
 #include "pg_proxy_types.h"
 #include "pg_stream.h"
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NPG {
 
@@ -142,9 +143,60 @@ TString TPGBind::Dump() const {
     stream >> portalName;
     stream >> statementName;
     if (portalName) {
-        text << "Portal: " << portalName;
+        text << "Portal: '" << portalName << "'";
     } else if (statementName) {
-        text << "Statement: " << statementName;
+        text << "Statement: '" << statementName << "'";
+    }
+    uint16_t numberOfParameterFormats = 0;
+    stream >> numberOfParameterFormats;
+    std::vector<uint16_t> parameterFormats;
+    if (numberOfParameterFormats > 0) {
+        text << " ParameterFormat: " << numberOfParameterFormats << " [";
+        for (uint16_t n = 0; n < numberOfParameterFormats; ++n) {
+            uint16_t format = 0;
+            stream >> format;
+            parameterFormats.push_back(format);
+            text << format;
+            if (n + 1 < numberOfParameterFormats) {
+                text << ",";
+            }
+        }
+        text << "]";
+    }
+    uint16_t numberOfParameterValues = 0;
+    stream >> numberOfParameterValues;
+    if (numberOfParameterFormats > 0) {
+        text << " ParameterValues: " << numberOfParameterValues << " [";
+        for (uint16_t n = 0; n < numberOfParameterValues; ++n) {
+            uint32_t size = 0;
+            stream >> size;
+            std::vector<uint8_t> value;
+            stream.Read(value, size);
+            TStringBuf data(reinterpret_cast<const char*>(value.data()), value.size());
+            if (parameterFormats.empty() || (parameterFormats.size() > n && parameterFormats[n] == 0) || (parameterFormats.size() == 1 && parameterFormats[0] == 0)) {
+                text << "'" << data << "'";
+            } else {
+                text << Base64Encode(data);
+            }
+            if (n + 1 < numberOfParameterValues) {
+                text << ",";
+            }
+        }
+        text << "]";
+    }
+    uint16_t numberOfResultFormats = 0;
+    stream >> numberOfResultFormats;
+    if (numberOfResultFormats > 0) {
+        text << " ResultFormat: " << numberOfResultFormats << " [";
+        for (uint16_t n = 0; n < numberOfResultFormats; ++n) {
+            uint16_t format = 0;
+            stream >> format;
+            text << format;
+            if (n + 1 < numberOfResultFormats) {
+                text << ",";
+            }
+        }
+        text << "]";
     }
     return text;
 }

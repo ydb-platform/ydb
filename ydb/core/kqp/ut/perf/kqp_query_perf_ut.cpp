@@ -770,7 +770,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         CompareYson(R"([[7u]])", FormatResultSetYson(checkResult.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
 
         AssertTableStats(result, "/Root/Join2", {
             .ExpectedReads = 3,

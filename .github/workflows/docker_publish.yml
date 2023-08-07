@@ -9,7 +9,7 @@ on:
         type: string
         required: true
         default: main
-        description: "Git branch/tag/sha revision to build"
+        description: "Git branch/tag revision to build"
       image_tag:
         type: string
         required: true

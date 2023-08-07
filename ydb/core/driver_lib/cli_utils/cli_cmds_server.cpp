@@ -2,7 +2,7 @@
 #include "cli_cmds.h"
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/yaml_config/yaml_config.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>

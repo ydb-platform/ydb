@@ -8,6 +8,7 @@
 #include <util/generic/bitops.h>
 #include <util/generic/hash.h>
 #include <util/system/unaligned_mem.h>
+#include <util/memory/pool.h>
 
 #include <type_traits>
 
@@ -120,6 +121,26 @@ public:
     const char* InlineData() const                  { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
     const char* Data() const                        { Y_VERIFY_DEBUG(!IsInline_); return Ptr; }
 #endif
+
+    void CopyDataInto(char * dst) const {
+        if (IsInline_) {
+            switch (DataSize_) {
+                case 8: memcpy(dst, &IntVal, 8); break;
+                case 7: memcpy(dst, &IntVal, 7); break;
+                case 6: memcpy(dst, &IntVal, 6); break;
+                case 5: memcpy(dst, &IntVal, 5); break;
+                case 4: memcpy(dst, &IntVal, 4); break;
+                case 3: memcpy(dst, &IntVal, 3); break;
+                case 2: memcpy(dst, &IntVal, 2); break;
+                case 1: memcpy(dst, &IntVal, 1); break;
+            }
+            return;
+        }
+
+        if (Ptr) {
+            memcpy(dst, Ptr, DataSize_);
+        }
+    }
 };
 
 #pragma pack(pop)
@@ -497,6 +518,70 @@ private:
 private:
     TString Buf;
     TVector<TCell> Cells;
+};
+
+class TOwnedCellVecBatch {
+public:
+    TOwnedCellVecBatch();
+
+    TOwnedCellVecBatch(const TOwnedCellVecBatch& rhs) = delete;
+
+    TOwnedCellVecBatch & operator=(const TOwnedCellVecBatch& rhs) = delete;
+
+    TOwnedCellVecBatch(const TOwnedCellVecBatch&& rhs) = default;
+
+    TOwnedCellVecBatch & operator=(TOwnedCellVecBatch&& rhs) = default;
+
+    size_t Append(TConstArrayRef<TCell> cells);
+
+    size_t Size() const {
+        return CellVectors.size();
+    }
+
+    bool Empty() const {
+        return CellVectors.empty();
+    }
+
+    bool empty() const {
+        return CellVectors.empty();
+    }
+
+    using iterator = TVector<TConstArrayRef<TCell>>::iterator;
+    using const_iterator = TVector<TConstArrayRef<TCell>>::const_iterator;
+
+    iterator begin() {
+        return CellVectors.begin();
+    }
+
+    iterator end() {
+        return CellVectors.end();
+    }
+
+    const_iterator cbegin() {
+        return CellVectors.cbegin();
+    }
+
+    const_iterator cend() {
+        return CellVectors.cend();
+    }
+
+    TConstArrayRef<TCell> operator[](size_t index) const {
+        return CellVectors[index];
+    }
+
+    TConstArrayRef<TCell> front() const {
+        return CellVectors.front();
+    }
+
+    TConstArrayRef<TCell> back() const {
+        return CellVectors.back();
+    }
+
+private:
+    static constexpr size_t InitialPoolSize = 1ULL << 16;
+
+    std::unique_ptr<TMemoryPool> Pool;
+    TVector<TConstArrayRef<TCell>> CellVectors;
 };
 
 void DbgPrintValue(TString&, const TCell&, NScheme::TTypeInfo typeInfo);

@@ -1,6 +1,5 @@
 #include "columnshard_impl.h"
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/engines/index_logic_logs.h>
 #include "blob_cache.h"
 
 namespace NKikimr::NColumnShard {
@@ -130,11 +129,11 @@ private:
 
         LOG_S_DEBUG("Portions eviction started at tablet " << TabletId);
         {
-            TCpuGuard guard(TxEvent->ResourceUsage);
+            auto guard = TxEvent->PutResult->StartCpuGuard();
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
-            NOlap::TEvictionLogic evictionLogic(TxEvent->IndexInfo, TxEvent->Tiering, Counters);
-            TxEvent->Blobs = std::move(evictionLogic.Apply(TxEvent->IndexChanges).DetachResult());
+            NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
+            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
             if (TxEvent->Blobs.empty()) {
                 TxEvent->SetPutStatus(NKikimrProto::OK);
             }
@@ -143,7 +142,6 @@ private:
         ctx.Send(Parent, TxEvent.release());
 
         LOG_S_DEBUG("Portions eviction finished (" << blobsSize << " new blobs) at tablet " << TabletId);
-        //Die(ctx); // It's alive till tablet's death
     }
 };
 

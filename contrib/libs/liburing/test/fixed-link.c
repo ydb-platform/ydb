@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 	for (i = 0; i < IOVECS_LEN; ++i) {
 		iovecs[i].iov_base = t_malloc(64);
 		iovecs[i].iov_len = 64;
-	};
+	}
 
 	ret = io_uring_register_buffers(&ring, iovecs, IOVECS_LEN);
 	if (ret) {

@@ -100,6 +100,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   core-persqueue-writer
   ydb-core-protos
   ydb-core-scheme
+  ydb-core-statistics
   core-sys_view-partition_stats
   ydb-core-tablet
   ydb-core-tablet_flat

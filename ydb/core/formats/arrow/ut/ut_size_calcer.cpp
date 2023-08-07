@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(SizeCalcer) {
             "field", NConstruction::TStringPoolFiller(8, 512));
         std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
         Cerr << GetBatchDataSize(batch) << Endl;
-        UNIT_ASSERT(GetBatchDataSize(batch) == 2048 * 512);
+        UNIT_ASSERT(GetBatchDataSize(batch) == 2048 * 512 + 2048 * 4);
     }
 
     Y_UNIT_TEST(DictionaryStrings) {
@@ -24,7 +24,23 @@ Y_UNIT_TEST_SUITE(SizeCalcer) {
             "field", NConstruction::TStringPoolFiller(8, 512));
         std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
         Cerr << GetBatchDataSize(batch) << Endl;
-        UNIT_ASSERT(GetBatchDataSize(batch) == 8 * 512 + 2048);
+        UNIT_ASSERT(GetBatchDataSize(batch) == 8 * 512 + 2048 + 4 * 8);
+    }
+
+    Y_UNIT_TEST(ZeroSimpleStrings) {
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(1, 0));
+        std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
+        Cerr << GetBatchDataSize(batch) << Endl;
+        UNIT_ASSERT(GetBatchDataSize(batch) == 2048 * 4);
+    }
+
+    Y_UNIT_TEST(ZeroDictionaryStrings) {
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TDictionaryArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(1, 0));
+        std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(2048);
+        Cerr << GetBatchDataSize(batch) << Endl;
+        UNIT_ASSERT(GetBatchDataSize(batch) == 2048 + 4);
     }
 
     Y_UNIT_TEST(SimpleInt64) {

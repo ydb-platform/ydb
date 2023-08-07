@@ -5,6 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 }
 }

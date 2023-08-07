@@ -5,6 +5,10 @@ TEST_SRCS(
     test_schemeshard_limits.py
 )
 
+REQUIREMENTS(
+    ram:16
+)
+
 TIMEOUT(600)
 SIZE(MEDIUM)
 

@@ -82,7 +82,7 @@ static int _io_uring_get_cqe(struct io_uring *ring,
 		}
 		if (!cqe && !data->wait_nr && !data->submit) {
 			/*
-			 * If we already looped once, we already entererd
+			 * If we already looped once, we already entered
 			 * the kernel. Since there's nothing to submit or
 			 * wait for, don't keep retrying.
 			 */
@@ -202,7 +202,7 @@ again:
  * Sync internal state with kernel ring state on the SQ side. Returns the
  * number of pending items in the SQ ring, for the shared ring.
  */
-unsigned __io_uring_flush_sq(struct io_uring *ring)
+static unsigned __io_uring_flush_sq(struct io_uring *ring)
 {
 	struct io_uring_sq *sq = &ring->sq;
 	unsigned tail = sq->sqe_tail;

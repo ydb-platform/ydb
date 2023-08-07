@@ -3,12 +3,19 @@ package NProtobufJsonTest;
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
+import "library/cpp/protobuf/json/proto/enum_options.proto";
+
 enum EEnum {
     E_0 = 0;
     E_1 = 1;
     E_2 = 2;
     E_3 = 3;
 };
+
+enum EJsonEnum {
+    J_0 = 0 [(json_enum_value)="enum_0"];
+    J_1 = 1 [(json_enum_value)="enum_1"];
+}
 
 message TFlatOptional {
     optional int32 I32 = 1;
@@ -214,6 +221,10 @@ message TSingleTimestamp {
 
 message TExtensionField {
     extensions 100 to 199;
+}
+
+message TCustomJsonEnumValue {
+    optional EJsonEnum JsonEnum = 1 [json_name="json_enum"];
 }
 
 extend TExtensionField {

@@ -44,17 +44,19 @@ void TDeferredAction::OnAlarm() {
     Ydb::Operations::GetOperationRequest getOperationRequest;
     getOperationRequest.set_id(OperationId_);
 
+    TRpcRequestSettings settings;
+    settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
+    
     Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
         std::move(getOperationRequest),
         std::move(UserResponseCb_),
         &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation,
         DbDriverState_,
         NextDelay_,
-        {},
+        settings,
         true,
-        TEndpointKey(Endpoint_, 0),
         std::move(Context_));
-}
+    }
 
 void TDeferredAction::OnError() {
     Y_VERIFY(Connection_);

@@ -38,7 +38,6 @@ static int verify_buffer(char *buf, char val)
 
 static int test(const char *filename, int dio, int async)
 {
-	struct io_uring_buf_reg reg = { };
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
 	struct io_uring ring;
@@ -53,10 +52,13 @@ static int test(const char *filename, int dio, int async)
 		return 1;
 	}
 
-	if (dio)
+	if (dio) {
 		fd = open(filename, O_DIRECT | O_RDONLY);
-	else
+		if (fd < 0 && errno == EINVAL)
+			return T_EXIT_SKIP;
+	} else {
 		fd = open(filename, O_RDONLY);
+	}
 	if (fd < 0) {
 		perror("open");
 		return 1;
@@ -66,15 +68,9 @@ static int test(const char *filename, int dio, int async)
 
 	if (posix_memalign((void **) &buf, 4096, FSIZE))
 		return 1;
-	if (posix_memalign((void **) &br, 4096, 4096))
-		return 1;
 
-	reg.ring_addr = (unsigned long) br;
-	reg.ring_entries = NR_BUFS;
-	reg.bgid = 1;
-
-	ret = io_uring_register_buf_ring(&ring, &reg, 0);
-	if (ret) {
+	br = io_uring_setup_buf_ring(&ring, NR_BUFS, 1, 0, &ret);
+	if (!br) {
 		if (ret == -EINVAL) {
 			no_buf_ring = 1;
 			return 0;
@@ -164,7 +160,7 @@ int main(int argc, char *argv[])
 	close(fd);
 
 	ret = test(fname, 1, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "dio test failed\n");
 		goto err;
 	}
@@ -178,13 +174,13 @@ int main(int argc, char *argv[])
 	}
 
 	ret = test(fname, 1, 1);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "dio async test failed\n");
 		goto err;
 	}
 
 	ret = test(fname, 0, 1);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "buffered async test failed\n");
 		goto err;
 	}

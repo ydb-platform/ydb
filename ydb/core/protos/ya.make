@@ -55,6 +55,7 @@ SRCS(
     database_basic_sausage_metainfo.proto
     datashard_load.proto
     drivemodel.proto
+    ev_write.proto
     export.proto
     external_sources.proto
     flat_tx_scheme.proto
@@ -96,6 +97,7 @@ SRCS(
     follower_group.proto
     ssa.proto
     statestorage.proto
+    statistics.proto
     stream.proto
     subdomains.proto
     table_stats.proto
@@ -118,7 +120,6 @@ SRCS(
     tx_proxy.proto
     tx_scheme.proto
     tx_sequenceshard.proto
-    type_info.proto
     pdiskfit.proto
     pqconfig.proto
     auth.proto
@@ -139,6 +140,7 @@ GENERATE_ENUM_SERIALIZATION(datashard_load.pb.h)
 PEERDIR(
     library/cpp/actors/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/scheme/protos
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
     ydb/public/api/protos

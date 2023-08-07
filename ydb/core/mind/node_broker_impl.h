@@ -25,6 +25,18 @@ using NConsole::TEvConsole;
 using NConsole::ITxExecutor;
 using NConsole::TTxProcessor;
 
+class INodeBrokerHooks {
+protected:
+    ~INodeBrokerHooks() = default;
+
+public:
+    virtual void OnActivateExecutor(ui64 tabletId);
+
+public:
+    static INodeBrokerHooks* Get();
+    static void Set(INodeBrokerHooks* hooks);
+};
+
 class TNodeBroker : public TActor<TNodeBroker>
                   , public TTabletExecutedFlat
                   , public ITxExecutor {
@@ -166,11 +178,11 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFuncTraced(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvNodeBroker::TEvListNodes, Handle);
             HFuncTraced(TEvNodeBroker::TEvResolveNode, Handle);
             HFuncTraced(TEvNodeBroker::TEvRegistrationRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvExtendLeaseRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
@@ -268,8 +280,6 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
                 const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
@@ -277,6 +287,8 @@ private:
     void Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);

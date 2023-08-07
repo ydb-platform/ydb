@@ -1,4 +1,4 @@
-#include "node.h"
+#include "source.h"
 #include "context.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -191,13 +191,18 @@ public:
         if (!Source->Init(ctx, src)) {
             return false;
         }
-        const auto& sourceColumns = Source->GetColumns();
-        const auto numColumns = !ColumnsHint.empty() && sourceColumns ? sourceColumns->List.size() : 0;
-        if (ColumnsHint.size() != numColumns) {
-            ctx.Error(Pos) << "SELECT have " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
-            return false;
-        }
+        const size_t numColumns = ColumnsHint.size();
         if (numColumns) {
+            const auto sourceColumns = Source->GetColumns();
+            if (!sourceColumns || sourceColumns->All || sourceColumns->QualifiedAll) {
+                return true;
+            }
+
+            if (numColumns != sourceColumns->List.size()) {
+                ctx.Error(Pos) << "SELECT have " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
+                return false;
+            }
+
             TStringStream str;
             bool mismatchFound = false;
             for (size_t i = 0; i < numColumns; ++i) {
@@ -223,18 +228,29 @@ public:
 
     TNodePtr Build(TContext& ctx) override {
         auto input = Source->Build(ctx);
-        if (ColumnsHint.empty() || !Source->GetColumns()) {
+        if (ColumnsHint.empty()) {
             return input;
         }
+        auto columns = Y();
+        for (auto column: ColumnsHint) {
+            columns = L(columns, BuildQuotedAtom(Pos, column));
+        }
+        const auto sourceColumns = Source->GetColumns();
+        if (!sourceColumns || sourceColumns->All || sourceColumns->QualifiedAll || sourceColumns->HasUnnamed) {
+            // will try to resolve column mapping on type annotation stage
+            return Y("OrderedSqlRename", input, Q(columns));
+        }
+
+        YQL_ENSURE(sourceColumns->List.size() == ColumnsHint.size());
         auto srcColumn = Source->GetColumns()->List.begin();
-        auto structObj = Y("AsStruct"); // ordered struct
+        auto structObj = Y("AsStruct"); // ordered struct		
         for (auto column: ColumnsHint) {
             structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column),
                 Y("Member", "row", BuildQuotedAtom(Pos, *srcColumn))
             )));
             ++srcColumn;
         }
-        return Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj));
+        return Y("AssumeColumnOrder", Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj)), Q(columns));
     }
 
     TNodePtr DoClone() const final {

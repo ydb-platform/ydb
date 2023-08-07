@@ -23,11 +23,11 @@ import sys
 import platform
 import json
 
-URLS = ['https://proxy.sandbox.yandex-team.ru/4662278249', 'https://storage.yandex-team.ru/get-devtools/1937492/580ef3b4db20f34996620509680ef9e4/by_platform.json']
-MD5 = '580ef3b4db20f34996620509680ef9e4'
+URLS = ['https://proxy.sandbox.yandex-team.ru/4846700967', 'https://storage.yandex-team.ru/get-devtools/212715/c74ccb22bdd831b131f1d8d17d3cac12/by_platform.json']
+MD5 = 'c74ccb22bdd831b131f1d8d17d3cac12'
 
-URLS3 = ['https://proxy.sandbox.yandex-team.ru/4662302638', 'https://storage.yandex-team.ru/get-devtools/995452/802961a9c0a1db05263418e0e143b72c/by_platform.json']
-MD53 = '802961a9c0a1db05263418e0e143b72c'
+URLS3 = ['https://proxy.sandbox.yandex-team.ru/4846691177', 'https://storage.yandex-team.ru/get-devtools/1942278/3f3a78b334369aee46990c44113186c3/by_platform.json']
+MD53 = '3f3a78b334369aee46990c44113186c3'
 
 DEFAULT_PY_VER = 2
 
@@ -40,6 +40,7 @@ PY3_HANDLERS = {
     "curl", "nvim", "gdb", "emacs", "grep", "jstyle", "nile", "sed", "vim",
     "py23_utils",
     'ydb',
+    'upload', 'download', 'paste', 'whoami',
 }
 
 PY2_HANDLERS = {
@@ -48,9 +49,7 @@ PY2_HANDLERS = {
 
 EXPERIMENTAL_PY3_HANDLERS = set()
 
-DEVTOOLS_PY3_HANDLERS = {
-    'upload', 'download', 'paste', 'whoami',
-}
+DEVTOOLS_PY3_HANDLERS = set()
 
 
 def is_devtools():

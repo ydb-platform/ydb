@@ -87,6 +87,23 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 
+template <typename TConnection>
+void FillGenericClusterConfig(
+    NYql::TGenericClusterConfig& clusterCfg,
+    const TConnection& connection,
+    const TString& connectionName,
+    NConnector::NApi::EDataSourceKind dataSourceKind,
+    const TString& authToken,
+    const THashMap<TString, TString>& accountIdSignatures
+){
+        clusterCfg.SetKind(dataSourceKind);
+        clusterCfg.SetName(connectionName);
+        clusterCfg.SetDatabaseId(connection.database_id());
+        clusterCfg.mutable_credentials()->mutable_basic()->set_username(connection.login());
+        clusterCfg.mutable_credentials()->mutable_basic()->set_password(connection.password());
+        FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);
+}
+
 } //namespace
 
 NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
@@ -152,14 +169,13 @@ void AddClustersFromConnections(
             break;
         }
         case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
-            const auto& ch = conn.content().setting().clickhouse_cluster();
-            auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
-            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::CLICKHOUSE);
-            clusterCfg->SetName(connectionName);
-            clusterCfg->SetDatabaseId(ch.database_id());
-            clusterCfg->mutable_credentials()->mutable_basic()->set_username(ch.login());
-            clusterCfg->mutable_credentials()->mutable_basic()->set_password(ch.password());
-            FillClusterAuth(*clusterCfg, ch.auth(), authToken, accountIdSignatures);
+            FillGenericClusterConfig(
+                *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
+                conn.content().setting().clickhouse_cluster(),
+                connectionName,
+                NYql::NConnector::NApi::EDataSourceKind::CLICKHOUSE,
+                authToken,
+                accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }
@@ -182,6 +198,17 @@ void AddClustersFromConnections(
             auto* clusterCfg = gatewaysConfig.MutableSolomon()->AddClusterMapping();
             FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
             clusters.emplace(connectionName, SolomonProviderName);
+            break;
+        }
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
+            FillGenericClusterConfig(
+                *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
+                conn.content().setting().postgresql_cluster(),
+                connectionName,
+                NYql::NConnector::NApi::EDataSourceKind::POSTGRESQL,
+                authToken,
+                accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
             break;
         }
 

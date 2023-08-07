@@ -13,7 +13,7 @@ items:
   href: cast.md
 - name: Текстовое представление типов данных
   href: type_string.md
-- name: JSON
+- name: Передача параметров в формате JSON
   href: json.md
 - name: YSON
   hidden: true

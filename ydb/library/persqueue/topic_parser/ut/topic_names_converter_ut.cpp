@@ -69,6 +69,7 @@ public:
 
 Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
     Y_UNIT_TEST(FullLegacyNames) {
+
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("rt3.dc1--account--topic", "", "");
         UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
@@ -125,7 +126,9 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
     Y_UNIT_TEST(AccountDatabase) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", TString("dc1"));
         wrapper.SetConverter("account/topic", "", "");
+        UNIT_ASSERT_C(wrapper.DiscoveryConverter->IsValid(), wrapper.DiscoveryConverter->GetReason());
         UNIT_ASSERT_VALUES_EQUAL(wrapper.GetAccount(), "account");
+
         wrapper.SetDatabase("/database");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.DiscoveryConverter->GetSecondaryPath(""), "/database/topic");
 
@@ -172,8 +175,43 @@ Y_UNIT_TEST_SUITE(DiscoveryConverterTest) {
         );
         UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account/account");
         UNIT_ASSERT_VALUES_EQUAL(converter->GetSecondaryPath("account"), "/account/account/account");
+        
+        converter = converterFactory.MakeDiscoveryConverter(
+                "account/", {}, "dc1", "account"
+        );
+        UNIT_ASSERT(!converter->IsValid());
+        UNIT_ASSERT(!converter->GetReason().Contains("Internal error"));
 
+    }
+    Y_UNIT_TEST(DiscoveryConverter) {
+        auto converterFactory = NPersQueue::TTopicNamesConverterFactory(
+                false, "/Root/PQ", "dc1", {}
+        );
+        TVector<TString> badNames = {"account//", "account/", "/"};
+        for (const auto& name : badNames) {
+            auto converter = converterFactory.MakeDiscoveryConverter(
+                    name, {}, "dc1", ""
+            );
+            UNIT_ASSERT_C(!converter->IsValid(), name);
+            UNIT_ASSERT(!converter->GetReason().Contains("Internal error"));
         }
+    }
+    Y_UNIT_TEST(EmptyModern) {
+        auto converterFactory = NPersQueue::TTopicNamesConverterFactory(
+                false, "/Root/PQ", "dc1", {}
+        );
+        auto converter = converterFactory.MakeDiscoveryConverter(
+                "account/", {}, "dc1", "account"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(converter->IsValid(), false);
+
+        converter = converterFactory.MakeDiscoveryConverter(
+                "/account", {}, "dc1", ""
+        );
+        UNIT_ASSERT(converter->IsValid());
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "account");
+
+    }
 
     Y_UNIT_TEST(FirstClass) {
         TConverterTestWrapper wrapper(true, "", "");

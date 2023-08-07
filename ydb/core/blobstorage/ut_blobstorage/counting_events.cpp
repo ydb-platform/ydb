@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
         UNIT_ASSERT(getResult);
         UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, status);
-        UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer, data);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer.ConvertToString(), data);
     };
 
     void SendCollect(const TTestInfo &test, const TLogoBlobID &blobId,

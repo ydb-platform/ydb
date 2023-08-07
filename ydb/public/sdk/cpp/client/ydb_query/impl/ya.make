@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     exec_query.cpp
     exec_query.h
+    client_session.cpp
 )
 
 PEERDIR(

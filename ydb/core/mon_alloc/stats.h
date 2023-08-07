@@ -18,6 +18,12 @@ namespace NKikimr {
 
     struct IAllocState {
         virtual ~IAllocState() = default;
+
+        /**
+         * @brief  Number of bytes that the application is actively using to hold data. 
+         * 
+         * This is computed by the bytes requested from the OS minus any bytes that are held in caches.
+         */
         virtual ui64 GetAllocatedMemoryEstimate() const = 0;
     };
 
@@ -43,6 +49,6 @@ namespace NKikimr {
         static std::unique_ptr<IAllocState> AllocState;
 
         static ui64 GetAllocatedMemoryEstimate();
-        static TMemoryUsage GetMemoryUsage();
+        static std::optional<TMemoryUsage> TryGetMemoryUsage();
     };
 }

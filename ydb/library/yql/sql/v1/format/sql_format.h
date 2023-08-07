@@ -24,4 +24,6 @@ TString MutateQuery(const TString& query, const NSQLTranslation::TTranslationSet
 
 bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& error);
 
+THashSet<TString> GetKeywords();
+
 }

@@ -23,7 +23,7 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
     void Init(
         const TProtoConfig& config,
         const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-        THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth>& databaseIds)
+        THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds)
     {
         TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
@@ -39,7 +39,7 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
             if (dbResolver) {
                 YQL_CLOG(DEBUG, ProviderClickHouse) << "Settings: clusterName = " << cluster.GetName()
                     << ", clusterDbId = "  << cluster.GetId() << ", cluster.GetCluster(): " << cluster.GetCluster() << ", HasCluster: " << (cluster.HasCluster() ? "TRUE" : "FALSE") ;
-                databaseIds[std::make_pair(cluster.GetId(), NYql::DatabaseType::ClickHouse)] =
+                databaseIds[std::make_pair(cluster.GetId(), NYql::EDatabaseType::ClickHouse)] =
                     NYql::TDatabaseAuth{cluster.GetCHToken(), /*AddBearer=*/false};
                 if (cluster.GetId()) {
                     DbId2Clusters[cluster.GetId()].emplace_back(cluster.GetName());

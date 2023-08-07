@@ -39,11 +39,11 @@ struct TEvPGEvents {
         uint32_t DataType;
         int16_t DataTypeSize;
         int32_t DataTypeModifier;
-        //uint16_t Format;
+        int16_t Format = 0; // 0 = text, 1 = binary
     };
 
     struct TRowValueField {
-        std::optional<TString> Value;
+        std::optional<std::variant<TString, std::vector<uint8_t>>> Value;
     };
 
     using TDataRow = std::vector<TRowValueField>;
@@ -112,6 +112,7 @@ struct TEvPGEvents {
         TString Tag;
         bool EmptyQuery = false;
         bool CommandCompleted = true;
+        bool ReadyForQuery = true;
         char TransactionStatus = 0;
     };
 
@@ -146,6 +147,7 @@ struct TEvPGEvents {
 
     struct TEvParseResponse : NActors::TEventLocal<TEvParseResponse, EvParseResponse> {
         std::unique_ptr<TPGParse> OriginalMessage;
+        std::vector<std::pair<char, TString>> ErrorFields;
 
         TEvParseResponse(std::unique_ptr<TPGParse> originalMessage)
             : OriginalMessage(std::move(originalMessage))
@@ -214,6 +216,7 @@ struct TEvPGEvents {
         TString Tag;
         bool EmptyQuery = false;
         bool CommandCompleted = true;
+        bool ReadyForQuery = true;
         char TransactionStatus = 0;
     };
 

@@ -17,8 +17,8 @@ class TPersQueueYdbSdkTestSetup : public ::NPersQueue::SDKTestSetup {
     TAdaptiveLock Lock;
 public:
     TPersQueueYdbSdkTestSetup(const TString& testCaseName, bool start = true,
-                              const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG)
-        : SDKTestSetup(testCaseName, start, logServices, logPriority)
+                              const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG, size_t topicPartitionsCount = 1)
+        : SDKTestSetup(testCaseName, start, logServices, logPriority, topicPartitionsCount)
     {
     }
 
@@ -56,7 +56,7 @@ public:
     NYdb::NPersQueue::TReadSessionSettings GetReadSessionSettings() {
         NYdb::NPersQueue::TReadSessionSettings settings;
         settings
-                .ConsumerName(GetTestClient())
+                .ConsumerName(GetTestConsumer())
                 .AppendTopics(GetTestTopic());
         return settings;
     }
@@ -65,7 +65,8 @@ public:
         TWriteSessionSettings settings;
         settings
                 .Path(GetTestTopic())
-                .MessageGroupId(GetTestMessageGroupId());
+                .MessageGroupId(GetTestMessageGroupId())
+                .ClusterDiscoveryMode(EClusterDiscoveryMode::On);
         return settings;
     }
 };
@@ -230,7 +231,7 @@ struct TYdbPqTestRetryPolicy : IRetryPolicy {
         if (AtomicSwap(&OnFatalBreakDown, 0)) {
             return std::make_unique<TYdbPqNoRetryState>();
         }
-        if (AtomicGet(Initialized_)) 
+        if (AtomicGet(Initialized_))
         {
             Cerr << "====CreateRetryState Initialized\n";
             auto res = AtomicSwap(&OnBreakDown, 0);

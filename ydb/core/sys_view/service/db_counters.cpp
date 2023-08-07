@@ -108,7 +108,7 @@ private:
     })
 };
 
-IActor* CreateDbWatcherActor(TIntrusivePtr<TDbWatcherCallback> callback) {
+NActors::IActor* CreateDbWatcherActor(TIntrusivePtr<TDbWatcherCallback> callback) {
     return new TDbWatcherActor(callback);
 }
 

@@ -9,16 +9,27 @@
 
 namespace NKikimr {
 
-template <class TTag, ui64 invalidValue>
+namespace NStrongTypeUtils {
+
+enum class EConstructorType {
+    Value,
+    Deleted,
+};
+
+} // namespace NStrongTypeUtils
+
+template <class TTag>
 class TUi64Id {
 protected:
     ui64 Value;
 
 public:
-    using TSelf = TUi64Id<TTag, invalidValue>;
+    using TSelf = TUi64Id<TTag>;
+    using TTraits = TTag;
 
+    template<NStrongTypeUtils::EConstructorType ConstructorType = TTraits::ConstructorType, typename std::enable_if<ConstructorType == NStrongTypeUtils::EConstructorType::Value, int>::type = 0>
     constexpr TUi64Id()
-        : Value(invalidValue)
+        : Value(TTraits::DefaultValue)
     {
     }
 
@@ -61,11 +72,15 @@ public:
     }
 
     explicit operator bool() const {
-        return Value != invalidValue;
+        return Value != TTraits::InvalidValue;
     }
 
     ui64 GetValue() const {
         return Value;
+    }
+
+    void SetValue(ui64 value) {
+        Value = value;
     }
 
     explicit operator ui64() const {
@@ -79,9 +94,9 @@ public:
 
 namespace NIceDb {
 
-template <typename TColumnType, class TTag, ui64 invalidValue>
-struct TConvertValue<TColumnType, TRawTypeValue, NKikimr::TUi64Id<TTag, invalidValue>> {
-    typedef NKikimr::TUi64Id<TTag, invalidValue> TSourceType;
+template <typename TColumnType, class TTag>
+struct TConvertValue<TColumnType, TRawTypeValue, NKikimr::TUi64Id<TTag>> {
+    typedef NKikimr::TUi64Id<TTag> TSourceType;
 
     ui64 Store;
     TTypeValue Value;
@@ -98,9 +113,9 @@ struct TConvertValue<TColumnType, TRawTypeValue, NKikimr::TUi64Id<TTag, invalidV
     }
 };
 
-template <typename TColumnType, class TTag, ui64 invalidValue>
-struct TConvertValue<TColumnType, NKikimr::TUi64Id<TTag, invalidValue>, TRawTypeValue> {
-    typedef NKikimr::TUi64Id<TTag, invalidValue> TTargetType;
+template <typename TColumnType, class TTag>
+struct TConvertValue<TColumnType, NKikimr::TUi64Id<TTag>, TRawTypeValue> {
+    typedef NKikimr::TUi64Id<TTag> TTargetType;
 
     TTypeValue Value;
 
@@ -118,11 +133,34 @@ struct TConvertValue<TColumnType, NKikimr::TUi64Id<TTag, invalidValue>, TRawType
 }
 }
 
-template <class TTag, ui64 invalidValue>
-struct THash<NKikimr::TUi64Id<TTag, invalidValue>> {
-    inline ui64 operator()(const NKikimr::TUi64Id<TTag, invalidValue> &x) const noexcept {
+template <class TTag>
+struct THash<NKikimr::TUi64Id<TTag>> {
+    inline ui64 operator()(const NKikimr::TUi64Id<TTag> &x) const noexcept {
         return x.Hash();
     }
 };
 
 
+/**
+ * Define strong ui64 alias with deleted default constructor
+ */
+#define STRONG_UI64_TYPE_DEF_NDC(T, InvalidVal) \
+    struct T ## Tag \
+    { \
+        static constexpr ::NKikimr::NStrongTypeUtils::EConstructorType ConstructorType = ::NKikimr::NStrongTypeUtils::EConstructorType::Deleted; \
+        static constexpr ui64 InvalidValue = InvalidVal; \
+    }; \
+    using T = ::NKikimr::TUi64Id<T##Tag>;
+
+/**
+ * Define strong ui64 alias with with default constructor
+ * The values is set to @Val
+ */
+#define STRONG_UI64_TYPE_DEF_DV(T, Val, InvalidVal) \
+    struct T ## Tag \
+    { \
+        static constexpr ::NKikimr::NStrongTypeUtils::EConstructorType ConstructorType = ::NKikimr::NStrongTypeUtils::EConstructorType::Value; \
+        static constexpr ui64 DefaultValue = Val; \
+        static constexpr ui64 InvalidValue = InvalidVal; \
+    }; \
+    using T = ::NKikimr::TUi64Id<T##Tag>;

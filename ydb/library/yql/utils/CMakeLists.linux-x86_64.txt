@@ -40,6 +40,7 @@ target_sources(library-yql-utils PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/proc_alive.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/rand_guid.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/retry.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/rope_over_buffer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/sort.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/swap_bytes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/url_builder.cpp

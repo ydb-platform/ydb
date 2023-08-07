@@ -9,12 +9,20 @@
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+
+#include <ydb/library/yql/dq/tasks/dq_task_program.h>
+
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
 namespace NYql {
 namespace {
@@ -171,33 +179,6 @@ namespace {
         return dropGroupSettings;
     }
 
-    TString GetOrDefault(const TCreateObjectSettings& container, const TString& key, const TString& defaultValue = TString{}) {
-        auto fValue = container.GetFeaturesExtractor().Extract(key);
-        return fValue ? *fValue : defaultValue;
-    }
-
-    TCreateExternalDataSourceSettings ParseCreateExternalDataSourceSettings(const TCreateObjectSettings& settings) {
-        TCreateExternalDataSourceSettings out;
-        out.ExternalDataSource = settings.GetObjectId();
-        out.SourceType = GetOrDefault(settings, "source_type");
-        out.AuthMethod = GetOrDefault(settings, "auth_method");
-        out.Installation = GetOrDefault(settings, "installation");
-        out.Location = GetOrDefault(settings, "location");
-        return out;
-    }
-
-    TAlterExternalDataSourceSettings ParseAlterExternalDataSourceSettings(const TAlterObjectSettings& settings) {
-        TAlterExternalDataSourceSettings out;
-        out.ExternalDataSource = settings.GetObjectId();
-        return out;
-    }
-
-    TDropExternalDataSourceSettings ParseDropExternalDataSourceSettings(const TDropObjectSettings& settings) {
-        TDropExternalDataSourceSettings out;
-        out.ExternalDataSource = settings.GetObjectId();
-        return out;
-    }
-
     TCreateTableStoreSettings ParseCreateTableStoreSettings(TKiCreateTable create, const TTableSettings& settings) {
         TCreateTableStoreSettings out;
         out.TableStore = TString(create.Table());
@@ -253,12 +234,11 @@ namespace {
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
             auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
-            auto dataType = actualType->Cast<TDataExprType>();
+            auto actualType = RemoveAllOptionals(type);
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = dataType->GetName();
+            columnMeta.Type = FormatType(actualType);
             columnMeta.NotNull = notNull;
 
             out.ColumnOrder.push_back(columnName);
@@ -519,11 +499,88 @@ private:
 };
 
 class TKiSourceCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSourceCallableExecutionTransformer> {
+private:
+    IGraphTransformer::TStatus PeepHole(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        TPeepholeSettings peepholeSettings;
+        bool hasNonDeterministicFunctions;
+        auto status = PeepHoleOptimizeNode(input, output, ctx, TypesCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
+        if (status.Level != TStatus::Ok) {
+            ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TString("Peephole optimization failed for Dq stage")));
+            return status;
+        }
+        return status;
+    }
+
+    IGraphTransformer::TStatus GetLambdaBody(TExprNode::TPtr resInput, NKikimrMiniKQL::TType& resultType, TExprContext& ctx, TString& lambda) {
+        auto pos = resInput->Pos();
+        auto typeAnn = resInput->GetTypeAnn();
+
+        const auto kind = resInput->GetTypeAnn()->GetKind();
+        const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
+        auto node = ctx.WrapByCallableIf(kind != ETypeAnnotationKind::Stream, "ToStream",
+                        ctx.WrapByCallableIf(data, "Just", std::move(resInput)));
+
+        auto peepHoleStatus = PeepHole(node, node, ctx);
+        if (peepHoleStatus.Level != IGraphTransformer::TStatus::Ok) {
+            return peepHoleStatus;
+        }
+
+        auto guard = Guard(SessionCtx->Query().QueryData->GetAllocState()->Alloc);
+
+        auto input = Build<TDqPhyStage>(ctx, pos)
+            .Inputs()
+                .Build()
+            .Program<TCoLambda>()
+                .Args({})
+                .Body(node)
+            .Build()
+            .Settings().Build()
+        .Done().Ptr();
+
+        NCommon::TMkqlCommonCallableCompiler compiler;
+
+        auto programLambda = TDqPhyStage(input).Program();
+
+        TVector<TExprBase> fakeReads;
+        auto paramsType = NDq::CollectParameters(programLambda, ctx);
+        lambda = NDq::BuildProgram(
+            programLambda, *paramsType, compiler, SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
+                *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry(),
+                ctx, fakeReads);
+
+        NKikimr::NMiniKQL::TProgramBuilder programBuilder(SessionCtx->Query().QueryData->GetAllocState()->TypeEnv,
+            *SessionCtx->Query().QueryData->GetAllocState()->HolderFactory.GetFunctionRegistry());
+
+        TStringStream errorStream;
+        auto type = NYql::NCommon::BuildType(*typeAnn, programBuilder, errorStream);
+        ExportTypeToProto(type, resultType);
+
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TString EncodeResultToYson(const NKikimrMiniKQL::TResult& result, bool& truncated) {
+        TStringStream ysonStream;
+        NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Binary);
+        NYql::IDataProvider::TFillSettings fillSettings;
+        KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+
+        TStringStream out;
+        NYson::TYsonWriter writer2((IOutputStream*)&out);
+        writer2.OnBeginMap();
+        writer2.OnKeyedItem("Data");
+        writer2.OnRaw(ysonStream.Str());
+        writer2.OnEndMap();
+
+        return out.Str();
+    }
+
 public:
     TKiSourceCallableExecutionTransformer(TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        TTypeAnnotationContext& types)
         : Gateway(gateway)
-        , SessionCtx(sessionCtx) {}
+        , SessionCtx(sessionCtx)
+        , TypesCtx(types) {}
 
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx)
@@ -544,14 +601,44 @@ public:
         }
 
         if (input->Content() == "Result") {
-            auto resultInput = TExprBase(input->ChildPtr(0));
-            auto exec = resultInput.Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input();
-            YQL_ENSURE(exec.Maybe<TKiExecDataQuery>());
+            auto result = TMaybeNode<TResult>(input).Cast();
+            NKikimrMiniKQL::TType resultType;
+            TString program;
+            TStatus status = GetLambdaBody(result.Input().Ptr(), resultType, ctx, program);
+            if (status.Level != TStatus::Ok) {
+                return SyncStatus(status);
+            }
+            auto asyncResult = Gateway->ExecuteLiteral(program, resultType, SessionCtx->Query().QueryData->GetAllocState());
 
-            ui32 index = FromString<ui32>(resultInput.Cast<TCoNth>().Index().Value());
-            YQL_ENSURE(index == 0);
+            return std::make_pair(IGraphTransformer::TStatus::Async, asyncResult.Apply(
+                [this](const NThreading::TFuture<IKikimrGateway::TExecuteLiteralResult>& future) {
+                    return TAsyncTransformCallback(
+                        [future, this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
 
-            return RunResOrPullForExec(TResOrPullBase(input), exec.Cast(), ctx, 0);
+                            const auto& literalResult = future.GetValueSync();
+
+                            if (!literalResult.Success()) {
+                                for (const auto& issue : literalResult.Issues()) {
+                                    ctx.AddError(issue);
+                                }
+                                input->SetState(TExprNode::EState::Error);
+                                return IGraphTransformer::TStatus::Error;
+                            }
+
+                            bool truncated = false;
+                            auto yson = this->EncodeResultToYson(literalResult.Result, truncated);
+                            if (truncated) {
+                                input->SetState(TExprNode::EState::Error);
+                                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "EvaluteExpr result is too big and was truncated"));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+
+                            output = input;
+                            input->SetState(TExprNode::EState::ExecutionComplete);
+                            input->SetResult(ctx.NewAtom(input->Pos(), yson));
+                            return IGraphTransformer::TStatus::Ok;
+                        });
+                }));
         }
 
         if (input->Content() == ConfigureName) {
@@ -677,6 +764,7 @@ private:
 private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TTypeAnnotationContext& TypesCtx;
 };
 
 template <class TKiObject, class TSettings>
@@ -765,48 +853,6 @@ private:
 protected:
     virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
         return GetGateway()->DropObject(cluster, settings);
-    }
-public:
-    using TBase::TBase;
-};
-
-class TCreateExternalDataSourceTransformer: public TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings> {
-private:
-    using TBase = TObjectModifierTransformer<TKiCreateObject, TCreateObjectSettings>;
-protected:
-    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TCreateObjectSettings& settings) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(std::make_exception_ptr(yexception() << "External data sources are disabled. Please contact your system administrator to enable it"));
-        }
-        return GetGateway()->CreateExternalDataSource(cluster, ParseCreateExternalDataSourceSettings(settings), true);
-    }
-public:
-    using TBase::TBase;
-};
-
-class TAlterExternalDataSourceTransformer: public TObjectModifierTransformer<TKiAlterObject, TAlterObjectSettings> {
-private:
-    using TBase = TObjectModifierTransformer<TKiAlterObject, TAlterObjectSettings>;
-protected:
-    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TAlterObjectSettings& settings) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(std::make_exception_ptr(yexception() << "External data sources are disabled. Please contact your system administrator to enable it"));
-        }
-        return GetGateway()->AlterExternalDataSource(cluster, ParseAlterExternalDataSourceSettings(settings));
-    }
-public:
-    using TBase::TBase;
-};
-
-class TDropExternalDataSourceTransformer: public TObjectModifierTransformer<TKiDropObject, TDropObjectSettings> {
-private:
-    using TBase = TObjectModifierTransformer<TKiDropObject, TDropObjectSettings>;
-protected:
-    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
-            return MakeErrorFuture<IKikimrGateway::TGenericResult>(std::make_exception_ptr(yexception() << "External data sources are disabled. Please contact your system administrator to enable it"));
-        }
-        return GetGateway()->DropExternalDataSource(cluster, ParseDropExternalDataSourceSettings(settings));
     }
 public:
     using TBase::TBase;
@@ -1677,21 +1723,15 @@ public:
         }
 
         if (auto kiObject = TMaybeNode<TKiCreateObject>(input)) {
-            return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                ? TCreateExternalDataSourceTransformer("CREATE EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                : TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+            return TCreateObjectTransformer("CREATE OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto kiObject = TMaybeNode<TKiAlterObject>(input)) {
-            return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                    ? TAlterExternalDataSourceTransformer("ALTER EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                    : TAlterObjectTransformer("ALTER OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+            return TAlterObjectTransformer("ALTER OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto kiObject = TMaybeNode<TKiDropObject>(input)) {
-            return kiObject.Cast().TypeId() == "EXTERNAL_DATA_SOURCE"
-                    ? TDropExternalDataSourceTransformer("DROP EXTERNAL DATA SOURCE", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx)
-                    : TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
+            return TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
         if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {
@@ -1955,9 +1995,10 @@ private:
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TTypeAnnotationContext& types)
 {
-    return new TKiSourceCallableExecutionTransformer(gateway, sessionCtx);
+    return new TKiSourceCallableExecutionTransformer(gateway, sessionCtx, types);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(

@@ -35,6 +35,7 @@ target_link_libraries(clickhouse_client_udf INTERFACE
   libs-apache-arrow
   libs-apache-orc
   libs-apache-avro
+  cpp-sanitizer-include
   yql-minikql-dom
   library-yql-utils
 )
@@ -93,6 +94,7 @@ target_link_libraries(clickhouse_client_udf.global PUBLIC
   libs-apache-arrow
   libs-apache-orc
   libs-apache-avro
+  cpp-sanitizer-include
   yql-minikql-dom
   library-yql-utils
 )

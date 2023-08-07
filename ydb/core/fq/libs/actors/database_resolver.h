@@ -6,8 +6,6 @@
 
 namespace NFq {
 
-TString TransformMdbHostToCorrectFormat(const TString& mdbHost);
-
 NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 
 } /* namespace NFq */

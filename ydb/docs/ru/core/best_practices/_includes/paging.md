@@ -28,27 +28,13 @@ DECLARE $limit AS Uint64;
 DECLARE $lastCity AS Utf8;
 DECLARE $lastNumber AS Uint32;
 
-$part1 = (
-    SELECT * FROM schools
-    WHERE city = $lastCity AND number > $lastNumber
-    ORDER BY city, number LIMIT $limit
-);
-
-$part2 = (
-    SELECT * FROM schools
-    WHERE city > $lastCity
-    ORDER BY city, number LIMIT $limit
-);
-
-$union = (
-    SELECT * FROM $part1
-    UNION ALL
-    SELECT * FROM $part2
-);
-
-SELECT * FROM $union
-ORDER BY city, number LIMIT $limit;
+SELECT * FROM schools
+WHERE (city, number) > ($lastCity, $lastNumber)
+ORDER BY city, number
+LIMIT $limit;
 ```
+
+В примере запроса, приведенном выше, в операторе `WHERE` применено сравнение кортежей для отбора очередного множества строк. Сравнение кортежей выполняется поэлементно слева направо, поэтому порядок указания полей в кортеже должен совпадать с порядком указания полей в первичном ключе, чтобы избежать полного сканирования таблицы при выполнении запроса.
 
 {% note warning "Значение NULL в ключевой колонке" %}
 

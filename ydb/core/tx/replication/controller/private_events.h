@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
-#include <ydb/core/base/pathid.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace NKikimr::NReplication::NController {

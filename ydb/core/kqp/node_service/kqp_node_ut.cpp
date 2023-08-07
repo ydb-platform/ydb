@@ -99,6 +99,11 @@ NKikimrConfig::TTableServiceConfig MakeKqpResourceManagerConfig() {
     config.MutableResourceManager()->SetPublishStatisticsIntervalSec(0);
     config.MutableResourceManager()->SetEnableInstantMkqlMemoryAlloc(true);
 
+    auto* infoExchangerRetrySettings = config.MutableResourceManager()->MutableInfoExchangerSettings();
+    auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+    exchangerSettings->SetStartDelayMs(10);
+    exchangerSettings->SetMaxDelayMs(10);
+
     return config;
 }
 
@@ -180,7 +185,7 @@ public:
         WaitForBootstrap();
 
         auto httpGateway = NYql::IHTTPGateway::Make();
-        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, httpGateway);
+        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, httpGateway, nullptr);
         auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get(), asyncIoFactory);
         KqpNodeActorId = Runtime->Register(kqpNode);
         Runtime->EnableScheduleForActor(KqpNodeActorId, true);

@@ -26,6 +26,7 @@ target_link_libraries(dq-actors-compute PUBLIC
   yql-dq-tasks
   minikql-comp_nodes-llvm
   yql-public-issue
+  core-quoter-public
 )
 target_sources(dq-actors-compute PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/dq_async_compute_actor.cpp

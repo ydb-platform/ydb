@@ -82,10 +82,16 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     bool WithSampleTables = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    TMaybe<NFake::TStorage> Storage = Nothing();
 
     TKikimrSettings()
     {
         FeatureFlags.SetForceColumnTablesCompositeMarks(true);
+        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
+        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
+        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+        exchangerSettings->SetStartDelayMs(10);
+        exchangerSettings->SetMaxDelayMs(10);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -98,6 +104,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
+    TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
 };
 
 class TKikimrRunner {
@@ -119,6 +126,8 @@ public:
     TKikimrRunner(const TString& authToken = "", const TString& domainRoot = KikimrDefaultUtDomainRoot,
         ui32 nodeCount = 1);
 
+    TKikimrRunner(const NFake::TStorage& storage);
+
     ~TKikimrRunner() {
         Driver->Stop(true);
         Server.Reset();
@@ -138,8 +147,10 @@ public:
             .UseQueryCache(false));
     }
 
-    NYdb::NQuery::TQueryClient GetQueryClient() const {
-        return NYdb::NQuery::TQueryClient(*Driver);
+    NYdb::NQuery::TQueryClient GetQueryClient(
+        NYdb::NQuery::TClientSettings settings = NYdb::NQuery::TClientSettings()) const
+    {
+        return NYdb::NQuery::TQueryClient(*Driver, settings);
     }
 
     bool IsUsingSnapshotReads() const {
@@ -179,7 +190,8 @@ struct TCollectedStreamResult {
     ui64 RowsCount = 0;
 };
 
-TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator& it);
+template<typename TIterator>
+TCollectedStreamResult CollectStreamResult(TIterator& it);
 
 enum class EIndexTypeSql {
     Global,
@@ -265,11 +277,6 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
 }
 
 void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true);
-
-// KQP proxy needs to asynchronously receive tenants info before it is able to serve requests that have
-// database name specified. Before that it returns errors.
-// This method retries a simple query until it succeeds.
-void WaitForKqpProxyInit(const NYdb::TDriver& driver);
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 

@@ -87,7 +87,7 @@ public:
         YQL_ENSURE(false, "Unimplemented");
     }
 
-    TMaybe<bool> CanWrite(const TDqSettings&, const TExprNode&, TExprContext&) override {
+    TMaybe<bool> CanWrite(const TExprNode&, TExprContext&) override {
         YQL_ENSURE(false, "Unimplemented");
     }
 

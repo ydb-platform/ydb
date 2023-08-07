@@ -5,6 +5,7 @@ import "ydb/core/protos/node_whiteboard.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/hive.proto";
+import "ydb/core/protos/kqp.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 
 package NKikimrViewer;
@@ -321,6 +322,7 @@ message TClusterInfo {
     uint64 Hosts = 44;
     uint64 Tenants = 45;
     uint64 Tablets = 46;
+    string Domain = 47;
 }
 
 enum ETenantType {
@@ -391,6 +393,7 @@ message TStorageInfo {
     repeated TStoragePoolInfo StoragePools = 2;
     uint64 TotalGroups = 3;
     uint64 FoundGroups = 4;
+    repeated TStorageGroupInfo StorageGroups = 5;
 }
 
 message TNodeInfo {
@@ -474,6 +477,7 @@ message TComputeNodeInfo {
     optional uint64 MemoryLimit = 27;
     NKikimrTabletBase.TMetrics Metrics = 32;
     repeated TTabletStateInfo Tablets = 33;
+    optional string Tenant = 41; // for response without tenant groups
 }
 
 message TComputeTenantInfo {
@@ -486,10 +490,19 @@ message TComputeInfo {
     EFlag Overall = 1;
     repeated TComputeTenantInfo Tenants = 2;
     repeated string Errors = 3;
+    uint64 TotalNodes = 4;
+    uint64 FoundNodes = 5;
+    repeated TComputeNodeInfo Nodes = 6;
 }
 
 message TNodeLocation {
     repeated uint32 NodeId = 1;
+}
+
+message TQueryRequest {
+    string Uri = 1;
+    bytes Content = 2;
+    string UserToken = 3;
 }
 
 message TEvViewerRequest {
@@ -497,6 +510,8 @@ message TEvViewerRequest {
     uint32 Timeout = 2; // ms
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
+        NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
+        TQueryRequest QueryRequest = 13;
     }
 }
 
@@ -504,6 +519,8 @@ message TEvViewerResponse {
     TNodeLocation LocationResponded = 2;
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
+        NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
+        NKikimrKqp.TEvQueryResponse QueryResponse = 13;
     }
 }
 

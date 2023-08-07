@@ -25,26 +25,26 @@ def _create_table(root, session, table_name, columns, keys_count, common_table=T
     keys = [name for name, _ in columns[:keys_count]]
     columns = [ydb.Column(name, ydb.OptionalType(column_type)) for name, column_type in columns]
 
+    description = ydb.TableDescription()
+    description.with_primary_keys(*keys)
+    description.with_columns(*columns)
     if queue_type and common_table:
+        partitions = ydb.PartitioningSettings()
+        partitions.with_min_partitions_count(10)
+        partitions.with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
+        partitions.with_partitioning_by_load(ydb.FeatureFlag.ENABLED)
+
+        description.with_uniform_partitions(10)
+        description.with_partitioning_settings(partitions)
+
         ydb.retry_operation_sync(lambda: session.create_table(
             table_path,
-            ydb.TableDescription()
-                .with_primary_keys(*keys)
-                .with_columns(*columns)
-                .with_uniform_partitions(10)
-                .with_partitioning_settings(
-                    ydb.PartitioningSettings()
-                        .with_min_partitions_count(10)
-                        .with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
-                        .with_partitioning_by_load(ydb.FeatureFlag.ENABLED)
-                )
+            description
         ))
     else:
         ydb.retry_operation_sync(lambda: session.create_table(
             table_path,
-            ydb.TableDescription()
-                .with_primary_keys(*keys)
-                .with_columns(*columns)
+            description
         ))
 
 

@@ -15,6 +15,48 @@ namespace NKikimr::NTestShard {
         Y_VERIFY(from != ::NTestShard::TStateServer::DELETED);
         Y_VERIFY(to != ::NTestShard::TStateServer::ABSENT);
 
+        // unconfirm the key
+        if (from == ::NTestShard::TStateServer::CONFIRMED) {
+            Y_VERIFY(key.second.ConfirmedKeyIndex != Max<size_t>() && key.second.ConfirmedKeyIndex < ConfirmedKeys.size());
+            auto& cell = ConfirmedKeys[key.second.ConfirmedKeyIndex];
+            Y_VERIFY(cell == key.first);
+            std::swap(cell, ConfirmedKeys.back());
+            ConfirmedKeys.pop_back();
+            if (key.second.ConfirmedKeyIndex != ConfirmedKeys.size()) {
+                const auto it = Keys.find(cell);
+                Y_VERIFY(it != Keys.end());
+                Y_VERIFY(it->second.ConfirmedKeyIndex == ConfirmedKeys.size());
+                it->second.ConfirmedKeyIndex = key.second.ConfirmedKeyIndex;
+            }
+            key.second.ConfirmedKeyIndex = Max<size_t>();
+        } else if (to == ::NTestShard::TStateServer::CONFIRMED) {
+            Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
+            key.second.ConfirmedKeyIndex = ConfirmedKeys.size();
+            ConfirmedKeys.push_back(key.first);
+        }
+
+        if (!Settings.HasStorageServerHost()) {
+            if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
+                BytesOfData += key.second.Len;
+            }
+            if (to == ::NTestShard::TStateServer::DELETED) {
+                Keys.erase(key.first);
+            } else {
+                key.second.ConfirmedState = key.second.PendingState = to;
+                Y_VERIFY((key.second.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex == Max<size_t>()) ||
+                    (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex != Max<size_t>() &&
+                     ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first));
+            }
+            if (ev) {
+                Send(TabletActorId, ev.release());
+            }
+            if (!DoSomeActionInFlight) {
+                TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));
+                DoSomeActionInFlight = true;
+            }
+            return;
+        }
+
         // generate transition command and send it to state server
         auto request = std::make_unique<TEvStateServerRequest>();
         auto& r = request->Record;
@@ -69,12 +111,17 @@ namespace NKikimr::NTestShard {
         key.second.ConfirmedState = key.second.PendingState;
         if (auto& r = key.second.Request) {
             if (const auto it = WritesInFlight.find(r->Record.GetCookie()); it != WritesInFlight.end()) {
-                StateServerWriteLatency.Add(TDuration::Seconds(it->second.Timer.PassedReset()));
+                StateServerWriteLatency.Add(TActivationContext::Monotonic(), TDuration::Seconds(it->second.Timer.PassedReset()));
             }
             Send(TabletActorId, r.release());
         }
         if (key.second.ConfirmedState == ::NTestShard::TStateServer::DELETED) {
+            Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
             Keys.erase(key.first);
+        } else {
+            Y_VERIFY((key.second.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex == Max<size_t>()) ||
+                (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex != Max<size_t>() &&
+                 ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first));
         }
 
         // perform some action if possible

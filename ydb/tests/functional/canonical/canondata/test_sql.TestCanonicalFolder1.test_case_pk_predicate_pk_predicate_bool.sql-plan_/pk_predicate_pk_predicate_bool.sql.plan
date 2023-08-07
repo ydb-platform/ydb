@@ -9,41 +9,15 @@
             "reads": [
                 {
                     "columns": [
+                        "Key1",
+                        "Key2",
                         "Value"
-                    ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Value"
-                    ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Value"
-                    ],
-                    "limit": "1001",
-                    "lookup_by": [
-                        "Key1 (false)"
                     ],
                     "scan_by": [
-                        "Key2 (false, +\u221e)"
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
                     ],
-                    "type": "Lookup"
-                },
-                {
-                    "columns": [
-                        "Value"
-                    ],
-                    "limit": "1001",
-                    "lookup_by": [
-                        "Key1 (true)"
-                    ],
-                    "scan_by": [
-                        "Key2 (-\u221e, true)"
-                    ],
-                    "type": "Lookup"
+                    "type": "FullScan"
                 }
             ]
         }

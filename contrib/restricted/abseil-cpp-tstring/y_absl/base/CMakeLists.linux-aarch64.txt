@@ -18,6 +18,7 @@ target_link_libraries(abseil-cpp-tstring-y_absl-base PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-sanitizer-include
 )
 target_sources(abseil-cpp-tstring-y_absl-base PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/cycleclock.cc

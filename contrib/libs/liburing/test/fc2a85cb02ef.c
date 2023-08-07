@@ -55,7 +55,7 @@ static int inject_fault(int nth)
   return fd;
 }
 
-static int setup_fault()
+static int setup_fault(void)
 {
   static struct {
     const char* file;
@@ -80,13 +80,13 @@ static int setup_fault()
   return 0;
 }
 
-uint64_t r[2] = {0xffffffffffffffff, 0xffffffffffffffff};
+static uint64_t r[2] = {0xffffffffffffffff, 0xffffffffffffffff};
 
 int main(int argc, char *argv[])
 {
   if (argc > 1)
     return T_EXIT_SKIP;
-  mmap((void *) 0x20000000ul, 0x1000000ul, 3ul, 0x32ul, -1, 0);
+  mmap((void *) 0x20000000ul, 0x1000000ul, 3ul, MAP_ANON|MAP_PRIVATE, -1, 0);
   if (setup_fault()) {
     printf("Test needs failslab/fail_futex/fail_page_alloc enabled, skipped\n");
     return T_EXIT_SKIP;

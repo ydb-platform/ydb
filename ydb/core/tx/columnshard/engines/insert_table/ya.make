@@ -11,6 +11,7 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/protos
     ydb/core/formats/arrow
+    ydb/core/tablet_flat
 )
 
 END()

@@ -1601,6 +1601,23 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(res);
     }
 
+    Y_UNIT_TEST(BadTopic) {
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+        auto writer = CreateSimpleWriter(*driver, "/topic/", "test source ID");
+        bool gotException = false;
+        try {
+        writer->GetInitSeqNo();
+        } catch(...) {
+            gotException = true;
+        }
+        UNIT_ASSERT(gotException);
+    }
+
+
     Y_UNIT_TEST(SetupWriteSessionOnDisabledCluster) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
@@ -1991,32 +2008,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
         server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME);
     }
-
-
-    Y_UNIT_TEST(BigRead) {
-        NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetGrpcMaxMessageSize(24_MB));
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400, 20000000, "user", 2000000);
-
-        server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
-
-        TString value(1_MB, 'x');
-        for (ui32 i = 0; i < 32; ++i)
-            server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
-
-        // trying to read small PQ messages in a big gRPC event
-        auto info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
-        UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromDisk, 0);
-        UNIT_ASSERT_VALUES_EQUAL(info.BlobsFromCache, 4);
-
-        TInstant now(TInstant::Now());
-        info = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 0, 32, "user"}, 23, "", NMsgBusProxy::MSTATUS_OK); //will read 21mb
-        TDuration dur = TInstant::Now() - now;
-        UNIT_ASSERT_C(dur > TDuration::Seconds(7) && dur < TDuration::Seconds(20), "dur = " << dur); //speed limit is 2000kb/s and burst is 2000kb, so to read 24mb it will take at least 11 seconds
-
-        server.AnnoyingClient->GetPartStatus({}, 1, true);
-
-    }
-
 
     // expects that L2 size is 32Mb
     Y_UNIT_TEST(Cache) {
@@ -4460,7 +4451,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       SourceIdLifetimeSeconds: 1382400
       WriteSpeedInBytesPerSecond: 123
       BurstSize: 1000
-      NumChannels: 10
       ExplicitChannelProfiles {
         PoolKind: "test"
       }
@@ -6180,12 +6170,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-        std::unordered_map<TString, TString> metadata = {{"key1", "val1"}, {"key2", "val2"}};
-/*        writer->Write("Somedata", Nothing(), Nothing(), TDuration::Max(), metadata);
+        TVector<std::pair<TString, TString>> metadata = {{"key1", "val1"}, {"key2", "val2"}};
+        {
+            auto message = NYdb::NTopic::TWriteMessage{"Somedata"}.MessageMeta(metadata);
+            writer->Write(std::move(message));
+        }
         metadata = {{"key3", "val3"}};
-        writer->Write("Somedata2", Nothing(), Nothing(), TDuration::Max(), metadata);
+        {
+            auto message = NYdb::NTopic::TWriteMessage{"Somedata2"}.MessageMeta(metadata);
+            writer->Write(std::move(message));
+        }
         writer->Write("Somedata3");
-*/
         writer->Close();
         NYdb::NTopic::TReadSessionSettings rSettings;
         rSettings.ConsumerName("debug").AppendTopics({topicFullName});

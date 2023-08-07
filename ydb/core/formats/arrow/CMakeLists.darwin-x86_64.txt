@@ -39,12 +39,14 @@ target_link_libraries(core-formats-arrow PUBLIC
 )
 target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/merging_sorted_input_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/replace_key.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
 )

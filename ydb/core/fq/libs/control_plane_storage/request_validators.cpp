@@ -109,7 +109,44 @@ TMap<TString, NYql::NUdf::EDataSlot> GetDataSlotColumns(const FederatedQuery::Sc
 
 }
 
-NYql::TIssues ValidateConnectionSetting(const FederatedQuery::ConnectionSetting& setting, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire) {
+template <typename TConnection>
+void ValidateGenericConnectionSetting(
+    const TConnection& connection, 
+    const TString& dataSourceKind,
+    bool disableCurrentIam,
+    bool passwordRequired,
+    NYql::TIssues& issues
+) {
+    if (!connection.has_auth() || connection.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.auth is not specified";
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, msg));
+    }
+
+    if (connection.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
+    }
+
+    if (!connection.database_id() && !(connection.host() && connection.port())) {
+        auto msg = TStringBuilder() << "content.setting.clickhouse_cluster.{database_id or host,port} field is not specified";
+        issues.AddIssue( MakeErrorIssue(TIssuesIds::BAD_REQUEST,msg));
+    }
+
+    if (!connection.login()) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.login is not specified";
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, msg));
+    }
+
+    if (!connection.password() && passwordRequired) {
+        auto msg = TStringBuilder() << "content.setting." << dataSourceKind << "_cluster.password is not specified";
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, msg));
+    }
+}
+
+NYql::TIssues ValidateConnectionSetting(
+    const FederatedQuery::ConnectionSetting &setting,
+    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase> &availableConnections,
+    bool disableCurrentIam,
+    bool passwordRequired) {
     NYql::TIssues issues;
     if (!availableConnections.contains(setting.connection_case())) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection of the specified type is disabled"));
@@ -132,26 +169,11 @@ NYql::TIssues ValidateConnectionSetting(const FederatedQuery::ConnectionSetting&
         break;
     }
     case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
-        const FederatedQuery::ClickHouseCluster ch = setting.clickhouse_cluster();
-        if (!ch.has_auth() || ch.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.auth field is not specified"));
-        }
-
-        if (ch.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-        }
-
-        if (!ch.database_id() && !(ch.host() && ch.port())) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.{database_id or host,port} field is not specified"));
-        }
-
-        if (!ch.login()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.login field is not specified"));
-        }
-
-        if (!ch.password() && clickHousePasswordRequire) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.password field is not specified"));
-        }
+        ValidateGenericConnectionSetting(setting.clickhouse_cluster(), "clickhouse", disableCurrentIam, passwordRequired, issues);
+        break;
+    }
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
+        ValidateGenericConnectionSetting(setting.postgresql_cluster(), "postgresql", disableCurrentIam, passwordRequired, issues);
         break;
     }
     case FederatedQuery::ConnectionSetting::kObjectStorage: {

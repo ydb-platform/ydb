@@ -24,7 +24,7 @@ public:
     }
 
     template <typename T>
-    void OnYellowChannels(T* executor) {
+    void OnYellowChannels(T* executor) const {
         if (YellowMoveChannels.size() || YellowStopChannels.size()) {
             executor->OnYellowChannels(
                 TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end()),

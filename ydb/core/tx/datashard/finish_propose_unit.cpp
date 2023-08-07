@@ -142,6 +142,7 @@ void TFinishProposeUnit::Complete(TOperation::TPtr op,
         Pipeline.RemoveActiveOp(op);
 
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
+        DataShard.EmitHeartbeats(ctx);
     }
 
     DataShard.SendRegistrationRequestTimeCast(ctx);

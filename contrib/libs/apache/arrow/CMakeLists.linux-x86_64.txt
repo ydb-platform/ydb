@@ -7,6 +7,42 @@
 
 
 find_package(ZLIB REQUIRED)
+get_built_tool_path(
+  TOOL_flatc_bin
+  TOOL_flatc_dependency
+  contrib/tools/flatc/bin
+  flatc
+)
+get_built_tool_path(
+  TOOL_flatc_bin
+  TOOL_flatc_dependency
+  contrib/tools/flatc/bin
+  flatc
+)
+get_built_tool_path(
+  TOOL_flatc_bin
+  TOOL_flatc_dependency
+  contrib/tools/flatc/bin
+  flatc
+)
+get_built_tool_path(
+  TOOL_flatc_bin
+  TOOL_flatc_dependency
+  contrib/tools/flatc/bin
+  flatc
+)
+get_built_tool_path(
+  TOOL_flatc_bin
+  TOOL_flatc_dependency
+  contrib/tools/flatc/bin
+  flatc
+)
+get_built_tool_path(
+  TOOL_flatc_bin
+  TOOL_flatc_dependency
+  contrib/tools/flatc/bin
+  flatc
+)
 
 add_library(libs-apache-arrow)
 target_compile_options(libs-apache-arrow PUBLIC
@@ -31,6 +67,7 @@ target_compile_options(libs-apache-arrow PRIVATE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(libs-apache-arrow PUBLIC
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/src
 )
@@ -61,6 +98,7 @@ target_link_libraries(libs-apache-arrow PUBLIC
   contrib-restricted-fast_float
   contrib-restricted-thrift
   contrib-restricted-uriparser
+  contrib-libs-flatbuffers
 )
 target_sources(libs-apache-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/arrow/adapters/orc/adapter.cc
@@ -263,4 +301,58 @@ target_sources(libs-apache-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/parquet/stream_reader.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/parquet/stream_writer.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/parquet/types.cc
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/File.fbs.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Message.fbs.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/SparseTensor.fbs.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Tensor.fbs.cpp
+  ${CMAKE_BINARY_DIR}/contrib/libs/apache/arrow/cpp/src/generated/feather.fbs.cpp
+)
+target_fbs_source(libs-apache-arrow
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/File.fbs
+  -I
+  ${CMAKE_BINARY_DIR}
+  -I
+  ${CMAKE_SOURCE_DIR}
+)
+target_fbs_source(libs-apache-arrow
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Message.fbs
+  -I
+  ${CMAKE_BINARY_DIR}
+  -I
+  ${CMAKE_SOURCE_DIR}
+)
+target_fbs_source(libs-apache-arrow
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs
+  -I
+  ${CMAKE_BINARY_DIR}
+  -I
+  ${CMAKE_SOURCE_DIR}
+)
+target_fbs_source(libs-apache-arrow
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/SparseTensor.fbs
+  -I
+  ${CMAKE_BINARY_DIR}
+  -I
+  ${CMAKE_SOURCE_DIR}
+)
+target_fbs_source(libs-apache-arrow
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Tensor.fbs
+  -I
+  ${CMAKE_BINARY_DIR}
+  -I
+  ${CMAKE_SOURCE_DIR}
+)
+target_fbs_source(libs-apache-arrow
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/feather.fbs
+  -I
+  ${CMAKE_BINARY_DIR}
+  -I
+  ${CMAKE_SOURCE_DIR}
 )

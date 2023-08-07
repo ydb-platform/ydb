@@ -35,9 +35,11 @@ SRCS(
     read_actor.cpp
     write_actor.cpp
     tables_manager.cpp
+    tx_controller.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)
+GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 
 PEERDIR(
     library/cpp/actors/core
@@ -54,6 +56,8 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/common
+    ydb/core/tx/columnshard/splitter
+    ydb/core/tx/columnshard/operations
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/long_tx_service/public

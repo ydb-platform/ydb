@@ -67,17 +67,19 @@ public:
     }
 
     void SendWhiteboardTabletStateRequest() {
-        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-        TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         THashSet<TTabletId> filterTablets;
-        for (TTabletId id : domain->Coordinators) {
-            filterTablets.emplace(id);
-        }
-        for (TTabletId id : domain->Mediators) {
-            filterTablets.emplace(id);
-        }
-        for (TTabletId id : domain->TxAllocators) {
-            filterTablets.emplace(id);
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        if (!domains->Domains.empty()) {
+            TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+            for (TTabletId id : domain->Coordinators) {
+                filterTablets.emplace(id);
+            }
+            for (TTabletId id : domain->Mediators) {
+                filterTablets.emplace(id);
+            }
+            for (TTabletId id : domain->TxAllocators) {
+                filterTablets.emplace(id);
+            }
         }
         const NKikimrSchemeOp::TPathDescription& pathDescription(DescribeResult->GetRecord().GetPathDescription());
         if (pathDescription.HasDomainDescription()) {
@@ -109,12 +111,16 @@ public:
     }
 
     void SendWhiteboardRequests() {
+        TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
         for (const auto& ni : NodesInfo->Nodes) {
             TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(ni.NodeId);
             SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvSystemStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-            SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-            SendRequest(whiteboardServiceId,new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-            SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId); 
+
+            if (ni.NodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
+                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+                SendRequest(whiteboardServiceId,new TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+                SendRequest(whiteboardServiceId, new TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId); 
+            }
         }
         if (Tablets) {
             SendWhiteboardTabletStateRequest();
@@ -127,11 +133,13 @@ public:
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }
-            TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-            TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-            TString domainPath = "/" + domain->Name;
             NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
-            record->SetPath(domainPath);
+            TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+            if (!domains->Domains.empty()) {
+                TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+                TString domainPath = "/" + domain->Name;
+                record->SetPath(domainPath);
+            }
             record->MutableOptions()->SetReturnPartitioningInfo(false);
             record->MutableOptions()->SetReturnPartitionConfig(false);
             record->MutableOptions()->SetReturnChildren(false);
@@ -178,19 +186,21 @@ public:
         if (SystemInfo.emplace(nodeId, NKikimrWhiteboard::TEvSystemStateResponse{}).second) {
             RequestDone();
         }
-        if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
-            RequestDone();
-        }
-        if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
-            RequestDone();
-        }
-        if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
-            RequestDone();
-        }
         TIntrusivePtr<TDynamicNameserviceConfig> dynamicNameserviceConfig = AppData()->DynamicNameserviceConfig;
-        if (Tablets && nodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
-            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
+        if (nodeId <= dynamicNameserviceConfig->MaxStaticNodeId) {
+            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
                 RequestDone();
+            }
+            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
+                RequestDone();
+            }
+            if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
+                RequestDone();
+            }
+            if (Tablets) {
+                if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
+                    RequestDone();
+                }
             }
         }
     }
@@ -286,21 +296,23 @@ public:
         if (Tablets) {
             MergeWhiteboardResponses(MergedTabletInfo, TabletInfo);
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-            TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
-            ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
-            ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
-            tablets.emplace(MakeBSControllerID(defaultStateStorageGroup));
-            tablets.emplace(MakeConsoleID(defaultStateStorageGroup));
-            tablets.emplace(domain->SchemeRoot);
-            tablets.emplace(domains->GetHive(domain->DefaultHiveUid));
-            for (TTabletId id : domain->Coordinators) {
-                tablets.emplace(id);
-            }
-            for (TTabletId id : domain->Mediators) {
-                tablets.emplace(id);
-            }
-            for (TTabletId id : domain->TxAllocators) {
-                tablets.emplace(id);
+            if (!domains->Domains.empty()) {
+                TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
+                ui32 hiveDomain = domains->GetHiveDomainUid(domain->DefaultHiveUid);
+                ui64 defaultStateStorageGroup = domains->GetDefaultStateStorageGroup(hiveDomain);
+                tablets.emplace(MakeBSControllerID(defaultStateStorageGroup));
+                tablets.emplace(MakeConsoleID(defaultStateStorageGroup));
+                tablets.emplace(domain->SchemeRoot);
+                tablets.emplace(domains->GetHive(domain->DefaultHiveUid));
+                for (TTabletId id : domain->Coordinators) {
+                    tablets.emplace(id);
+                }
+                for (TTabletId id : domain->Mediators) {
+                    tablets.emplace(id);
+                }
+                for (TTabletId id : domain->TxAllocators) {
+                    tablets.emplace(id);
+                }
             }
 
             if (DescribeResult) {
@@ -395,6 +407,11 @@ public:
         pbCluster.SetStorageTotal(totalStorageSize);
         pbCluster.SetStorageUsed(totalStorageSize - availableStorageSize);
         pbCluster.SetHosts(hosts.size());
+        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
+        if (!domains->Domains.empty()) {
+            TString domainName = "/" + domains->Domains.begin()->second->Name;
+            pbCluster.SetDomain(domainName);
+        }
         for (const TString& dc : dataCenters) {
             pbCluster.AddDataCenters(dc);
         }

@@ -26,10 +26,10 @@ namespace NYql {
                 if (ctx.Step.IsDone(TExprStep::DiscoveryIO))
                     return TStatus::Ok;
 
-                if (!State_->DbResolver)
+                if (!State_->DatabaseResolver)
                     return TStatus::Ok;
 
-                THashMap<std::pair<TString, NYql::DatabaseType>, NYql::TDatabaseAuth> ids;
+                THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> ids;
                 if (auto reads = FindNodes(input,
                                            [&](const TExprNode::TPtr& node) {
                                                const TExprBase nodeExpr(node);
@@ -48,12 +48,13 @@ namespace NYql {
                         const auto clusterName = read.DataSource().Cluster().StringValue();
                         YQL_CLOG(DEBUG, ProviderGeneric) << "found cluster name: " << clusterName;
 
-                        auto databaseId = State_->Configuration->ClusterNamesToClusterConfigs[clusterName].GetDatabaseId();
+                        auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
+                        auto databaseId = cluster.GetDatabaseId();
                         if (databaseId) {
                             YQL_CLOG(DEBUG, ProviderGeneric) << "found database id: " << databaseId;
-                            const auto idKey = std::make_pair(databaseId, NYql::DatabaseType::Generic);
-                            const auto iter = State_->DatabaseIds.find(idKey);
-                            if (iter != State_->DatabaseIds.end()) {
+                            const auto idKey = std::make_pair(databaseId, DataSourceKindToDatabaseType(cluster.GetKind()));
+                            const auto iter = State_->DatabaseAuth.find(idKey);
+                            if (iter != State_->DatabaseAuth.end()) {
                                 YQL_CLOG(DEBUG, ProviderGeneric) << "resolve database id: " << databaseId;
                                 ids[idKey] = iter->second;
                             }
@@ -68,8 +69,8 @@ namespace NYql {
 
                 // FIXME: overengineered code - instead of using weak_ptr, directly copy shared_ptr in callback in this way:
                 // Apply([response = DbResolverResponse_](...))
-                const std::weak_ptr<NYql::TDbResolverResponse> response = DbResolverResponse_;
-                AsyncFuture_ = State_->DbResolver->ResolveIds(ids).Apply([response](auto future) {
+                const std::weak_ptr<NYql::TDatabaseResolverResponse> response = DbResolverResponse_;
+                AsyncFuture_ = State_->DatabaseResolver->ResolveIds(ids).Apply([response](auto future) {
                     if (const auto res = response.lock()) {
                         *res = std::move(future.ExtractValue());
                     }
@@ -93,7 +94,7 @@ namespace NYql {
                 // Copy resolver results and reallocate pointer
                 auto databaseIdsToEndpointsResolved = std::move(DbResolverResponse_->DatabaseId2Endpoint);
 
-                DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
+                DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
 
                 // Modify cluster configs with resolved ids
                 return ModifyClusterConfigs(databaseIdsToEndpointsResolved, ctx);
@@ -101,11 +102,11 @@ namespace NYql {
 
             void Rewind() final {
                 AsyncFuture_ = {};
-                DbResolverResponse_.reset(new NYql::TDbResolverResponse);
+                DbResolverResponse_.reset(new NYql::TDatabaseResolverResponse);
             }
 
         private:
-            TStatus ModifyClusterConfigs(const TDbResolverResponse::TDatabaseEndpointsMap& databaseIdsToEndpoints, TExprContext& ctx) {
+            TStatus ModifyClusterConfigs(const TDatabaseResolverResponse::TDatabaseEndpointsMap& databaseIdsToEndpoints, TExprContext& ctx) {
                 const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
 
@@ -147,7 +148,7 @@ namespace NYql {
             const TGenericState::TPtr State_;
 
             NThreading::TFuture<void> AsyncFuture_;
-            std::shared_ptr<NYql::TDbResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDbResolverResponse>();
+            std::shared_ptr<NYql::TDatabaseResolverResponse> DbResolverResponse_ = std::make_shared<NYql::TDatabaseResolverResponse>();
         };
     }
 

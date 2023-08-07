@@ -39,9 +39,18 @@ namespace NYql {
                                  ->Cast<TMultiExprType>()
                                  ->GetSize()) {
                             const auto& read = maybe.Cast();
-                            const auto structType =
-                                State_->Tables[std::make_pair(read.DataSource().Cluster().Value(), read.Table().Value())]
-                                    .ItemType;
+
+                            // Get table metadata
+                            const auto [tableMeta, issue] = State_->GetTable(
+                                read.DataSource().Cluster().Value(),
+                                read.Table().Value(),
+                                ctx.GetPosition(node.Pos()));
+                            if (issue.has_value()) {
+                                ctx.AddError(issue.value());
+                                return node;
+                            }
+
+                            const auto structType = tableMeta.value()->ItemType;
                             YQL_ENSURE(structType->GetSize());
                             auto columns =
                                 ctx.NewList(read.Pos(), {ctx.NewAtom(read.Pos(), GetLightColumn(*structType)->GetName())});

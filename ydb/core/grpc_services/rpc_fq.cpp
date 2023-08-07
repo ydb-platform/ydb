@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/control_plane_proxy/utils.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/library/aclib/aclib.h>
 
@@ -113,7 +114,12 @@ public:
         }
 
         const auto* req = GetProtoRequest();
-        auto ev = MakeHolder<EvRequestType>(FolderId, *req, User, Token, permissions);
+        auto ev         = MakeHolder<EvRequestType>(
+            NYdb::NFq::TScope{NYdb::NFq::TScope::YandexCloudScopeSchema + "://" + FolderId}.ToString(),
+            *req,
+            User,
+            Token,
+            permissions);
         Send(NFq::ControlPlaneProxyActorId(), ev.Release());
         Become(&TFederatedQueryRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }
@@ -545,7 +551,11 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryModifyConnectionReques
     static const std::function permissions{ [](const FederatedQuery::ModifyConnectionRequest& request) -> TVector<NPerms::TPermission> {
         TVector<NPerms::TPermission> basePermissions{
             NPerms::Required("yq.connections.update"),
-            NPerms::Optional("yq.resources.managePrivate")
+            NPerms::Required("yq.connections.get"),
+            NPerms::Required("yq.bindings.get"),
+            NPerms::Optional("yq.resources.managePrivate"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
         };
         if (request.content().acl().visibility() == FederatedQuery::Acl::SCOPE) {
             basePermissions.push_back(NPerms::Required("yq.resources.managePublic"));
@@ -560,8 +570,11 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryDeleteConnectionReques
     static const std::function permissions{ [](const FederatedQuery::DeleteConnectionRequest&) -> TVector<NPerms::TPermission> {
         return {
             NPerms::Required("yq.connections.delete"),
+            NPerms::Required("yq.connections.get"),
             NPerms::Optional("yq.resources.managePublic"),
-            NPerms::Optional("yq.resources.managePrivate")
+            NPerms::Optional("yq.resources.managePrivate"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
         };
     } };
 
@@ -628,8 +641,12 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryModifyBindingRequestOp
         // so yq.resources.managePublic is always requested as optional
         return {
             NPerms::Required("yq.bindings.update"),
+            NPerms::Required("yq.bindings.get"),
+            NPerms::Required("yq.connections.get"),
             NPerms::Optional("yq.resources.managePrivate"),
-            NPerms::Optional("yq.resources.managePublic")
+            NPerms::Optional("yq.resources.managePublic"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
         };
     } };
 
@@ -640,8 +657,11 @@ std::unique_ptr<TEvProxyRuntimeEvent> CreateFederatedQueryDeleteBindingRequestOp
     static const std::function permissions{ [](const FederatedQuery::DeleteBindingRequest&) -> TVector<NPerms::TPermission> {
         return {
             NPerms::Required("yq.bindings.delete"),
+            NPerms::Required("yq.bindings.get"),
             NPerms::Optional("yq.resources.managePublic"),
-            NPerms::Optional("yq.resources.managePrivate")
+            NPerms::Optional("yq.resources.managePrivate"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
         };
     } };
 

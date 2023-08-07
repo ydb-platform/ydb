@@ -117,8 +117,8 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "i1q1 (Asc)",
-                                    "i1q2 (Asc)"
+                                    "i1.q1 (Asc)",
+                                    "i1.q2 (Asc)"
                                 ]
                             }
                         ]

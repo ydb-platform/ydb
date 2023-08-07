@@ -20,6 +20,7 @@ from collections import defaultdict
 import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import typing
 
@@ -27,6 +28,10 @@ import typing
 bad_hosts = set()
 cache = {}
 name_cache = {}
+
+EPDiskType = kikimr_bs3.EPDiskType
+EVirtualGroupState = kikimr_bs3.EVirtualGroupState
+TGroupDecommitStatus = kikimr_bs3.TGroupDecommitStatus
 
 
 class EndpointInfo:
@@ -708,7 +713,7 @@ def message_to_string(m):
 
 
 def add_pdisk_select_options(parser, specification=None):
-    types = kikimr_bsconfig.EPDiskType.keys()
+    types = EPDiskType.keys()
     name = 'PDisk selection options'
     if specification is not None:
         name += ' for ' + specification
@@ -751,7 +756,7 @@ def get_selected_pdisks(args, base_config):
         if args.fqdn is None or any(fnmatch.fnmatchcase(node_id_to_host[pdisk.NodeId], fqdn) for fqdn in args.fqdn)
         if args.pdisk_id is None or pdisk.PDiskId in args.pdisk_id
         if args.path in [None, pdisk.Path]
-        if args.type in [None, kikimr_bsconfig.EPDiskType.Name(pdisk.Type)]
+        if args.type in [None, EPDiskType.Name(pdisk.Type)]
     }
 
 

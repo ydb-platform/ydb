@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/granules_table.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
+#include <ydb/core/tx/columnshard/operations/write.h>
 
 #include <type_traits>
 
@@ -34,6 +35,7 @@ struct Schema : NIceDb::Schema {
         GranulesTableId,
         ColumnsTableId,
         CountersTableId,
+        OperationsTableId,
     };
 
     enum class EValueIds : ui32 {
@@ -246,6 +248,18 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Index, Counter, ValueUI64>;
     };
 
+    struct Operations : NIceDb::Schema::Table<OperationsTableId> {
+        struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct CreatedAt : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct GlobalWriteId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Metadata : Column<6, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<WriteId>;
+        using TColumns = TableColumns<TxId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -263,7 +277,8 @@ struct Schema : NIceDb::Schema {
         IndexColumns,
         IndexCounters,
         SmallBlobs,
-        OneToOneEvictedBlobs
+        OneToOneEvictedBlobs,
+        Operations
         >;
 
     //
@@ -521,7 +536,7 @@ struct Schema : NIceDb::Schema {
     static void IndexGranules_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::IColumnEngine& engine,
                                     const TGranuleRecord& row) {
         TString metaStr;
-        const auto& indexInfo = engine.GetIndexInfo();
+        const auto& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         if (indexInfo.IsCompositeIndexKey()) {
             NKikimrTxColumnShard::TIndexGranuleMeta meta;
             Y_VERIFY(indexInfo.GetIndexKey());
@@ -576,10 +591,11 @@ struct Schema : NIceDb::Schema {
 
     // IndexColumns activities
 
-    static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, row.Granule, row.ColumnId, row.PlanStep, row.TxId, row.Portion, row.Chunk).Update(
-            NIceDb::TUpdate<IndexColumns::XPlanStep>(row.XPlanStep),
-            NIceDb::TUpdate<IndexColumns::XTxId>(row.XTxId),
+    static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
+            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
+            NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
             NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
             NIceDb::TUpdate<IndexColumns::Metadata>(row.Metadata),
             NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
@@ -587,26 +603,27 @@ struct Schema : NIceDb::Schema {
         );
     }
 
-    static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const TColumnRecord& row) {
-        db.Table<IndexColumns>().Key(index, row.Granule, row.ColumnId, row.PlanStep, row.TxId, row.Portion, row.Chunk).Delete();
+    static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
+            portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Delete();
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
-                                  const std::function<void(const TColumnRecord&)>& callback) {
+                                  const std::function<void(const NOlap::TPortionInfo&, const TColumnRecord&)>& callback) {
         auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
         if (!rowset.IsReady())
             return false;
 
         while (!rowset.EndOfSet()) {
             TColumnRecord row;
-            row.Granule = rowset.GetValue<IndexColumns::Granule>();
+            NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
+            portion.SetGranule(rowset.GetValue<IndexColumns::Granule>());
             row.ColumnId = rowset.GetValue<IndexColumns::ColumnIdx>();
-            row.PlanStep = rowset.GetValue<IndexColumns::PlanStep>();
-            row.TxId = rowset.GetValue<IndexColumns::TxId>();
-            row.Portion = rowset.GetValue<IndexColumns::Portion>();
+            portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
+            portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
             row.Chunk = rowset.GetValue<IndexColumns::Chunk>();
-            row.XPlanStep = rowset.GetValue<IndexColumns::XPlanStep>();
-            row.XTxId = rowset.GetValue<IndexColumns::XTxId>();
+            portion.SetRemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
+
             TString strBlobId = rowset.GetValue<IndexColumns::Blob>();
             row.Metadata = rowset.GetValue<IndexColumns::Metadata>();
             row.BlobRange.Offset = rowset.GetValue<IndexColumns::Offset>();
@@ -616,7 +633,7 @@ struct Schema : NIceDb::Schema {
             TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
             row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
 
-            callback(row);
+            callback(portion, row);
 
             if (!rowset.Next())
                 return false;
@@ -648,6 +665,26 @@ struct Schema : NIceDb::Schema {
         }
         return true;
     }
+
+    // Operations
+    static void Operations_Write(NIceDb::TNiceDb& db, const TWriteOperation& operation) {
+        TString metadata;
+        NKikimrTxColumnShard::TInternalOperationData proto;
+        operation.ToProto(proto);
+        Y_VERIFY(proto.SerializeToString(&metadata));
+
+        db.Table<Operations>().Key((ui64)operation.GetWriteId()).Update(
+            NIceDb::TUpdate<Operations::Status>((ui32)operation.GetStatus()),
+            NIceDb::TUpdate<Operations::CreatedAt>(operation.GetCreatedAt().Seconds()),
+            NIceDb::TUpdate<Operations::Metadata>(metadata),
+            NIceDb::TUpdate<Operations::TxId>(operation.GetTxId())
+        );
+    }
+
+    static void Operations_Erase(NIceDb::TNiceDb& db, const TWriteId writeId) {
+        db.Table<Operations>().Key((ui64)writeId).Delete();
+    }
+
 };
 
 }

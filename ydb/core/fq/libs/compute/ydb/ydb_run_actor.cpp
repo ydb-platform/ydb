@@ -61,6 +61,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
+        hFunc(TEvYdbCompute::TEvInitializerResponse, Handle);
         hFunc(TEvYdbCompute::TEvExecuterResponse, Handle);
         hFunc(TEvYdbCompute::TEvStatusTrackerResponse, Handle);
         hFunc(TEvYdbCompute::TEvResultWriterResponse, Handle);
@@ -68,6 +69,18 @@ public:
         hFunc(TEvYdbCompute::TEvFinalizerResponse, Handle);
         hFunc(TEvYdbCompute::TEvStopperResponse, Handle);
     )
+
+    void Handle(const TEvYdbCompute::TEvInitializerResponse::TPtr& ev) {
+        auto& response = *ev->Get();
+        if (response.Status != NYdb::EStatus::SUCCESS) {
+            LOG_I("InitializerResponse (failed). Issues: " << response.Issues.ToOneLineString());
+            ResignAndPassAway(response.Issues);
+            return;
+        }
+
+        LOG_I("InitializerResponse (success)");
+        Register(ActorFactory->CreateExecuter(SelfId(), Connector, Pinger).release());
+    }
 
     void Handle(const TEvYdbCompute::TEvExecuterResponse::TPtr& ev) {
         auto& response = *ev->Get();
@@ -92,7 +105,7 @@ public:
         ExecStatus = response.ExecStatus;
         LOG_I("StatusTrackerResponse (success) " << response.Status << " ExecStatus: " << static_cast<int>(response.ExecStatus) << " Issues: " << response.Issues.ToOneLineString());
         if (response.ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
-            Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.ExecutionId).release());
+            Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
         } else {
             Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
         }
@@ -163,13 +176,13 @@ public:
             break;
         case FederatedQuery::QueryMeta::COMPLETING:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
-                Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.ExecutionId).release());
+                Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
                 Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus).release());
             }
             break;
         case FederatedQuery::QueryMeta::STARTING:
-            Register(ActorFactory->CreateExecuter(SelfId(), Connector, Pinger).release());
+            Register(ActorFactory->CreateInitializer(SelfId(), Pinger).release());
             break;
         case FederatedQuery::QueryMeta::RUNNING:
             Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());

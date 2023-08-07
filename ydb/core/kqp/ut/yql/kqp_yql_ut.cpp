@@ -416,6 +416,51 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             #
         ]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(EvaluateExpr1) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT EvaluateExpr(2+2);
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[
+            4]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(EvaluateExpr2) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT EvaluateExpr(12+20);
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[
+            32]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(EvaluateExpr3) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT EvaluateExpr( EvaluateExpr(2+2) + EvaluateExpr(5*5) );
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[
+            29]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

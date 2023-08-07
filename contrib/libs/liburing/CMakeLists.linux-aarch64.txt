@@ -19,8 +19,10 @@ target_link_libraries(contrib-libs-liburing PUBLIC
   contrib-libs-linux-headers
 )
 target_sources(contrib-libs-liburing PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/nolibc.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/queue.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/register.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/setup.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/syscall.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/liburing/src/version.c
 )

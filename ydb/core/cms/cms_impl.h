@@ -258,7 +258,6 @@ private:
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
-            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
@@ -274,6 +273,7 @@ private:
         }
     }
 
+    void DefaultSignalTabletActive(const TActorContext &ctx) override;
     void OnActivateExecutor(const TActorContext &ctx) override;
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
@@ -422,7 +422,6 @@ private:
     void Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
 

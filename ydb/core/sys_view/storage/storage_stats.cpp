@@ -29,7 +29,7 @@ public:
     }
 };
 
-THolder<IActor> CreateStorageStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateStorageStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     return MakeHolder<TStorageStatsScan>(ownerId, scanId, tableId, tableRange, columns);

@@ -294,6 +294,13 @@ struct IContiguousChunk : TThrRefBase {
         return GetDataMut();
     }
 
+    /**
+     * Should return true if GetDataMut() would not copy contents when called.
+     */
+    virtual bool IsPrivate() const {
+        return true;
+    }
+
     virtual size_t GetOccupiedMemorySize() const = 0;
 };
 
@@ -434,8 +441,12 @@ class TRcBuf {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return value.IsPrivate();
+                } else if constexpr (std::is_same_v<T, TString>) {
+                    return value.IsDetached();
+                } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
+                    return value.RefCount() == 1 && value->IsPrivate();
                 } else {
-                    return false;
+                    static_assert(TDependentFalse<T>);
                 }
             });
         }
@@ -446,14 +457,12 @@ class TRcBuf {
             }
             return Visit(Owner, [](EType, auto& value) -> TContiguousSpan {
                 using T = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<T, TString>) {
-                    return {&(*value.cbegin()), value.size()};
-                } else if constexpr (std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
+                if constexpr (std::is_same_v<T, TString> || std::is_same_v<T, NActors::TSharedData> || std::is_same_v<T, TInternalBackend>) {
                     return {value.data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->GetData();
                 } else {
-                    return {};
+                    static_assert(TDependentFalse<T>, "unexpected type");
                 }
             });
         }
@@ -479,7 +488,7 @@ class TRcBuf {
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->GetDataMut();
                 } else {
-                    return {};
+                    static_assert(TDependentFalse<T>, "unexpected type");
                 }
             });
         }
@@ -497,7 +506,7 @@ class TRcBuf {
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->UnsafeGetDataMut();
                 } else {
-                    return {};
+                    static_assert(TDependentFalse<T>, "unexpected type");
                 }
             });
         }
@@ -515,7 +524,7 @@ class TRcBuf {
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
                     return value->GetOccupiedMemorySize();
                 } else {
-                    Y_FAIL();
+                    static_assert(TDependentFalse<T>, "unexpected type");
                 }
             });
         }
@@ -582,26 +591,24 @@ class TRcBuf {
             return false;
         }
 
-        template <class TResult>
-        TResult GetRaw() const {
+        template <typename TResult, typename TCallback>
+        std::invoke_result_t<TCallback, const TResult*> ApplySpecificValue(TCallback&& callback) const {
+            static_assert(std::is_same_v<TResult, TString> ||
+                std::is_same_v<TResult, NActors::TSharedData> ||
+                std::is_same_v<TResult, TInternalBackend> ||
+                std::is_same_v<TResult, IContiguousChunk::TPtr>);
+
             if (!Owner) {
-                return TResult{};
+                return callback(nullptr);
             }
-            return Visit(Owner, [](EType, auto& value) {
+            return Visit(Owner, [&](EType, auto& value) {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, TResult>) {
-                    return value;
+                    return callback(&value);
                 } else {
-                    Y_FAIL();
-                    return TResult{}; // unreachable
+                    return callback(nullptr);
                 }
             });
-        }
-
-        NActors::TSharedData GetRawTrimmed(size_t size) const {
-            NActors::TSharedData result = GetRaw<NActors::TSharedData>();
-            result.TrimBack(size);
-            return result;
         }
 
         explicit operator bool() const {
@@ -845,28 +852,6 @@ public:
         return Backend.ContainsNativeType<TType>();
     }
 
-    template <class TResult>
-    TResult GetRaw() const {
-        return Backend.GetRaw<TResult>();
-    }
-
-    NActors::TSharedData GetRawTrimmed(size_t size) const {
-        return Backend.GetRawTrimmed(size);
-    }
-
-    bool ReferencesWholeContainer() const {
-        return Backend.GetData().size() == GetSize();
-    }
-
-
-    bool ReferencesTrimableToWholeContainer() const {
-        if (ContainsNativeType<NActors::TSharedData>()) {
-            return Backend.GetData().size() == (GetSize() + UnsafeTailroom());
-        } else {
-            return ReferencesWholeContainer();
-        }
-    }
-
     bool CanGrowFront() const noexcept {
         return Backend.CanGrowFront(Begin);
     }
@@ -891,14 +876,20 @@ public:
         return Begin;
     }
 
-    char* GetDataMut() {
-        const char* oldBegin = Backend.GetData().data();
-        ptrdiff_t offset = Begin - oldBegin;
-        size_t size = GetSize();
-        char* newBegin = Backend.GetDataMut().data();
-        Begin = newBegin + offset;
-        End = Begin + size;
-        return newBegin + offset;
+    char* GetDataMut(size_t headroom = 0, size_t tailroom = 0) {
+        const TContiguousSpan backendData = Backend.GetData();
+        if (IsPrivate() || (backendData.data() == GetData() && backendData.size() == GetSize())) { // if we own container or reference it whole
+            const char* oldBegin = backendData.data();
+            ptrdiff_t offset = Begin - oldBegin;
+            size_t size = GetSize();
+            char* newBegin = Backend.GetDataMut().data();
+            Begin = newBegin + offset;
+            End = Begin + size;
+            return newBegin + offset;
+        } else { // make a copy of referenced data
+            *this = Copy(GetContiguousSpan(), headroom, tailroom);
+            return Backend.GetDataMut().data();
+        }
     }
 
     char* UnsafeGetDataMut() {
@@ -913,18 +904,30 @@ public:
 
     template <class TResult>
     TResult ExtractUnderlyingContainerOrCopy() const {
-        if (ContainsNativeType<TResult>() && (ReferencesWholeContainer() || ReferencesTrimableToWholeContainer())) {
-            using T = std::decay_t<TResult>;
-            if constexpr (std::is_same_v<T, NActors::TSharedData>) {
-                return GetRawTrimmed(GetSize());
-            } else {
-                return GetRaw<TResult>();
+        static_assert(std::is_same_v<TResult, TString> ||
+            std::is_same_v<TResult, NActors::TSharedData> ||
+            std::is_same_v<TResult, TInternalBackend>);
+
+        constexpr bool isSharedData = std::is_same_v<TResult, NActors::TSharedData>;
+        TResult res;
+
+        const bool found = Backend.ApplySpecificValue<TResult>([&](const TResult *raw) {
+            if (raw && raw->data() == Begin && (isSharedData ? End <= Begin + raw->size() : End == Begin + raw->size())) {
+                if constexpr (isSharedData) {
+                    raw->TrimBack(size());
+                }
+                res = TResult(*raw);
+                return true;
             }
+            return false;
+        });
+
+        if (!found) {
+            res = TResult::Uninitialized(GetSize());
+            char* data = NContiguousDataDetails::TContainerTraits<TResult>::UnsafeGetDataMut(res);
+            std::memcpy(data, GetData(), GetSize());
         }
 
-        TResult res = TResult::Uninitialized(GetSize());
-        char* data = NContiguousDataDetails::TContainerTraits<TResult>::UnsafeGetDataMut(res);
-        std::memcpy(data, Begin, End - Begin);
         return res;
     }
 
@@ -932,7 +935,7 @@ public:
         return {GetData(), GetSize()};
     }
 
-    TStringBuf Slice(size_t pos = 0, size_t len = -1) const noexcept {
+    TStringBuf Slice(size_t pos = 0, size_t len = Max<size_t>()) const noexcept {
         pos = Min(pos, size());
         len = Min(len, size() - pos);
         return {const_cast<TRcBuf*>(this)->UnsafeGetDataMut() + pos, len};
@@ -1076,6 +1079,10 @@ public:
 
     char* Detach() {
         return GetDataMut();
+    }
+
+    bool IsPrivate() const {
+        return Backend.IsPrivate();
     }
 
     size_t UnsafeHeadroom() const {

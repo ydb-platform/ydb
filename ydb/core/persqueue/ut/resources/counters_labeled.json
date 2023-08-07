@@ -1817,24 +1817,6 @@
       "labels": {
         "user_counters": "PersQueue",
         "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/ReserveLimitBytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "user_counters": "PersQueue",
-        "topic": "rt3.dc1--asdfgs--topic",
-        "sensor": "PQ/ReserveUsedBytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "user_counters": "PersQueue",
-        "topic": "rt3.dc1--asdfgs--topic",
         "sensor": "PQ/SourceIdCount"
       },
       "value": 3
@@ -2135,24 +2117,6 @@
         "sensor": "PQ/QuotaBytesPerSec"
       },
       "value": 540
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "user_counters": "PersQueue",
-        "topic": "total",
-        "sensor": "PQ/ReserveLimitBytes"
-      },
-      "value": 0
-    },
-    {
-      "kind": "GAUGE",
-      "labels": {
-        "user_counters": "PersQueue",
-        "topic": "total",
-        "sensor": "PQ/ReserveUsedBytes"
-      },
-      "value": 0
     },
     {
       "kind": "GAUGE",

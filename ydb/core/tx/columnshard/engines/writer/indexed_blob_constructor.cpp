@@ -6,93 +6,77 @@
 
 namespace NKikimr::NOlap {
 
-TIndexedBlobConstructor::TIndexedBlobConstructor(TAutoPtr<TEvColumnShard::TEvWrite> writeEv, NOlap::ISnapshotSchema::TPtr snapshotSchema)
-    : WriteEv(writeEv)
-    , SnapshotSchema(snapshotSchema)
+TIndexedWriteController::TBlobConstructor::TBlobConstructor(TIndexedWriteController& owner)
+    : Owner(owner)
 {}
 
-const TString& TIndexedBlobConstructor::GetBlob() const {
-    return DataPrepared;
+const TString& TIndexedWriteController::TBlobConstructor::GetBlob() const {
+    Y_VERIFY(CurrentIndex > 0);
+    return BlobsSplitted[CurrentIndex - 1].GetData();
 }
 
-IBlobConstructor::EStatus TIndexedBlobConstructor::BuildNext() {
-    if (!!DataPrepared) {
+IBlobConstructor::EStatus TIndexedWriteController::TBlobConstructor::BuildNext() {
+    if (CurrentIndex == BlobsSplitted.size()) {
         return EStatus::Finished;
     }
-
-    const auto& evProto = Proto(WriteEv.Get());
-    const ui64 pathId = evProto.GetTableId();
-    const ui64 writeId = evProto.GetWriteId();
-
-    TString serializedScheme;
-    if (evProto.HasMeta()) {
-        serializedScheme = evProto.GetMeta().GetSchema();
-        if (serializedScheme.empty() || evProto.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_parsing_fails")("write_id", writeId)("path_id", pathId);
-            return EStatus::Error;
-        }
-    }
-    const auto& data = evProto.GetData();
-
-    // Heavy operations inside. We cannot run them in tablet event handler.
-    TString strError;
-    {
-        NColumnShard::TCpuGuard guard(ResourceUsage);
-        Batch = SnapshotSchema->PrepareForInsert(data, serializedScheme, strError);
-    }
-    if (!Batch) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("path_id", pathId)("error", strError);
-        return EStatus::Error;
-    }
-
-    {
-        NColumnShard::TCpuGuard guard(ResourceUsage);
-        DataPrepared = NArrow::SerializeBatchNoCompression(Batch);
-    }
-
-    if (DataPrepared.size() > NColumnShard::TLimits::GetMaxBlobSize()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_data_too_big")("write_id", writeId)("path_id", pathId);
-        return EStatus::Error;
-    }
-
-    ui64 dirtyTime = TAppData::TimeProvider->Now().Seconds();
-    Y_VERIFY(dirtyTime);
-    NKikimrTxColumnShard::TLogicalMetadata outMeta;
-    outMeta.SetNumRows(Batch->num_rows());
-    outMeta.SetRawBytes(NArrow::GetBatchDataSize(Batch));
-    outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
-
-    if (!outMeta.SerializeToString(&MetaString)) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_metadata")("write_id", writeId)("path_id", pathId);
-        return EStatus::Error;;
-    }
-
-    ++Iteration;
+    CurrentIndex++;
     return EStatus::Ok;
 }
 
-bool TIndexedBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
-    Y_VERIFY(Iteration == 1);
-    WriteEv->BlobId = blobId;
-    Y_VERIFY(WriteEv->BlobId.BlobSize() == DataPrepared.size());
+bool TIndexedWriteController::TBlobConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
+    const auto& blobInfo = BlobsSplitted[CurrentIndex - 1];
+    Owner.BlobData.emplace_back(blobId, blobInfo.GetData(), blobInfo.GetRowsCount(), blobInfo.GetRawBytes(), AppData()->TimeProvider->Now());
     return true;
 }
 
-TAutoPtr<IEventBase> TIndexedBlobConstructor::BuildResult(NKikimrProto::EReplyStatus status,
-                                                        NColumnShard::TBlobBatch&& blobBatch,
-                                                        THashSet<ui32>&& yellowMoveChannels,
-                                                        THashSet<ui32>&& yellowStopChannels)
+bool TIndexedWriteController::TBlobConstructor::Init() {
+    const auto& writeMeta = Owner.WriteData.GetWriteMeta();
+    const ui64 tableId = writeMeta.GetTableId();
+    const ui64 writeId = writeMeta.GetWriteId();
+
+    std::shared_ptr<arrow::RecordBatch> batch;
+    {
+        NColumnShard::TCpuGuard guard(Owner.ResourceUsage);
+        batch = Owner.WriteData.GetData().GetArrowBatch();
+    }
+
+    if (!batch) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ev_write_bad_data")("write_id", writeId)("table_id", tableId);
+        return false;
+    }
+
+    auto splitResult = NArrow::SplitByBlobSize(batch, NColumnShard::TLimits::GetMaxBlobSize());
+    if (!splitResult) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", TStringBuilder() << "cannot split batch in according to limits: " + splitResult.GetErrorMessage());
+        return false;
+    }
+    BlobsSplitted = splitResult.ReleaseResult();
+    return true;
+}
+
+TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const NEvWrite::TWriteData& writeData)
+    : WriteData(writeData)
+    , BlobConstructor(std::make_shared<TBlobConstructor>(*this))
+    , DstActor(dstActor)
 {
-    WriteEv->WrittenBatch = Batch;
+    ResourceUsage.SourceMemorySize = WriteData.GetSize();
+}
 
-    auto& record = Proto(WriteEv.Get());
-    record.SetData(DataPrepared); // modify for TxWrite
-    record.MutableMeta()->SetLogicalMeta(MetaString);
+void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
+    if (putResult->GetPutStatus() == NKikimrProto::OK) {
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData), WriteData.GetWriteMeta(), WriteData.GetData().GetSchemaVersion());
+        ctx.Send(DstActor, result.release());
+    } else {
+        auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, WriteData.GetWriteMeta());
+        ctx.Send(DstActor, result.release());
+    }
+}
 
-    WriteEv->ResourceUsage.Add(ResourceUsage);
-    WriteEv->SetPutStatus(status, std::move(yellowMoveChannels), std::move(yellowStopChannels));
-    WriteEv->BlobBatch = std::move(blobBatch);
-    return WriteEv.Release();
+NOlap::IBlobConstructor::TPtr TIndexedWriteController::GetBlobConstructor() {
+    if (!BlobConstructor->Init()) {
+        return nullptr;
+    }
+    return BlobConstructor;
 }
 
 }

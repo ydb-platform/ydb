@@ -84,13 +84,22 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         "    ($scope, $connection_id, $user, $visibility, $name, $connection_type, $connection, $revision, $internal);"
     );
 
-    auto validatorName = CreateUniqueNameValidator(
+    auto connectionNameUniqueValidator = CreateUniqueNameValidator(
         CONNECTIONS_TABLE_NAME,
         content.acl().visibility(),
         scope,
         content.name(),
         user,
         "Connection with the same name already exists. Please choose another name",
+        YdbConnection->TablePathPrefix);
+
+    auto bindingNameUniqueValidator = CreateUniqueNameValidator(
+        BINDINGS_TABLE_NAME,
+        content.acl().visibility(),
+        scope,
+        content.name(),
+        user,
+        "Binding with the same name already exists. Please choose another name",
         YdbConnection->TablePathPrefix);
 
     auto validatorCountConnections = CreateCountEntitiesValidator(
@@ -104,7 +113,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     if (idempotencyKey) {
         validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix));
     }
-    validators.push_back(validatorName);
+    validators.push_back(connectionNameUniqueValidator);
+    validators.push_back(bindingNameUniqueValidator);
     validators.push_back(validatorCountConnections);
 
     if (content.acl().visibility() == FederatedQuery::Acl::PRIVATE) {
@@ -246,6 +256,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
                 auto& ch = *setting.mutable_clickhouse_cluster();
                 ch.set_password("");
             }
+            if (setting.has_postgresql_cluster()) {
+                auto& pg = *setting.mutable_postgresql_cluster();
+                pg.set_password("");
+            }
         }
 
         if (result.connection_size() == limit + 1) {
@@ -348,6 +362,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
             auto& ch = *setting.mutable_clickhouse_cluster();
             ch.set_password("");
         }
+        if (setting.has_postgresql_cluster()) {
+            auto& pg = *setting.mutable_postgresql_cluster();
+            pg.set_password("");
+        }
         return result;
     };
 
@@ -449,14 +467,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
         }
 
-        TString clickHousePassword;
+        // FIXME: this code needs better generalization
         if (request.content().setting().has_clickhouse_cluster()) {
-            clickHousePassword = request.content().setting().clickhouse_cluster().password();
+            auto clickHousePassword = request.content().setting().clickhouse_cluster().password();
             if (!clickHousePassword) {
                 clickHousePassword = content.setting().clickhouse_cluster().password();
             }
             content = request.content();
             content.mutable_setting()->mutable_clickhouse_cluster()->set_password(clickHousePassword);
+        } else if (request.content().setting().has_postgresql_cluster()) {
+            auto postgreSQLPassword = request.content().setting().postgresql_cluster().password();
+            if (!postgreSQLPassword) {
+                postgreSQLPassword = content.setting().postgresql_cluster().password();
+            }
+            content = request.content();
+            content.mutable_setting()->mutable_postgresql_cluster()->set_password(postgreSQLPassword);
         } else {
             content = request.content();
         }
@@ -511,7 +536,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     }
 
     {
-        auto modifyUniqueNameValidator = CreateModifyUniqueNameValidator(
+        auto connectionNameUniqueValidator = CreateModifyUniqueNameValidator(
             CONNECTIONS_TABLE_NAME,
             CONNECTION_ID_COLUMN_NAME,
             request.content().acl().visibility(),
@@ -521,7 +546,18 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
             connectionId,
             "Connection with the same name already exists. Please choose another name",
             YdbConnection->TablePathPrefix);
-        validators.push_back(modifyUniqueNameValidator);
+        validators.push_back(connectionNameUniqueValidator);
+    }
+    {
+        auto bindingNameUniqueValidator = CreateUniqueNameValidator(
+            BINDINGS_TABLE_NAME,
+            request.content().acl().visibility(),
+            scope,
+            request.content().name(),
+            user,
+            "Binding with the same name already exists. Please choose another name",
+            YdbConnection->TablePathPrefix);
+        validators.push_back(bindingNameUniqueValidator);
     }
 
     const auto readQuery = readQueryBuilder.Build();

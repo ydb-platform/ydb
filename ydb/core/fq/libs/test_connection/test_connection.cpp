@@ -9,6 +9,7 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.h>
 #include <ydb/core/fq/libs/control_plane_storage/config.h>
 
 #include <ydb/library/security/util.h>
@@ -113,7 +114,7 @@ public:
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
+        const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
@@ -128,12 +129,9 @@ public:
         , CmConnections(cmConnections)
         , FunctionRegistry(functionRegistry)
         , Counters(counters)
+        , Signer(signer)
         , HttpGateway(httpGateway)
-    {
-        if (tokenAccessorConfig.GetHmacSecretFile()) {
-            Signer = ::NFq::CreateSignerFromFile(tokenAccessorConfig.GetHmacSecretFile());
-        }
-    }
+    {}
 
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
 
@@ -146,7 +144,8 @@ public:
         DbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         NActors::TActivationContext::ActorSystem(), DatabaseResolverActor,
                         CommonConfig.GetYdbMvpCloudEndpoint(), CommonConfig.GetMdbGateway(),
-                        CommonConfig.GetMdbTransformHost());
+                        NFq::MakeTMdbHostTransformerGeneric()
+                        );
 
         Become(&TTestConnectionActor::StateFunc);
     }
@@ -233,7 +232,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
+        const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
@@ -242,7 +241,7 @@ NActors::IActor* CreateTestConnectionActor(
         const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new TTestConnectionActor(config, controlPlaneStorageConfig,
                                     s3Config, commonConfig,
-                                    tokenAccessorConfig, sharedResources,
+                                    signer, sharedResources,
                                     credentialsFactory, cmConnections,
                                     functionRegistry, httpGateway, counters);
 }

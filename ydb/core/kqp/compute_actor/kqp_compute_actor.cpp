@@ -55,12 +55,12 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
 namespace NKqp {
 
-NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters, const NYql::IHTTPGateway::TPtr& httpGateway) {
+NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters, const NYql::IHTTPGateway::TPtr& httpGateway, const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterStreamLookupActorFactory(*factory, counters);
     RegisterKqpReadActor(*factory, counters);
-    RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
-    RegisterS3WriteActorFactory(*factory, nullptr, httpGateway);
+    RegisterS3ReadActorFactory(*factory, credentialsFactory, httpGateway);
+    RegisterS3WriteActorFactory(*factory, credentialsFactory, httpGateway);
     RegisterSequencerActorFactory(*factory, counters);
     return factory;
 }

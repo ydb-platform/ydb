@@ -454,8 +454,8 @@ protected:
                 VERBOSE_COUT("  response[" << i <<"]: " << StatusToString(response.Status));
                 if (response.Status == NKikimrProto::OK) {
                     //TODO: Process response.Id (should be same logoblobid as in request)
-                    LastResponse.Data[i] = response.Buffer;
-                    VERBOSE_COUT(" shift: " << response.Shift << " data: " << response.Buffer.c_str());
+                    LastResponse.Data[i] = response.Buffer.ConvertToString();
+                    VERBOSE_COUT(" shift: " << response.Shift << " data: " << response.Buffer.ConvertToString());
                 }
             }
         }

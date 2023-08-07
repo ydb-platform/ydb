@@ -9,8 +9,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 class TCommandImport : public TClientCommandTree {
 public:
@@ -117,5 +116,5 @@ public:
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
 };
-}
+
 }

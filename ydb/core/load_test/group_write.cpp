@@ -121,7 +121,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         ui64 TotalBytesRead = 0;
         TSpeedTracker<ui64> MegabytesPerSecondST;
         TQuantileTracker<ui64> MegabytesPerSecondQT;
-        TLatencyTrackerUs ResponseQT;
+        std::unique_ptr<TLatencyTrackerUs> ResponseQT;
         THashMap<ui64, ui64> SentTimestamp;
         TDeque<std::pair<ui64, ui64>> WritesInFlightTimestamps;
         TIntrusivePtr<NMonitoring::TCounterForPtr> MaxInFlightLatency;
@@ -139,7 +139,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         THashMap<ui64, ui64> ReadSentTimestamp;
         TSpeedTracker<ui64> ReadMegabytesPerSecondST;
         TQuantileTracker<ui64> ReadMegabytesPerSecondQT;
-        TLatencyTrackerUs ReadResponseQT;
+        std::unique_ptr<TLatencyTrackerUs> ReadResponseQT;
         bool NextWriteInQueue = false;
         bool NextReadInQueue = false;
         bool IsWorkingNow = true;
@@ -219,8 +219,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             *Counters->GetCounter("tabletId") = tabletId;
             const auto& percCounters = Counters->GetSubgroup("sensor", "microseconds");
             MaxInFlightLatency = percCounters->GetCounter("MaxInFlightLatency");
-            ResponseQT.Initialize(percCounters->GetSubgroup("metric", "writeResponse"), Percentiles);
-            ReadResponseQT.Initialize(percCounters->GetSubgroup("metric", "readResponse"), Percentiles);
+            ResponseQT->Initialize(percCounters->GetSubgroup("metric", "writeResponse"), Percentiles);
+            ReadResponseQT->Initialize(percCounters->GetSubgroup("metric", "readResponse"), Percentiles);
         }
 
         TString PrintMe() {
@@ -382,8 +382,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ReadBytesInFlightQT.Add(now, ReadBytesInFlight);
             if (now > LastLatencyTrackerUpdate + TDuration::Seconds(1)) {
                 LastLatencyTrackerUpdate = now;
-                ResponseQT.Update();
-                ReadResponseQT.Update();
+                ResponseQT->Update();
+                ReadResponseQT->Update();
                 if (WritesInFlightTimestamps) {
                     const auto& maxLatency = CyclesToDuration(GetCycleCountFast() - WritesInFlightTimestamps.front().second);
                     *MaxInFlightLatency = maxLatency.MicroSeconds();
@@ -576,7 +576,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 Y_VERIFY(itInFlight != WritesInFlightTimestamps.end());
                 WritesInFlightTimestamps.erase(itInFlight);
 
-                ResponseQT.Increment(response.MicroSeconds());
+                ResponseQT->Increment(response.MicroSeconds());
                 IssueWriteIfPossible(ctx);
 
                 if (ConfirmedBlobIds.size() == 1) {
@@ -719,7 +719,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 const TDuration response = CyclesToDuration(GetCycleCountFast() - it->second);
                 ReadSentTimestamp.erase(it);
 
-                ReadResponseQT.Increment(response.MicroSeconds());
+                ReadResponseQT->Increment(response.MicroSeconds());
                 IssueReadIfPossible(ctx);
             };
 
@@ -753,7 +753,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
     TInstant TestStartTime;
     bool EarlyStop = false;
 
-    TVector<TTabletWriter> TabletWriters;
+    TVector<std::unique_ptr<TTabletWriter>> TabletWriters;
 
     TWakeupQueue WakeupQueue;
     TDeque<TInstant> WakeupScheduledAt;
@@ -831,12 +831,12 @@ public:
                 if (!tablet.HasTabletId() || !tablet.HasChannel() || !tablet.HasGroupId()) {
                     ythrow TLoadActorException() << "TTabletInfo.{TabletId,Channel,GroupId} fields are mandatory";
                 }
-                TabletWriters.emplace_back(Tag, counters, WakeupQueue, QueryDispatcher, tablet.GetTabletId(),
+                TabletWriters.emplace_back(std::make_unique<TTabletWriter>(Tag, counters, WakeupQueue, QueryDispatcher, tablet.GetTabletId(),
                     tablet.GetChannel(), tablet.HasGeneration() ?  TMaybe<ui32>(tablet.GetGeneration()) : TMaybe<ui32>(),
                     tablet.GetGroupId(), putHandleClass, writeSizeGen, writeIntervalGen, garbageCollectIntervalGen,
                     maxWritesInFlight, maxWriteBytesInFlight, maxTotalBytesWritten,
                     getHandleClass, readSizeGen, readIntervalGen,
-                    maxReadsInFlight, maxReadBytesInFlight, scriptedRoundDuration, std::move(scriptedRequests));
+                    maxReadsInFlight, maxReadBytesInFlight, scriptedRoundDuration, std::move(scriptedRequests)));
             }
         }
     }
@@ -849,7 +849,7 @@ public:
             ctx.Schedule(*TestDuration, new TEvents::TEvPoisonPill());
         }
         for (auto& writer : TabletWriters) {
-            writer.Bootstrap(ctx);
+            writer->Bootstrap(ctx);
         }
         HandleWakeup(ctx);
         HandleUpdateQuantile(ctx);
@@ -861,7 +861,7 @@ public:
         }
         LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load tablet recieved PoisonPill, going to die");
         for (auto& writer : TabletWriters) {
-            writer.StopWorking(ctx); // Sends TEvStopTest then all garbage is collected
+            writer->StopWorking(ctx); // Sends TEvStopTest then all garbage is collected
         }
     }
 
@@ -894,7 +894,7 @@ public:
     void HandleUpdateQuantile(const TActorContext& ctx) {
         TInstant now = TAppData::TimeProvider->Now();
         for (auto& writer : TabletWriters) {
-            writer.UpdateQuantile(now);
+            writer->UpdateQuantile(now);
         }
         ctx.Schedule(TDuration::MilliSeconds(5), new TEvUpdateQuantile);
     }
@@ -958,7 +958,7 @@ public:
                         TABLER() {
                             str << "<td colspan=\"2\">" << "<b>Tablet</b>" << "</td>";
                         }
-                        writer.DumpState(str, finalResult);
+                        writer->DumpState(str, finalResult);
                     }
                 }
             }

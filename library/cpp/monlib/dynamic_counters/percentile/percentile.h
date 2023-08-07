@@ -10,15 +10,15 @@ namespace NMonitoring {
 
 template <size_t BUCKET_SIZE, size_t BUCKET_COUNT, size_t FRAME_COUNT>
 struct TPercentileTracker : public TPercentileBase {
-    TAtomic Items[BUCKET_COUNT];
-    TAtomicBase Frame[FRAME_COUNT][BUCKET_COUNT];
+    std::atomic<size_t> Items[BUCKET_COUNT];
+    size_t Frame[FRAME_COUNT][BUCKET_COUNT];
     size_t CurrentFrame;
 
     TPercentileTracker()
         : CurrentFrame(0)
     {
         for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            AtomicSet(Items[i], 0);
+            Items[i].store(0);
         }
         for (size_t frame = 0; frame < FRAME_COUNT; ++frame) {
             for (size_t bucket = 0; bucket < BUCKET_COUNT; ++bucket) {
@@ -28,17 +28,18 @@ struct TPercentileTracker : public TPercentileBase {
     }
 
     void Increment(size_t value) {
-        AtomicIncrement(Items[Min((value + BUCKET_SIZE - 1) / BUCKET_SIZE, BUCKET_COUNT - 1)]);
+        auto idx = Min((value + BUCKET_SIZE - 1) / BUCKET_SIZE, BUCKET_COUNT - 1);
+        Items[idx].fetch_add(1, std::memory_order_relaxed);
     }
 
     // shift frame (call periodically)
     void Update() {
-        TVector<TAtomicBase> totals(BUCKET_COUNT);
+        TVector<size_t> totals(BUCKET_COUNT);
         totals.resize(BUCKET_COUNT);
-        TAtomicBase total = 0;
+        size_t total = 0;
         for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            TAtomicBase item = AtomicGet(Items[i]);
-            TAtomicBase prevItem = Frame[CurrentFrame][i];
+            size_t item = Items[i].load(std::memory_order_relaxed);
+            size_t prevItem = Frame[CurrentFrame][i];
             Frame[CurrentFrame][i] = item;
             total += item - prevItem;
             totals[i] = total;
@@ -46,7 +47,7 @@ struct TPercentileTracker : public TPercentileBase {
 
         for (size_t i = 0; i < Percentiles.size(); ++i) {
             TPercentile &percentile = Percentiles[i];
-            auto threshold = (TAtomicBase)(percentile.first * (float)total);
+            auto threshold = (size_t)(percentile.first * (float)total);
             threshold = Min(threshold, total);
             auto it = LowerBound(totals.begin(), totals.end(), threshold);
             size_t index = it - totals.begin();

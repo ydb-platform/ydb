@@ -1,27 +1,46 @@
+#include "percentile.h"
 #include "percentile_lg.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/datetime/cputimer.h>
 
 using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(PercentileTest) {
 
 template<size_t A, size_t B, size_t B_BEGIN>
-void printSizeAndLimit() {
+void PrintSizeAndLimit() {
     using TPerc = TPercentileTrackerLg<A, B, 15>;
     Cout << "TPercentileTrackerLg<" << A << ", " << B << ", 15>"
         << "; sizeof# " << LeftPad(HumanReadableSize(sizeof(TPerc), SF_BYTES), 7)
         << "; max_granularity# " << LeftPad(HumanReadableSize(TPerc::MAX_GRANULARITY, SF_QUANTITY), 5)
         << "; limit# " << LeftPad(HumanReadableSize(TPerc::TRACKER_LIMIT , SF_QUANTITY), 5) << Endl;
     if constexpr (B > 1) {
-        printSizeAndLimit<A, B - 1, B_BEGIN>();
+        PrintSizeAndLimit<A, B - 1, B_BEGIN>();
     } else if constexpr (A > 1) {
         Cout << Endl;
-        printSizeAndLimit<A - 1, B_BEGIN, B_BEGIN>();
+        PrintSizeAndLimit<A - 1, B_BEGIN, B_BEGIN>();
     }
 }
 
     Y_UNIT_TEST(PrintTrackerLgSizeAndLimits) {
-        printSizeAndLimit<10, 5, 5>();
+        PrintSizeAndLimit<10, 5, 5>();
+    }
+
+template<class T>
+void RunPerf() {
+    TTimer t(TypeName<T>() + "\n");
+    T tracker;
+    for (size_t i = 0; i < 1000000; ++i) {
+        for (size_t i = 0; i < 10; ++i) {
+            tracker.Increment(i * 6451);
+        }
+        tracker.Update();
+    }
+}
+
+    Y_UNIT_TEST(TrackerPerf) {
+        RunPerf<TPercentileTracker<4, 512, 15>>();
+        RunPerf<TPercentileTrackerLg<4, 3, 15>>();
     }
 
     Y_UNIT_TEST(TrackerLimitTest) {

@@ -6,12 +6,14 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(fake_llvm_symbolizer)
 add_subdirectory(ut)
 
 add_library(yql-utils-backtrace)
 target_link_libraries(yql-utils-backtrace PUBLIC
   contrib-libs-cxxsupp
   yutil
+  utils-backtrace-fake_llvm_symbolizer
   lib-DebugInfo-Symbolize
   cpp-deprecated-atomic
 )

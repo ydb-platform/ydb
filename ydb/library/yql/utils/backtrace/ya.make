@@ -17,6 +17,9 @@ ELSE()
     SRCS(
         symbolizer_dummy.cpp
     )
+    PEERDIR(
+        ydb/library/yql/utils/backtrace/fake_llvm_symbolizer
+    )
 ENDIF()
 
 PEERDIR(

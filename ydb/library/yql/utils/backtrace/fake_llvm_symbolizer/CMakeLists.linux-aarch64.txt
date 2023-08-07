@@ -6,20 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(fake_llvm_symbolizer)
-add_subdirectory(ut)
 
-add_library(yql-utils-backtrace)
-target_link_libraries(yql-utils-backtrace PUBLIC
+add_library(utils-backtrace-fake_llvm_symbolizer)
+target_link_libraries(utils-backtrace-fake_llvm_symbolizer PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  utils-backtrace-fake_llvm_symbolizer
   lib-DebugInfo-Symbolize
-  cpp-deprecated-atomic
 )
-target_sources(yql-utils-backtrace PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/backtrace.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/symbolize.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/symbolizer_dummy.cpp
+target_sources(utils-backtrace-fake_llvm_symbolizer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/fake_llvm_symbolizer/fake_llvm_symbolizer.cpp
 )

@@ -4,85 +4,49 @@
 -- TPC TPC-H Parameter Substitution (Version 2.17.2 build 0)
 -- using 1680793381 as a seed to the RNG
 
-$exists = (
-    select
-        COUNT(*) > 0 as result,
-        l1.l_orderkey as l_orderkey,
-        l1.l_suppkey as l_suppkey
-    from
-        {{lineitem}} as l1
-    join
-        {{lineitem}} as l2
-    on
-        l2.l_orderkey = l1.l_orderkey
-    where
-        l2.l_suppkey <> l1.l_suppkey
-    group by
-        l1.l_orderkey, l1.l_suppkey
-);
-$not_exists_inverse = (
-    select
-        l1.l_orderkey as l_orderkey,
-        l1.l_suppkey as l_suppkey
-    from
-        {{lineitem}} as l1
-    join
-        {{lineitem}} as l3
-    on
-        l3.l_orderkey = l1.l_orderkey
-    where
-        l3.l_suppkey <> l1.l_suppkey
-        and l3.l_receiptdate > l3.l_commitdate
-    group by
-        l1.l_orderkey, l1.l_suppkey
-);
-$not_exists = (
-    select
-        l1.l_orderkey as l_orderkey,
-        l1.l_suppkey as l_suppkey
-    from
-        {{lineitem}} as l1
-    left only join
-        $not_exists_inverse AS nei
-    on
-        nei.l_orderkey = l1.l_orderkey and
-        nei.l_suppkey = l1.l_suppkey
-    group by
-        l1.l_orderkey, l1.l_suppkey
-);
+$n = select n_nationkey from {{nation}}
+where n_name = 'EGYPT';
 
-select
-    s.s_name as s_name,
-    count(*) as numwait
-from
-    {{supplier}} as s
-join
-    {{lineitem}} as l1
-on
-    s.s_suppkey = l1.l_suppkey
-join
-    {{orders}} as o
-on
-    o.o_orderkey = l1.l_orderkey
-join
-    {{nation}} as n
-on
-    s.s_nationkey = n.n_nationkey
-join
-    $exists as e
-    on e.l_orderkey == l1.l_orderkey and
-      e.l_suppkey == l1.l_suppkey
-join
-    $not_exists as ne
-    on ne.l_orderkey == l1.l_orderkey and
-      ne.l_suppkey == l1.l_suppkey
-where
-    o.o_orderstatus = 'F'
-    and l1.l_receiptdate > l1.l_commitdate
-    and n.n_name = 'EGYPT'
+$s = select s_name, s_suppkey from {{supplier}} as supplier
+join $n as nation
+on supplier.s_nationkey = nation.n_nationkey;
+
+$l = select l_suppkey, l_orderkey from {{lineitem}}
+where l_receiptdate > l_commitdate;
+
+$j1 = select s_name, l_suppkey, l_orderkey from $l as l1
+join $s as supplier
+on l1.l_suppkey = supplier.s_suppkey;
+
+$j1_1 = select l1.l_orderkey as l_orderkey from $j1 as l1
+join $l as l3
+on l1.l_orderkey = l3.l_orderkey
+where l3.l_suppkey <> l1.l_suppkey;
+
+$j2 = select s_name, l_suppkey, l_orderkey from $j1 as l1
+left only join $j1_1 as l3
+on l1.l_orderkey = l3.l_orderkey;
+
+$j2_1 = select l1.l_orderkey as l_orderkey from $j2 as l1
+join {{lineitem}} as l2
+on l1.l_orderkey = l2.l_orderkey
+where l2.l_suppkey <> l1.l_suppkey;
+
+$j3 = select s_name, l1.l_suppkey as l_suppkey, l1.l_orderkey as l_orderkey from $j2 as l1
+left semi join $j2_1 as l2
+on l1.l_orderkey = l2.l_orderkey;
+
+$j4 = select s_name from $j3 as l1
+join {{orders}} as orders
+on orders.o_orderkey = l1.l_orderkey
+where o_orderstatus = 'F';
+
+select s_name,
+    count(*) as numwait from $j4
 group by
-    s.s_name
+    s_name
 order by
     numwait desc,
     s_name
 limit 100;
+

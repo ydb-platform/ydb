@@ -46,6 +46,7 @@ PEERDIR(
     ydb/public/lib/experimental
     ydb/public/lib/json_value
     ydb/public/lib/yson_value
+    ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_coordination
     ydb/public/sdk/cpp/client/ydb_export
@@ -54,7 +55,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_monitoring
     ydb/services/ydb
-    ydb/services/ydb/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

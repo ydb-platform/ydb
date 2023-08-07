@@ -7,9 +7,8 @@
 
 
 
-add_library(services-ydb-ut_helpers)
-target_link_libraries(services-ydb-ut_helpers PUBLIC
-  contrib-libs-linux-headers
+add_library(public-lib-ut_helpers)
+target_link_libraries(public-lib-ut_helpers PUBLIC
   contrib-libs-cxxsupp
   yutil
   api-grpc
@@ -18,6 +17,6 @@ target_link_libraries(services-ydb-ut_helpers PUBLIC
   api-protos-out
   cpp-grpc-client
 )
-target_sources(services-ydb-ut_helpers PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ut_helpers/ut_helpers_query.cpp
+target_sources(public-lib-ut_helpers PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ut_helpers/ut_helpers_query.cpp
 )

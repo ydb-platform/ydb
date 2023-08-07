@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-kqp-ut-service PUBLIC
   kqp-ut-common
   yql-sql-pg
   yql-parser-pg_wrapper
+  public-lib-ut_helpers
   cpp-client-ydb_operation
   client-ydb_types-operation
 )

@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
@@ -40,6 +41,42 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 auto result = db.GetSession().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(result.GetSession().GetId(), id);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(QueryOnClosedSession) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetQueryClient();
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId());
+                auto session = result.GetSession();
+                id = session.GetId();
+
+                bool allDoneOk = true;
+                NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+                UNIT_ASSERT(allDoneOk);
+
+                auto execResult = session.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::BAD_SESSION);
+            }
+            // closed session must be removed from session pool
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId() != id);
             }
         }
         WaitForZeroSessions(counters);

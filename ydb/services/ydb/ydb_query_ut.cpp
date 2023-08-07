@@ -1,7 +1,7 @@
 #include "ydb_common_ut.h"
-#include "ut_helpers/ut_helpers_query.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 

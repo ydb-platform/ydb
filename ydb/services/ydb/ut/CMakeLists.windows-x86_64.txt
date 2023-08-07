@@ -34,6 +34,7 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   public-lib-experimental
   public-lib-json_value
   public-lib-yson_value
+  public-lib-ut_helpers
   cpp-client-draft
   cpp-client-ydb_coordination
   cpp-client-ydb_export
@@ -41,7 +42,6 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   cpp-client-ydb_operation
   cpp-client-ydb_scheme
   cpp-client-ydb_monitoring
-  services-ydb-ut_helpers
 )
 target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_bulk_upsert_ut.cpp

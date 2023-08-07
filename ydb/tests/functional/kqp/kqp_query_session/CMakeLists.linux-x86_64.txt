@@ -15,9 +15,9 @@ target_link_libraries(ydb-tests-functional-kqp-kqp_query_session PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-threading-local_executor
+  public-lib-ut_helpers
   cpp-client-ydb_discovery
   cpp-client-draft
-  services-ydb-ut_helpers
 )
 target_link_options(ydb-tests-functional-kqp-kqp_query_session PRIVATE
   -ldl

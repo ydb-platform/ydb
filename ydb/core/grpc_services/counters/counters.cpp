@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -114,7 +115,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutDatabase;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutToken;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutTls;
-    NMonitoring::TPercentileTracker<4, 512, 15> RequestHistMs;
+    NMonitoring::TPercentileTrackerLg<4, 3, 15> RequestHistMs;
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
 
     TYdbRpcCounters YdbCounters;

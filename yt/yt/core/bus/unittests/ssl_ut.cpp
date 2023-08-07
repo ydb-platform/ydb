@@ -394,7 +394,7 @@ TEST_F(TSslTest, CAVerificationModeFailure)
 
     auto clientConfig = TBusClientConfig::CreateTcp(Address);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
-    clientConfig->VerificationMode = EVerificationMode::CA;
+    clientConfig->VerificationMode = EVerificationMode::Ca;
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
@@ -454,7 +454,7 @@ JFWcF3ghP7uPmbONWLiTFwxsSJHT0svVQZgq1aZz
 
     auto clientConfig = TBusClientConfig::CreateTcp(Address);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
-    clientConfig->VerificationMode = EVerificationMode::CA;
+    clientConfig->VerificationMode = EVerificationMode::Ca;
     clientConfig->CAFile = "unused if CA has already been loaded";
     auto client = CreateBusClient(clientConfig);
 

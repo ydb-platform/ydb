@@ -2004,7 +2004,7 @@ void TTcpConnection::TryEstablishSslSession()
                 return;
             }
             [[fallthrough]];
-        case EVerificationMode::CA: {
+        case EVerificationMode::Ca: {
             if (!Config_->CAFile) {
                 Abort(TError(NBus::EErrorCode::SslError, "The CA file is not set in bus config"));
                 return;

@@ -49,7 +49,7 @@ DEFINE_ENUM(EEncryptionMode,
 
 DEFINE_ENUM(EVerificationMode,
     ((None)     (0))    // Do no certificate or host name verifications.
-    ((CA)       (1))    // Verifies peer's certificate with the CA.
+    ((Ca)       (1))    // Verifies peer's certificate with the CA.
     ((Full)     (2))    // Verifies peer's certificate with the CA as well as peer's host name against the certificate.
 );
 

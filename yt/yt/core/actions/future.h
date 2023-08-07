@@ -65,10 +65,10 @@ void Unref(TFutureState<T>* state);
 template <class T>
 [[nodiscard]] TFuture<T> MakeWellKnownFuture(TErrorOr<T> value);
 
-template<class T>
+template <class T>
 constexpr bool IsFuture = false;
 
-template<class T>
+template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
 
 } // namespace NDetail
@@ -716,7 +716,7 @@ TFuture<std::vector<TErrorOr<T>>> CancelableRunWithBoundedConcurrency(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<class T>
+template <class T>
 concept CFuture = NDetail::IsFuture<T>;
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2234,7 +2234,8 @@ public:
         const TS3ReadActorFactoryConfig& readActorFactoryCfg,
         ::NMonitoring::TDynamicCounterPtr counters,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
-        ui64 fileSizeLimit
+        ui64 fileSizeLimit,
+        IMemoryQuotaManager::TPtr memoryQuotaManager
     )   : ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
@@ -2252,7 +2253,8 @@ public:
         , ReadSpec(readSpec)
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
-        , FileSizeLimit(fileSizeLimit) {
+        , FileSizeLimit(fileSizeLimit)
+        , MemoryQuotaManager(memoryQuotaManager) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -2279,6 +2281,16 @@ public:
 
     void Bootstrap() {
         LOG_D("TS3StreamReadActor", "Bootstrap");
+
+        // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
+        // After exact mem control implementation, this allocation should be deleted
+        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
+            TIssues issues;
+            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate read buffer"});
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED));
+            return;
+        }
+
         QueueBufferCounter = std::make_shared<TReadBufferCounter>(
             ReadActorFactoryCfg.DataInflight,
             TActivationContext::ActorSystem(),
@@ -2521,10 +2533,13 @@ private:
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
             ArrowRowContainerCache.Clear();
+
+            MemoryQuotaManager->FreeQuota(ReadActorFactoryCfg.DataInflight);
         } else {
             LOG_W("TS3StreamReadActor", "PassAway w/o Bootstrap");
         }
 
+        MemoryQuotaManager.reset();
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
 
@@ -2687,6 +2702,7 @@ private:
     NActors::TActorId FileQueueActor;
     const ui64 FileSizeLimit;
     bool Bootstrapped = false;
+    IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -2841,7 +2857,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
-    ::NMonitoring::TDynamicCounterPtr taskCounters)
+    ::NMonitoring::TDynamicCounterPtr taskCounters,
+    IMemoryQuotaManager::TPtr memoryQuotaManager)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2988,7 +3005,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SUPPORTED_FLAGS
         const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy,
-                                                  cfg, counters, taskCounters, fileSizeLimit);
+                                                  cfg, counters, taskCounters, fileSizeLimit, memoryQuotaManager);
 
         return {actor, actor};
     } else {

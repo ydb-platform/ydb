@@ -1570,7 +1570,8 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .TaskCounters = TaskCounters,
-                        .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr
+                        .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr,
+                        .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();

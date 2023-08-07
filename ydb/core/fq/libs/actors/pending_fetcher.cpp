@@ -41,7 +41,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
@@ -398,7 +397,7 @@ private:
             );
 
         auto runActorId =
-            ComputeConfig.GetComputeType(task) == NConfig::EComputeType::YDB
+            ComputeConfig.GetComputeType(task.query_type(), task.scope()) == NConfig::EComputeType::YDB
                 ? Register(CreateYdbRunActor(std::move(params), queryCounters))
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 

@@ -4,6 +4,7 @@ option cc_enable_arenas = true;
 package NFq.NConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
+import "ydb/core/fq/libs/config/protos/activation.proto";
 import "ydb/core/fq/libs/config/protos/storage.proto";
 import "ydb/public/api/protos/draft/fq.proto";
 
@@ -59,24 +60,15 @@ enum EComputeType {
     YDB = 2;
 }
 
-message TComputeMappingRuleKey {
-    oneof key {
-        FederatedQuery.QueryContent.QueryType QueryType = 1;
-        // FederatedQuery.QueryContent.EngineType EngineType = 2;
-    }
-}
-
-message TComputeMappingRule {
-    repeated TComputeMappingRuleKey Key = 1;
-    EComputeType Compute = 2;
-}
-
 message TComputeMapping {
-    repeated TComputeMappingRule Rule = 1;
+    FederatedQuery.QueryContent.QueryType QueryType = 1;
+    EComputeType Compute = 2;
+    TActivationPercentage Activation = 3;
 }
 
 message TComputeConfig {
     TInPlaceCompute InPlace = 1;
     TYdbCompute Ydb = 2;
-    TComputeMapping ComputeMapping = 3;
+    EComputeType DefaultCompute = 3;
+    repeated TComputeMapping ComputeMapping = 4;
 }

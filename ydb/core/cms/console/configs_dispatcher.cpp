@@ -46,6 +46,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ImmediateControlsConfigItem,
     (ui32)NKikimrConsole::TConfigItem::LogConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MonitoringConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem,
     (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
@@ -57,6 +58,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
+    (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
     (ui32)NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem,
 });
 

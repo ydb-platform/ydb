@@ -8,6 +8,8 @@
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 #include <library/cpp/actors/interconnect/interconnect_address.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -207,6 +209,9 @@ public:
             HFunc(TEvNodeBroker::TEvNodesInfo, Handle);
             HFunc(TEvPrivate::TEvUpdateEpoch, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
+
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         }
     }
 
@@ -238,6 +243,9 @@ private:
     void Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TActorContext &ctx);
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
 
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;

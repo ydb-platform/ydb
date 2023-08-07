@@ -624,31 +624,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         const TActorId resolverId = NDnsResolver::MakeDnsResolverActorId();
         const TActorId nameserviceId = GetNameserviceActorId();
 
-        ui32 numNodes = 0;
+        TIntrusivePtr<TTableNameserverSetup> table = NNodeBroker::BuildNameserverTable(nsConfig);
+
+        const ui32 numNodes = table->StaticNodeTable.size();
         TSet<TString> dataCenters;
-
-        TIntrusivePtr<TTableNameserverSetup> table(new TTableNameserverSetup());
-        for (const auto &node : nsConfig.GetNode()) {
-            const ui32 nodeId = node.GetNodeId();
-            const TString host = node.HasHost() ? node.GetHost() : TString();
-            const ui32 port = node.GetPort();
-
-            const TString resolveHost = node.HasInterconnectHost() ?
-                node.GetInterconnectHost() : host;
-
-            // Use ip address only when dns host not specified
-            const TString addr = resolveHost ? TString() : node.GetAddress();
-
-            TNodeLocation location;
-            if (node.HasWalleLocation()) {
-                location = TNodeLocation(node.GetWalleLocation());
-            } else if (node.HasLocation()) {
-                location = TNodeLocation(node.GetLocation());
-            }
-            table->StaticNodeTable[nodeId] = TTableNameserverSetup::TNodeInfo(addr, host, resolveHost, port, location);
-
-            ++numNodes;
-            dataCenters.insert(location.GetDataCenterId());
+        for (const auto& [nodeId, info] : table->StaticNodeTable) {
+            dataCenters.insert(info.Location.GetDataCenterId());
         }
 
         NDnsResolver::TOnDemandDnsResolverOptions resolverOptions;

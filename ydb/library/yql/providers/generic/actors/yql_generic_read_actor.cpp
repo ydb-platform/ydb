@@ -134,31 +134,31 @@ namespace NYql::NDq {
 
                 ui64 total = 0;
 
+                // It's very important to fill UV columns in the alphabet order,
+                // paying attention to the scalar field containing block length.
+                TVector<TString> fieldNames;
+                std::transform(Select_.what().items().cbegin(), Select_.what().items().cend(),
+                               std::back_inserter(fieldNames), [](const auto& item) { return item.column().name(); });
+
+                fieldNames.push_back(std::string(BlockLengthColumnName));
+                std::sort(fieldNames.begin(), fieldNames.end());
+                std::map<TStringBuf, std::size_t> fieldNameOrder;
+                for (std::size_t i = 0; i < fieldNames.size(); i++) {
+                    fieldNameOrder[fieldNames[i]] = i;
+                }
+
                 for (const auto& batch : Result_->RecordBatches) {
                     total += NUdf::GetSizeOfArrowBatchInBytes(*batch);
 
-                    YQL_CLOG(TRACE, ProviderGeneric) << "Converting arrow::RecordBatch into NUdf::UnboxedValue:\n"
-                                                     << batch->ToString();
-
-                    // It's very important to fill UV column in the alphabet order,
-                    // paying attention to the scalar field containing block length.
-                    auto fieldNames = batch->schema()->field_names();
-                    fieldNames.push_back(std::string(BlockLengthColumnName));
-                    std::sort(fieldNames.begin(), fieldNames.end());
-                    std::map<std::string, std::size_t> fieldNameOrder;
-                    for (std::size_t i = 0; i < fieldNames.size(); i++) {
-                        fieldNameOrder[fieldNames[i]] = i;
-                    }
-
                     NUdf::TUnboxedValue* structItems = nullptr;
-                    auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, 1 + batch->num_columns(), structItems);
+                    auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, fieldNames.size(), structItems);
                     for (int i = 0; i < batch->num_columns(); ++i) {
                         const auto& columnName = batch->schema()->field(i)->name();
                         const auto ix = fieldNameOrder[columnName];
                         structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
                     }
 
-                    structItems[fieldNameOrder[std::string(BlockLengthColumnName)]] = HolderFactory_.CreateArrowBlock(
+                    structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
                         arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
                     value = structObj;
 

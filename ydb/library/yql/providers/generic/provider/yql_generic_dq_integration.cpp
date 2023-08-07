@@ -41,8 +41,6 @@ namespace NYql {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
-                    YQL_CLOG(INFO, ProviderGeneric) << "Wrap " << read->Content() << " with token: " << token;
-
                     const auto rowType = genReadTable.Ref()
                                              .GetTypeAnn()
                                              ->Cast<TTupleExprType>()
@@ -131,11 +129,11 @@ namespace NYql {
                     for (size_t i = 0; i < columns.Size(); i++) {
                         // assign column name
                         auto column = items->Add()->mutable_column();
-                        auto column_name = columns.Item(i).StringValue();
-                        column->mutable_name()->assign(column_name);
+                        auto columnName = columns.Item(i).StringValue();
+                        column->mutable_name()->assign(columnName);
 
                         // assign column type
-                        auto type = NConnector::GetColumnTypeByName(tableMeta.value()->Schema, column_name);
+                        auto type = NConnector::GetColumnTypeByName(tableMeta.value()->Schema, columnName);
                         column->mutable_type()->CopyFrom(type);
                     }
 

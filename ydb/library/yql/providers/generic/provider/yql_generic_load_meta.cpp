@@ -243,7 +243,7 @@ namespace NYql {
                 items.emplace_back(ctx.MakeType<TItemExprType>(columns.Get(i).name(), typeAnnotation));
                 columnOrder.emplace_back(columns.Get(i).name());
             }
-            // FIXME: handle on Generic's side?
+            // FIXME: handle on Connector's side?
             return std::make_pair(ctx.MakeType<TStructExprType>(items), TString("Europe/Moscow"));
         } catch (std::exception&) {
             ctx.AddError(TIssue({}, TStringBuilder() << "Failed to parse table metadata: " << CurrentExceptionMessage()));

@@ -53,6 +53,11 @@ namespace NYql {
             TString clusterName{input->Child(TGenSourceSettings::idx_Cluster)->Content()};
             TString tableName{input->Child(TGenSourceSettings::idx_Table)->Content()};
 
+            THashSet<TStringBuf> columnSet;
+            for (const auto& child : input->Child(TGenSourceSettings::idx_Columns)->Children()) {
+                columnSet.insert(child->Content());
+            }
+
             auto [tableMeta, issue] = State_->GetTable(clusterName, tableName, ctx.GetPosition(input->Pos()));
             if (issue.has_value()) {
                 ctx.AddError(issue.value());
@@ -64,18 +69,18 @@ namespace NYql {
 
             const auto structExprType = tableMeta.value()->ItemType;
             for (const auto& item : structExprType->GetItems()) {
-                blockRowTypeItems.push_back(
-                    ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(item->GetItemType())));
+                // Filter out columns that are not required in this query
+                if (columnSet.contains(item->GetName())) {
+                    blockRowTypeItems.push_back(
+                        ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(item->GetItemType())));
+                }
             }
 
             blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(
                 BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
             const TTypeAnnotationNode* typeAnnotationNode = ctx.MakeType<TStructExprType>(blockRowTypeItems);
 
-            // Struct column order
-            YQL_CLOG(INFO, ProviderGeneric)
-                << "StructExprType column order:"
-                << (static_cast<const TStructExprType*>(typeAnnotationNode))->ToString();
+            YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order" << (static_cast<const TStructExprType*>(typeAnnotationNode))->ToString();
 
             auto streamExprType = ctx.MakeType<TStreamExprType>(typeAnnotationNode);
             input->SetTypeAnn(streamExprType);
@@ -105,21 +110,21 @@ namespace NYql {
                 return TStatus::Error;
             }
 
-            TMaybe<THashSet<TStringBuf>> columnsSet;
+            TMaybe<THashSet<TStringBuf>> columnSet;
             auto columns = input->Child(TGenReadTable::idx_Columns);
             if (!columns->IsCallable(TCoVoid::CallableName())) {
                 if (!EnsureTuple(*columns, ctx)) {
                     return TStatus::Error;
                 }
 
-                columnsSet.ConstructInPlace();
+                columnSet.ConstructInPlace();
                 for (auto& child : columns->Children()) {
                     if (!EnsureAtom(*child, ctx)) {
                         return TStatus::Error;
                     }
 
                     auto name = child->Content();
-                    if (!columnsSet->insert(name).second) {
+                    if (!columnSet->insert(name).second) {
                         ctx.AddError(
                             TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicated column name: " << name));
                         return TStatus::Error;
@@ -139,13 +144,15 @@ namespace NYql {
             auto itemType = tableMeta.value()->ItemType;
             auto columnOrder = tableMeta.value()->ColumnOrder;
 
-            YQL_CLOG(INFO, ProviderGeneric) << "Custom column order:" << StateColumnOrderToString(columnOrder);
+            if (columnSet) {
+                YQL_CLOG(INFO, ProviderGeneric) << "custom column set" << ColumnSetToString(*columnSet.Get());
 
-            if (columnsSet) {
                 TVector<const TItemExprType*> items = itemType->GetItems();
-                EraseIf(items, [&](const TItemExprType* item) { return !columnsSet->contains(item->GetName()); });
-                EraseIf(columnOrder, [&](const TString& col) { return !columnsSet->contains(col); });
+                EraseIf(items, [&](const TItemExprType* item) { return !columnSet->contains(item->GetName()); });
+                EraseIf(columnOrder, [&](const TString& col) { return !columnSet->contains(col); });
                 itemType = ctx.MakeType<TStructExprType>(items);
+
+                YQL_CLOG(DEBUG, ProviderGeneric) << "struct column order" << (static_cast<const TStructExprType*>(itemType))->ToString();
             }
 
             input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
@@ -154,14 +161,29 @@ namespace NYql {
             return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
         }
 
-        TString StateColumnOrderToString(const TVector<TString>& columns) {
+        TString ColumnOrderToString(const TVector<TString>& columns) {
             TStringBuilder sb;
 
             for (std::size_t i = 0; i < columns.size(); i++) {
-                sb << i << ": " << columns[i];
+                sb << i << "=" << columns[i];
                 if (i != columns.size() - 1) {
                     sb << ", ";
                 }
+            }
+
+            return sb;
+        }
+
+        TString ColumnSetToString(const THashSet<TStringBuf>& columnSet) {
+            TStringBuilder sb;
+
+            std::size_t i = 0;
+            for (const auto key : columnSet) {
+                sb << i << "=" << key;
+                if (i != columnSet.size() - 1) {
+                    sb << ", ";
+                }
+                i++;
             }
 
             return sb;

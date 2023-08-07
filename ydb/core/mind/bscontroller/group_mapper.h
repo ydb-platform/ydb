@@ -41,6 +41,7 @@ namespace NKikimr {
                 i64 SpaceAvailable;
                 const bool Operational;
                 const bool Decommitted;
+                TString WhyUnusable;
             };
 
         public:

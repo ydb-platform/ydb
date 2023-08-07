@@ -191,6 +191,7 @@ enum EDecommitStatus {
     DECOMMIT_NONE = 1; // no decomission
     DECOMMIT_PENDING = 2; // drive is going to be removed soon, but SelfHeal logic would not remove it automatically
     DECOMMIT_IMMINENT = 3; // drive is going to be settled automatically
+    DECOMMIT_REJECTED = 4; // drive is working as usual, but decommitted slots are not placed here
 }
 
 message TGroupStatus {
@@ -561,6 +562,9 @@ message TConfigRequest {
 
     // execute this request ASAP
     bool Cito = 10;
+
+    // is this command originated by self-heal decommission?
+    bool IsSelfHealReasonDecommit = 12;
 }
 
 enum ETriStateBool {

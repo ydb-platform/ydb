@@ -15,6 +15,7 @@ namespace NKikimr::NBsController {
                 bool Faulty;
                 bool Bad;
                 bool Decommitted;
+                bool IsSelfHealReasonDecommit;
                 bool OnlyPhantomsRemain;
                 bool IsReady;
                 NKikimrBlobStorage::EVDiskStatus VDiskStatus;

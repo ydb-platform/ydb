@@ -25,7 +25,7 @@ namespace NKikimr::NBsController {
             }
 
             bool IsUsable() const {
-                return Usable && !Decommitted && NumSlots < MaxSlots;
+                return Usable && NumSlots < MaxSlots;
             }
 
             void InsertGroup(ui32 groupId) {
@@ -887,10 +887,7 @@ namespace NKikimr::NBsController {
                         s << std::exchange(minus, "") << "f";
                     }
                     if (!pdisk->Usable) {
-                        s << std::exchange(minus, "") << "u";
-                    }
-                    if (pdisk->Decommitted) {
-                        s << std::exchange(minus, "") << "d";
+                        s << std::exchange(minus, "") << pdisk->WhyUnusable;
                     }
                     if (pdisk->NumSlots >= pdisk->MaxSlots) {
                         s << std::exchange(minus, "") << "s[" << pdisk->NumSlots << "/" << pdisk->MaxSlots << "]";

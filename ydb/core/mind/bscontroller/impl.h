@@ -451,6 +451,17 @@ public:
                 || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
         }
 
+        bool IsSelfHealReasonDecommit() const {
+            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
+                Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
+                Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
+        }
+
+        bool UsableInTermsOfDecommission(bool isSelfHealReasonDecommit) const {
+            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE // acceptable in any case
+                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
+        }
+
         bool BadInTermsOfSelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
@@ -470,6 +481,7 @@ public:
                     return false;
                 case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING:
                 case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT:
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED:
                     return true;
                 case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET:
                 case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MIN_SENTINEL_DO_NOT_USE_:

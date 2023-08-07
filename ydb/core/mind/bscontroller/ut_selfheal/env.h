@@ -194,6 +194,11 @@ struct TEnvironmentSetup {
         Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
     }
 
+    void Sim(TDuration duration) {
+        const auto end = Runtime->GetClock() + duration;
+        Runtime->Sim([&] { return Runtime->GetClock() <= end; });
+    }
+
     void WaitForNodeWardensToConnect() {
         std::vector<TActorId> edges;
         for (ui32 nodeId : Runtime->GetNodes()) {

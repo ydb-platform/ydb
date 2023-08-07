@@ -42,19 +42,22 @@ namespace NKikimr::NBsController {
         const std::optional<TVDiskID> VDiskToReplace;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
         TBlobStorageGroupInfo::TGroupVDisks FailedGroupDisks;
+        const bool IsSelfHealReasonDecommit;
         THashSet<TVDiskID> PendingVDisks;
         THashMap<TActorId, TVDiskID> ActorToDiskMap;
         THashMap<TNodeId, TVector<TVDiskID>> NodeToDiskMap;
 
     public:
         TReassignerActor(TActorId controllerId, TGroupId groupId, TEvControllerUpdateSelfHealInfo::TGroupContent group,
-                std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology)
+                std::optional<TVDiskID> vdiskToReplace, std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology,
+                bool isSelfHealReasonDecommit)
             : ControllerId(controllerId)
             , GroupId(groupId)
             , Group(std::move(group))
             , VDiskToReplace(vdiskToReplace)
             , Topology(std::move(topology))
             , FailedGroupDisks(Topology.get())
+            , IsSelfHealReasonDecommit(isSelfHealReasonDecommit)
         {}
 
         void Bootstrap(const TActorId& parent) {
@@ -149,6 +152,7 @@ namespace NKikimr::NBsController {
             auto *request = record.MutableRequest();
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
+            request->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
             if (VDiskToReplace) {
                 auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
                 cmd->SetGroupId(VDiskToReplace->GroupID);
@@ -405,9 +409,11 @@ namespace NKikimr::NBsController {
                 }
 
                 // check if it is possible to move anything out
-                if (const auto v = FindVDiskToReplace(group.VDiskStatus, group.Content, now, group.Topology.get())) {
+                bool isSelfHealReasonDecommit;
+                if (const auto v = FindVDiskToReplace(group.VDiskStatus, group.Content, now, group.Topology.get(),
+                        &isSelfHealReasonDecommit)) {
                     group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                        *v, group.Topology));
+                        *v, group.Topology, isSelfHealReasonDecommit));
                 } else {
                     ++counter; // this group can't be reassigned right now
                 }
@@ -440,7 +446,7 @@ namespace NKikimr::NBsController {
                         ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(GroupLayoutSanitizerOperationLog,
                                 "Start sanitizing GroupId# " << group.GroupId << " GroupGeneration# " << group.Content.Generation);
                         group.ReassignerActorId = Register(new TReassignerActor(ControllerId, group.GroupId, group.Content,
-                            std::nullopt, group.Topology));
+                            std::nullopt, group.Topology, false /*isSelfHealReasonDecommit*/));
                     }
                 }
             }
@@ -491,7 +497,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TVDiskID> FindVDiskToReplace(const THashMap<TVDiskID, TVDiskStatusTracker>& tracker,
                 const TEvControllerUpdateSelfHealInfo::TGroupContent& content, TInstant now,
-                TBlobStorageGroupInfo::TTopology *topology) {
+                TBlobStorageGroupInfo::TTopology *topology, bool *isSelfHealReasonDecommit) {
             // main idea of selfhealing is step-by-step healing of bad group; we can allow healing of group with more
             // than one disk missing, but we should not move next faulty disk until previous one is replicated, at least
             // partially (meaning only phantoms left)
@@ -537,6 +543,7 @@ namespace NKikimr::NBsController {
                     } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
                         continue; // this group will become degraded when applying self-heal logic, skip disk
                     }
+                    *isSelfHealReasonDecommit = vdisk.IsSelfHealReasonDecommit;
                     return vdiskId;
                 }
             }
@@ -906,6 +913,7 @@ namespace NKikimr::NBsController {
                     slot->PDisk->ShouldBeSettledBySelfHeal(),
                     slot->PDisk->BadInTermsOfSelfHeal(),
                     slot->PDisk->Decommitted(),
+                    slot->PDisk->IsSelfHealReasonDecommit(),
                     slot->OnlyPhantomsRemain,
                     slot->IsReady,
                     slot->Status,

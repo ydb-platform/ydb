@@ -599,6 +599,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         {"Extend", &TProgramBuilder::Extend},
         {"OrderedExtend", &TProgramBuilder::Extend},
+        {"BlockExtend", &TProgramBuilder::BlockExtend},
 
         {"Zip", &TProgramBuilder::Zip},
         {"ZipAll", &TProgramBuilder::ZipAll},

@@ -2511,6 +2511,21 @@ namespace {
             }
         }
 
+        if (listType->GetKind() == ETypeAnnotationKind::Flow) {
+            auto flowItem = listType->Cast<TFlowExprType>()->GetItemType();
+            if (flowItem->GetKind() == ETypeAnnotationKind::Multi) {
+                auto items = flowItem->Cast<TMultiExprType>()->GetItems();
+                if (!items.empty()) {
+                    items.pop_back();
+                    if (AnyOf(items, [](const auto& item) { return item->GetKind() == ETypeAnnotationKind::Scalar; })) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                            << "Scalars are not supported in Extend inputs:  " << *listType));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
+            }
+        }
+
         input->SetTypeAnn(listType);
         return IGraphTransformer::TStatus::Ok;
     }

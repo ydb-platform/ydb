@@ -986,6 +986,51 @@ IGraphTransformer::TStatus BlockPgCallWrapper(const TExprNode::TPtr& input, TExp
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TTypeAnnotationNode::TListType commonItemTypes;
+    for (size_t idx = 0; idx < input->ChildrenSize(); ++idx) {
+        auto child = input->Child(idx);        
+        TTypeAnnotationNode::TListType currentItemTypes;
+        if (!EnsureWideFlowBlockType(*child, idx ? currentItemTypes : commonItemTypes, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (idx == 0) {
+            continue;
+        }
+
+        if (currentItemTypes.size() != commonItemTypes.size()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
+                TStringBuilder() << "Expected same width ( " << commonItemTypes.size() << ") on all inputs, but got: " << *child->GetTypeAnn() << " on input #" << idx));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+
+        for (size_t i = 0; i < currentItemTypes.size(); ++i) {
+            if (!IsSameAnnotation(*currentItemTypes[i], *commonItemTypes[i])) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
+                    TStringBuilder() << "Expected item type " << *commonItemTypes[i] << " at column #" << i << " on input #" << idx << ", but got : " << *currentItemTypes[i]));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+    }
+
+    TTypeAnnotationNode::TListType resultItemTypes;
+    for (size_t i = 0; i < commonItemTypes.size(); ++i) {
+        if (i + 1 == commonItemTypes.size()) {
+            resultItemTypes.emplace_back(ctx.Expr.MakeType<TScalarExprType>(commonItemTypes[i]));
+        } else {
+            resultItemTypes.emplace_back(ctx.Expr.MakeType<TBlockExprType>(commonItemTypes[i]));
+        }
+    }
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TMultiExprType>(std::move(resultItemTypes))));
+    return IGraphTransformer::TStatus::Ok;
+}
 
 } // namespace NTypeAnnImpl
 }

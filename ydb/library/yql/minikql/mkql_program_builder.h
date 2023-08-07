@@ -256,6 +256,7 @@ public:
     TRuntimeNode WideTopSortBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode WideSortBlocks(TRuntimeNode flow, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
     TRuntimeNode AsScalar(TRuntimeNode value);
+    TRuntimeNode BlockExtend(const TArrayRef<const TRuntimeNode>& flows);
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
     TRuntimeNode BlockExpandChunked(TRuntimeNode flow);
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);

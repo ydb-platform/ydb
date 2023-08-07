@@ -26,13 +26,13 @@ std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
 }
 
 std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
-    constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui8) - 1) / sizeof(ui8);
+    constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
     static ui64 nulls[NullWordCount] = { 0 };
     if (byteLen <= sizeof(nulls)) {
         return std::make_shared<arrow::Buffer>(reinterpret_cast<const ui8*>(nulls), byteLen);
     }
 
-    size_t wordCount = (byteLen + sizeof(ui8) - 1) / sizeof(ui8);
+    size_t wordCount = (byteLen + sizeof(ui64) - 1) / sizeof(ui64);
     std::shared_ptr<ui64[]> buf(new ui64[wordCount]);
     std::fill(buf.get(), buf.get() + wordCount, 0);
     return std::make_shared<TOwnedArrowBuffer>(TContiguousSpan{ reinterpret_cast<const char*>(buf.get()), byteLen }, buf);
@@ -132,7 +132,9 @@ public:
             YQL_ENSURE(NullsCount_.Defined() && NullsSize_.Defined(), "Nulls metadata should be loaded");
             if (*NullsCount_ != 0) {
                 if (*NullsSize_ == 0) {
-                    return MakeDefaultValue(blockLen, offset);
+                    auto result = MakeDefaultValue(blockLen, offset);
+                    ResetMetadata();
+                    return result;
                 }
                 nulls = LoadNullsBitmap(src, NullsCount_, NullsSize_);
                 nullsCount = *NullsCount_;

@@ -1501,6 +1501,36 @@ TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockExtend(const TArrayRef<const TRuntimeNode>& args) {
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
+
+    TVector<TType*> types;
+    for (const auto& arg : args) {
+        auto currentTypes = ValidateBlockFlowType(arg.GetStaticType());
+        MKQL_ENSURE(!currentTypes.empty(), "Wide block flow should have at least one component");
+        if (types.empty()) {
+            types.assign(currentTypes.begin(), currentTypes.end());
+            continue;
+        }
+        MKQL_ENSURE(currentTypes.size() == types.size(), "All arguments should have same width");
+        for (size_t i = 0; i < currentTypes.size(); ++i) {
+            MKQL_ENSURE(currentTypes[i]->IsSameType(*types[i]), "Item types mismatch");
+        }
+    }
+
+    for (ui32 i = 0; i < types.size(); ++i) {
+        types[i] = NewBlockType(types[i], (i + 1 == types.size()) ? TBlockType::EShape::Scalar : TBlockType::EShape::Many);
+    }
+
+    auto returnType = NewFlowType(NewMultiType(types));
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    for (const auto& arg : args) {
+        callableBuilder.Add(arg);
+    }
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode flow, ui32 bitmapIndex) {
     auto blockItemTypes = ValidateBlockFlowType(flow.GetStaticType());
 

@@ -12,6 +12,7 @@
 #include "mkql_block_just.h"
 #include "mkql_block_logical.h"
 #include "mkql_block_compress.h"
+#include "mkql_block_extend.h"
 #include "mkql_block_skiptake.h"
 #include "mkql_block_top.h"
 #include "mkql_block_tuple.h"
@@ -290,6 +291,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"BlockNot", &WrapBlockNot},
         {"BlockJust", &WrapBlockJust},
         {"BlockCompress", &WrapBlockCompress},
+        {"BlockExtend", &WrapBlockExtend},
         {"BlockAsTuple", &WrapBlockAsTuple},
         {"BlockNth", &WrapBlockNth},
         {"BlockExpandChunked", &WrapBlockExpandChunked},

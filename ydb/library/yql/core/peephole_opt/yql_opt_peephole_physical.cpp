@@ -146,6 +146,16 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
         }
     }
 
+    if (const auto& input = node->Head(); input.IsCallable("Extend")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+        TExprNodeList newChildren;
+        newChildren.reserve(input.ChildrenSize());
+        for (auto& child : input.ChildrenList()) {
+            newChildren.emplace_back(ctx.ChangeChild(*node, 0, std::move(child)));
+        }
+        return ctx.NewCallable(input.Pos(), "BlockExtend", std::move(newChildren));
+    }
+
     return node;
 }
 
@@ -3752,6 +3762,19 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
             }
         }
     }
+
+    if (const auto& input = node->Head(); input.IsCallable("Extend")) {
+        bool isWideBlockFlow = AllOf(node->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems(),
+            [](const auto& itemType) { return itemType->IsBlockOrScalar(); });
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+        TExprNodeList newChildren;
+        newChildren.reserve(input.ChildrenSize());
+        for (auto& child : input.ChildrenList()) {
+            newChildren.emplace_back(ctx.ChangeChildren(*node, { child, ctx.DeepCopyLambda(node->Tail())}));
+        }
+        return ctx.NewCallable(input.Pos(), isWideBlockFlow ? "BlockExtend" : "Extend", std::move(newChildren));
+    }
+
 /* TODO
     if (const auto& input = node->Head(); input.IsCallable("WithContext")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();

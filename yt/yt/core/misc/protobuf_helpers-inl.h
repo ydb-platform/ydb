@@ -65,6 +65,33 @@ inline void FromProto(TString* original, std::string serialized)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// These conversions work in case if the patched protobuf that uses
+// TString is used.
+inline void ToProto(TString* serialized, TStringBuf original)
+{
+    *serialized = original;
+}
+
+inline void FromProto(TStringBuf* original, const TString& serialized)
+{
+    *original = serialized;
+}
+
+// These conversions work in case if the original protobuf that uses
+// std::string is used.
+inline void ToProto(std::string* serialized, TStringBuf original)
+{
+    serialized->resize(original.size());
+    memcpy(serialized->data(), original.data(), original.size());
+}
+
+inline void FromProto(TStringBuf* original, const std::string& serialized)
+{
+    *original = serialized;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 inline void ToProto(::google::protobuf::int64* serialized, TDuration original)
 {
     *serialized = original.MicroSeconds();

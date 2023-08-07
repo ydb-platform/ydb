@@ -344,7 +344,7 @@ protected:
         }
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, Request.Transactions,
-            GetTableKeysRef(), TasksGraph);
+            TasksGraph);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         LOG_T("Got request, become WaitResolveState");
@@ -694,8 +694,8 @@ protected:
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
-        const auto& keyTypes = table.KeyColumnTypes;
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+        const auto& keyTypes = tableInfo->KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
@@ -724,7 +724,7 @@ protected:
 
             TTaskMeta::TShardReadInfo readInfo = {
                 .Ranges = std::move(keyRanges),
-                .Columns = BuildKqpColumns(op, table),
+                .Columns = BuildKqpColumns(op, tableInfo),
             };
 
             task.Meta.Reads.ConstructInPlace();
@@ -797,12 +797,12 @@ protected:
 
         auto& source = stage.GetSources(0).GetReadRangesSource();
 
-        const auto& table = GetTableKeys().GetTable(MakeTableId(source.GetTable()));
-        const auto& keyTypes = table.KeyColumnTypes;
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+        const auto& keyTypes = tableInfo->KeyColumnTypes;
 
-        YQL_ENSURE(table.TableKind != NKikimr::NKqp::ETableKind::Olap);
+        YQL_ENSURE(tableInfo->TableKind != NKikimr::NKqp::ETableKind::Olap);
 
-        auto columns = BuildKqpColumns(source, table);
+        auto columns = BuildKqpColumns(source, tableInfo);
 
         const auto& snapshot = GetSnapshot();
 
@@ -896,9 +896,9 @@ protected:
         };
 
         if (source.GetSequentialInFlightShards()) {
-            auto [startShard, shardInfo] = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+            auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
             if (Stats) {
-                THashMap<ui64, TShardInfo> partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+                THashMap<ui64, TShardInfo> partitions = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
                 for (auto& [shardId, _] : partitions) {
                     Stats->AffectedShards.insert(shardId);
                 }
@@ -910,7 +910,7 @@ protected:
                 return 0;
             }
         } else {
-            THashMap<ui64, TShardInfo> partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+            THashMap<ui64, TShardInfo> partitions = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
             for (auto& [shardId, shardInfo] : partitions) {
                 addPartiton(shardId, shardId, shardInfo, {});
             }
@@ -1139,14 +1139,6 @@ protected:
         } else {
             return "unknown state";
         }
-    }
-
-    const TKqpTableKeys& GetTableKeys() const {
-        return TasksGraph.GetMeta().TableKeys;
-    }
-
-    TKqpTableKeys& GetTableKeysRef() {
-        return TasksGraph.GetMeta().TableKeys;
     }
 
     std::unordered_map<ui64, IActor*>& GetResultChannelProxies() {

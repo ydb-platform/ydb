@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
@@ -31,6 +32,10 @@ struct TPhyTxResultMetadata {
     TVector<ui32> ColumnOrder;
 };
 
+struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
+    THashMap<TTableId, TIntrusivePtr<TKqpTableKeys::TTableConstInfo>> Map;
+};
+
 class TKqpPhyTxHolder {
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
     const NKqpProto::TKqpPhyTx* Proto;
@@ -38,6 +43,8 @@ class TKqpPhyTxHolder {
     TVector<TPhyTxResultMetadata> TxResultsMeta;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
     std::vector<TStagePredictor> Predictors;
+    TIntrusivePtr<TTableConstInfoMap> TableConstInfoById;
+
 public:
     using TConstPtr = std::shared_ptr<const TKqpPhyTxHolder>;
 
@@ -97,8 +104,13 @@ public:
         return Proto->ShortDebugString();
     }
 
+    TIntrusiveConstPtr<TTableConstInfoMap> GetTableConstInfoById() const {
+        return TableConstInfoById;
+    }
+
+
     TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPreparedQuery>& pq, const NKqpProto::TKqpPhyTx* proto,
-        const std::shared_ptr<TPreparedQueryAllocHolder>& alloc);
+        const std::shared_ptr<TPreparedQueryAllocHolder>& alloc, TIntrusivePtr<TTableConstInfoMap> tableConstInfoById);
 
     bool IsLiteralTx() const;
 };
@@ -115,11 +127,14 @@ public:
 
 class TPreparedQueryHolder {
 private:
+    using TTableConstInfo = TKqpTableKeys::TTableConstInfo;
+
     YDB_ACCESSOR_DEF(TLlvmSettings, LlvmSettings);
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> Proto;
     std::shared_ptr<TPreparedQueryAllocHolder> Alloc;
     TVector<TString> QueryTables;
     std::vector<TKqpPhyTxHolder::TConstPtr> Transactions;
+    TIntrusivePtr<TTableConstInfoMap> TableConstInfoById;
 
 public:
 
@@ -164,6 +179,20 @@ public:
     const NKqpProto::TKqpPhyQuery& GetPhysicalQuery() const {
         return Proto->GetPhysicalQuery();
     }
+
+    TIntrusivePtr<TTableConstInfo>& GetInfo(const TTableId& tableId) {
+        auto info = TableConstInfoById->Map.FindPtr(tableId);
+        MKQL_ENSURE_S(info);
+        return *info;
+    }
+
+    const THashMap<TTableId, TIntrusivePtr<TTableConstInfo>>& GetTableConstInfo() const {
+        return TableConstInfoById->Map;
+    }
+
+    void FillTable(const NKqpProto::TKqpPhyTable& phyTable);
+
+    void FillTables(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyStage>& stages);
 };
 
 

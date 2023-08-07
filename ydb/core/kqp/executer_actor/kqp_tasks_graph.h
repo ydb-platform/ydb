@@ -32,6 +32,8 @@ struct TStageInfoMeta {
     TTableId TableId;
     TString TablePath;
     ETableKind TableKind;
+    TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo> TableConstInfo;
+    TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
 
     TVector<bool> SkipNullKeys;
 
@@ -84,7 +86,6 @@ struct TStageInfoMeta {
 
 // things which are common for all tasks in the graph.
 struct TGraphMeta {
-    TKqpTableKeys TableKeys;
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
@@ -243,7 +244,7 @@ using TKqpTasksGraph = NYql::NDq::TDqTasksGraph<TGraphMeta, TStageInfoMeta, TTas
 
 void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGateway::TPhysicalTxData>& txs);
 void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
-void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
+void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TStageInfo& stageInfo,
     ui64 txId, bool enableSpilling);
 
 NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task);
@@ -252,13 +253,14 @@ void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransact
 void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel);
 
 template<typename Proto>
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, const TKqpTableKeys::TTable& table) {
+TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TKqpTableKeys::TTableConstInfo> tableInfo) {
     TVector<TTaskMeta::TColumn> columns;
     columns.reserve(op.GetColumns().size());
 
     for (const auto& column : op.GetColumns()) {
         TTaskMeta::TColumn c;
-        const auto& tableColumn = table.Columns.at(column.GetName());
+
+        const auto& tableColumn = tableInfo->Columns.at(column.GetName());
         c.Id = column.GetId();
         c.Type = tableColumn.Type;
         c.TypeMod = tableColumn.TypeMod;

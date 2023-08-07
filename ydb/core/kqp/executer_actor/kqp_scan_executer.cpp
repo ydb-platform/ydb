@@ -335,14 +335,14 @@ private:
         THashMap<ui64, ui64> assignedShardsCount;
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
-        const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
-        const auto& keyTypes = table.KeyColumnTypes;
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+        const auto& keyTypes = tableInfo->KeyColumnTypes;
         ui32 metaId = 0;
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
-            auto columns = BuildKqpColumns(op, table);
-            auto partitions = PrunePartitions(GetTableKeys(), op, stageInfo, HolderFactory(), TypeEnv());
+            auto columns = BuildKqpColumns(op, tableInfo);
+            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
             const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
@@ -562,7 +562,7 @@ private:
                 YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
             }
 
-            BuildKqpStageChannels(TasksGraph, GetTableKeys(), stageInfo, TxId, AppData()->EnableKqpSpilling);
+            BuildKqpStageChannels(TasksGraph, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
         ResponseEv->InitTxResult(tx.Body);

@@ -1066,9 +1066,9 @@ private:
                 if (!res->Record.GetTxLocks().empty()) {
                     auto& lock = res->Record.GetTxLocks(0);
                     auto tableId = TTableId(lock.GetSchemeShard(), lock.GetPathId());
-                    auto it = FindIf(GetTableKeys().Get(), [tableId](const auto& x){ return x.first.HasSamePath(tableId); });
-                    if (it != GetTableKeys().Get().end()) {
-                        tableName = it->second.Path;
+                    auto it = FindIf(TasksGraph.GetStagesInfo(), [tableId](const auto& x){ return x.second.Meta.TableId.HasSamePath(tableId); });
+                    if (it != TasksGraph.GetStagesInfo().end()) {
+                        tableName = it->second.Meta.TableConstInfo->Path;
                     }
                 }
 
@@ -1356,17 +1356,17 @@ private:
             return task;
         };
 
-        const auto& table = GetTableKeys().GetTable(stageInfo.Meta.TableId);
-        const auto& keyTypes = table.KeyColumnTypes;;
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+        const auto& keyTypes = tableInfo->KeyColumnTypes;
 
         for (auto& op : stage.GetTableOps()) {
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-            auto columns = BuildKqpColumns(op, table);
+            auto columns = BuildKqpColumns(op, tableInfo);
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                 case NKqpProto::TKqpPhyTableOperation::kReadRange:
                 case NKqpProto::TKqpPhyTableOperation::kLookup: {
-                    auto partitions = PrunePartitions(GetTableKeys(), op, stageInfo, HolderFactory(), TypeEnv());
+                    auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
                     auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
 
                     for (auto& [shardId, shardInfo] : partitions) {
@@ -1420,7 +1420,7 @@ private:
                             ShardsWithEffects.insert(task.Meta.ShardId);
                         }
                     } else {
-                        auto result = PruneEffectPartitions(GetTableKeys(), op, stageInfo, HolderFactory(), TypeEnv());
+                        auto result = PruneEffectPartitions(op, stageInfo, HolderFactory(), TypeEnv());
                         for (auto& [shardId, shardInfo] : result) {
                             YQL_ENSURE(!shardInfo.KeyReadRanges);
                             YQL_ENSURE(shardInfo.KeyWriteRanges);
@@ -1441,7 +1441,7 @@ private:
                             }
 
                             for (const auto& [name, info] : shardInfo.ColumnWrites) {
-                                auto& column = table.Columns.at(name);
+                                auto& column = tableInfo->Columns.at(name);
 
                                 auto& taskColumnWrite = task.Meta.Writes->ColumnWrites[column.Id];
                                 taskColumnWrite.Column.Id = column.Id;
@@ -1724,7 +1724,7 @@ private:
                     YQL_ENSURE(stageInfo.Tasks.size() == 1, "Unexpected multiple tasks in single-partition stage");
                 }
 
-                BuildKqpStageChannels(TasksGraph, GetTableKeys(), stageInfo, TxId, /* enableSpilling */ false);
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ false);
             }
 
             ResponseEv->InitTxResult(tx.Body);

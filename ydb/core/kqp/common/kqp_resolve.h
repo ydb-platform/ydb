@@ -26,29 +26,150 @@ class TKqpTableKeys {
 public:
     using TColumn = NSharding::TShardingBase::TColumn;
 
-    struct TTable {
-    public:
+    struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         TString Path;
         TMap<TString, TColumn> Columns;
         TVector<TString> KeyColumns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         ETableKind TableKind = ETableKind::Unknown;
         THashMap<TString, TString> Sequences;
-        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfo;
 
-        const TMap<TString, TColumn>& GetColumnsRemap() const {
-            return Columns;
+        TTableConstInfo() {}
+        TTableConstInfo(const TString& path) : Path(path) {}
+
+        void FillColumn(const NKqpProto::TKqpPhyColumn& phyColumn) {
+            if (Columns.FindPtr(phyColumn.GetId().GetName())) {
+                return;
+            }
+
+            TKqpTableKeys::TColumn column;
+            column.Id = phyColumn.GetId().GetId();
+
+            if (phyColumn.GetTypeId() != NScheme::NTypeIds::Pg) {
+                column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId());
+            } else {
+                column.Type = NScheme::TTypeInfo(phyColumn.GetTypeId(),
+                    NPg::TypeDescFromPgTypeName(phyColumn.GetPgTypeName()));
+            }
+
+            Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
+            if (!phyColumn.GetDefaultFromSequence().empty()) {
+                TString seq = phyColumn.GetDefaultFromSequence();
+                if (!seq.StartsWith(Path)) {
+                    seq = Path + "/" + seq;
+                }
+
+                Sequences.emplace(phyColumn.GetId().GetName(), seq);
+            }
         }
 
-        std::unique_ptr<NSharding::TShardingBase> BuildSharding() const {
-            if (ColumnTableInfo) {
-                auto result = NSharding::TShardingBase::BuildShardingOperator(ColumnTableInfo->Description.GetSharding());
+        void AddColumn(const TString& columnName) {
+            auto& sysColumns = GetSystemColumns();
+            if (Columns.FindPtr(columnName)) {
+                return;
+            }
+
+            auto* systemColumn = sysColumns.FindPtr(columnName);
+            YQL_ENSURE(systemColumn, "Unknown table column"
+                << ", table: " << Path
+                << ", column: " << columnName);
+
+            TKqpTableKeys::TColumn column;
+            column.Id = systemColumn->ColumnId;
+            column.Type = NScheme::TTypeInfo(systemColumn->TypeId);
+            Columns.emplace(columnName, std::move(column));
+        }
+
+
+        void FillTable(const NKqpProto::TKqpPhyTable& phyTable) {
+            switch (phyTable.GetKind()) {
+                case NKqpProto::TABLE_KIND_DS:
+                    TableKind = ETableKind::Datashard;
+                    break;
+                case NKqpProto::TABLE_KIND_OLAP:
+                    TableKind = ETableKind::Olap;
+                    break;
+                case NKqpProto::TABLE_KIND_SYS_VIEW:
+                    TableKind = ETableKind::SysView;
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
+            }
+
+            for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
+                FillColumn(phyColumn);
+            }
+
+            YQL_ENSURE(KeyColumns.empty());
+            KeyColumns.reserve(phyTable.KeyColumnsSize());
+            YQL_ENSURE(KeyColumnTypes.empty());
+            KeyColumnTypes.reserve(phyTable.KeyColumnsSize());
+            for (const auto& keyColumnId : phyTable.GetKeyColumns()) {
+                const auto& column = Columns.FindPtr(keyColumnId.GetName());
+                YQL_ENSURE(column);
+
+                KeyColumns.push_back(keyColumnId.GetName());
+                KeyColumnTypes.push_back(column->Type);
+            }
+        }
+    };
+
+    struct TTable {
+    private:
+        TIntrusivePtr<TTableConstInfo> TableConstInfo;
+        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfo;
+
+    public:
+        TTable() : TableConstInfo(MakeIntrusive<TTableConstInfo>()) {}
+
+        TTable(TIntrusivePtr<TTableConstInfo> constInfoPtr) : TableConstInfo(constInfoPtr) {}
+
+        const TString& GetPath() const {
+            return TableConstInfo->Path;
+        }
+
+        const TMap<TString, TColumn>& GetColumns() const {
+            return TableConstInfo->Columns;
+        }
+        
+        const TVector<TString>& GetKeyColumns() const {
+            return TableConstInfo->KeyColumns;
+        }
+        
+        const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const {
+            return TableConstInfo->KeyColumnTypes;
+        }
+        
+        const ETableKind& GetTableKind() const {
+            return TableConstInfo->TableKind;
+        }
+        
+        const THashMap<TString, TString>& GetSequences() const {
+            return TableConstInfo->Sequences;
+        }
+
+        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> GetColumnTableInfo() const {
+            return ColumnTableInfo;
+        }
+
+        void SetColumnTableInfo(TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> columnTableInfo) {
+            ColumnTableInfo = columnTableInfo;
+        }
+
+        static std::unique_ptr<NSharding::TShardingBase> BuildSharding(const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo>& columnTableInfo) {
+            if (columnTableInfo) {
+                auto result = NSharding::TShardingBase::BuildShardingOperator(columnTableInfo->Description.GetSharding());
                 YQL_ENSURE(result);
                 return result;
             } else {
                 return nullptr;
             }
         }
+
+        void SetPath(const TStringBuf& path) {
+            TableConstInfo->Path = path;
+        }
+
     };
 
     TTable* FindTablePtr(const TTableId& id) {
@@ -71,13 +192,13 @@ public:
         return *table;
     }
 
-    TTable& GetOrAddTable(const TTableId& id, const TStringBuf path) {
+    TTable& GetOrAddTable(const TTableId& id, const TStringBuf& path) {
         auto& table = TablesById[id];
 
-        if (table.Path.empty()) {
-            table.Path = path;
+        if (table.GetPath().empty()) {
+            table.SetPath(path);
         } else {
-            MKQL_ENSURE_S(table.Path == path);
+            MKQL_ENSURE_S(table.GetPath() == path);
         }
 
         return table;
@@ -89,6 +210,10 @@ public:
 
     const THashMap<TTableId, TTable>& Get() const {
         return TablesById;
+    }
+
+    void AddTable(const TTableId& id, TIntrusivePtr<TTableConstInfo> info) {
+        TablesById.insert_or_assign(id, info);
     }
 
 private:

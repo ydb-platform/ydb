@@ -936,7 +936,7 @@ namespace NTypeAnnImpl {
             TAstNode::NewList(inputPos, pool,
                 TAstNode::NewLiteralAtom(inputPos, TStringBuf("return"), pool), parsedType));
         TExprNode::TPtr exprRoot;
-        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr)) {
+        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr, nullptr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

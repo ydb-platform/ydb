@@ -20,6 +20,7 @@ add_subdirectory(peephole_opt)
 add_subdirectory(services)
 add_subdirectory(sql_types)
 add_subdirectory(type_ann)
+add_subdirectory(url_lister)
 add_subdirectory(url_preprocessing)
 add_subdirectory(user_data)
 add_subdirectory(ut)
@@ -66,6 +67,8 @@ target_link_libraries(library-yql-core PUBLIC
   yql-core-file_storage
   yql-core-sql_types
   yql-core-credentials
+  core-url_lister-interface
+  core-url_preprocessing-interface
   library-yql-minikql
   library-yql-protos
   yql-public-udf

@@ -24,7 +24,9 @@ target_link_libraries(library-yql-ast PUBLIC
   cpp-yson-node
   yql-public-udf
   library-yql-utils
+  yql-utils-fetch
   yql-core-issue
+  core-url_lister-interface
   yql-parser-pg_catalog
 )
 target_sources(library-yql-ast PRIVATE

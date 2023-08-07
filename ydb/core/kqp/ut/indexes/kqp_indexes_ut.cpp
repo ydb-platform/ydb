@@ -60,7 +60,7 @@ NYql::NNodes::TExprBase GetExpr(const TString& ast, NYql::TExprContext& ctx, NYq
     NYql::TAstParseResult astRes = NYql::ParseAst(ast);
     YQL_ENSURE(astRes.IsOk());
     NYql::TExprNode::TPtr result;
-    YQL_ENSURE(CompileExpr(*astRes.Root, result, ctx, moduleResolver));
+    YQL_ENSURE(CompileExpr(*astRes.Root, result, ctx, moduleResolver, nullptr));
     return NYql::NNodes::TExprBase(result);
 }
 

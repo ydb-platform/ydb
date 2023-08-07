@@ -42,3 +42,5 @@ default:
   ydb-doc-repo: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
 
   corporate-paste: https://www.paste.example.com
+  corporate-yt: https://www.yt.example.com
+  corporate-yt-cluster: example-cluster

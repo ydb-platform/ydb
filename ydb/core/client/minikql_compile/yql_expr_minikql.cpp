@@ -1582,7 +1582,7 @@ private:
             return false;
         }
         Expr->Context.IssueManager.AddIssues(std::move(astRes.Issues));
-        if (!CompileExpr(*root, Expr->Root, Expr->Context, nullptr)) {
+        if (!CompileExpr(*root, Expr->Root, Expr->Context, nullptr, nullptr)) {
             errors = Expr->Context.IssueManager.GetIssues();
             return false;
         }

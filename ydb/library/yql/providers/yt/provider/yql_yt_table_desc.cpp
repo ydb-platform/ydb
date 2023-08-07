@@ -148,7 +148,7 @@ TExprNode::TPtr BuildIgnoreTypeV3Remapper(const TStructExprType* rowType, TExprC
 }
 
 TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IRandomProvider& randomProvider)
+    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
 {
     NSQLTranslation::TTranslationSettings settings;
     settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
@@ -164,7 +164,7 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
     }
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*sqlRes.Root, exprRoot, ctx, moduleResolver, false, Max<ui32>(), syntaxVersion)) {
+    if (!CompileExpr(*sqlRes.Root, exprRoot, ctx, moduleResolver, urlListerManager, false, Max<ui32>(), syntaxVersion)) {
         return {};
     }
 
@@ -233,10 +233,10 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
 
 
 bool TYtViewDescription::Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
-    IModuleResolver* moduleResolver, IRandomProvider& randomProvider)
+    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
 {
     Sql = sql;
-    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, ctx, moduleResolver, randomProvider);
+    CompiledSql = CompileViewSql(provider, cluster, sql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider);
     return bool(CompiledSql);
 }
 
@@ -247,7 +247,7 @@ void TYtViewDescription::CleanupCompiledSQL()
 
 bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& cluster, const TString& table,
     const TStructExprType* type, const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs,
-    TExprContext& ctx, IModuleResolver* moduleResolver, IRandomProvider& randomProvider)
+    TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider)
 {
     // (1) row type
     RawRowType = type;
@@ -326,13 +326,13 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
     }
 
     // (3) views
-    if (!FillViews(provider, cluster, table, metaAttrs, ctx, moduleResolver, randomProvider)) {
+    if (!FillViews(provider, cluster, table, metaAttrs, ctx, moduleResolver, urlListerManager, randomProvider)) {
         return false;
     }
 
     if (viewSql) {
         if (!View) {
-            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, randomProvider)) {
+            if (!View.ConstructInPlace().Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view, table: " << cluster << '.' << table));
                 return false;
@@ -344,7 +344,8 @@ bool TYtTableDescriptionBase::Fill(const TString& provider, const TString& clust
 }
 
 bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& cluster, const TString& table,
-    const THashMap<TString, TString>& metaAttrs, TExprContext& ctx, IModuleResolver* moduleResolver, IRandomProvider& randomProvider)
+    const THashMap<TString, TString>& metaAttrs, TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager,
+    IRandomProvider& randomProvider)
 {
     for (auto& view: Views) {
         TYtViewDescription& viewDesc = view.second;
@@ -372,7 +373,7 @@ bool TYtTableDescriptionBase::FillViews(const TString& provider, const TString& 
                 }
             }
 
-            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, randomProvider)) {
+            if (!viewDesc.Fill(provider, cluster, viewSql, syntaxVersion, ctx, moduleResolver, urlListerManager, randomProvider)) {
                 ctx.AddError(TIssue(TPosition(),
                     TStringBuilder() << "Can't load sql view " << viewSql.Quote()
                     << ", table: " << cluster << '.' << table

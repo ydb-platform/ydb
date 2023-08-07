@@ -262,7 +262,7 @@ private:
                 const auto astRoot = TAstNode::NewList({}, pool,
                     TAstNode::NewList({}, pool, TAstNode::NewLiteralAtom({}, TStringBuf("return"), pool), parsedType));
                 TExprNode::TPtr exprRoot;
-                YQL_ENSURE(CompileExpr(*astRoot, exprRoot, ctx, nullptr), "Failed to compile.");
+                YQL_ENSURE(CompileExpr(*astRoot, exprRoot, ctx, nullptr, nullptr), "Failed to compile.");
 
                 // TODO: Collect type annotation directly from AST.
                 const auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*State_->Types);

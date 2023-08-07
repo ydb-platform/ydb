@@ -188,6 +188,10 @@ void TProgramFactory::SetArrowResolver(IArrowResolver::TPtr arrowResolver) {
     ArrowResolver_ = arrowResolver;
 }
 
+void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager) {
+    UrlListerManager_ = std::move(urlListerManager);
+}
+
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
         const TString& sessionId)
@@ -210,11 +214,13 @@ TProgramPtr TProgramFactory::Create(
     TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr;
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
     IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
+    IUrlListerManagerPtr urlListerManager = UrlListerManager_ ? UrlListerManager_->Clone() : nullptr;
     auto udfResolver = udfIndex ? NCommon::CreateUdfResolverWithIndex(udfIndex, UdfResolver_, FileStorage_) : UdfResolver_;
 
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
-        UserDataTable_, Credentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
+        UserDataTable_, Credentials_, moduleResolver, urlListerManager,
+        udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode);
 }
 
@@ -230,6 +236,7 @@ TProgram::TProgram(
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
+        const IUrlListerManagerPtr& urlListerManager,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
@@ -250,6 +257,7 @@ TProgram::TProgram(
     , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , Credentials_(credentials)
+    , UrlListerManager_(urlListerManager)
     , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(udfIndexPackageSet)
@@ -280,6 +288,12 @@ TProgram::TProgram(
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
         modules->SetCredentials(Credentials_);
     }
+
+    if (UrlListerManager_) {
+        UrlListerManager_->SetCredentials(Credentials_);
+        UrlListerManager_->SetUrlPreprocessing(urlPreprocessing);
+    }
+
     OperationOptions_.Runner = runner;
     UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
 }
@@ -352,6 +366,10 @@ void TProgram::SetParametersYson(const TString& parameters) {
     OperationOptions_.ParametersYson = node;
     if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
         modules->SetParameters(node);
+    }
+
+    if (UrlListerManager_) {
+        UrlListerManager_->SetParameters(node);
     }
 }
 
@@ -470,7 +488,11 @@ bool TProgram::Compile(const TString& username, bool skipLibraries) {
         }
     }
 
-    if (!CompileExpr(*AstRoot_, ExprRoot_, *ExprCtx_, skipLibraries ? nullptr : Modules_.get(), 0, SyntaxVersion_)) {
+    if (!CompileExpr(
+        *AstRoot_, ExprRoot_, *ExprCtx_,
+        skipLibraries ? nullptr : Modules_.get(),
+        skipLibraries ? nullptr : UrlListerManager_.Get(), 0, SyntaxVersion_
+    )) {
         return false;
     }
 
@@ -1437,6 +1459,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = Credentials_;
     typeAnnotationContext->Modules = Modules_;
+    typeAnnotationContext->UrlListerManager = UrlListerManager_;
     typeAnnotationContext->UdfResolver = UdfResolver_;
     typeAnnotationContext->UdfIndex = UdfIndex_;
     typeAnnotationContext->UdfIndexPackageSet = UdfIndexPackageSet_;

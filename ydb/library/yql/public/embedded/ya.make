@@ -30,9 +30,11 @@ PEERDIR(
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/core/url_preprocessing
+    ydb/library/yql/core/url_lister
     ydb/library/yql/providers/yt/gateway/native
     ydb/library/yql/providers/yt/lib/log
     ydb/library/yql/providers/yt/lib/yt_download
+    ydb/library/yql/providers/yt/lib/yt_url_lister
     ydb/library/yql/providers/yt/provider
 )
 

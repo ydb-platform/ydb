@@ -82,7 +82,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
 
     TExprContext exprCtx(libCtx.NextUniqueId);
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), false, Max<ui32>(), options.SyntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), nullptr, false, Max<ui32>(), options.SyntaxVersion)) {
         errors = exprCtx.IssueManager.GetIssues();
         exprCtx.IssueManager.Reset();
         return false;

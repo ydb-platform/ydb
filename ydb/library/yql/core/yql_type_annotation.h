@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/core/credentials/yql_credentials.h>
+#include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -202,6 +203,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TYqlOperationOptions OperationOptions;
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
     IModuleResolver::TPtr Modules;
+    IUrlListerManagerPtr UrlListerManager;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;

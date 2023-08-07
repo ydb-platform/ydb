@@ -688,7 +688,7 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr)) {
         return nullptr;
     }
 

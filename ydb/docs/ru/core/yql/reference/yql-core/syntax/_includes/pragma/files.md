@@ -60,4 +60,53 @@ IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
 
+### Package
+
+| Тип значения | По умолчанию | Статическая /<br/>динамическая |
+| --- | --- | --- |
+| Два или три аргумента - имя пакета, URL и опциональный токен | — | Статическая |
+
+Приложить иерархический набор файлов к запросу по URL, интерпретируя их в качестве пакета с указанным именем - взаимосвязанного набора библиотек.
+
+Имя пакета ожидается в формате ``project_name.package_name``; из библиотек пакета в дальнейшнем можно делать [IMPORT](../../export_import.md) с именем модуля вида ``pkg.project_name.package_name.maybe.nested.module.name``.
+
+Пример для пакета с плоской иерархией, состоящего из двух библиотек - foo.sql и bar.sql: 
+
+``` yql
+PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
+IMPORT pkg.project.package.foo SYMBOLS $foo;
+IMPORT pkg.project.package.bar SYMBOLS $bar;
+SELECT $foo, $bar;
+```
+
+При этом можно использовать подстановку текстовых параметров в URL:
+
+``` yql
+DECLARE $_path AS STRING; -- "path"
+PRAGMA package("project.package","{{ corporate-yt }}/{{ corporate-yt-cluster }}/{$_path}/to/package");
+IMPORT pkg.project.package.foo SYMBOLS $foo;
+IMPORT pkg.project.package.bar SYMBOLS $bar;
+SELECT $foo, $bar;
+```
+
+### OverrideLibrary
+
+| Тип значения | По умолчанию | Статическая /<br/>динамическая |
+| --- | --- | --- |
+| Один аргумент - имя файла | — | Статическая |
+
+Интерпретировать указанный приложенный файл как библиотеку и перекрыть ей одну из библиотек пакета.
+
+Имя файла ожидается в формате ``project_name/package_name/maybe/nested/module/name.EXTENSION``, поддерживаются аналогичные [PRAGMA Library](#library) расширения.
+
+Пример:
+
+``` yql
+PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
+PRAGMA override_library("project/package/maybe/nested/module/name.sql");
+
+IMPORT pkg.project.package.foo SYMBOLS $foo;
+SELECT $foo;
+```
+
 {% endif %}

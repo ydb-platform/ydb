@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr));
+        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
 
         auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
         TTestTablesMapping testTables;

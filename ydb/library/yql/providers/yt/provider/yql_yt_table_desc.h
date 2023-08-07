@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 
@@ -48,7 +49,7 @@ struct TYtViewDescription {
     const TTypeAnnotationNode* RowType = nullptr; // Filled only if scheme requested
 
     bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IRandomProvider& randomProvider);
+        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider);
     void CleanupCompiledSQL();
 };
 
@@ -69,10 +70,10 @@ struct TYtTableDescriptionBase {
 
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,
         const TString& viewSql, ui16 syntaxVersion, const THashMap<TString, TString>& metaAttrs, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IRandomProvider& randomProvider);
+        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider);
     void CleanupCompiledSQL();
     bool FillViews(const TString& provider, const TString& cluster, const TString& table, const THashMap<TString, TString>& metaAttrs,
-        TExprContext& ctx, IModuleResolver* moduleResolver, IRandomProvider& randomProvider);
+        TExprContext& ctx, IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider);
 };
 
 }

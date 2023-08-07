@@ -39,6 +39,7 @@ target_link_libraries(providers-yt-provider PUBLIC
   yql-core-peephole_opt
   yql-core-type_ann
   yql-core-file_storage
+  core-url_lister-interface
   yql-dq-integration
   yql-dq-opt
   library-yql-minikql

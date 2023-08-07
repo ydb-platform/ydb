@@ -34,7 +34,9 @@ PEERDIR(
     library/cpp/yson/node
     ydb/library/yql/public/udf
     ydb/library/yql/utils
+    ydb/library/yql/utils/fetch
     ydb/library/yql/core/issue
+    ydb/library/yql/core/url_lister/interface
     ydb/library/yql/parser/pg_catalog
 )
 

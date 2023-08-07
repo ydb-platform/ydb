@@ -15,6 +15,8 @@ PEERDIR(
     ydb/library/yql/core/extract_predicate
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/services
+    ydb/library/yql/core/url_lister/interface
+    ydb/library/yql/core/url_preprocessing/interface
     ydb/library/yql/core/credentials
     ydb/library/yql/sql
     ydb/library/yql/utils/log

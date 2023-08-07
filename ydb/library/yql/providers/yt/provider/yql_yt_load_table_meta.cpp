@@ -100,7 +100,10 @@ public:
                     // skip if table already has loaded metadata and has only read intents
                     if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents)) {
                         // Intents/views can be updated since evaluation phase
-                        if (!tableDesc.FillViews(clusterAndTable.first, clusterAndTable.second, ctx, State_->Types->Modules.get(), *State_->Types->RandomProvider)) {
+                        if (!tableDesc.FillViews(
+                            clusterAndTable.first, clusterAndTable.second, ctx,
+                            State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider
+                        )) {
                             return TStatus::Error;
                         }
                         continue;
@@ -224,7 +227,10 @@ public:
                 }
 
                 if (0 == LoadCtx->Epoch) {
-                    if (!tableDesc.Fill(cluster, tableName, ctx, State_->Types->Modules.get(), *State_->Types->RandomProvider)) {
+                    if (!tableDesc.Fill(
+                        cluster, tableName, ctx,
+                        State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider
+                    )) {
                         return TStatus::Error;
                     }
                 }

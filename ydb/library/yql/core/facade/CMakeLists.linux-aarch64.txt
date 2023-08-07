@@ -25,6 +25,8 @@ target_link_libraries(yql-core-facade PUBLIC
   yql-core-extract_predicate
   yql-core-file_storage
   yql-core-services
+  core-url_lister-interface
+  core-url_preprocessing-interface
   yql-core-credentials
   library-yql-sql
   yql-utils-log

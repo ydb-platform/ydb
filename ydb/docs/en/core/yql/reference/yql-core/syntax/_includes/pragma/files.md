@@ -56,5 +56,53 @@ IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
 
-{% endif %}
+### Package
 
+| Value type | Default | Static /<br/>dynamic |
+| --- | --- | --- |
+| Two or three arguments: package name, URL and optional token | — | Static |
+
+Attach a hierarchical set of files to the query by URL, treating them as a package with a given name - an interconnected set of libraries.
+
+Package name is expected to be given as ``project_name.package_name``; from package's libraries you can do [IMPORT](../../export_import.md) with a module name like ``pkg.project_name.package_name.maybe.nested.module.name``.
+
+Example for a package with flat hierarchy which consists of two libraries - foo.sql and bar.sql:
+
+``` yql
+PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
+IMPORT pkg.project.package.foo SYMBOLS $foo;
+IMPORT pkg.project.package.bar SYMBOLS $bar;
+SELECT $foo, $bar;
+```
+
+You can also use text parameter value substitution in the URL:
+
+``` yql
+DECLARE $_path AS STRING; -- "path"
+PRAGMA package("project.package","{{ corporate-yt }}/{{ corporate-yt-cluster }}/{$_path}/to/package");
+IMPORT pkg.project.package.foo SYMBOLS $foo;
+IMPORT pkg.project.package.bar SYMBOLS $bar;
+SELECT $foo, $bar;
+```
+
+### OverrideLibrary
+
+| Value type | Default | Static/<br/>dynamic |
+| --- | --- | --- |
+| One argument: the file name | — | Static |
+
+Treat the specified attached file as a library and override with it one of package's libraries.
+
+File name is expected to be given as ``project_name/package_name/maybe/nested/module/name.EXTENSION``, extensions analagous to [PRAGMA Library](#library) are supported.
+
+Example:
+
+```yql
+PRAGMA package("project.package", "{{ corporate-yt }}/{{ corporate-yt-cluster }}/path/to/package");
+PRAGMA override_library("project/package/maybe/nested/module/name.sql");
+
+IMPORT pkg.project.package.foo SYMBOLS $foo;
+SELECT $foo;
+```
+
+{% endif %}

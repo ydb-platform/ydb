@@ -8,6 +8,7 @@
 #include "yql_constraint.h"
 #include "yql_pos_handle.h"
 
+#include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
@@ -2737,10 +2738,12 @@ private:
 };
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
-    IModuleResolver* resolver, bool hasAnnotations = false, ui32 typeAnnotationIndex = Max<ui32>(), ui16 syntaxVersion = 0);
+    IModuleResolver* resolver, IUrlListerManager* urlListerManager,
+    bool hasAnnotations = false, ui32 typeAnnotationIndex = Max<ui32>(), ui16 syntaxVersion = 0);
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
-    IModuleResolver* resolver, ui32 annotationFlags, ui16 syntaxVersion = 0);
+    IModuleResolver* resolver, IUrlListerManager* urlListerManager,
+    ui32 annotationFlags, ui16 syntaxVersion = 0);
 
 struct TLibraryCohesion {
     TExportTable Exports;

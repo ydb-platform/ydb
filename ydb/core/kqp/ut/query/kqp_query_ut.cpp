@@ -669,7 +669,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(astRes.IsOk());
         NYql::TExprContext exprCtx;
         NYql::TExprNode::TPtr exprRoot;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr));
+        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
 
         UNIT_ASSERT(NJson::ValidateJson(result.GetPlan()));
     }

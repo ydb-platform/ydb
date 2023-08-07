@@ -214,6 +214,7 @@ bool TModuleResolver::AddFromUrl(const std::string_view& file, const std::string
         }
         block.UrlToken = cred->Content;
     }
+
     UserData->AddUserDataBlock(file, block);
 
     return AddFromFile(file, ctx, syntaxVersion, packageVersion, pos);

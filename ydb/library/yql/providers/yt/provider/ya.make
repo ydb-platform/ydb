@@ -60,6 +60,7 @@ PEERDIR(
     ydb/library/yql/core/peephole_opt
     ydb/library/yql/core/type_ann
     ydb/library/yql/core/file_storage
+    ydb/library/yql/core/url_lister/interface
     ydb/library/yql/dq/integration
     ydb/library/yql/dq/opt
     ydb/library/yql/minikql

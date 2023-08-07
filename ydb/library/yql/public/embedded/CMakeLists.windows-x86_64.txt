@@ -38,9 +38,11 @@ target_link_libraries(yql-public-embedded PUBLIC
   providers-common-proto
   providers-common-udf_resolve
   yql-core-url_preprocessing
+  yql-core-url_lister
   yt-gateway-native
   yt-lib-log
   yt-lib-yt_download
+  yt-lib-yt_url_lister
   providers-yt-provider
 )
 target_sources(yql-public-embedded PRIVATE

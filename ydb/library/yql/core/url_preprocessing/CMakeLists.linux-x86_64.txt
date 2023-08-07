@@ -6,12 +6,14 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(interface)
 
 add_library(yql-core-url_preprocessing)
 target_link_libraries(yql-core-url_preprocessing PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  core-url_preprocessing-interface
   providers-common-proto
   yql-utils-log
   cpp-regex-pcre

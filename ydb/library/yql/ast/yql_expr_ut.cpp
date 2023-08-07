@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
     }
 
     static void CompileExprWithCheck(TAstNode& root, TExprNode::TPtr& exprRoot, TExprContext& exprCtx, ui32 typeAnnotationIndex = Max<ui32>()) {
-        const bool success = CompileExpr(root, exprRoot, exprCtx, nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
+        const bool success = CompileExpr(root, exprRoot, exprCtx, nullptr, nullptr, typeAnnotationIndex != Max<ui32>(), typeAnnotationIndex);
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
 
         UNIT_ASSERT(success);
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TAstParseResult astRes = ParseAstWithCheck(program);
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
-        bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr);
+        bool result = CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr);
         exprCtx.IssueManager.GetIssues().PrintTo(Cout);
         return result;
     }
@@ -313,8 +313,8 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
         TExprContext ctxOne, ctxTwo;
         TExprNode::TPtr rootOne, rootTwo;
 
-        UNIT_ASSERT(CompileExpr(*progOne.Root, rootOne, ctxOne, nullptr));
-        UNIT_ASSERT(CompileExpr(*progTwo.Root, rootTwo, ctxTwo, nullptr));
+        UNIT_ASSERT(CompileExpr(*progOne.Root, rootOne, ctxOne, nullptr, nullptr));
+        UNIT_ASSERT(CompileExpr(*progTwo.Root, rootTwo, ctxTwo, nullptr, nullptr));
 
         const TExprNode* diffOne = rootOne.Get();
         const TExprNode* diffTwo = rootTwo.Get();
@@ -893,7 +893,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr));
+        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr));
         UNIT_ASSERT(exprRoot);
 
         const auto convRes = ConvertToAst(*exprRoot, exprCtx, 0, true);
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
 
         TExprContext exprCtx2;
         TExprNode::TPtr exprRoot2;
-        auto compileOk = CompileExpr(*convRes.Root, exprRoot2, exprCtx2, nullptr);
+        auto compileOk = CompileExpr(*convRes.Root, exprRoot2, exprCtx2, nullptr, nullptr);
         exprCtx2.IssueManager.GetIssues().PrintTo(Cout);
         UNIT_ASSERT(compileOk);
         UNIT_ASSERT(exprRoot2);

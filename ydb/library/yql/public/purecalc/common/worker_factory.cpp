@@ -177,7 +177,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     // Translate AST into expression
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, moduleResolver.get(), 0, syntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, moduleResolver.get(), nullptr, 0, syntaxVersion)) {
         TStringStream astStr;
         astRes.Root->PrettyPrintTo(astStr, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         ythrow TCompileError(astStr.Str(), ExprContext_.IssueManager.GetIssues().ToString()) << "failed to compile";

@@ -2345,6 +2345,37 @@ public:
                 Add(Y("declare", var.first, var.second));
             }
 
+            for (const auto& overrideLibrary: ctx.OverrideLibraries) {
+                auto node = Y(
+                    "override_library",
+                    new TAstAtomNodeImpl(
+                        std::get<TPosition>(overrideLibrary.second),
+                        overrideLibrary.first, TNodeFlags::ArbitraryContent
+                    ));
+
+                Add(node);
+            }
+
+            for (const auto& package: ctx.Packages) {
+                const auto& [url, urlPosition] = std::get<1U>(package.second);
+
+                auto node = Y(
+                    "package",
+                    new TAstAtomNodeImpl(
+                        std::get<TPosition>(package.second), package.first,
+                        TNodeFlags::ArbitraryContent
+                    ),
+                    new TAstAtomNodeImpl(urlPosition, url, TNodeFlags::ArbitraryContent));
+
+                if (const auto& tokenWithPosition = std::get<2U>(package.second)) {
+                    const auto& [token, tokenPosition] = *tokenWithPosition;
+
+                    node = L(node, new TAstAtomNodeImpl(tokenPosition, token, TNodeFlags::ArbitraryContent));
+                }
+
+                Add(node);
+            }
+
             for (const auto& lib : ctx.Libraries) {
                 auto node = Y("library", new TAstAtomNodeImpl(std::get<TPosition>(lib.second), lib.first, TNodeFlags::ArbitraryContent));
                 if (const auto& first = std::get<1U>(lib.second)) {

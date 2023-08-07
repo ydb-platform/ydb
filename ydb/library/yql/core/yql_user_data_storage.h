@@ -5,6 +5,7 @@
 #include "yql_udf_resolver.h"
 #include "yql_user_data.h"
 
+#include <ydb/library/yql/core/url_preprocessing/interface/url_preprocessing.h>
 #include <ydb/library/yql/protos/yql_mount.pb.h>
 
 #include <util/generic/maybe.h>

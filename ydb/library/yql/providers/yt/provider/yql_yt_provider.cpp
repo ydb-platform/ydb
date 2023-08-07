@@ -12,7 +12,9 @@
 
 namespace NYql {
 
-bool TYtTableDescription::Fill(const TString& cluster, const TString& table, TExprContext& ctx, IModuleResolver* moduleResolver, IRandomProvider& randomProvider) {
+bool TYtTableDescription::Fill(
+    const TString& cluster, const TString& table, TExprContext& ctx,
+    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider) {
     const TStructExprType* type = RowSpec ? RowSpec->GetType() : nullptr;
     if (!type) {
         TVector<const TItemExprType*> items;
@@ -25,7 +27,8 @@ bool TYtTableDescription::Fill(const TString& cluster, const TString& table, TEx
     }
 
     if (!TYtTableDescriptionBase::Fill(TString{YtProviderName}, cluster,
-        table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, Meta->Attrs, ctx, moduleResolver, randomProvider)) {
+        table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, Meta->Attrs, ctx,
+        moduleResolver, urlListerManager, randomProvider)) {
         return false;
     }
     if (QB2RowSpec) {
@@ -236,8 +239,12 @@ void TYtTableDescription::SetConstraintsReady() {
     }
 }
 
-bool TYtTableDescription::FillViews(const TString& cluster, const TString& table, TExprContext& ctx, IModuleResolver* moduleResolver, IRandomProvider& randomProvider) {
-    return TYtTableDescriptionBase::FillViews(TString{YtProviderName}, cluster, table, Meta->Attrs, ctx, moduleResolver, randomProvider);
+bool TYtTableDescription::FillViews(
+    const TString& cluster, const TString& table, TExprContext& ctx,
+    IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider) {
+    return TYtTableDescriptionBase::FillViews(
+        TString{YtProviderName}, cluster, table, Meta->Attrs, ctx,
+        moduleResolver, urlListerManager, randomProvider);
 }
 
 const TYtTableDescription& TYtTablesData::GetTable(const TString& cluster, const TString& table, TMaybe<ui32> epoch) const {

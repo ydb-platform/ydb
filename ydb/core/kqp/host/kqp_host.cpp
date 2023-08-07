@@ -1144,7 +1144,7 @@ private:
         }
 
         TExprNode::TPtr result;
-        if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get())) {
+        if (!CompileExpr(*astRes.Root, result, ctx, ModuleResolver.get(), nullptr)) {
             return nullptr;
         }
 

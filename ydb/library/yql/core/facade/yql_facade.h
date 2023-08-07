@@ -4,6 +4,8 @@
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
+#include <ydb/library/yql/core/url_preprocessing/interface/url_preprocessing.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/core/yql_user_data.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
@@ -51,6 +53,7 @@ public:
     void SetCredentials(TCredentials::TPtr credentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
     void SetModules(IModuleResolver::TPtr modules);
+    void SetUrlListerManager(IUrlListerManagerPtr urlListerManager);
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
     void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
@@ -79,6 +82,7 @@ private:
     TCredentials::TPtr Credentials_;
     const TGatewaysConfig* GatewaysConfig_;
     IModuleResolver::TPtr Modules_;
+    IUrlListerManagerPtr UrlListerManager_;
     IUdfResolver::TPtr UdfResolver_;
     TUdfIndex::TPtr UdfIndex_;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
@@ -329,6 +333,7 @@ private:
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
+        const IUrlListerManagerPtr& urlListerManager,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
@@ -375,6 +380,7 @@ private:
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
     TCredentials::TPtr Credentials_;
+    const IUrlListerManagerPtr UrlListerManager_;
     const IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;

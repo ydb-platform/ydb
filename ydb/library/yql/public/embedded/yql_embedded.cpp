@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
+#include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 
@@ -19,6 +20,7 @@
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/core/file_storage/http_download/http_download.h>
+#include <ydb/library/yql/core/url_lister/url_lister_manager.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
@@ -356,6 +358,11 @@ namespace NYql {
                 ProgramFactory_->SetGatewaysConfig(&GatewaysConfig_);
                 ProgramFactory_->SetFileStorage(FileStorage_);
                 ProgramFactory_->SetUrlPreprocessing(MakeIntrusive<TUrlPreprocessing>(GatewaysConfig_));
+                ProgramFactory_->SetUrlListerManager(
+                    MakeUrlListerManager(
+                        {MakeYtUrlLister()}
+                    )
+                );
             }
 
             THolder<IOperation> Run(const TString& queryText, const TOperationOptions& options) const override {

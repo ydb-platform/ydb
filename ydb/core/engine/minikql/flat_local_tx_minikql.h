@@ -95,7 +95,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         }
         expr.Context.IssueManager.AddIssues(astResult.Issues);
 
-        if (!NYql::CompileExpr(*astResult.Root, expr.Root, expr.Context, nullptr)) {
+        if (!NYql::CompileExpr(*astResult.Root, expr.Root, expr.Context, nullptr, nullptr)) {
             errors = expr.Context.IssueManager.GetIssues();
             return false;
         }

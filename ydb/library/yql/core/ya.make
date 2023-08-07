@@ -64,6 +64,8 @@ PEERDIR(
     ydb/library/yql/core/file_storage
     ydb/library/yql/core/sql_types
     ydb/library/yql/core/credentials
+    ydb/library/yql/core/url_lister/interface
+    ydb/library/yql/core/url_preprocessing/interface
     ydb/library/yql/minikql
     ydb/library/yql/protos
     ydb/library/yql/public/udf

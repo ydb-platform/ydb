@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/core/url_preprocessing/interface/url_preprocessing.h>
 #include <ydb/library/yql/core/url_preprocessing/pattern_group.h>
 #include <ydb/library/yql/core/url_preprocessing/url_mapper.h>
 

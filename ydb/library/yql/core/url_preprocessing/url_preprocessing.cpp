@@ -45,8 +45,8 @@ std::pair<TString, TString> TUrlPreprocessing::Preprocess(const TString& url) {
         if (auto a = AllowedUrls_.Match(convertedUrl)) {
             alias = *a;
         } else {
-            YQL_LOG(WARN) << "Url " << convertedUrl << " is not in allowed list, reject downloading";
-            ythrow yexception() << "It is not allowed to download url " << url;
+            YQL_LOG(WARN) << "Url " << convertedUrl << " is not in allowed list, reject accessing";
+            ythrow yexception() << "It is not allowed to access url " << url;
         }
     }
     YQL_LOG(INFO) << "UrlPreprocessing: " << convertedUrl << ", alias=" << alias;

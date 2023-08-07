@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx_;
         TExprNode::TPtr exprRoot_;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr));
+        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
         const auto result = dqIntegration->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
         const auto expected = 428;
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx_;
         TExprNode::TPtr exprRoot_;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr));
+        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
         const auto result = dqIntegration->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
         const auto expected = 642;
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         UNIT_ASSERT(astRes.IsOk());
         TExprContext exprCtx_;
         TExprNode::TPtr exprRoot_;
-        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr));
+        UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
         const auto result = dqIntegration->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
         const auto expected = 214;

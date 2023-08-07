@@ -3,6 +3,7 @@
 #include "yql_gc_nodes.h"
 
 #include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/utils/fetch/fetch.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
@@ -16,12 +17,17 @@
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
 #include <util/digest/numeric.h>
+#include <util/string/cast.h>
 
 #include <map>
+#include <unordered_set>
 
 namespace NYql {
 
 const TStringBuf ZeroString = "";
+const char Dot = '.';
+const char Sep = '/';
+const TStringBuf PkgPrefix = "pkg";
 
 void ReportError(TExprContext& ctx, const TIssue& issue) {
     ctx.AddError(issue);
@@ -114,11 +120,13 @@ namespace {
         TExprContext& Expr;
         TVector<TFrame> Frames;
         TLibraryCohesion Cohesion;
+        std::unordered_set<TString> OverrideLibraries;
 
         TNodeOnNodeOwnedMap DeepClones;
 
         const TAnnotationNodeMap* Annotations = nullptr;
         IModuleResolver* ModuleResolver = nullptr;
+        IUrlListerManager* UrlListerManager = nullptr;
         ui32 TypeAnnotationIndex = Max<ui32>();
         TString File;
         ui16 SyntaxVersion = 0;
@@ -891,6 +899,31 @@ namespace {
         return TAstNode::NewList(node->GetPosition(), children.data(), children.size(), pool);
     }
 
+    bool AddParameterDependencies(const TString& url, const TAstNode& node, TContext& ctx) {
+        auto world = ctx.FindBinding("world");
+        if (!world.empty()) {
+            TSet<TString> names;
+            SubstParameters(url, Nothing(), &names);
+            for (const auto& name : names) {
+                auto nameRef = ctx.FindBinding(name);
+                if (nameRef.empty()) {
+                    ctx.AddError(node, TStringBuilder() << "Name not found: " << name);
+                    return false;
+                }
+
+                TExprNode::TListType args = world;
+                args.insert(args.end(), nameRef.begin(), nameRef.end());
+                auto newWorld = TExprNode::TListType{ ctx.Expr.NewCallable(node.GetPosition(), "Left!", {
+                    ctx.Expr.NewCallable(node.GetPosition(), "Cons!", std::move(args)) })};
+
+                ctx.Frames.back().Bindings["world"] = newWorld;
+                world = newWorld;
+            }
+        }
+
+        return true;
+    }
+
     TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
     TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
@@ -1210,27 +1243,8 @@ namespace {
             }
         }
 
-        if (url) {
-            auto world = ctx.FindBinding("world");
-            if (!world.empty()) {
-                TSet<TString> names;
-                SubstParameters(url, Nothing(), &names);
-                for (const auto& name : names) {
-                    auto nameRef = ctx.FindBinding(name);
-                    if (nameRef.empty()) {
-                        ctx.AddError(node, TStringBuilder() << "Name not found: " << name);
-                        return false;
-                    }
-
-                    TExprNode::TListType args = world;
-                    args.insert(args.end(), nameRef.begin(), nameRef.end());
-                    auto newWorld = TExprNode::TListType{ ctx.Expr.NewCallable(node.GetPosition(), "Left!", {
-                        ctx.Expr.NewCallable(node.GetPosition(), "Cons!", std::move(args)) })};
-
-                    ctx.Frames.back().Bindings["world"] = newWorld;
-                    world = newWorld;
-                }
-            }
+        if (url && !AddParameterDependencies(url, node, ctx)) {
+            return false;
         }
 
         if (!ctx.ModuleResolver) {
@@ -1246,6 +1260,149 @@ namespace {
                 return false;
             }
         }
+
+        return true;
+    }
+
+    bool CompilePackageDef(const TAstNode& node, TContext& ctx) {
+        if (node.GetChildrenCount() < 2 || node.GetChildrenCount() > 4) {
+            ctx.AddError(node, "Expected list of size from 2 to 4");
+            return false;
+        }
+
+        auto nameNode = node.GetChild(1);
+        if (!nameNode->IsAtom()) {
+            ctx.AddError(*nameNode, "Expected atom");
+            return false;
+        }
+
+        auto name = TString(nameNode->GetContent());
+
+        TString url;
+        if (node.GetChildrenCount() > 2) {
+            const auto file = node.GetChild(2);
+            if (!file->IsAtom()) {
+                ctx.AddError(*file, "Expected atom");
+                return false;
+            }
+
+            url = file->GetContent();
+        }
+
+        TString token;
+        if (node.GetChildrenCount() > 3) {
+            const auto tokenNode = node.GetChild(3);
+            if (!tokenNode->IsAtom()) {
+                ctx.AddError(*tokenNode, "Expected atom");
+                return false;
+            }
+
+            token = tokenNode->GetContent();
+        }
+
+        if (url && !AddParameterDependencies(url, node, ctx)) {
+            return false;
+        }
+
+        if (!ctx.ModuleResolver) {
+            return true;
+        }
+
+        if (!ctx.UrlListerManager) {
+            return true;
+        }
+
+        ctx.ModuleResolver->RegisterPackage(name);
+
+        auto packageModuleName = TStringBuilder() << PkgPrefix;
+
+        TStringBuf nameBuf(name);
+        while (auto part = nameBuf.NextTok(Dot)) {
+            packageModuleName << Sep << part;
+        }
+
+        auto queue = TVector<std::pair<TString, THttpURL>> {
+            {packageModuleName, ParseURL(url)}
+        };
+
+        while (queue) {
+            auto [prefix, httpUrl] = queue.back();
+            queue.pop_back();
+
+            TVector<TUrlListEntry> urlListEntries;
+            try {
+                urlListEntries = ctx.UrlListerManager->ListUrl(httpUrl, token);
+            } catch (const std::exception& e) {
+                ctx.AddError(*nameNode,
+                    TStringBuilder()
+                        << "UrlListerManager: failed to list URL \"" << httpUrl.PrintS()
+                        << "\", details: " << e.what()
+                );
+
+                return false;
+            }
+
+            for (auto& urlListEntry: urlListEntries) {
+                switch (urlListEntry.Type) {
+                case EUrlListEntryType::FILE: {
+                    auto moduleName = TStringBuilder()
+                        << prefix << Sep << urlListEntry.Name;
+
+                    if (ctx.OverrideLibraries.contains(moduleName)) {
+                        continue;
+                    }
+
+                    if (!ctx.ModuleResolver->AddFromUrl(
+                        moduleName, urlListEntry.Url.PrintS(), token, ctx.Expr,
+                        ctx.SyntaxVersion, 0, nameNode->GetPosition()
+                    )) {
+                        return false;
+                    }
+
+                    break;
+                }
+
+                case EUrlListEntryType::DIRECTORY: {
+                    queue.push_back({
+                        TStringBuilder() << prefix << Sep << urlListEntry.Name,
+                        urlListEntry.Url
+                    });
+
+                    break;
+                }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool CompileOverrideLibraryDef(const TAstNode& node, TContext& ctx) {
+        if (node.GetChildrenCount() != 2) {
+            ctx.AddError(node, "Expected list of size 2");
+            return false;
+        }
+
+        auto nameNode = node.GetChild(1);
+        if (!nameNode->IsAtom()) {
+            ctx.AddError(*nameNode, "Expected atom");
+            return false;
+        }
+
+        if (!ctx.ModuleResolver) {
+            return true;
+        }
+
+        auto overrideLibraryName = TStringBuilder()
+            << PkgPrefix << Sep << nameNode->GetContent();
+
+        if (!ctx.ModuleResolver->AddFromFile(
+            overrideLibraryName, ctx.Expr, ctx.SyntaxVersion, 0, nameNode->GetPosition()
+        )) {
+            return false;
+        }
+
+        ctx.OverrideLibraries.insert(std::move(overrideLibraryName));
 
         return true;
     }
@@ -1309,6 +1466,14 @@ namespace {
                 } else if (firstChild->GetContent() == TStringBuf("declare")) {
                     if (!CompileDeclare(*node, ctx, false))
                         return {};
+                } else if (firstChild->GetContent() == TStringBuf("package")) {
+                    if (!CompilePackageDef(*node, ctx)) {
+                        return {};
+                    }
+                } else if (firstChild->GetContent() == TStringBuf("override_library")) {
+                    if (!CompileOverrideLibraryDef(*node, ctx)) {
+                        return {};
+                    }
                 }
             }
 
@@ -1378,6 +1543,16 @@ namespace {
                 }
 
                 continue;
+            } else if (firstChild->GetContent() == TStringBuf("package")) {
+                if (!topLevel) {
+                    ctx.AddError(*firstChild, "Package statements are only allowed on top level block");
+                    return {};
+                }
+            } else if (firstChild->GetContent() == TStringBuf("override_library")) {
+                if (!topLevel) {
+                    ctx.AddError(*firstChild, "override_library statements are only allowed on top level block");
+                    return {};
+                }
             } else {
                 ctx.AddError(*firstChild, ToString("expected either let, return or import, but have ") + firstChild->GetContent());
                 return {};
@@ -2070,7 +2245,8 @@ namespace {
 } // namespace
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
-    IModuleResolver* resolver, bool hasAnnotations, ui32 typeAnnotationIndex, ui16 syntaxVersion) {
+    IModuleResolver* resolver, IUrlListerManager* urlListerManager,
+    bool hasAnnotations, ui32 typeAnnotationIndex, ui16 syntaxVersion) {
     exprRoot.Reset();
     TAstNode* cleanRoot = nullptr;
     TAnnotationNodeMap annotations;
@@ -2101,6 +2277,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     compileCtx.Annotations = currentAnnotations;
     compileCtx.TypeAnnotationIndex = typeAnnotationIndex;
     compileCtx.ModuleResolver = resolver;
+    compileCtx.UrlListerManager = urlListerManager;
     compileCtx.PushFrame();
     auto world = compileCtx.Expr.NewWorld(astRoot.GetPosition());
     if (typeAnnotationIndex != Max<ui32>()) {
@@ -2117,7 +2294,8 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
 }
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
-    IModuleResolver* resolver, ui32 annotationFlags, ui16 syntaxVersion)
+    IModuleResolver* resolver, IUrlListerManager* urlListerManager,
+    ui32 annotationFlags, ui16 syntaxVersion)
 {
     bool hasAnnotations = annotationFlags != TExprAnnotationFlags::None;
     ui32 typeAnnotationIndex = Max<ui32>();
@@ -2126,7 +2304,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
         typeAnnotationIndex = hasPostions ? 1 : 0;
     }
 
-    return CompileExpr(astRoot, exprRoot, ctx, resolver, hasAnnotations, typeAnnotationIndex, syntaxVersion);
+    return CompileExpr(astRoot, exprRoot, ctx, resolver, urlListerManager, hasAnnotations, typeAnnotationIndex, syntaxVersion);
 }
 
 bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& library, TExprContext& ctx, ui16 syntaxVersion) {

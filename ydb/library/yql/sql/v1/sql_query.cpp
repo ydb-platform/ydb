@@ -1526,6 +1526,91 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
 
             Ctx.Libraries[alias] = std::move(library);
             Ctx.IncrementMonCounter("sql_pragma", "library");
+        } else if (normalizedPragma == "package") {
+            if (values.size() < 2U || values.size() > 3U) {
+                Error() << "Expected package name, url and optional token name as pragma values";
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            TString packageName;
+            if (!values.front().GetLiteral(packageName, Ctx)) {
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            TContext::TPackageStuff package;
+            std::get<TPosition>(package) = values.front().Build()->GetPos();
+
+            auto fillLiteral = [&](auto& literal, size_t index) {
+                if (values.size() <= index) {
+                    return true;
+                }
+
+                constexpr bool optional = std::is_base_of_v<
+                    std::optional<TContext::TLiteralWithPosition>,
+                    std::decay_t<decltype(literal)>
+                >;
+
+                TContext::TLiteralWithPosition* literalPtr;
+
+                if constexpr (optional) {
+                    literal.emplace();
+                    literalPtr = &*literal;
+                } else {
+                    literalPtr = &literal;
+                }
+
+                literalPtr->second = values[index].Build()->GetPos();
+
+                if (!values[index].GetLiteral(literalPtr->first, Ctx)) {
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return false;
+                }
+
+                return true;
+            };
+
+            // fill url
+            auto& urlLiteral = std::get<1U>(package);
+            if (!fillLiteral(urlLiteral, 1U)) {
+                return {};
+            }
+
+            TSet<TString> names;
+            SubstParameters(urlLiteral.first, Nothing(), &names);
+            for (const auto& name : names) {
+                auto namedNode = GetNamedNode(name);
+                if (!namedNode) {
+                    return {};
+                }
+            }
+
+            // fill token
+            if (!fillLiteral(std::get<2U>(package), 2U)) {
+                return {};
+            }
+
+            Ctx.Packages[packageName] = std::move(package);
+            Ctx.IncrementMonCounter("sql_pragma", "package");
+        } else if (normalizedPragma == "overridelibrary") {
+            if (values.size() != 1U) {
+                Error() << "Expected override library alias as pragma value";
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            TString alias;
+            if (!values.front().GetLiteral(alias, Ctx)) {
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            TContext::TOverrideLibraryStuff overrideLibrary;
+            std::get<TPosition>(overrideLibrary) = values.front().Build()->GetPos();
+
+            Ctx.OverrideLibraries[alias] = std::move(overrideLibrary);
+            Ctx.IncrementMonCounter("sql_pragma", "overridelibrary");
         } else if (normalizedPragma == "directread") {
             Ctx.PragmaDirectRead = true;
             Ctx.IncrementMonCounter("sql_pragma", "DirectRead");

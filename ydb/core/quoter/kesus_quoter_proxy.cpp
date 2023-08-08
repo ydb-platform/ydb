@@ -2,6 +2,8 @@
 #include "quoter_service_impl.h"
 #include "debug_info.h"
 
+# Non-ya.make change for test
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kesus/tablet/events.h>

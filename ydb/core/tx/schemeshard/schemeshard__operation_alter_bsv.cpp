@@ -531,12 +531,12 @@ public:
             return result;
         }
 
-        if (alterVolumeConfig->HasFillToken() &&
-            alterVolumeConfig->GetFillToken() != volume->VolumeConfig.GetFillToken())
+        if (alterVolumeConfig->HasFillGeneration() &&
+            alterVolumeConfig->GetFillGeneration() != volume->VolumeConfig.GetFillGeneration())
         {
             result->SetError(
                 NKikimrScheme::StatusPreconditionFailed,
-                "Wrong FillToken in VolumeConfig");
+                "Wrong FillGeneration in VolumeConfig");
             return result;
         }
 

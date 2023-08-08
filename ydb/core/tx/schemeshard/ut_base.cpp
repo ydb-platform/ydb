@@ -8328,7 +8328,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(AssignBlockStoreCheckFillTokenInAlter) { //+
+    Y_UNIT_TEST(AssignBlockStoreCheckFillGenerationInAlter) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -8337,7 +8337,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
         vc.SetBlockSize(4096);
-        vc.SetFillToken("barkovbg");
+        vc.SetFillGeneration(1);
         vc.AddPartitions()->SetBlockCount(16);
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
@@ -8348,7 +8348,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
 
-        vc.SetFillToken("barkovbg");
+        vc.SetFillGeneration(1);
         vc.AddPartitions()->SetBlockCount(24);
         vc.AddPartitions()->SetBlockCount(24);
 
@@ -8356,7 +8356,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
 
-        vc.SetFillToken("svartmetal");
+        vc.SetFillGeneration(2);
         vc.AddPartitions()->SetBlockCount(25);
         vc.AddPartitions()->SetBlockCount(25);
 
@@ -8366,7 +8366,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         vc.Clear();
 
-        vc.SetFillToken("barkovbg");
+        vc.SetFillGeneration(1);
         vc.AddPartitions()->SetBlockCount(48);
         vc.AddPartitions()->SetBlockCount(48);
 

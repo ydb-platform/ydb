@@ -3,6 +3,7 @@
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
 namespace NKafka {
@@ -233,7 +234,8 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     partitionRequest->SetPartition(data.Index);
     // partitionRequest->SetCmdWriteOffset();
     partitionRequest->SetCookie(cookie);
-    // partitionRequest->SetPutUnitsSize(); TODO
+
+    ui64 totalSize = 0;
 
     for (const auto& record : batch->Records) {
         if (!record.Value) {
@@ -269,7 +271,11 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetUncompressedSize(record.Value->size());
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
+
+        totalSize += record.Value->size();
     }
+
+    partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
 
     return ev;
 }

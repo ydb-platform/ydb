@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(Yq_2) {
         {
             auto transformer = ::NFq::MakeTMdbHostTransformerGeneric();
             UNIT_ASSERT_VALUES_EQUAL(::NFq::MakeTMdbHostTransformerGeneric()->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
-                                    "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net:9000");
+                                    "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net:8443");
             UNIT_ASSERT_VALUES_EQUAL(::NFq::MakeTMdbHostTransformerGeneric()->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
                                     "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net:6432");
         }

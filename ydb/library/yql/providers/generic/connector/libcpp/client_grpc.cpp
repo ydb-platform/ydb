@@ -26,7 +26,7 @@ namespace NYql::NConnector {
         std::shared_ptr<grpc::ChannelCredentials> credentials;
         auto networkEndpoint = cfg.GetEndpoint().host() + ":" + std::to_string(cfg.GetEndpoint().port());
 
-        if (cfg.GetUseTLS()) {
+        if (cfg.GetUseSsl()) {
             // Hopefully GRPC will find appropriate CA cert in system folders
             credentials = grpc::SslCredentials(grpc::SslCredentialsOptions());
         } else {

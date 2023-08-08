@@ -25,8 +25,9 @@ namespace NFq {
         TString ToEndpoint(const NYql::EDatabaseType databaseType, const TString& mdbHost) const override {
             switch (databaseType) {
                 case NYql::EDatabaseType::ClickHouse:
-                    // TODO: https://st.yandex-team.ru/YQ-2170: support secure connections on 9440
-                    return mdbHost + ":9000";
+                    // https://cloud.yandex.ru/docs/managed-clickhouse/operations/connect
+                    // TODO: fix Native protocol + TLS https://st.yandex-team.ru/YQ-2286
+                    return mdbHost + ":8443";
                 case NYql::EDatabaseType::PostgreSQL:
                     // https://cloud.yandex.ru/docs/managed-postgresql/operations/connect
                     return mdbHost + ":6432";

@@ -1,5 +1,7 @@
 LIBRARY()
 
+# one more ya.make to test import
+
 SRCS(
     parser.cpp
     parser.h

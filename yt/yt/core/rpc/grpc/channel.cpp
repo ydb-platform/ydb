@@ -315,6 +315,13 @@ private:
                 }
             }
 
+            if (Request_->Header().HasExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext)) {
+                const auto& customMetadataExt = Request_->Header().GetExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
+                for (const auto& [key, value] : customMetadataExt.entries()) {
+                    InitialMetadataBuilder_.Add(key.c_str(), value);
+                }
+            }
+
             try {
                 RequestBody_ = Request_->Serialize();
             } catch (const std::exception& ex) {

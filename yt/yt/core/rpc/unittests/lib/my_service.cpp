@@ -62,6 +62,7 @@ public:
             .SetStreamingEnabled(true)
             .SetCancelable(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetTraceBaggage));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(CustomMetadata));
         // NB: NotRegisteredCall is not registered intentionally
 
         DeclareServerFeature(EMyFeature::Great);
@@ -308,6 +309,15 @@ public:
         context->SetRequestInfo();
         auto* traceContext = NTracing::TryGetCurrentTraceContext();
         response->set_baggage(NYson::ConvertToYsonString(traceContext->UnpackBaggage()).ToString());
+        context->Reply();
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NMyRpc, CustomMetadata)
+    {
+        auto customMetadataExt = context->GetRequestHeader().GetExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
+        for (const auto& [key, value] : customMetadataExt.entries()) {
+            (*response->mutable_parsed_custom_metadata())[key] = value;
+        }
         context->Reply();
     }
 

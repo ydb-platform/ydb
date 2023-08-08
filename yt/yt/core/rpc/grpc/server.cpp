@@ -402,6 +402,7 @@ private:
         std::optional<TString> UserAgent_;
         std::optional<NGrpc::NProto::TSslCredentialsExt> SslCredentialsExt_;
         std::optional<NRpc::NProto::TCredentialsExt> RpcCredentialsExt_;
+        std::optional<NRpc::NProto::TCustomMetadataExt> CustomMetadataExt_;
         std::optional<NTracing::NProto::TTracingExt> TraceContext_;
         TString ServiceName_;
         TString MethodName_;
@@ -463,6 +464,7 @@ private:
             ParseUserTag();
             ParseUserAgent();
             ParseRpcCredentials();
+            ParseCustomMetadata();
             ParseTimeout();
 
             try {
@@ -680,6 +682,18 @@ private:
             }
         }
 
+        void ParseCustomMetadata()
+        {
+            for (const auto& [key, value] : CallMetadata_.ToMap()) {
+                if (!GetNativeMetadataKeys().contains(key)) {
+                    if (!CustomMetadataExt_) {
+                        CustomMetadataExt_.emplace();
+                    }
+                    (*CustomMetadataExt_->mutable_entries())[key] = value;
+                }
+            }
+        }
+
         TFuture<std::optional<NGrpc::NProto::TSslCredentialsExt>> ParseSslCredentials()
         {
             auto authContext = TGrpcAuthContextPtr(grpc_call_auth_context(Call_.Unwrap()));
@@ -876,6 +890,9 @@ private:
             }
             if (RpcCredentialsExt_) {
                 *header->MutableExtension(NRpc::NProto::TCredentialsExt::credentials_ext) = std::move(*RpcCredentialsExt_);
+            }
+            if (CustomMetadataExt_) {
+                *header->MutableExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext) = std::move(*CustomMetadataExt_);
             }
 
             {

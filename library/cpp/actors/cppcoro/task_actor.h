@@ -8,28 +8,47 @@ namespace NActors {
 
         static void await_suspend(std::coroutine_handle<> h) noexcept;
 
-        static std::unique_ptr<IEventHandle> await_resume() noexcept;
+        static std::unique_ptr<IEventHandle> await_resume();
     };
 
-    struct TAfterAwaiter {
-        TDuration Duration;
+    class TAfterAwaiter {
+    public:
+        TAfterAwaiter(TDuration duration)
+            : Duration(duration)
+        {}
 
         static constexpr bool await_ready() noexcept { return false; }
 
         void await_suspend(std::coroutine_handle<> h) noexcept;
 
-        void await_resume();
+        void await_resume() {
+            Result.Value();
+        }
+
+    private:
+        TDuration Duration;
+        TTaskResult<void> Result;
     };
 
-    struct TBindAwaiter {
-        TActorSystem* Sys;
-        TActorId ActorId;
+    class TBindAwaiter {
+    public:
+        TBindAwaiter(TActorSystem* sys, const TActorId& actorId)
+            : Sys(sys)
+            , ActorId(actorId)
+        {}
 
         bool await_ready() noexcept;
 
         void await_suspend(std::coroutine_handle<> h) noexcept;
 
-        void await_resume();
+        void await_resume() {
+            Result.Value();
+        }
+
+    private:
+        TActorSystem* Sys;
+        TActorId ActorId;
+        TTaskResult<void> Result;
     };
 
     class TTaskActor {
@@ -77,11 +96,10 @@ namespace NActors {
          */
         template<class T>
         static TTask<T> Bind(TTask<T>&& task) {
-            // TODO: may run on non-actor thread, protect from unwind
             return [](TTask<T> task, TBindAwaiter bindTask) -> TTask<T> {
-                co_await task.WhenDone();
+                auto result = co_await std::move(task).WhenDone();
                 co_await bindTask;
-                co_return task.ExtractResult();
+                co_return std::move(result).Value();
             }(std::move(task), Bind());
         }
     };

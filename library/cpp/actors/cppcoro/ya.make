@@ -11,6 +11,8 @@ SRCS(
     task_actor.h
     task_group.cpp
     task_group.h
+    task_result.cpp
+    task_result.h
     task.cpp
     task.h
 )
@@ -18,5 +20,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

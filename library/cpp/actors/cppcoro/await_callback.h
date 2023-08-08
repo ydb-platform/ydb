@@ -5,6 +5,7 @@
 namespace NActors {
 
     namespace NDetail {
+
         template<class TAwaitable>
         decltype(auto) GetAwaiter(TAwaitable&& awaitable) {
             if constexpr (requires { ((TAwaitable&&) awaitable).operator co_await(); }) {
@@ -23,31 +24,31 @@ namespace NActors {
         class TCallbackResult {
         public:
             TCallbackResult(TCallback& callback)
-                : Callback_(callback)
+                : Callback(callback)
             {}
 
             template<class TRealResult>
             void return_value(TRealResult&& result) noexcept {
-                Callback_(std::forward<TRealResult>(result));
+                Callback(std::forward<TRealResult>(result));
             }
 
         private:
-            TCallback& Callback_;
+            TCallback& Callback;
         };
 
         template<class TCallback>
         class TCallbackResult<TCallback, void> {
         public:
             TCallbackResult(TCallback& callback)
-                : Callback_(callback)
+                : Callback(callback)
             {}
 
             void return_void() noexcept {
-                Callback_();
+                Callback();
             }
 
         private:
-            TCallback& Callback_;
+            TCallback& Callback;
         };
 
         template<class TAwaitable, class TCallback>
@@ -82,7 +83,8 @@ namespace NActors {
 
             TAwaitThenCallback(THandle) noexcept {}
         };
-    }
+
+    } // namespace NDetail
 
     /**
      * Awaits the awaitable and calls callback with the result.

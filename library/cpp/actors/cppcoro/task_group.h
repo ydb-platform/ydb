@@ -1,10 +1,9 @@
 #pragma once
+#include "task_result.h"
 #include <util/generic/ptr.h>
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
 #include <coroutine>
-#include <exception>
-#include <variant>
 #include <atomic>
 #include <memory>
 
@@ -13,50 +12,8 @@ namespace NActors {
     namespace NDetail {
 
         template<class T>
-        struct TTaskGroupResult final {
+        struct TTaskGroupResult final : public TTaskResult<T> {
             TTaskGroupResult* Next;
-            std::variant<std::exception_ptr, T> Result_;
-
-            void SetException() {
-                Result_.template emplace<0>(std::current_exception());
-            }
-
-            template<class TResult>
-            void SetValue(TResult&& result) {
-                Result_.template emplace<1>(std::forward<TResult>(result));
-            }
-
-            T Extract() {
-                switch (Result_.index()) {
-                    case 0: {
-                        std::rethrow_exception(std::get<0>(std::move(Result_)));
-                    }
-                    case 1: {
-                        return std::get<1>(std::move(Result_));
-                    }
-                }
-                std::terminate();
-            }
-        };
-
-        template<>
-        struct TTaskGroupResult<void> final {
-            TTaskGroupResult* Next;
-            std::exception_ptr Exception_;
-
-            void SetException() {
-                Exception_ = std::current_exception();
-            }
-
-            void SetValue() {
-                // nothing
-            }
-
-            void Extract() {
-                if (Exception_) {
-                    std::rethrow_exception(std::move(Exception_));
-                }
-            }
         };
 
         template<class T>
@@ -70,6 +27,12 @@ namespace NActors {
             static constexpr uintptr_t MarkerAwaiting = 1;
             static constexpr uintptr_t MarkerDetached = 2;
 
+            ~TTaskGroupSink() noexcept {
+                if (!IsDetached()) {
+                    Detach();
+                }
+            }
+
             std::coroutine_handle<> Push(std::unique_ptr<TTaskGroupResult<T>>&& result) noexcept {
                 void* currentValue = LastReady.load(std::memory_order_acquire);
                 for (;;) {
@@ -78,8 +41,8 @@ namespace NActors {
                             continue;
                         }
                         // We consume the awaiter
-                        Y_VERIFY(ReadyQueue == nullptr, "TaskGroup is awaiting with non-empty ready queue");
-                        result->Next = nullptr;
+                        Y_VERIFY_DEBUG(ReadyQueue == nullptr, "TaskGroup is awaiting with non-empty ready queue");
+                        result->Next = ReadyQueue;
                         ReadyQueue = result.release();
                         return std::exchange(Continuation, {});
                     }
@@ -103,7 +66,7 @@ namespace NActors {
             }
 
             Y_NO_INLINE std::coroutine_handle<> Suspend(std::coroutine_handle<> h) noexcept {
-                Y_VERIFY(ReadyQueue == nullptr, "Caller suspending with non-empty ready queue");
+                Y_VERIFY_DEBUG(ReadyQueue == nullptr, "Caller suspending with non-empty ready queue");
                 Continuation = h;
                 void* currentValue = LastReady.load(std::memory_order_acquire);
                 for (;;) {
@@ -151,6 +114,11 @@ namespace NActors {
                 }
             }
 
+            bool IsDetached() const noexcept {
+                void* headValue = LastReady.load(std::memory_order_acquire);
+                return headValue == (void*)MarkerDetached;
+            }
+
             void Detach() noexcept {
                 // After this exchange all new results will be discarded
                 void* headValue = LastReady.exchange((void*)MarkerDetached, std::memory_order_acq_rel);
@@ -166,48 +134,38 @@ namespace NActors {
         };
 
         template<class T>
-        class TTaskGroupPromiseBase {
+        class TTaskGroupResultHandler {
         public:
-            static auto initial_suspend() noexcept { return std::suspend_always{}; }
-
-            class TFinalSuspend {
-            public:
-                TFinalSuspend(TTaskGroupPromiseBase& promise)
-                    : Promise_(promise)
-                {}
-
-                static bool await_ready() noexcept { return false; }
-
-                Y_NO_INLINE std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept {
-                    auto next = Promise_.Sink_->Push(std::move(Promise_.Result_));
-                    h.destroy();
-                    return next;
-                }
-
-                static void await_resume() noexcept { std::terminate(); }
-
-            private:
-                TTaskGroupPromiseBase& Promise_;
-            };
-
-            auto final_suspend() noexcept { return TFinalSuspend(*this); }
-
             void unhandled_exception() noexcept {
-                Result_->SetException();
-                Sink_->Push(std::move(Result_));
+                Result->SetException(std::current_exception());
             }
 
-            void SetSink(const TIntrusivePtr<TTaskGroupSink<T>>& sink) {
-                Sink_ = sink;
+            template<class TResult>
+            void return_value(TResult&& result) {
+                Result->SetValue(std::forward<TResult>(result));
             }
 
         protected:
-            std::unique_ptr<TTaskGroupResult<T>> Result_ = std::make_unique<TTaskGroupResult<T>>();
-            TIntrusivePtr<TTaskGroupSink<T>> Sink_;
+            std::unique_ptr<TTaskGroupResult<T>> Result = std::make_unique<TTaskGroupResult<T>>();
+        };
+
+        template<>
+        class TTaskGroupResultHandler<void> {
+        public:
+            void unhandled_exception() noexcept {
+                Result->SetException(std::current_exception());
+            }
+
+            void return_void() noexcept {
+                Result->SetValue();
+            }
+
+        protected:
+            std::unique_ptr<TTaskGroupResult<void>> Result = std::make_unique<TTaskGroupResult<void>>();
         };
 
         template<class T>
-        class TTaskGroupPromise final : public TTaskGroupPromiseBase<T> {
+        class TTaskGroupPromise final : public TTaskGroupResultHandler<T> {
         public:
             using THandle = std::coroutine_handle<TTaskGroupPromise<T>>;
 
@@ -215,24 +173,30 @@ namespace NActors {
                 return THandle::from_promise(*this);
             }
 
-            template<class TResult>
-            void return_value(TResult&& result) {
-                this->Result_->SetValue(std::forward<TResult>(result));
-            }
-        };
+            static auto initial_suspend() noexcept { return std::suspend_always{}; }
 
-        template<>
-        class TTaskGroupPromise<void> final : public TTaskGroupPromiseBase<void> {
-        public:
-            using THandle = std::coroutine_handle<TTaskGroupPromise<void>>;
+            struct TFinalSuspend {
+                static bool await_ready() noexcept { return false; }
+                static void await_resume() noexcept { Y_FAIL("unexpected coroutine resume"); }
 
-            THandle get_return_object() noexcept {
-                return THandle::from_promise(*this);
+                Y_NO_INLINE
+                static std::coroutine_handle<> await_suspend(std::coroutine_handle<TTaskGroupPromise<T>> h) noexcept {
+                    auto& promise = h.promise();
+                    auto sink = std::move(promise.Sink);
+                    auto next = sink->Push(std::move(promise.Result));
+                    h.destroy();
+                    return next;
+                }
+            };
+
+            static auto final_suspend() noexcept { return TFinalSuspend{}; }
+
+            void SetSink(const TIntrusivePtr<TTaskGroupSink<T>>& sink) {
+                Sink = sink;
             }
 
-            void return_void() {
-                this->Result_->SetValue();
-            }
+        private:
+            TIntrusivePtr<TTaskGroupSink<T>> Sink;
         };
 
         template<class T>
@@ -244,16 +208,16 @@ namespace NActors {
 
         public:
             TTaskGroupTask(THandle handle)
-                : Handle_(handle)
+                : Handle(handle)
             {}
 
             void Start(const TIntrusivePtr<TTaskGroupSink<T>>& sink) {
-                Handle_.promise().SetSink(sink);
-                Handle_.resume();
+                Handle.promise().SetSink(sink);
+                Handle.resume();
             }
 
         private:
-            THandle Handle_;
+            THandle Handle;
         };
 
         template<class T, class TAwaitable>
@@ -272,6 +236,11 @@ namespace NActors {
     class TTaskGroup {
     public:
         TTaskGroup() = default;
+
+        TTaskGroup(const TTaskGroup&) = delete;
+        TTaskGroup(TTaskGroup&&) = delete;
+        TTaskGroup& operator=(const TTaskGroup&) = delete;
+        TTaskGroup& operator=(TTaskGroup&&) = delete;
 
         ~TTaskGroup() {
             Sink_->Detach();
@@ -311,7 +280,7 @@ namespace NActors {
             }
 
             T await_resume() {
-                return TaskGroup_.Sink_->Resume()->Extract();
+                return std::move(*TaskGroup_.Sink_->Resume()).Value();
             }
 
         private:

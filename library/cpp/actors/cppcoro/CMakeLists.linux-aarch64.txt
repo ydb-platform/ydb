@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(benchmark)
 add_subdirectory(ut)
 
 add_library(cpp-actors-cppcoro)
@@ -19,5 +20,6 @@ target_sources(cpp-actors-cppcoro PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/await_callback.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/task_actor.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/task_group.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/task_result.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/task.cpp
 )

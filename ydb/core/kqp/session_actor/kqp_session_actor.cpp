@@ -1369,21 +1369,26 @@ public:
             bool useYdbResponseFormat = QueryState->GetUsePublicResponseDataFormat();
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
-                auto* protoRes = QueryState->QueryData->GetMkqlTxResult(phyQuery.GetResultBindings(i), response->GetArena());
-                std::optional<IDataProvider::TFillSettings> fillSettings;
-                if (QueryState->PreparedQuery->ResultsSize()) {
-                    YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
-                            << phyQuery.ResultBindingsSize() << " != " << QueryState->PreparedQuery->ResultsSize());
-                    const auto& result = QueryState->PreparedQuery->GetResults(i);
-                    if (result.GetRowsLimit()) {
-                        fillSettings = FillSettings;
-                        fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
-                    }
-                }
-                auto* finalResult = KikimrResultToProto(*protoRes, {}, fillSettings.value_or(FillSettings), response->GetArena());
                 if (useYdbResponseFormat) {
-                    ConvertKqpQueryResultToDbResult(*finalResult, response->AddYdbResults());
+                    TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
+                    if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
+                        effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
+                    }
+                    auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i), response->GetArena(), effectiveRowsLimit);
+                    response->AddYdbResults()->Swap(ydbResult);
                 } else {
+                    auto* protoRes = QueryState->QueryData->GetMkqlTxResult(phyQuery.GetResultBindings(i), response->GetArena());
+                    std::optional<IDataProvider::TFillSettings> fillSettings;
+                    if (QueryState->PreparedQuery->ResultsSize()) {
+                        YQL_ENSURE(phyQuery.ResultBindingsSize() == QueryState->PreparedQuery->ResultsSize(), ""
+                                << phyQuery.ResultBindingsSize() << " != " << QueryState->PreparedQuery->ResultsSize());
+                        const auto& result = QueryState->PreparedQuery->GetResults(i);
+                        if (result.GetRowsLimit()) {
+                            fillSettings = FillSettings;
+                            fillSettings->RowsLimitPerWrite = result.GetRowsLimit();
+                        }
+                    }
+                    auto* finalResult = KikimrResultToProto(*protoRes, {}, fillSettings.value_or(FillSettings), response->GetArena());
                     response->AddResults()->Swap(finalResult);
                 }
             }

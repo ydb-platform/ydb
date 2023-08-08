@@ -10,6 +10,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NMiniKQL;
@@ -68,6 +70,39 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
         ExportValueToProto(MkqlItemType, *Rows.Head(), *mkqlResult->MutableValue());
     }
 }
+
+Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite) {
+    Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
+    FillYdb(ydbResult, rowsLimitPerWrite);
+    return ydbResult;
+}
+
+void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, TMaybe<ui64> rowsLimitPerWrite) {
+    YQL_ENSURE(ydbResult);
+    YQL_ENSURE(!Rows.IsWide());
+    YQL_ENSURE(MkqlItemType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
+    const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(MkqlItemType);
+
+    for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
+        auto* column = ydbResult->add_columns();
+        ui32 memberIndex = (!ColumnOrder || ColumnOrder->empty()) ? idx : (*ColumnOrder)[idx];
+        column->set_name(TString(mkqlSrcRowStructType->GetMemberName(memberIndex)));
+        ExportTypeToProto(mkqlSrcRowStructType->GetMemberType(memberIndex), *column->mutable_type());
+    }
+    
+    Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
+        if (rowsLimitPerWrite) {
+            if (*rowsLimitPerWrite == 0) {
+                ydbResult->set_truncated(true);
+                return false;
+            }
+            --(*rowsLimitPerWrite);
+        }
+        ExportValueToProto(MkqlItemType, value, *ydbResult->add_rows(), ColumnOrder);
+        return true;
+    });
+}
+
 
 TTxAllocatorState::TTxAllocatorState(const IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
@@ -188,6 +223,16 @@ NKikimrMiniKQL::TResult* TQueryData::GetMkqlTxResult(const NKqpProto::TKqpPhyRes
     auto g = TypeEnv().BindAllocator();
     return TxResults[txIndex][resultIndex].GetMkql(arena);
 }
+
+Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena, TMaybe<ui64> rowsLimitPerWrite) {
+    auto txIndex = rb.GetTxResultBinding().GetTxIndex();
+    auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
+
+    YQL_ENSURE(HasResult(txIndex, resultIndex));
+    auto g = TypeEnv().BindAllocator();
+    return TxResults[txIndex][resultIndex].GetYdb(arena, rowsLimitPerWrite);
+}
+
 
 void TQueryData::AddTxResults(ui32 txIndex, TVector<TKqpExecuterTxResult>&& results) {
     auto g = TypeEnv().BindAllocator();

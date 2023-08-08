@@ -36,6 +36,7 @@ target_link_options(ydb-core-tx-coordinator-ut PRIVATE
 )
 target_sources(ydb-core-tx-coordinator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_volatile_ut.cpp
 )
 set_property(
   TARGET

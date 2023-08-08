@@ -20,6 +20,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     coordinator_ut.cpp
+    coordinator_volatile_ut.cpp
 )
 
 END()

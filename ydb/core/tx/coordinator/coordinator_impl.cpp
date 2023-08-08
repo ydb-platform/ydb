@@ -37,7 +37,7 @@ static TTransactionProposal MakeTransactionProposal(TEvTxProxy::TEvProposeTransa
     const ui64 maxStep = txrec.HasMaxStep() ? txrec.GetMaxStep() : Max<ui64>();
     const bool ignoreLowDiskSpace = txrec.GetIgnoreLowDiskSpace();
 
-    TTransactionProposal proposal(sender, txId, minStep, maxStep, ignoreLowDiskSpace);
+    TTransactionProposal proposal(sender, txId, minStep, maxStep, txrec.GetFlags(), ignoreLowDiskSpace);
     proposal.AffectedSet.resize(txrec.AffectedSetSize());
     for (ui32 i = 0, e = txrec.AffectedSetSize(); i != e; ++i) {
         const auto &x = txrec.GetAffectedSet(i);
@@ -136,49 +136,52 @@ void TTxCoordinator::PlanTx(TTransactionProposal &&proposal, const TActorContext
                 proposal.TxId, 0, ctx, TabletID());
     }
 
-    bool forRapidExecution = (proposal.MinStep <= VolatileState.LastPlanned);
-    ui64 planStep = 0;
+    // Volatile transactions are not persistent and planned as soon as possible
+    bool volatileTx = proposal.HasVolatileFlag();
 
-    // cycle for flow control
-    for (ui64 cstep = (proposal.MinStep + Config.Resolution - 1) / Config.Resolution * Config.Resolution; /*no-op*/;cstep += Config.Resolution) {
-        if (cstep >= proposal.MaxStep) {
-            MonCounters.PlanTxOutdated->Inc();
-            return SendTransactionStatus(proposal.Proxy,
-                TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated, proposal.TxId, 0, ctx, TabletID());
-        }
+    // Rapid transactions are buffered and may be planned without alignment
+    bool rapidTx = (proposal.MinStep <= VolatileState.LastPlanned) && !volatileTx;
 
-        if (forRapidExecution) {
-            planStep = VolatileState.LastPlanned + 1;
-            if ((planStep % Config.Resolution) == 0) // if point on border - do not use rapid slot
-                forRapidExecution = false;
-        } else {
-            planStep = cstep;
-        }
+    // The minimum step we can plan is the next step
+    ui64 planStep = VolatileState.LastPlanned + 1;
 
-        break;
+    // Prefer planning non-rapid transactions to a resolution aligned step
+    if (!rapidTx && !volatileTx) {
+        planStep = Max(planStep, Min(proposal.MaxStep - 1,
+                (proposal.MinStep + Config.Resolution - 1) / Config.Resolution * Config.Resolution));
+    }
+
+    if (planStep >= proposal.MaxStep) {
+        MonCounters.PlanTxOutdated->Inc();
+        return SendTransactionStatus(proposal.Proxy,
+            TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated, proposal.TxId, 0, ctx, TabletID());
+    }
+
+    if ((planStep % Config.Resolution) == 0) {
+        // Step is already aligned
+        rapidTx = false;
     }
 
     MonCounters.PlanTxAccepted->Inc();
     SendTransactionStatus(proposal.Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted,
         proposal.TxId, planStep, ctx, TabletID());
 
-    if (forRapidExecution) {
+    if (rapidTx) {
         TQueueType::TSlot &rapidSlot = VolatileState.Queue.RapidSlot;
         rapidSlot.push_back(std::move(proposal));
 
-        if (rapidSlot.size() >= Config.RapidSlotFlushSize) {
-            SchedulePlanTickExact(planStep);
+        if (rapidSlot.size() < Config.RapidSlotFlushSize) {
+            // Wait for the next aligned step until enough rapid transactions
+            SchedulePlanTickAligned(planStep);
+            return;
         }
-
-        // We may be sleeping at reduced resolution, try to wake up sooner
-        SchedulePlanTickAligned(planStep);
     } else {
         TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep);
         planSlot.push_back(std::move(proposal));
-
-        // We may be sleeping at reduced resolution, try to wake up sooner
-        SchedulePlanTickExact(planStep);
     }
+
+    // Wait for the specified step even when not aligned
+    SchedulePlanTickExact(planStep);
 }
 
 void TTxCoordinator::Handle(TEvTxProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {

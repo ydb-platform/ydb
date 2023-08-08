@@ -39,6 +39,7 @@ struct TTransactionProposal {
     TTxId TxId; // could be zero, then transaction is not saved a-priori and must be idempotent, with body provided
     TStepId MinStep; // not plan before (tablet would be not ready), could be zero
     TStepId MaxStep; // not plan after (tablet would trash tx body).
+    ui32 Flags;
 
     struct TAffectedEntry {
         TTabletId TabletId;
@@ -51,13 +52,18 @@ struct TTransactionProposal {
     TInstant AcceptMoment;
     bool IgnoreLowDiskSpace;
 
-    TTransactionProposal(const TActorId &proxy, TTxId txId, TStepId minStep, TStepId maxStep, bool ignoreLowDiskSpace)
+    TTransactionProposal(const TActorId &proxy, TTxId txId, TStepId minStep, TStepId maxStep, ui32 flags, bool ignoreLowDiskSpace)
         : Proxy(proxy)
         , TxId(txId)
         , MinStep(minStep)
         , MaxStep(maxStep)
+        , Flags(flags)
         , IgnoreLowDiskSpace(ignoreLowDiskSpace)
     {}
+
+    bool HasVolatileFlag() const {
+        return (Flags & TEvTxProxy::TEvProposeTransaction::FlagVolatile) != 0;
+    }
 };
 
 struct TCoordinatorStepConfirmations {
@@ -85,19 +91,15 @@ struct TMediatorStep {
         // todo: move to flat presentation (with buffer for all affected, instead of per-one)
         TVector<TTabletId> PushToAffected; // filtered one (only entries which belong to this mediator)
 
-        ui64 Moderator;
-
-        TTx(TTxId txId, const TTabletId *affected, ui32 affectedSize, ui64 moderator)
+        TTx(TTxId txId, const TTabletId *affected, ui32 affectedSize)
             : TxId(txId)
             , PushToAffected(affected, affected + affectedSize)
-            , Moderator(moderator)
         {
             Y_VERIFY(TxId != 0);
         }
 
         TTx(TTxId txId)
             : TxId(txId)
-            , Moderator(0)
         {
             Y_VERIFY(TxId != 0);
         }
@@ -105,7 +107,8 @@ struct TMediatorStep {
 
     TTabletId MediatorId;
     TStepId Step;
-    bool Confirmed;
+    bool Confirmed = false;
+    bool Volatile = false;
 
     TVector<TTx> Transactions;
 
@@ -115,7 +118,6 @@ struct TMediatorStep {
     TMediatorStep(TTabletId mediatorId, TStepId step)
         : MediatorId(mediatorId)
         , Step(step)
-        , Confirmed(false)
     {}
 
     void SerializeTo(TEvTxCoordinator::TEvCoordinatorStep *msg) const;
@@ -399,13 +401,9 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     };
 
     struct TTransaction {
-        TStepId PlanOnStep;
+        TStepId PlanOnStep = 0;
         THashSet<TTabletId> AffectedSet;
         THashMap<TTabletId, THashSet<TTabletId>> UnconfirmedAffectedSet;
-
-        TTransaction()
-            : PlanOnStep(0)
-        {}
     };
 
     struct TAcquireReadStepRequest {
@@ -599,6 +597,10 @@ private:
 
     typedef THashMap<TTxId, TTransaction> TTransactions;
     TTransactions Transactions;
+
+    // Volatile transactions are not persistent
+    // Separate hash map so we don't trip consistency checks
+    TTransactions VolatileTransactions;
 
     TActorId ReadStepSubscriptionManager;
 

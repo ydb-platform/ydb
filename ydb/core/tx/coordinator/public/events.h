@@ -67,8 +67,11 @@ struct TEvTxCoordinator {
     {
         TEvCoordinatorStateRequest() = default;
 
-        explicit TEvCoordinatorStateRequest(ui32 generation) {
+        explicit TEvCoordinatorStateRequest(ui32 generation, const TString& continuationToken = {}) {
             Record.SetGeneration(generation);
+            if (!continuationToken.empty()) {
+                Record.SetContinuationToken(continuationToken);
+            }
         }
     };
 

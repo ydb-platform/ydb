@@ -38,16 +38,10 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
     TMediatorStep::TTx& GetMediatorTx(TTabletId mediatorId, TStepId step, TTxId txId) {
         auto& medStep = GetMediatorStep(mediatorId, step);
-        if (medStep.Transactions.empty() || medStep.Transactions.back().TxId < txId) {
+        if (medStep.Transactions.empty() || medStep.Transactions.back().TxId != txId) {
             return medStep.Transactions.emplace_back(txId);
         }
-        auto& medTx = medStep.Transactions.back();
-        Y_VERIFY_S(medTx.TxId == txId, "Transaction loading must be ordered by TxId:"
-            << " Mediator# " << mediatorId
-            << " step# " << step
-            << " TxId# " << txId
-            << " PrevTxId# " << medTx.TxId);
-        return medTx;
+        return medStep.Transactions.back();
     }
 
     void EnsureLastMediatorStep(TTabletId mediatorId, TStepId step) {
@@ -73,6 +67,9 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
             while (!rowset.EndOfSet()) {
                 TTxId txId = rowset.GetValue<Schema::Transaction::ID>();
+                Y_VERIFY_DEBUG_S(!Self->VolatileTransactions.contains(txId),
+                    "Unexpected txId# " << txId << " both volatile and persistent");
+                Self->VolatileTransactions.erase(txId);
                 TTransaction& transaction = transactions[txId];
                 transaction.PlanOnStep = rowset.GetValue<Schema::Transaction::Plan>();
                 TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>();
@@ -128,6 +125,20 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         return true;
     }
 
+    void RestoreVolatileSteps() {
+        for (auto &pr : Self->VolatileTransactions) {
+            auto txId = pr.first;
+            auto &tx = pr.second;
+            for (auto &prmed : tx.UnconfirmedAffectedSet) {
+                auto medId = prmed.first;
+                auto &medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
+                for (ui64 tabletId : prmed.second) {
+                    medTx.PushToAffected.push_back(tabletId);
+                }
+            }
+        }
+    }
+
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
@@ -135,7 +146,8 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         bool result = Restore(transactions, txc, ctx);
         if (!result)
             return false;
-        i64 txCounter = transactions.size();
+        RestoreVolatileSteps();
+        i64 txCounter = transactions.size() + Self->VolatileTransactions.size();
         Self->Transactions.swap(transactions);
         *Self->MonCounters.TxInFly += txCounter;
         Self->MonCounters.CurrentTxInFly = txCounter;

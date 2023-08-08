@@ -46,6 +46,7 @@ private:
     ui64 LastAcquiredStep = -1;
     ui64 LastConfirmedStep = -1;
     ui64 LastBlockedStep = 0;
+    TString SerializedState;
 };
 
 } // namespace NKikimr::NFlatTxCoordinator

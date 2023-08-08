@@ -5,6 +5,8 @@
 
 namespace NKikimr::NFlatTxCoordinator {
 
+static constexpr size_t MaxSerializedStateChunk = 8 * 1024 * 1024;
+
 TCoordinatorStateActor::TCoordinatorStateActor(TTxCoordinator* owner, const TActorId& prevStateActorId)
     : TActor(&TThis::StateWork)
     , Owner(owner)
@@ -48,6 +50,32 @@ void TCoordinatorStateActor::PreserveState() {
     LastBlockedStep = Max(
         Owner->VolatileState.LastBlockedPending,
         Owner->VolatileState.LastBlockedCommitted);
+
+    if (!Owner->VolatileTransactions.empty()) {
+        google::protobuf::Arena arena;
+        auto* state = google::protobuf::Arena::CreateMessage<NKikimrTxCoordinator::TEvCoordinatorStateResponse::TSerializedState>(&arena);
+        auto* pTxs = state->MutableVolatileTxs();
+        pTxs->Reserve(Owner->VolatileTransactions.size());
+        for (auto& tx : Owner->VolatileTransactions) {
+            auto* pTx = pTxs->Add();
+            pTx->SetTxId(tx.first);
+            pTx->SetPlanStep(tx.second.PlanOnStep);
+            auto* pMediators = pTx->MutableMediators();
+            pMediators->Reserve(tx.second.UnconfirmedAffectedSet.size());
+            for (auto& m : tx.second.UnconfirmedAffectedSet) {
+                auto* pMediator = pMediators->Add();
+                pMediator->SetMediatorId(m.first);
+                auto* pAffectedSet = pMediator->MutableAffectedSet();
+                pAffectedSet->Reserve(m.second.size());
+                for (ui64 tabletId : m.second) {
+                    pAffectedSet->Add(tabletId);
+                }
+            }
+        }
+        bool ok = state->SerializeToString(&SerializedState);
+        Y_VERIFY(ok);
+    }
+
 }
 
 STFUNC(TCoordinatorStateActor::StateWork) {
@@ -58,19 +86,46 @@ STFUNC(TCoordinatorStateActor::StateWork) {
 }
 
 void TCoordinatorStateActor::Handle(TEvTxCoordinator::TEvCoordinatorStateRequest::TPtr& ev) {
+    auto* msg = ev->Get();
+
     // We could receive this request only when newer generation found us in persistent storage
     ConfirmPersistent();
 
     if (Owner) {
         // New generation may request state before current tablet dies
-        PreserveState();
+        OnTabletDead();
     }
 
     auto res = std::make_unique<TEvTxCoordinator::TEvCoordinatorStateResponse>();
-    res->Record.SetLastSentStep(LastSentStep);
-    res->Record.SetLastAcquiredStep(LastAcquiredStep);
-    res->Record.SetLastConfirmedStep(LastConfirmedStep);
-    Send(ev->Sender, res.release());
+    if (!msg->Record.HasContinuationToken()) {
+        res->Record.SetLastSentStep(LastSentStep);
+        res->Record.SetLastAcquiredStep(LastAcquiredStep);
+        res->Record.SetLastConfirmedStep(LastConfirmedStep);
+    }
+
+    if (!SerializedState.empty()) {
+        NKikimrTxCoordinator::TEvCoordinatorStateResponse::TContinuationToken token;
+        if (msg->Record.HasContinuationToken()) {
+            bool ok = token.ParseFromString(msg->Record.GetContinuationToken());
+            Y_VERIFY_DEBUG(ok);
+        }
+        size_t offset = token.GetOffset();
+        if (offset < SerializedState.size()) {
+            size_t left = SerializedState.size() - offset;
+            if (offset == 0 && left <= MaxSerializedStateChunk) {
+                res->Record.SetSerializedState(SerializedState);
+            } else if (left <= MaxSerializedStateChunk) {
+                res->Record.SetSerializedState(SerializedState.substr(offset));
+            } else {
+                res->Record.SetSerializedState(SerializedState.substr(offset, MaxSerializedStateChunk));
+                token.SetOffset(offset + MaxSerializedStateChunk);
+                bool ok = token.SerializeToString(res->Record.MutableContinuationToken());
+                Y_VERIFY_DEBUG(ok);
+            }
+        }
+    }
+
+    Send(ev->Sender, res.release(), 0, ev->Cookie);
 }
 
 void TCoordinatorStateActor::HandlePoison() {
@@ -137,7 +192,13 @@ public:
     }
 
     void StateMissing() {
-        Send(Owner, new TEvPrivate::TEvRestoredStateMissing(LastBlockedStep));
+        if (Cookie == 0) {
+            Send(Owner, new TEvPrivate::TEvRestoredStateMissing(LastBlockedStep));
+        } else {
+            // Use partial state from the first response
+            Response.ClearSerializedState();
+            Send(Owner, new TEvPrivate::TEvRestoredState(std::move(Response)));
+        }
         PassAway();
     }
 
@@ -159,7 +220,9 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
             Subscribed = true;
         }
-        Send(PrevStateActorId, new TEvTxCoordinator::TEvCoordinatorStateRequest(Generation), flags);
+        Send(PrevStateActorId,
+            new TEvTxCoordinator::TEvCoordinatorStateRequest(Generation, ContinuationToken),
+            flags, Cookie);
     }
 
     void NodeDisconnected() {
@@ -180,7 +243,28 @@ public:
     }
 
     void Handle(TEvTxCoordinator::TEvCoordinatorStateResponse::TPtr& ev) {
-        Send(Owner, new TEvPrivate::TEvRestoredState(std::move(ev->Get()->Record)));
+        if (ev->Cookie != Cookie) {
+            // This is not the response we are waiting for
+            return;
+        }
+
+        ContinuationToken = ev->Get()->Record.GetContinuationToken();
+
+        if (Cookie == 0) {
+            Response = std::move(ev->Get()->Record);
+            Response.ClearContinuationToken();
+        } else {
+            Response.MutableSerializedState()->append(ev->Get()->Record.GetSerializedState());
+        }
+
+        // Request the next chunk if we have continuation token
+        if (!ContinuationToken.empty()) {
+            ++Cookie;
+            SendRequest();
+            return;
+        }
+
+        Send(Owner, new TEvPrivate::TEvRestoredState(std::move(Response)));
         PassAway();
     }
 
@@ -202,6 +286,9 @@ private:
     const ui64 LastBlockedStep;
     const TInstant Deadline;
     bool Subscribed = false;
+    TString ContinuationToken;
+    ui64 Cookie = 0;
+    NKikimrTxCoordinator::TEvCoordinatorStateResponse Response;
 };
 
 void TTxCoordinator::RestoreState(const TActorId& prevStateActorId, ui64 lastBlockedStep) {
@@ -247,6 +334,25 @@ void TTxCoordinator::Handle(TEvPrivate::TEvRestoredState::TPtr& ev) {
         VolatileState.LastSentStep,
         VolatileState.LastAcquired,
         VolatileState.LastConfirmedStep);
+
+    if (record.HasSerializedState()) {
+        google::protobuf::Arena arena;
+        auto* state = google::protobuf::Arena::CreateMessage<NKikimrTxCoordinator::TEvCoordinatorStateResponse::TSerializedState>(&arena);
+        bool ok = state->ParseFromString(record.GetSerializedState());
+        if (ok) {
+            for (auto& protoTx : state->GetVolatileTxs()) {
+                auto& tx = VolatileTransactions[protoTx.GetTxId()];
+                tx.PlanOnStep = protoTx.GetPlanStep();
+                for (auto& protoMediator : protoTx.GetMediators()) {
+                    auto& unconfirmed = tx.UnconfirmedAffectedSet[protoMediator.GetMediatorId()];
+                    unconfirmed.reserve(protoMediator.AffectedSetSize());
+                    for (ui64 tabletId : protoMediator.GetAffectedSet()) {
+                        unconfirmed.insert(tabletId);
+                    }
+                }
+            }
+        }
+    }
 
     Execute(CreateTxRestoreTransactions());
 }

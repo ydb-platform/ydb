@@ -1,3 +1,5 @@
+# Some text to verify import script
+
 RECURSE(
     apps
     core
@@ -8,3 +10,5 @@ RECURSE(
     docs/ru/core
     docs/en/core
 )
+
+

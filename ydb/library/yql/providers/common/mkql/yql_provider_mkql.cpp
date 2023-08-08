@@ -675,7 +675,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     AddCallable("WideMap", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto lambda = [&](TRuntimeNode::TList items) { return MkqlBuildWideLambda(node.Tail(), ctx, items); };
-        return ctx.ProgramBuilder.WideMap(arg, lambda);
+        TRuntimeNode result = ctx.ProgramBuilder.WideMap(arg, lambda);
+        if (IsWideBlockType(*node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType())) {
+            result = ctx.ProgramBuilder.BlockExpandChunked(result);
+        }
+        return result;
     });
 
     AddCallable("WideChain1Map", [](const TExprNode& node, TMkqlBuildContext& ctx) {

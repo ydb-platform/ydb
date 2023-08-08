@@ -112,17 +112,6 @@ TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TEx
     return ctx.NewLambda(lambda.Pos(), ctx.NewArguments(lambda.Pos(), std::move(newArgs)), std::move(newRoots));
 }
 
-TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
-    Y_UNUSED(types);
-    if (node->Head().IsCallable("BlockExpandChunked")) {
-        // WideFromBlocks accepts chunked input
-        YQL_CLOG(DEBUG, Core) << "Drop " << node->Head().Content() << " under " << node->Content();
-        return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
-    }
-
-    return node;
-}
-
 TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     if (node->Head().IsCallable("WideFromBlocks")) {
@@ -5254,13 +5243,11 @@ TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext&
 
     auto ret = ctx.Builder(node->Pos())
         .Callable("WideFromBlocks")
-            .Callable(0, "BlockExpandChunked")
-                .Callable(0, "WideMap")
-                    .Callable(0, "WideToBlocks")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                    .Add(1, blockLambda)
+            .Callable(0, "WideMap")
+                .Callable(0, "WideToBlocks")
+                    .Add(0, node->HeadPtr())
                 .Seal()
+                .Add(1, blockLambda)
             .Seal()
         .Seal()
         .Build();
@@ -5288,13 +5275,11 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
     }
 
     auto blockMapped = ctx.Builder(node->Pos())
-        .Callable("BlockExpandChunked")
-            .Callable(0, "WideMap")
-                .Callable(0, "WideToBlocks")
-                    .Add(0, node->HeadPtr())
-                .Seal()
-                .Add(1, blockLambda)
+        .Callable("WideMap")
+            .Callable(0, "WideToBlocks")
+                .Add(0, node->HeadPtr())
             .Seal()
+            .Add(1, blockLambda)
         .Seal()
         .Build();
 
@@ -7309,7 +7294,6 @@ struct TPeepHoleRules {
         {"WideMap", &OptimizeWideMapBlocks},
         {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
-        {"WideFromBlocks", &OptimizeWideFromBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
         {"Skip", &OptimizeSkipTakeToBlocks},
         {"Take", &OptimizeSkipTakeToBlocks},

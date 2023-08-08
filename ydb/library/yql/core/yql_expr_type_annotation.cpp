@@ -2792,6 +2792,32 @@ bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& t
     return true;
 }
 
+bool IsWideBlockType(const TTypeAnnotationNode& type) {
+    if (type.GetKind() != ETypeAnnotationKind::Multi) {
+        return false;
+    }
+
+    const auto& items = type.Cast<TMultiExprType>()->GetItems();
+    if (items.empty()) {
+        return false;
+    }
+
+    if (!AllOf(items, [](const auto& item){ return item->IsBlockOrScalar(); })) {
+        return false;
+    }
+
+    if (items.back()->GetKind() != ETypeAnnotationKind::Scalar) {
+        return false;
+    }
+
+    auto blockLenType = items.back()->Cast<TScalarExprType>()->GetItemType();
+    if (blockLenType->GetKind() != ETypeAnnotationKind::Data) {
+        return false;
+    }
+
+    return blockLenType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Uint64;
+}
+
 bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& type, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (HasError(&type, ctx)) {
         return false;

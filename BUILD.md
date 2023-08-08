@@ -6,8 +6,8 @@
  Below is a list of packages that need to be installed before building YDB. 'How to Build' section contains step by step instructions to obtain these packages.
 
  - cmake 3.22+
- - clang-12
- - lld-12
+ - clang-14
+ - lld-14
  - git 2.20+
  - python3.8
  - pip3
@@ -28,28 +28,16 @@
 
 ## (optional) Add CMake and LLVM APT repositories (for Ubuntu 18.04 and 20.04)
 
-## Ubuntu 18.04
+## Ubuntu 18.04 and Ubuntu 20.04
 
-For Ubuntu 18.04, you have to add CMake and LLVM APT repositories:
+For Ubuntu 18.04 and Ubuntu 20.04, you have to add CMake and LLVM APT repositories:
 
 ```bash
 wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
 echo "deb http://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
 
 wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-12 main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
-
-sudo apt-get update
-
-```
-
-## Ubuntu 20.04
-
-For Ubuntu 20.04, you have to add CMake APT repository:
-
-```bash
-wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
-echo "deb http://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-14 main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
 
 sudo apt-get update
 
@@ -59,7 +47,7 @@ sudo apt-get update
 ## Install dependencies
 
 ```bash
-sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev llvm-12
+sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev libaio1 libaio-dev llvm-14
 sudo pip3 install conan==1.59
 
 ```

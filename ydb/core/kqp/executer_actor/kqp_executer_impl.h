@@ -756,8 +756,7 @@ protected:
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
-        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1,
-            "multiple sources or sources mixed with connections");
+        YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
 
         const auto& stageSource = stage.GetSources(0);
         const auto& externalSource = stageSource.GetExternalSource();

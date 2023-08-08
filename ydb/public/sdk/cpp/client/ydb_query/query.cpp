@@ -14,6 +14,10 @@ TResultSet TExecuteQueryResult::GetResultSet(size_t resultIndex) const {
     return ResultSets_[resultIndex];
 }
 
+TResultSetParser TExecuteQueryResult::GetResultSetParser(size_t resultIndex) const {
+    return TResultSetParser(GetResultSet(resultIndex));
+}
+
 TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Operations::Operation&& operation)
     : TOperation(std::move(status), std::move(operation))
 {

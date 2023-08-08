@@ -29,7 +29,14 @@ R"({"key": "1", "value": "trololo"}
 {"key": "2", "value": "hello world"}
 )"sv;
 
+constexpr TStringBuf TEST_CONTENT_KEYS =
+R"({"key": "1"}
+{"key": "3"}
+)"sv;
+
 const TString TEST_SCHEMA = R"(["StructType";[["key";["DataType";"Utf8";];];["value";["DataType";"Utf8";];];];])";
+
+const TString TEST_SCHEMA_IDS = R"(["StructType";[["key";["DataType";"Utf8";];];];])";
 
 bool InitAwsApi() {
     Aws::InitAPI(Aws::SDKOptions());
@@ -64,19 +71,26 @@ void CreateBucket(const TString& bucket) {
     CreateBucket(bucket, s3Client);
 }
 
+void UploadObject(const TString& bucket, const TString& object, const TStringBuf& content, Aws::S3::S3Client& s3Client) {
+    Aws::S3::Model::PutObjectRequest req;
+    req.WithBucket(bucket).WithKey(object);
+
+    auto inputStream = std::make_shared<std::stringstream>();
+    *inputStream << content;
+    req.SetBody(inputStream);
+    const Aws::S3::Model::PutObjectOutcome result = s3Client.PutObject(req);
+    UNIT_ASSERT_C(result.IsSuccess(), "Error uploading object \"" << object << "\" to a bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
+}
+
+void UploadObject(const TString& bucket, const TString& object, const TStringBuf& content) {
+    Aws::S3::S3Client s3Client = MakeS3Client();
+
+    UploadObject(bucket, object, content, s3Client);
+}
+
 void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content, Aws::S3::S3Client& s3Client) {
     CreateBucket(bucket, s3Client);
-
-    {
-        Aws::S3::Model::PutObjectRequest req;
-        req.WithBucket(bucket).WithKey(object);
-
-        auto inputStream = std::make_shared<std::stringstream>();
-        *inputStream << content;
-        req.SetBody(inputStream);
-        const Aws::S3::Model::PutObjectOutcome result = s3Client.PutObject(req);
-        UNIT_ASSERT_C(result.IsSuccess(), "Error uploading object \"" << object << "\" to a bucket \"" << bucket << "\": " << result.GetError().GetExceptionName() << ": " << result.GetError().GetMessage());
-    }
+    UploadObject(bucket, object, content, s3Client);
 }
 
 void CreateBucketWithObject(const TString& bucket, const TString& object, const TStringBuf& content) {
@@ -814,6 +828,82 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_STRING_CONTAINS(content, "key\tvalue\n"); // tsv header
         UNIT_ASSERT_STRING_CONTAINS(content, "1\ttrololo\n");
         UNIT_ASSERT_STRING_CONTAINS(content, "2\thello world\n");
+    }
+
+    Y_UNIT_TEST(JoinTwoSources) {
+        using namespace fmt::literals;
+        const TString dataSource = "/Root/data_source";
+        const TString bucket = "test_bucket_mixed";
+        const TString dataTable = "/Root/data";
+        const TString dataObject = "data";
+        const TString keysTable = "/Root/keys";
+        const TString keysObject = "keys";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket(bucket, s3Client);
+            UploadObject(bucket, dataObject, TEST_CONTENT, s3Client);
+            UploadObject(bucket, keysObject, TEST_CONTENT_KEYS, s3Client);
+        }
+
+        auto kikimr = DefaultKikimrRunner();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{data_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{bucket_location}",
+                AUTH_METHOD="NONE"
+            );
+
+            CREATE EXTERNAL TABLE `{data_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{data_source}",
+                LOCATION="{data_object}",
+                FORMAT="json_each_row"
+            );
+
+            CREATE EXTERNAL TABLE `{keys_table}` (
+                key Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{data_source}",
+                LOCATION="{keys_object}",
+                FORMAT="json_each_row"
+            );
+            )",
+            "data_source"_a = dataSource,
+            "bucket_location"_a = GetBucketLocation(bucket),
+            "data_table"_a = dataTable,
+            "data_object"_a = dataObject,
+            "keys_table"_a = keysTable,
+            "keys_object"_a = keysObject
+            );
+        auto schemeQueryesult = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(schemeQueryesult.GetStatus() == NYdb::EStatus::SUCCESS, schemeQueryesult.GetIssues().ToString());
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{data_table}`
+                WHERE key IN (
+                    SELECT key FROM `{keys_table}`
+                )
+            )",
+            "data_table"_a = dataTable,
+            "keys_table"_a = keysTable);
+
+        auto db = kikimr.GetQueryClient();
+        auto resultFuture = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        UNIT_ASSERT_C(resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
+        auto result = resultFuture.GetValueSync().GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(result.RowsCount(), 1);
+        UNIT_ASSERT(result.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser("key").GetUtf8(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser("value").GetUtf8(), "trololo");
+        UNIT_ASSERT(!result.TryNextRow());
     }
 }
 

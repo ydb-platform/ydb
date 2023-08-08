@@ -56,6 +56,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
+    NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
@@ -75,6 +76,8 @@ struct TKikimrSettings {
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
     bool HasOptUseFinalizeByKey() const;
+    bool HasOptEnableCostBasedOptimization() const;
+
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;
     NDq::EHashJoinMode GetHashJoinMode() const;

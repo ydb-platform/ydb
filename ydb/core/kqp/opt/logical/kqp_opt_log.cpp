@@ -33,6 +33,7 @@ public:
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInToEquiJoin));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInCompactToJoin));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
@@ -120,6 +121,12 @@ protected:
     TMaybeNode<TExprBase> RewriteSqlInCompactToJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteSqlInCompactToJoin(node, ctx);
         DumpAppliedRule("KqpRewriteSqlInCompactToJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, Config->HasOptEnableCostBasedOptimization());
+        DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

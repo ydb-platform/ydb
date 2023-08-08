@@ -5,6 +5,7 @@
 #include "yql_udf_resolver.h"
 #include "yql_user_data_storage.h"
 #include "yql_arrow_resolver.h"
+#include "yql_statistics.h"
 
 #include <ydb/library/yql/public/udf/udf_validate.h>
 #include <ydb/library/yql/core/credentials/yql_credentials.h>
@@ -184,6 +185,7 @@ struct TUdfCachedInfo {
 };
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    THashMap<const TExprNode*, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSourceMap;

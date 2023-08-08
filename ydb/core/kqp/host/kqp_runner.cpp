@@ -4,6 +4,8 @@
 #include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
+#include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
+
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
@@ -89,6 +91,7 @@ public:
             .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
+            .Add(CreateKqpStatisticsTransformer(*typesCtx, Config), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize")

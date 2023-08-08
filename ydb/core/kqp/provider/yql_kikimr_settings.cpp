@@ -63,6 +63,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
     REGISTER_SETTING(*this, OptEnableOlapPushdown);
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
+    REGISTER_SETTING(*this, OptEnableCostBasedOptimization);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -123,6 +124,11 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetOptionalFlagValue(OptUseFinalizeByKey.Get()) == EOptionalFlag::Enabled;
 }
+
+bool TKikimrSettings::HasOptEnableCostBasedOptimization() const {
+    return GetOptionalFlagValue(OptEnableCostBasedOptimization.Get()) == EOptionalFlag::Enabled;
+}
+
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {
     return GetOptionalFlagValue(OptEnablePredicateExtract.Get());

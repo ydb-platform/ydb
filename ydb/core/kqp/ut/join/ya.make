@@ -16,6 +16,7 @@ SRCS(
     kqp_flip_join_ut.cpp
     kqp_index_lookup_join_ut.cpp
     kqp_join_ut.cpp
+    kqp_join_order_ut.cpp
 )
 
 PEERDIR(

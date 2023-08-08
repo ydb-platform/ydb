@@ -44,6 +44,7 @@ target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_range_legacy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_blocks_transformer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_statistics_transformer.cpp
 )
 generate_enum_serilization(core-kqp-opt
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.h

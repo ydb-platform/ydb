@@ -35,6 +35,7 @@ target_sources(ydb-core-kqp-ut-join PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/join/kqp_flip_join_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/join/kqp_index_lookup_join_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/join/kqp_join_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/join/kqp_join_order_ut.cpp
 )
 set_property(
   TARGET

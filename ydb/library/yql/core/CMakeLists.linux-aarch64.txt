@@ -99,6 +99,7 @@ target_sources(library-yql-core PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_window.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_statistics.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_udf_index.cpp

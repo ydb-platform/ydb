@@ -238,6 +238,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> WideFlowLimit;
     NCommon::TConfSetting<bool, false> UseSystemColumns;
     NCommon::TConfSetting<bool, false> HybridDqExecution;
+    NCommon::TConfSetting<TDuration, false> HybridDqTimeSpentLimit;
     NCommon::TConfSetting<NSize::TSize, false> HybridDqDataSizeLimitForOrdered;
     NCommon::TConfSetting<NSize::TSize, false> HybridDqDataSizeLimitForUnordered;
     NCommon::TConfSetting<bool, false> HybridDqExecutionFallback;

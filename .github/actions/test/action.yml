@@ -42,11 +42,12 @@ runs:
     id: init
     shell: bash
     run: |
-      mkdir -p artifacts tmp test_reports
-      rm -rf artifacts/* tmp/* test_reports/*
+      rm -rf artifacts tmp test_reports
+      mkdir -p artifacts tmp/pytest test_reports/pytest
       echo "WORKDIR=$(pwd)" >> $GITHUB_ENV
       echo "TESTREPDIR=$(pwd)/test_reports" >> $GITHUB_ENV
-      echo "PYTESTREPDIR=$(pwd)/ydb/tests/functional/test-results/xml" >> $GITHUB_ENV
+      echo "TMPDIR=$(pwd)/tmp" >> $GITHUB_ENV
+      echo "PYTESTREPDIR=$(pwd)/test_reports/pytest/" >> $GITHUB_ENV
       echo "TESTMO_TOKEN=${{inputs.testman_token}}" >> $GITHUB_ENV
       echo "TESTMO_URL=${{inputs.testman_url}}" >> $GITHUB_ENV
       echo "ARTIFACTS_DIR=$(pwd)/artifacts" >> $GITHUB_ENV
@@ -54,13 +55,12 @@ runs:
       echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
       echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
       echo "functestfilterfile=$(pwd)/.github/config/muted_functest.txt" >> $GITHUB_OUTPUT
-      echo "logurlprefix=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_OUTPUT
       echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
 
   - name: configure s3cmd
     shell: bash
     run: |
-      cat <<EOF > $WORKDIR/tmp/s3cfg
+      cat <<EOF > $TMPDIR/s3cfg
       [default]
       access_key = ${aws_key_id}
       secret_key = ${aws_secret_access_key}
@@ -68,8 +68,9 @@ runs:
       host_base = storage.yandexcloud.net
       host_bucket = %(bucket)s.storage.yandexcloud.net
       EOF
-      echo "S3CMD_CONFIG=$WORKDIR/tmp/s3cfg" >> $GITHUB_ENV
+      echo "S3CMD_CONFIG=$TMPDIR/s3cfg" >> $GITHUB_ENV
       echo "S3_BUCKET_PATH=s3://${{ inputs.aws_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/" >> $GITHUB_ENV
+      echo "S3_URL_PREFIX=${{inputs.aws_endpoint}}/${{inputs.aws_bucket}}/${{ github.repository }}/${{github.workflow}}/${{github.run_id}}" >> $GITHUB_ENV
     env:
       aws_key_id: ${{inputs.AWS_KEY_ID }}
       aws_secret_access_key: ${{inputs.AWS_KEY_VALUE}}
@@ -130,11 +131,11 @@ runs:
     run: |
       cd $WORKDIR/../build/ydb
 
-      echo "[Stdout unittest/ctest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.logfilename}})" >> $GITHUB_STEP_SUMMARY
+      echo "[Stdout unittest/ctest log (gzip archive)]($S3_URL_PREFIX/${{steps.init.outputs.logfilename}})" >> $GITHUB_STEP_SUMMARY
 
       # Sed removes coloring from the output
       
-      TMPDIR=$WORKDIR/tmp GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
+      GTEST_OUTPUT="xml:$TESTREPDIR/unittests/" Y_UNITTEST_OUTPUT="xml:$TESTREPDIR/unittests/" \
         ctest -j28 --timeout 1200 --force-new-ctest-process --output-on-failure \
               --output-junit $TESTREPDIR/suites/ctest_report.xml \
               -L '${{inputs.test_label_regexp}}' -E "${CTEST_SKIP_SHARDS:-}" | \
@@ -156,7 +157,7 @@ runs:
     run: |
       tar -C $TESTREPDIR/ -czf $ARTIFACTS_DIR/reports.tar.gz .
       ls -la $ARTIFACTS_DIR/reports.tar.gz
-      echo "[Unittest/CTest XML reports archive](${{steps.init.outputs.logurlprefix}}/reports.tar.gz)" >> $GITHUB_STEP_SUMMARY
+      echo "[Unittest/CTest XML reports archive]($S3_URL_PREFIX/reports.tar.gz)" >> $GITHUB_STEP_SUMMARY
 
   - name: postprocess xml reports
     if: inputs.run_unit_tests == 'true'
@@ -167,7 +168,7 @@ runs:
       mkdir $ARTIFACTS_DIR/logs/
 
       .github/scripts/tests/attach-logs.py \
-        --url-prefix ${{steps.init.outputs.logurlprefix}}/logs/ \
+        --url-prefix $S3_URL_PREFIX/logs/ \
         --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
         --filter-test-file ${{steps.init.outputs.testfilterfile}} \
         --ctest-report $TESTREPDIR/suites/ctest_report.xml \
@@ -232,26 +233,27 @@ runs:
       export source_root=$WORKDIR
       export build_root=$WORKDIR/../build/
 
-      echo "[Stdout pytest log (gzip archive)](${{steps.init.outputs.logurlprefix}}/${{steps.init.outputs.pytest-logfilename}})" >> $GITHUB_STEP_SUMMARY
-      cd $WORKDIR/ydb/tests/functional/
-      bad_suites=$(grep -Eo 'ignore=[a-zA-Z_-]*' pytest.ini | sed -e 's/ignore=//g')
-      suites=""
-      for suite in $(echo */ | sed -e 's/\///g'); do
-        if [[ $(echo "$bad_suites" | grep -F -e $suite -) == '' ]]; then
-            suites+=$suite
-            suites+=$'\n'
-        fi
-      done
-      if [[ "${{inputs.test_label_regexp}}" != '' ]]; then
-        suites="${{inputs.test_label_regexp}}"
-      fi
+      echo "[Stdout pytest log (gzip archive)]($S3_URL_PREFIX/${{steps.init.outputs.pytest-logfilename}})" >> $GITHUB_STEP_SUMMARY
       source $WORKDIR/ydb/tests/oss/launch/prepare.sh
-      echo -n "$suites" | parallel -j28 "pytest -o junit_logging=log -o junit_log_passing_tests=False \
-        -v --junit-xml=$PYTESTREPDIR/{}.xml {}" | \
-        sed -e 's/\x1b\[[0-9;]*m//g' | \
-        tee >(gzip --stdout > $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}) | \
-        grep -E '(FAILED|ERROR)\s*\[.*\]' | \
-        tee $WORKDIR/pytest-short.log
+      
+      rm -rf $ARTIFACTS_DIR/pytest/
+      mkdir $ARTIFACTS_DIR/pytest/
+      
+      cd $WORKDIR/ydb/tests/functional/
+      
+      pytest \
+        -p xdist -n 24 --dist worksteal \
+        --timeout_method signal \
+        -o junit_logging=log -o junit_log_passing_tests=False --junit-xml=$PYTESTREPDIR/pytest.xml \
+        -ra --tb=no --show-capture=no \
+        --github-repo $GITHUB_REPOSITORY --github-ref $GITHUB_SHA \
+        --source-root $source_root \
+        --build-root $build_root \
+        --output-dir $TMPDIR/pytest/ \
+        . | tee $WORKDIR/pytest-short.log
+
+#        --artifacts-dir $ARTIFACTS_DIR/pytest/ \
+#        --artifacts-url $S3_URL_PREFIX/pytest/ \
 
   - name: postprocess functional test reports
     if: always() && inputs.run_functional_tests == 'true'
@@ -261,6 +263,7 @@ runs:
       
       .github/scripts/tests/junit-postprocess.py \
         --filter-file ${{ steps.init.outputs.functestfilterfile }} \
+        --no-attach-filename \
         $PYTESTREPDIR/
 
       echo "::endgroup::"

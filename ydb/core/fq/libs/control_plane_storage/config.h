@@ -15,6 +15,7 @@ namespace NFq {
 
 struct TControlPlaneStorageConfig {
     NConfig::TControlPlaneStorageConfig Proto;
+    NConfig::TComputeConfig ComputeConfigProto;
     TString IdsPrefix;
     TDuration IdempotencyKeyTtl;
     TDuration AutomaticQueriesTtl;
@@ -30,7 +31,7 @@ struct TControlPlaneStorageConfig {
     TDuration QuotaTtl;
     TDuration MetricsTtl;
 
-    TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common);
+    TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NYql::TS3GatewayConfig& s3Config, const NConfig::TCommonConfig& common, const NConfig::TComputeConfig& computeConfigProto);
 };
 
 } // NFq

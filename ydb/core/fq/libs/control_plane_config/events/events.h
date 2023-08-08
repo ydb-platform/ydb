@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/quota_manager/events/events.h>
+#include <ydb/core/fq/libs/compute/common/config.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
@@ -30,9 +31,21 @@ struct TTenantInfo {
     THashMap<TString /* vtenant */, TString /* tenant */> TenantMapping;
     THashMap<TString /* tenant */, ui32 /* state */> TenantState;
     TInstant StateTime;
+    NFq::TComputeConfig ComputeConfig;
+
+    TTenantInfo() = default;
+
+    TTenantInfo(const NFq::NConfig::TComputeConfig& computeConfig)
+        : ComputeConfig(computeConfig)
+    {}
 
     // this method must be thread safe
-    TString Assign(const TString& cloudId, const TString& /* scope */, const TString& DefaultTenantName = "") const {
+    TString Assign(const TString& cloudId, const TString& scope, FederatedQuery::QueryContent::QueryType queryType, const TString& DefaultTenantName = "") const {
+        auto pinTenants = ComputeConfig.GetPinTenantNames(queryType, scope);
+        if (pinTenants) {
+            return pinTenants[MultiHash(cloudId) % pinTenants.size()];
+        }
+
         auto it = SubjectMapping.find(SUBJECT_TYPE_CLOUD);
         auto vTenant = it == SubjectMapping.end() ? "" : it->second.Value(cloudId, "");
         if (!vTenant && CommonVTenants.size()) {

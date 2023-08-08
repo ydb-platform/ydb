@@ -23,6 +23,10 @@ namespace NFq {
 
 NActors::TActorId ControlPlaneConfigActorId();
 
-NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
+                                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+                                               const NConfig::TControlPlaneStorageConfig& config,
+                                               const NConfig::TComputeConfig& computeConfig,
+                                               const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

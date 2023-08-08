@@ -46,6 +46,7 @@ NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TControlPlaneStorageConfig& config,
     const NYql::TS3GatewayConfig& s3Config,
     const NConfig::TCommonConfig& common,
+    const NConfig::TComputeConfig& computeConfig,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NFq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,

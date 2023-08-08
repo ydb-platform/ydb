@@ -1,15 +1,22 @@
 #pragma once
 
 #include <ydb/core/fq/libs/config/protos/compute.pb.h>
+#include <ydb/core/fq/libs/protos/fq_private.pb.h>
 
 #include <util/digest/multi.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
 namespace NFq {
 
 class TComputeConfig {
 public:
+    explicit TComputeConfig()
+        : TComputeConfig({})
+    {}
+
     explicit TComputeConfig(const NFq::NConfig::TComputeConfig& computeConfig)
         : ComputeConfig(computeConfig)
         , DefaultCompute(ComputeConfig.GetDefaultCompute() != NFq::NConfig::EComputeType::UNKNOWN
@@ -46,6 +53,19 @@ public:
         }
 
         return DefaultCompute;
+    }
+
+    TVector<TString> GetPinTenantNames(FederatedQuery::QueryContent::QueryType queryType, const TString& scope) const {
+        NFq::NConfig::EComputeType computeType = GetComputeType(queryType, scope);
+        switch (computeType) {
+            case NFq::NConfig::EComputeType::YDB:
+                return TVector<TString>{ComputeConfig.GetYdb().GetPinTenantName().begin(), ComputeConfig.GetYdb().GetPinTenantName().end()};
+            case NFq::NConfig::EComputeType::IN_PLACE:
+            case NFq::NConfig::EComputeType::UNKNOWN:
+            case NFq::NConfig::EComputeType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NFq::NConfig::EComputeType_INT_MAX_SENTINEL_DO_NOT_USE_:
+                return TVector<TString>{};
+        }
     }
 
     NFq::NConfig::TYdbStorageConfig GetConnection(const TString& scope) const {

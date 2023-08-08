@@ -34,17 +34,19 @@ class TControlPlaneConfigActor : public NActors::TActorBootstrapped<TControlPlan
     NDbPool::TDbPool::TPtr DbPool;
     ::NMonitoring::TDynamicCounterPtr Counters;
     NConfig::TControlPlaneStorageConfig Config;
+    NConfig::TComputeConfig ComputeConfig;
     TTenantInfo::TPtr TenantInfo;
     bool LoadInProgress = false;
     TDuration DbReloadPeriod;
     TString TablePathPrefix;
 
 public:
-    TControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters)
+    TControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const NConfig::TComputeConfig& computeConfig, const ::NMonitoring::TDynamicCounterPtr& counters)
         : YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
         , Counters(counters)
         , Config(config)
+        , ComputeConfig(computeConfig)
     {
         DbReloadPeriod = GetDuration(Config.GetDbReloadPeriod(), TDuration::Seconds(3));
     }
@@ -60,7 +62,7 @@ public:
             TablePathPrefix = YdbConnection->TablePathPrefix;
             Schedule(TDuration::Zero(), new NActors::TEvents::TEvWakeup());
         } else {
-            TenantInfo.reset(new TTenantInfo());
+            TenantInfo.reset(new TTenantInfo(ComputeConfig));
             const auto& mapping = Config.GetMapping();
             for (const auto& cloudToTenant : mapping.GetCloudIdToTenantName()) {
                 TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
@@ -108,7 +110,7 @@ private:
 
         LoadInProgress = true;
         TDbExecutable::TPtr executable;
-        auto& executer = TTenantExecuter::Create(executable, true, [](TTenantExecuter& executer) { executer.State.reset(new TTenantInfo()); } );
+        auto& executer = TTenantExecuter::Create(executable, true, [computeConfig=ComputeConfig](TTenantExecuter& executer) { executer.State.reset(new TTenantInfo(computeConfig)); } );
 
         executer.Read(
             [=](TTenantExecuter&, TSqlQueryBuilder& builder) {
@@ -242,8 +244,12 @@ TActorId ControlPlaneConfigActorId() {
     return NActors::TActorId(0, name);
 }
 
-NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NConfig::TControlPlaneStorageConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters) {
-    return new TControlPlaneConfigActor(yqSharedResources, credProviderFactory, config, counters);
+NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
+                                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+                                               const NConfig::TControlPlaneStorageConfig& config,
+                                               const NConfig::TComputeConfig& computeConfig,
+                                               const ::NMonitoring::TDynamicCounterPtr& counters) {
+    return new TControlPlaneConfigActor(yqSharedResources, credProviderFactory, config, computeConfig, counters);
 }
 
 }  // namespace NFq

@@ -703,6 +703,7 @@ namespace NKikimr {
         NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncerGroup SyncerMonGroup;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
+        NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
         TInstant LastSanitizeTime = TInstant::Zero();
@@ -1183,6 +1184,7 @@ namespace NKikimr {
                    VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
                    NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
+            DskOutOfSpaceGroup.EstimatedDiskTimeConsumptionNs() += cost;
             TExtQueueClass &extQueue = GetExtQueue(extQueueId);
             NBackpressure::TQueueClientId clientId(msgQoS);
             std::unique_ptr<IEventHandle> event = extQueue.Enqueue(ctx, std::unique_ptr<IEventHandle>(
@@ -2091,6 +2093,7 @@ namespace NKikimr {
             , ReplMonGroup(VDiskCounters, "subsystem", "repl")
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
+            , DskOutOfSpaceGroup(VDiskCounters, "subsystem", "outofspace")
         {
             ReplMonGroup.ReplUnreplicatedVDisks() = 1;
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::Initial);

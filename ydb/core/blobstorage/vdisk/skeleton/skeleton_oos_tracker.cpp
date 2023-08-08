@@ -90,7 +90,9 @@ namespace NKikimr {
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
-            MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
+            if (msg->NumSlots > 0) {
+                MonGroup.DiskTimeAvailableNs() = 1'000'000'000ull / msg->NumSlots;
+            }
 
             Become(&TThis::WaitFunc);
             ctx.Schedule(DskTrackerInterval, new TEvents::TEvWakeup());

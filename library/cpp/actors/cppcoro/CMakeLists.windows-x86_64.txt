@@ -6,7 +6,7 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(benchmark)
+add_subdirectory(corobenchmark)
 add_subdirectory(ut)
 
 add_library(cpp-actors-cppcoro)

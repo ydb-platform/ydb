@@ -7,18 +7,28 @@
 
 
 
-add_executable(benchmark)
-target_link_libraries(benchmark PUBLIC
+add_executable(corobenchmark)
+target_link_libraries(corobenchmark PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-cpuid_check
   testing-benchmark-main
   cpp-actors-cppcoro
 )
-target_sources(benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/benchmark/main.cpp
+target_link_options(corobenchmark PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
 )
-target_allocator(benchmark
-  system_allocator
+target_sources(corobenchmark PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/cppcoro/corobenchmark/main.cpp
 )
-vcs_info(benchmark)
+target_allocator(corobenchmark
+  cpp-malloc-jemalloc
+)
+vcs_info(corobenchmark)

@@ -13,6 +13,9 @@ public:
     };
 
     enum EBinaryOp {
+        And,
+        Or,
+        Xor,
         Add,
         Sub,
         Mul,

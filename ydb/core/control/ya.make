@@ -1,5 +1,7 @@
 LIBRARY()
 
+# Another test change for ya.make
+
 PEERDIR(
     library/cpp/actors/core
     library/cpp/monlib/dynamic_counters

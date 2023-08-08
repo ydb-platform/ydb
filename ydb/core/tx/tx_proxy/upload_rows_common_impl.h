@@ -1036,6 +1036,7 @@ private:
                 ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
                 status = Ydb::StatusIds::OVERLOADED;
                 break;
+            case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
             case NKikimrTxDataShard::TError::OUT_OF_SPACE:
                 status = Ydb::StatusIds::UNAVAILABLE;
                 break;

@@ -894,11 +894,247 @@
 
 - source_filter: "^contrib/libs/nvidia/thrust"
   includes:
+    - __THRUST_DEVICE_SYSTEM_ADJACENT_DIFFERENCE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/adjacent_difference.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/adjacent_difference.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/adjacent_difference.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/adjacent_difference.h
+
+    - __THRUST_DEVICE_SYSTEM_ASSIGN_VALUE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/assign_value.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/assign_value.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/assign_value.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/assign_value.h
+
+    - __THRUST_DEVICE_SYSTEM_BINARY_SEARCH_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/binary_search.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/binary_search.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/binary_search.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/binary_search.h
+
+    - __THRUST_DEVICE_SYSTEM_COPY_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/copy.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/copy.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/copy.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/copy.h
+
+    - __THRUST_DEVICE_SYSTEM_COPY_IF_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/copy_if.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/copy_if.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/copy_if.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/copy_if.h
+
+    - __THRUST_DEVICE_SYSTEM_COUNT_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/count.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/count.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/count.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/count.h
+
+    - __THRUST_DEVICE_SYSTEM_EQUAL_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/equal.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/equal.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/equal.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/equal.h
+
+    - __THRUST_DEVICE_SYSTEM_EXECUTION_POLICY_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/execution_policy.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/execution_policy.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/execution_policy.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/execution_policy.h
+
+    - __THRUST_DEVICE_SYSTEM_EXTREMA_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/extrema.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/extrema.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/extrema.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/extrema.h
+
+    - __THRUST_DEVICE_SYSTEM_FILL_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/fill.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/fill.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/fill.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/fill.h
+
+    - __THRUST_DEVICE_SYSTEM_FIND_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/find.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/find.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/find.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/find.h
+
+    - __THRUST_DEVICE_SYSTEM_FOR_EACH_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/for_each.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/for_each.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/for_each.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/for_each.h
+
+    - __THRUST_DEVICE_SYSTEM_GENERATE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/generate.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/generate.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/generate.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/generate.h
+
+    - __THRUST_DEVICE_SYSTEM_GET_VALUE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/get_value.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/get_value.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/get_value.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/get_value.h
+
+    - __THRUST_DEVICE_SYSTEM_ITER_SWAP_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/iter_swap.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/iter_swap.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/iter_swap.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/iter_swap.h
+
+    - __THRUST_DEVICE_SYSTEM_MALLOC_AND_FREE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/malloc_and_free.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/malloc_and_free.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/malloc_and_free.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/malloc_and_free.h
+
+    - __THRUST_DEVICE_SYSTEM_MEMORY_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/memory_resource.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/memory_resource.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/memory_resource.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/memory_resource.h
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/memory.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/memory.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/memory.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/memory.h
+
+    - __THRUST_DEVICE_SYSTEM_MERGE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/merge.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/merge.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/merge.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/merge.h
+
+    - __THRUST_DEVICE_SYSTEM_MISMATCH_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/mismatch.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/mismatch.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/mismatch.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/mismatch.h
+
+    - __THRUST_DEVICE_SYSTEM_PARTITION_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/partition.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/partition.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/partition.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/partition.h
+
+    - __THRUST_DEVICE_SYSTEM_REDUCE_BY_KEY_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/reduce_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/reduce_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/reduce_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/reduce_by_key.h
+
+    - __THRUST_DEVICE_SYSTEM_REDUCE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/reduce.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/reduce.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/reduce.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/reduce.h
+
+    - __THRUST_DEVICE_SYSTEM_REMOVE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/remove.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/remove.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/remove.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/remove.h
+
+    - __THRUST_DEVICE_SYSTEM_REPLACE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/replace.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/replace.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/replace.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/replace.h
+
+    - __THRUST_DEVICE_SYSTEM_REVERSE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/reverse.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/reverse.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/reverse.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/reverse.h
+
+    - __THRUST_DEVICE_SYSTEM_SCAN_BY_KEY_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/scan_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/scan_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/scan_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/scan_by_key.h
+
+    - __THRUST_DEVICE_SYSTEM_SCAN_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/scan.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/scan.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/scan.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/scan.h
+
+    - __THRUST_DEVICE_SYSTEM_SCATTER_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/scatter.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/scatter.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/scatter.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/scatter.h
+
+    - __THRUST_DEVICE_SYSTEM_SEQUENCE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/sequence.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/sequence.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/sequence.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/sequence.h
+
+    - __THRUST_DEVICE_SYSTEM_SORT_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/sort.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/sort.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/sort.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/sort.h
+
+    - __THRUST_DEVICE_SYSTEM_SWAP_RANGES_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/swap_ranges.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/swap_ranges.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/swap_ranges.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/swap_ranges.h
+
+    - __THRUST_DEVICE_SYSTEM_TABULATE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/tabulate.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/tabulate.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/tabulate.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/tabulate.h
+
     - __THRUST_DEVICE_SYSTEM_TAG_HEADER:
       - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/execution_policy.h
       - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/execution_policy.h
       - contrib/libs/nvidia/thrust/thrust/system/omp/detail/execution_policy.h
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/execution_policy.h
+
+    - __THRUST_DEVICE_SYSTEM_TEMPORARY_BUFFER_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/temporary_buffer.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/temporary_buffer.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/temporary_buffer.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/temporary_buffer.h
+
+    - __THRUST_DEVICE_SYSTEM_TRANSFORM_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/transform.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/transform.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/transform.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/transform.h
+
+    - __THRUST_DEVICE_SYSTEM_TRANSFORM_REDUCE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/transform_reduce.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/transform_reduce.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/transform_reduce.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/transform_reduce.h
+
+    - __THRUST_DEVICE_SYSTEM_UNINITIALIZED_FILL_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/uninitialized_fill.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/uninitialized_fill.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/uninitialized_fill.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/uninitialized_fill.h
+
+    - __THRUST_DEVICE_SYSTEM_UNIQUE_BY_KEY_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/unique_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/unique_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/unique_by_key.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/unique_by_key.h
+
+    - __THRUST_DEVICE_SYSTEM_UNIQUE_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/unique.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/unique.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/unique.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/unique.h
+
+    - THRUST_MR_STD_MR_HEADER:
+      # this macro has a second value <memory_resource> that will not be used
+      - contrib/libs/cxxsupp/libcxx/include/experimental/memory_resource
 
 - source_filter: "^contrib/libs/unixodbc/libltdl"
   includes:

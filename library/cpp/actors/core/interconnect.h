@@ -179,6 +179,13 @@ namespace NActors {
         struct TEvRegisterNodeResult;
 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
+            const bool SubscribeToStaticNodeChanges = false;
+
+            TEvListNodes() = default;
+
+            TEvListNodes(bool subscribeToStaticNodeChanges)
+                : SubscribeToStaticNodeChanges(subscribeToStaticNodeChanges)
+            {}
         };
 
         struct TNodeInfo {

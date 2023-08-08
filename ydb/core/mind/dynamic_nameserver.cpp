@@ -356,6 +356,9 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
         }
     }
     ListNodesQueue.push_back(ev->Sender);
+    if (ev->Get()->SubscribeToStaticNodeChanges) {
+        StaticNodeChangeSubscribers.insert(ev->Sender);
+    }
 }
 
 void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TActorContext &ctx)
@@ -441,10 +444,20 @@ void TDynamicNameserver::Handle(NConsole::TEvConsole::TEvConfigNotificationReque
     auto& record = ev->Get()->Record;
     if (record.HasConfig()) {
         if (const auto& config = record.GetConfig(); config.HasNameserviceConfig()) {
-            StaticConfig = BuildNameserverTable(config.GetNameserviceConfig());
+            auto newStaticConfig = BuildNameserverTable(config.GetNameserviceConfig());
+            if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
+                StaticConfig = std::move(newStaticConfig);
+                for (const auto& subscriber : StaticNodeChangeSubscribers) {
+                    TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
+                }
+            }
         }
     }
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
+}
+
+void TDynamicNameserver::Handle(TEvents::TEvUnsubscribe::TPtr ev) {
+    StaticNodeChangeSubscribers.erase(ev->Sender);
 }
 
 IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup, ui32 poolId) {

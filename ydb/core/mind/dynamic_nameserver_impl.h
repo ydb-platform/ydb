@@ -209,6 +209,7 @@ public:
             HFunc(TEvNodeBroker::TEvNodesInfo, Handle);
             HFunc(TEvPrivate::TEvUpdateEpoch, Handle);
             HFunc(NMon::TEvHttpInfo, Handle);
+            hFunc(TEvents::TEvUnsubscribe, Handle);
 
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
@@ -247,6 +248,8 @@ private:
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
 
+    void Handle(TEvents::TEvUnsubscribe::TPtr ev);
+
 private:
     TIntrusivePtr<TTableNameserverSetup> StaticConfig;
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
@@ -258,6 +261,7 @@ private:
     // Domain -> Epoch ID.
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
+    THashSet<TActorId> StaticNodeChangeSubscribers;
 };
 
 } // NNodeBroker

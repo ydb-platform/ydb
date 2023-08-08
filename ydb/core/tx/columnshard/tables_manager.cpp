@@ -78,6 +78,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId) {
             auto& table = Tables.at(pathId);
             TTableInfo::TTableVersionInfo versionInfo;
             Y_VERIFY(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_table_version")("path_id", pathId)("snapshot", version)("version", versionInfo.HasSchema() ? versionInfo.GetSchema().GetVersion() : -1);
             Y_VERIFY(SchemaPresets.contains(versionInfo.GetSchemaPresetId()));
 
             if (!table.IsDropped()) {
@@ -113,6 +114,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)("version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
             if (!rowset.Next()) {
                 return false;
@@ -128,6 +130,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const ui64 tabletId) {
         }
         for (const auto& [version, schemaInfo] : preset.GetVersions()) {
             if (schemaInfo.HasSchema()) {
+                AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "index_schema")("preset_id", id)("snapshot", version)("version", schemaInfo.GetSchema().GetVersion());
                 IndexSchemaVersion(version, schemaInfo.GetSchema());
             }
         }
@@ -148,6 +151,7 @@ void TTablesManager::Clear() {
     Tables.clear();
     SchemaPresets.clear();
     PathsToDrop.clear();
+    PrimaryIndex.reset();
 }
 
 bool TTablesManager::HasTable(const ui64 pathId) const {

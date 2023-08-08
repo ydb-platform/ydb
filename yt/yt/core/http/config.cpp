@@ -62,6 +62,8 @@ void TClientConfig::Register(TRegistrar registrar)
         .GreaterThanOrEqual(0);
     registrar.Parameter("dialer", &TThis::Dialer)
         .DefaultNew();
+    registrar.Parameter("omit_question_mark_for_empty_query", &TThis::OmitQuestionMarkForEmptyQuery)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

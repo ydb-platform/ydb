@@ -76,6 +76,7 @@ class TClientConfig
 public:
     int MaxIdleConnections;
     NNet::TDialerConfigPtr Dialer;
+    bool OmitQuestionMarkForEmptyQuery;
 
     REGISTER_YSON_STRUCT(TClientConfig);
 

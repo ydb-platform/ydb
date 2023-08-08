@@ -247,7 +247,7 @@ private:
             request->SetHeaders(headers);
         }
 
-        auto requestPath = urlRef.RawQuery.empty()
+        auto requestPath = (urlRef.RawQuery.empty() && Config_->OmitQuestionMarkForEmptyQuery)
             ? TString(urlRef.Path)
             : Format("%v?%v", urlRef.Path, urlRef.RawQuery);
         request->WriteRequest(method, requestPath);

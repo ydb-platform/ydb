@@ -300,19 +300,24 @@ struct TEvYdbCompute {
 
 
     struct TEvResultSetWriterResponse : public NActors::TEventLocal<TEvResultSetWriterResponse, EvResultSetWriterResponse> {
-        TEvResultSetWriterResponse(NYql::TIssues issues, NYdb::EStatus status)
-            : Issues(std::move(issues))
+        TEvResultSetWriterResponse(ui64 resultSetId, NYql::TIssues issues, NYdb::EStatus status)
+            : ResultSetId(resultSetId)
+            , Issues(std::move(issues))
             , Status(status)
         {}
 
-        TEvResultSetWriterResponse(int64_t rowsCount)
-            : Status(NYdb::EStatus::SUCCESS)
+        TEvResultSetWriterResponse(ui64 resultSetId, int64_t rowsCount, bool truncated)
+            : ResultSetId(resultSetId)
+            , Status(NYdb::EStatus::SUCCESS)
             , RowsCount(rowsCount)
+            , Truncated(truncated)
         {}
 
+        const ui64 ResultSetId;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
         int64_t RowsCount = 0;
+        bool Truncated = false;
     };
 
     struct TEvSynchronizeRequest : public NActors::TEventLocal<TEvSynchronizeRequest, EvSynchronizeRequest> {
@@ -334,7 +339,7 @@ struct TEvYdbCompute {
         {}
 
         TEvSynchronizeResponse(const TString& scope, NYql::TIssues issues, NYdb::EStatus status)
-            : Scope(scope) 
+            : Scope(scope)
             , Issues(std::move(issues))
             , Status(status)
         {}

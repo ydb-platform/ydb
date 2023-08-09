@@ -171,9 +171,6 @@ message ExecuteQueryRequest {
 
 message ResultSetMeta {
     repeated Ydb.Column columns = 1;
-
-    // TODO: Remove.
-    bool truncated = 2;
 }
 
 message ExecuteQueryResponsePart {

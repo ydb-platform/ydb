@@ -527,7 +527,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
         UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().truncated(), false);
         UNIT_ASSERT_VALUES_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns(0).name(), "column0");
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ResultSetsMeta.front().columns(0).type().type_id(), Ydb::Type::PrimitiveTypeId::Type_PrimitiveTypeId_INT32);
 

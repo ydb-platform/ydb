@@ -22,6 +22,7 @@ target_link_libraries(library-yql-utils PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-actors-util
   cpp-digest-md5
   library-cpp-messagebus
   cpp-string_utils-quote

@@ -92,6 +92,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/actors/util
     library/cpp/containers/absl_flat_hash
     library/cpp/containers/intrusive_rb_tree
     library/cpp/containers/stack_vector

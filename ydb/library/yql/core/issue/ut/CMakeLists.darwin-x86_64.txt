@@ -22,6 +22,8 @@ target_link_options(ydb-library-yql-core-issue-ut PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
+  -framework
+  CoreFoundation
 )
 target_sources(ydb-library-yql-core-issue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/issue/yql_issue_ut.cpp

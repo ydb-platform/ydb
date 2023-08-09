@@ -21,6 +21,8 @@ target_link_libraries(ydb-library-yql-providers-s3-range_helpers-ut PUBLIC
   cpp-testing-unittest_main
   providers-s3-range_helpers
   providers-common-provider
+  udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-library-yql-providers-s3-range_helpers-ut PRIVATE
   -ldl

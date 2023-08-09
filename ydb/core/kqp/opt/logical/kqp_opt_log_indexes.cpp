@@ -16,43 +16,45 @@ using namespace NYql::NNodes;
 namespace {
 
 TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
-    TVector<TExprBase> columnsToSelect;
-    columnsToSelect.reserve(table.Metadata->KeyColumnNames.size());
-    for (auto key : table.Metadata->KeyColumnNames) {
-        auto value = table.Metadata->Columns.at(key);
+    TSet<TString> columnsToSelect(table.Metadata->KeyColumnNames.begin(), table.Metadata->KeyColumnNames.end());
+    TVector<TExprBase> columnsList;
+    columnsList.reserve(columnsToSelect.size());
+    for (auto column : columnsToSelect) {
         auto atom = Build<TCoAtom>(ctx, pos)
-            .Value(value.Name)
+            .Value(column)
             .Done();
 
-        columnsToSelect.push_back(atom);
+        columnsList.emplace_back(std::move(atom));
     }
 
     return Build<TCoAtomList>(ctx, pos)
-        .Add(columnsToSelect)
+        .Add(columnsList)
         .Done();
 }
 
 TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
-    TVector<TCoAtom> columns;
-    THashSet<TString> uniqColumns;
-    columns.reserve(col1.Size() + col2.size());
-
+    TMap<TString, TCoAtom> columns;
     for (const auto& c : col1) {
-        YQL_ENSURE(uniqColumns.emplace(c.StringValue()).second);
-        columns.push_back(c);
+        YQL_ENSURE(columns.insert({c.StringValue(), c}).second);
     }
 
     for (const auto& c : col2) {
-        if (uniqColumns.emplace(c).second) {
+        if (!columns.contains(c)) {
             auto atom = Build<TCoAtom>(ctx, col1.Pos())
                 .Value(c)
                 .Done();
-            columns.push_back(atom);
+            columns.insert({c, std::move(atom)});
         }
     }
 
+    TVector<TCoAtom> columnsList;
+    columnsList.reserve(columns.size());
+    for (auto [_, column] : columns) {
+        columnsList.emplace_back(std::move(column));
+    }
+
     return Build<TCoAtomList>(ctx, col1.Pos())
-        .Add(columns)
+        .Add(columnsList)
         .Done();
 }
 

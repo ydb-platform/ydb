@@ -22,9 +22,9 @@
             "reads": [
                 {
                     "columns": [
-                        "Key1",
                         "Index1A",
-                        "Index1B"
+                        "Index1B",
+                        "Key1"
                     ],
                     "limit": "2",
                     "reverse": true,

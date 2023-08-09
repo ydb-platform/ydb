@@ -905,6 +905,68 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser("value").GetUtf8(), "trololo");
         UNIT_ASSERT(!result.TryNextRow());
     }
+
+    Y_UNIT_TEST(ExecuteScriptWithExternalTableResolveCheckPartitionedBy) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket1";
+        const TString object = "year=1/month=2/test_object";
+        const TString content = "data,year,month\ntest,1,2";
+
+        CreateBucketWithObject(bucket, object, content);
+
+        auto kikimr = DefaultKikimrRunner();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+        CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                data STRING NOT NULL,
+                year UINT32 NOT NULL,
+                month UINT32 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="/",
+                FORMAT="csv_with_names",
+                PARTITIONED_BY="[year, month]"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = GetBucketLocation(bucket)
+            );
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr.GetQueryClient();
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_table}`
+            )", "external_table"_a = externalTableName);
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+       
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("data").GetString(), "test");
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("year").GetUint32(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("month").GetUint32(), 2);
+    }
 }
 
 } // namespace NKqp

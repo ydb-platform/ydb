@@ -50,10 +50,14 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
     auto userSchema = ctx.NewAtom(pos, "userschema"sv);
     items.emplace_back(ctx.NewList(pos, {userSchema, type, order}));
 
-    for (const auto& [key, value]: source->GetParameters(content)) {
-        auto keyAtom = ctx.NewAtom(pos, NormalizeName(key));
-        auto valueAtom = ctx.NewAtom(pos, value);
-        items.emplace_back(ctx.NewList(pos, {keyAtom, valueAtom}));
+    for (const auto& [key, values]: source->GetParameters(content)) {
+        TExprNode::TListType children = {ctx.NewAtom(pos, NormalizeName(key))};
+        children.reserve(values.size() + 1);
+        for (const TString& value : values) {
+            children.emplace_back(ctx.NewAtom(pos, value));
+        }
+
+        items.emplace_back(ctx.NewList(pos, std::move(children)));
     }
     return ctx.NewList(pos, std::move(items));
 }

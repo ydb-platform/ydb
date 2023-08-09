@@ -35,7 +35,7 @@ struct IExternalSource : public TThrRefBase {
         this data will be displayed in the viewer.
         Can throw an exception in case of an error
     */
-    virtual TMap<TString, TString> GetParameters(const TString& content) const = 0;
+    virtual TMap<TString, TVector<TString>> GetParameters(const TString& content) const = 0;
 };
 
 }

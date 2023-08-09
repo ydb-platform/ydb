@@ -30,6 +30,7 @@ SRCS(
     join.cpp
     insert.cpp
     list_builtin.cpp
+    match_recognize.cpp
     node.cpp
     select.cpp
     source.cpp
@@ -37,6 +38,7 @@ SRCS(
     sql_call_expr.cpp
     sql_expression.cpp
     sql_group_by.cpp
+    sql_match_recognize.cpp
     sql_into_tables.cpp
     sql_query.cpp
     sql_select.cpp
@@ -48,8 +50,8 @@ SRCS(
 
 YQL_LAST_ABI_VERSION()
 
+GENERATE_ENUM_SERIALIZATION(match_recognize.h)
 GENERATE_ENUM_SERIALIZATION(node.h)
-
 GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 
 END()

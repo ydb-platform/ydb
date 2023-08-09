@@ -22,6 +22,12 @@ get_built_tool_path(
   tools/enum_parser/enum_parser
   enum_parser
 )
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(yql-sql-v1)
 target_compile_options(yql-sql-v1 PRIVATE
@@ -59,6 +65,7 @@ target_sources(yql-sql-v1 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/insert.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/list_builtin.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/match_recognize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/select.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/source.cpp
@@ -66,6 +73,7 @@ target_sources(yql-sql-v1 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_call_expr.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_expression.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_group_by.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_match_recognize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_into_tables.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_select.cpp
@@ -73,6 +81,11 @@ target_sources(yql-sql-v1 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/sql_values.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/object_processing.cpp
+)
+generate_enum_serilization(yql-sql-v1
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/match_recognize.h
+  INCLUDE_HEADERS
+  ydb/library/yql/sql/v1/match_recognize.h
 )
 generate_enum_serilization(yql-sql-v1
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/node.h

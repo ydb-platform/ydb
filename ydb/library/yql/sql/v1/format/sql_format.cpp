@@ -1599,13 +1599,15 @@ private:
 
     void VisitNamedSingleSource(const TRule_named_single_source& msg) {
         Visit(msg.GetRule_single_source1());
-        if (msg.HasBlock2()) {
+        //TODO handle MATCH_RECOGNIZE block
+        //https://st.yandex-team.ru/YQL-16186
+        if (msg.HasBlock3()) {
             NewLine();
             PushCurrentIndent();
-            const auto& block2 = msg.GetBlock2();
-            Visit(block2.GetBlock1());
-            if (block2.HasBlock2()) {
-                const auto& columns = block2.GetBlock2().GetRule_pure_column_list1();
+            const auto& block3 = msg.GetBlock3();
+            Visit(block3.GetBlock1());
+            if (block3.HasBlock2()) {
+                const auto& columns = block3.GetBlock2().GetRule_pure_column_list1();
                 Visit(columns.GetToken1());
                 NewLine();
                 PushCurrentIndent();
@@ -1624,10 +1626,10 @@ private:
             PopCurrentIndent();
         }
 
-        if (msg.HasBlock3()) {
+        if (msg.HasBlock4()) {
             NewLine();
             PushCurrentIndent();
-            Visit(msg.GetBlock3());
+            Visit(msg.GetBlock4());
             PopCurrentIndent();
         }
     }

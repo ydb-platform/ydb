@@ -378,6 +378,108 @@ select_core:
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
 
+// ISO/IEC 9075-2:2016(E) 7.7 <row pattern recognition clause>
+row_pattern_recognition_clause: MATCH_RECOGNIZE LPAREN
+    window_partition_clause?
+    order_by_clause?
+    row_pattern_measures?
+    row_pattern_rows_per_match?
+    row_pattern_common_syntax
+  RPAREN
+;
+
+row_pattern_rows_per_match:
+      ONE ROW PER MATCH
+    | ALL ROWS PER MATCH row_pattern_empty_match_handling?
+;
+
+row_pattern_empty_match_handling: SHOW EMPTY MATCHES | OMIT EMPTY MATCHES | WITH UNMATCHED ROWS;
+
+// ISO/IEC 9075-2:2016(E) 7.8 <row pattern measures>
+row_pattern_measures: MEASURES row_pattern_measure_list;
+
+row_pattern_measure_list: row_pattern_measure_definition (COMMA row_pattern_measure_definition)*;
+
+row_pattern_measure_definition: expr AS an_id;
+
+// ISO/IEC 9075-2:2016(E) 7.9 <row pattern common syntax>
+row_pattern_common_syntax:
+    (AFTER MATCH row_pattern_skip_to)?
+    row_pattern_initial_or_seek?
+    PATTERN LPAREN row_pattern RPAREN
+    row_pattern_subset_clause?
+    DEFINE row_pattern_definition_list
+;
+
+row_pattern_skip_to:
+      SKIP TO NEXT ROW
+    | SKIP PAST LAST ROW
+    | SKIP TO FIRST row_pattern_skip_to_variable_name
+    | SKIP TO LAST row_pattern_skip_to_variable_name
+    | SKIP TO row_pattern_skip_to_variable_name
+;
+
+row_pattern_skip_to_variable_name: row_pattern_variable_name;
+
+row_pattern_initial_or_seek: INITIAL | SEEK;
+
+row_pattern: row_pattern_term (PIPE row_pattern_term)*;
+
+row_pattern_term: row_pattern_factor+;
+
+row_pattern_factor: row_pattern_primary row_pattern_quantifier?;
+
+row_pattern_quantifier:
+      ASTERISK QUESTION?
+    | PLUS QUESTION?
+    | QUESTION QUESTION?
+    | LBRACE_CURLY integer? COMMA integer? RBRACE_CURLY QUESTION?
+    | LBRACE_CURLY integer RBRACE_CURLY
+;
+
+row_pattern_primary:
+      row_pattern_primary_variable_name
+    | DOLLAR
+    | CARET
+    | LPAREN row_pattern? RPAREN
+    | LBRACE_CURLY MINUS row_pattern MINUS RBRACE_CURLY //TODO This rule accepts spaces between brace and minus sign, i.e: {   -  S2 - } that is not supposed to. Handle this case in https://st.yandex-team.ru/YQL-16227
+    | row_pattern_permute
+;
+
+row_pattern_primary_variable_name: row_pattern_variable_name;
+
+row_pattern_permute: PERMUTE LPAREN
+    row_pattern (COMMA row_pattern)*
+    RPAREN
+;
+
+row_pattern_subset_clause: SUBSET row_pattern_subset_list;
+
+row_pattern_subset_list: row_pattern_subset_item (COMMA row_pattern_subset_item)*;
+
+row_pattern_subset_item: row_pattern_subset_item_variable_name EQUALS LPAREN
+    row_pattern_subset_rhs RPAREN
+;
+
+row_pattern_subset_item_variable_name: row_pattern_variable_name;
+
+row_pattern_subset_rhs: row_pattern_subset_rhs_variable_name (COMMA row_pattern_subset_rhs_variable_name)*;
+
+row_pattern_subset_rhs_variable_name: row_pattern_variable_name;
+
+row_pattern_definition_list: row_pattern_definition (COMMA row_pattern_definition)*;
+
+row_pattern_definition: row_pattern_definition_variable_name AS row_pattern_definition_search_condition;
+
+row_pattern_definition_variable_name: row_pattern_variable_name;
+
+row_pattern_definition_search_condition: search_condition;
+
+search_condition: expr;
+
+//TODO allow use tokens as vars https://st.yandex-team.ru/YQL-16223
+row_pattern_variable_name: identifier;
+
 order_by_clause: ORDER BY sort_specification_list;
 
 ext_order_by_clause: ASSUME? order_by_clause;
@@ -423,7 +525,7 @@ flatten_by_arg:
 
 flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY flatten_by_arg | COLUMNS))?;
 
-named_single_source: single_source (((AS an_id) | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
+named_single_source: single_source row_pattern_recognition_clause? (((AS an_id) | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
 
 single_source:
     table_ref
@@ -1006,14 +1108,27 @@ keyword_as_compat:
   | DATA
   | DESCRIBE
   | DIRECTORY
+  | FIRST
   | GRANT
+  | INITIAL
+  | LAST
   | LEGACY
   | MANAGE
+  | MATCHES
+  | MATCH_RECOGNIZE
+  | MEASURES
   | MICROSECONDS
   | MILLISECONDS
   | MODIFY
   | NANOSECONDS
+  | NEXT
+  | OMIT
+  | ONE
   | OPTION
+  | PAST
+  | PATTERN
+  | PER
+  | PERMUTE
   | PRIVILEGES
   | QUEUE
 //  | READ
@@ -1021,11 +1136,17 @@ keyword_as_compat:
   | REPLICATION
   | REVOKE
   | SECONDS
+  | SEEK
+  | SHOW
+  | SKIP
   | SOURCE
+  | SUBSET
   | TABLES
   | TOPIC
   | TYPE
+  | UNMATCHED
 //  | WRITE
+
 ;
 
 // insert new keyword into keyword_as_compat also
@@ -1096,6 +1217,7 @@ keyword_compat: (
   | FAIL
   | FAMILY
   | FILTER
+  | FIRST
   | FLATTEN
   | FOLLOWING
   | FOR
@@ -1115,6 +1237,7 @@ keyword_compat: (
   | INDEX
   | INDEXED
   | INHERITS
+  | INITIAL
   | INITIALLY
   | INNER
   | INSERT
@@ -1124,23 +1247,30 @@ keyword_compat: (
   | ISNULL
   | JOIN
   | KEY
+  | LAST
   | LEFT
   | LEGACY
   | LIKE
   | MANAGE
   | MATCH
+  | MATCHES
+  | MATCH_RECOGNIZE
+  | MEASURES
   | MICROSECONDS
   | MILLISECONDS
   | MODIFY
   | NANOSECONDS
   | NATURAL
+  | NEXT
   | NO
   | NOTNULL
   | NULLS
   | OBJECT
   | OF
   | OFFSET
+  | OMIT
   | ON
+  | ONE
   | ONLY
   | OPTION
   | OR
@@ -1151,6 +1281,10 @@ keyword_compat: (
   | PARTITION
   | PASSING
   | PASSWORD
+  | PAST
+  | PATTERN
+  | PER
+  | PERMUTE
   | PLAN
   | PRAGMA
   | PRECEDING
@@ -1183,10 +1317,14 @@ keyword_compat: (
   | SAMPLE
   | SAVEPOINT
   | SECONDS
+  | SEEK
   | SEMI
   | SETS
+  | SHOW
+  | SKIP
   | SOURCE
   | SUBQUERY
+  | SUBSET
   | SYMBOLS
   | SYNC
   | SYSTEM
@@ -1206,6 +1344,7 @@ keyword_compat: (
   | UNCONDITIONAL
   | UNIQUE
   | UNKNOWN
+  | UNMATCHED
   | UPDATE
   | UPSERT
   | USE
@@ -1408,6 +1547,7 @@ FAIL: F A I L;
 FALSE: F A L S E;
 FAMILY: F A M I L Y;
 FILTER: F I L T E R;
+FIRST: F I R S T;
 FLATTEN: F L A T T E N;
 FLOW: F L O W;
 FOLLOWING: F O L L O W I N G;
@@ -1434,6 +1574,7 @@ IN: I N;
 INDEX: I N D E X;
 INDEXED: I N D E X E D;
 INHERITS: I N H E R I T S;
+INITIAL: I N I T I A L;
 INITIALLY: I N I T I A L L Y;
 INNER: I N N E R;
 INSERT: I N S E R T;
@@ -1447,6 +1588,7 @@ JSON_EXISTS: J S O N '_' E X I S T S;
 JSON_QUERY: J S O N '_' Q U E R Y;
 JSON_VALUE: J S O N '_' V A L U E;
 KEY: K E Y;
+LAST: L A S T;
 LEFT: L E F T;
 LEGACY: L E G A C Y;
 LIKE: L I K E;
@@ -1455,11 +1597,15 @@ LIST: L I S T;
 LOCAL: L O C A L;
 MANAGE: M A N A G E;
 MATCH: M A T C H;
+MATCHES: M A T C H E S;
+MATCH_RECOGNIZE: M A T C H '_' R E C O G N I Z E;
+MEASURES: M E A S U R E S;
 MICROSECONDS: M I C R O S E C O N D S;
 MILLISECONDS: M I L L I S E C O N D S;
 MODIFY: M O D I F Y;
 NANOSECONDS: N A N O S E C O N D S;
 NATURAL: N A T U R A L;
+NEXT: N E X T;
 NO: N O;
 NOT: N O T;
 NOTNULL: N O T N U L L;
@@ -1468,7 +1614,9 @@ NULLS: N U L L S;
 OBJECT: O B J E C T;
 OF: O F;
 OFFSET: O F F S E T;
+OMIT: O M I T;
 ON: O N;
+ONE: O N E;
 ONLY: O N L Y;
 OPTION: O P T I O N;
 OPTIONAL: O P T I O N A L;
@@ -1480,6 +1628,10 @@ OVER: O V E R;
 PARTITION: P A R T I T I O N;
 PASSING: P A S S I N G;
 PASSWORD: P A S S W O R D;
+PAST: P A S T;
+PATTERN: P A T T E R N;
+PER: P E R;
+PERMUTE: P E R M U T E;
 PLAN: P L A N;
 PRAGMA: P R A G M A;
 PRECEDING: P R E C E D I N G;
@@ -1521,14 +1673,18 @@ SAMPLE: S A M P L E;
 SAVEPOINT: S A V E P O I N T;
 SCHEMA: S C H E M A;
 SECONDS: S E C O N D S;
+SEEK: S E E K;
 SELECT: S E L E C T;
 SEMI: S E M I;
 SET: S E T;
 SETS: S E T S;
+SHOW: S H O W;
+SKIP: S K I P;
 SOURCE: S O U R C E;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
+SUBSET: S U B S E T;
 SYMBOLS: S Y M B O L S;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;
@@ -1553,6 +1709,7 @@ UNCONDITIONAL: U N C O N D I T I O N A L;
 UNION: U N I O N;
 UNIQUE: U N I Q U E;
 UNKNOWN: U N K N O W N;
+UNMATCHED: U N M A T C H E D;
 UPDATE: U P D A T E;
 UPSERT: U P S E R T;
 USE: U S E;

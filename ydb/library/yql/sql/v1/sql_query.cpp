@@ -1953,6 +1953,21 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansilike") {
             Ctx.AnsiLike = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiLike");
+        } else if (normalizedPragma == "featurer010") {
+            if (values.size() == 1 && values[0].GetLiteral()) {
+                const auto& value = *values[0].GetLiteral();
+                if ("prototype" == value)
+                    Ctx.FeatureR010 = true;
+                else {
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                    return {};
+                }
+            }
+            else {
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+            Ctx.IncrementMonCounter("sql_pragma", "FeatureR010");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

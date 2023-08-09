@@ -307,6 +307,10 @@ bool ISource::AddFuncOverWindow(TContext& ctx, const TString& windowName, TNodeP
     return true;
 }
 
+void ISource::SetMatchRecognize(TMatchRecognizeBuilderPtr matchRecognize) {
+    MatchRecognizeBuilder = matchRecognize;
+}
+
 bool ISource::IsCompositeSource() const {
     return false;
 }
@@ -932,6 +936,13 @@ TNodePtr ISource::BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, c
         return Y("Sort", label, dirsNode, keySelectorNode);
     }
 }
+
+TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable){
+    if (MatchRecognizeBuilder){
+        return MatchRecognizeBuilder->Build(ctx, std::move(inputTable), this);
+    }
+    return TNodePtr{};
+};
 
 IJoin::IJoin(TPosition pos)
     : ISource(pos)

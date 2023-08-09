@@ -2,6 +2,7 @@
 #include "source.h"
 
 #include "context.h"
+#include "match_recognize.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -1673,8 +1674,16 @@ public:
             return nullptr;
         }
 
-        bool ordered = ctx.UseUnordered(*this);
         auto block(Y(Y("let", "core", input)));
+
+        if (auto matchRecognize = Source->BuildMatchRecognize(ctx, "core")) {
+            //use unique name match_recognize to find this block easily in unit tests
+            block = L(block, Y("let", "match_recognize", matchRecognize));
+            //then bind to the conventional name
+            block = L(block, Y("let", "core", "match_recognize"));
+        }
+
+        bool ordered = ctx.UseUnordered(*this);
         if (PreFlattenMap) {
             block = L(block, Y("let", "core", Y(ordered ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), PreFlattenMap))));
         }

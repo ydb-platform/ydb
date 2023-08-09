@@ -4,6 +4,7 @@
 #include <ydb/core/base/events.h>
 
 #include "kafka_messages.h"
+#include "ydb/library/aclib/aclib.h"
 
 using namespace NActors;
 
@@ -13,6 +14,7 @@ struct TEvKafka {
     enum EEv {
         EvRequest = EventSpaceBegin(NKikimr::TKikimrEvents::TKikimrEvents::ES_KAFKA),
         EvProduceRequest,
+        EvAuthSuccess,
         EvWakeup,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
@@ -32,6 +34,14 @@ struct TEvKafka {
 
         ui64 CorrelationId;
         const TProduceRequestData* Request;
+    };
+
+    struct TEvAuthSuccess : public TEventLocal<TEvAuthSuccess, EvAuthSuccess> {
+        TEvAuthSuccess(TIntrusiveConstPtr<NACLib::TUserToken> token)
+        : UserToken(token)
+        {}
+
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {

@@ -16,10 +16,14 @@ namespace NKafka {
 using namespace NActors;
 using namespace NKikimr;
 
+
 NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 correlationId, const TApiVersionsRequestData* message);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TActorId parent, const ui64 correlationId, const TInitProducerIdRequestData* message);
 NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const ui64 correlationId, const TMetadataRequestData* message);
 NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const TString& clientDC);
+NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const TSaslHandshakeRequestData* message);
+NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message);
+    
 
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;
@@ -73,7 +77,7 @@ public:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
     TString ClientDC;
 
-    i32 CorrelationId = 0;
+    i32 CorrelationId = 1;
     std::shared_ptr<Msg> Request;
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
     std::deque<Msg::TPtr> PendingRequestsQueue;
@@ -86,6 +90,8 @@ public:
     size_t InflightSize;
 
     TActorId ProduceActorId;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 
 
     TKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
@@ -213,6 +219,14 @@ protected:
         Register(CreateKafkaMetadataActor(SelfId(), header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TSaslAuthenticateRequestData* message) {
+        Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, Address, message));
+    }
+
+    void HandleMessage(const TRequestHeaderData* header, const TSaslHandshakeRequestData* message) {
+        Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, message));
+    }
+
     void ProcessRequest() {
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
@@ -240,6 +254,14 @@ protected:
                 HandleMessage(&Request->Header, dynamic_cast<TMetadataRequestData*>(message));
                 return;
 
+            case SASL_HANDSHAKE:
+                HandleMessage(&Request->Header, dynamic_cast<TSaslHandshakeRequestData*>(message));
+                return;
+
+            case SASL_AUTHENTICATE:
+                HandleMessage(&Request->Header, dynamic_cast<TSaslAuthenticateRequestData*>(message));
+                return;
+
             default:
                 KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
                 PassAway();
@@ -249,6 +271,10 @@ protected:
     void Handle(TEvKafka::TEvResponse::TPtr response) {
         auto r = response->Get();
         Reply(r->CorrelationId, r->Response);
+    }
+
+    void Handle(TEvKafka::TEvAuthSuccess::TPtr auth) {
+        UserToken = auth->Get()->UserToken;
     }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response) {
@@ -437,6 +463,7 @@ protected:
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
             hFunc(TEvKafka::TEvResponse, Handle);
+            hFunc(TEvKafka::TEvAuthSuccess, Handle);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }

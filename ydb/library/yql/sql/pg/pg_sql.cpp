@@ -295,6 +295,32 @@ public:
         case T_DropStmt:
             return ParseDropStmt(CAST_NODE(DropStmt, node)) != nullptr;
         case T_VariableSetStmt:
+            {
+                // YQL-16284
+                const char* node_name = CAST_NODE(VariableSetStmt, node)->name;
+                char* skip_statements[] = {
+                    "extra_float_digits",                   // jdbc
+                    "application_name",                     // jdbc
+                    "statement_timeout",                    // pg_dump
+                    "lock_timeout",                         // pg_dump
+                    "idle_in_transaction_session_timeout",  // pg_dump
+                    "client_encoding",                      // pg_dump
+                    "standard_conforming_strings",          // pg_dump
+                    "check_function_bodies",                // pg_dump
+                    "xmloption",                            // pg_dump
+                    "client_min_messages",                  // pg_dump
+                    "row_security",                        // pg_dump
+                    NULL,
+                };
+
+                for (int i = 0; skip_statements[i] != NULL; i++){
+                    const char *skip_name = skip_statements[i];
+                    if (stricmp(node_name, skip_name) == 0){
+                        return true;
+                    }
+                };
+            };
+
             return ParseVariableSetStmt(CAST_NODE(VariableSetStmt, node)) != nullptr;
         case T_DeleteStmt:
             return ParseDeleteStmt(CAST_NODE(DeleteStmt, node)) != nullptr;
@@ -1019,7 +1045,7 @@ public:
 
         return Statements.back();
     }
-    
+
     [[nodiscard]]
     TAstNode* ParseUpdateStmt(const UpdateStmt* value) {
         const auto fromClause = value->fromClause ? value->fromClause : ListMake1(value->relation).get();
@@ -1066,7 +1092,7 @@ public:
                 A("sink"),
                 A("key"),
                 L(A("Void")),
-                QVL(options.data(), options.size()))) 
+                QVL(options.data(), options.size())))
             ));
         Statements.push_back(L(
             A("let"),
@@ -3415,14 +3441,14 @@ public:
     TAstNode* QL(TNodes... nodes) {
         return Q(L(nodes...));
     }
-    
+
     template <typename... TNodes>
     TAstNode* E(TAstNode* list, TNodes... nodes)  {
         Y_VERIFY(list->IsList());
         TVector<TAstNode*> nodes_vec;
         nodes_vec.reserve(list->GetChildrenCount() + sizeof...(nodes));
 
-        auto children = list->GetChildren(); 
+        auto children = list->GetChildren();
         if (children) {
             nodes_vec.assign(children.begin(), children.end());
         }

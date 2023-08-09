@@ -49,6 +49,7 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/dictionarydata.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/dtintrv.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/edits.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/emojiprops.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/errorcode.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/filteredbrk.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/filterednormalizer2.cpp
@@ -70,6 +71,7 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/locresdata.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/locutil.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/lsr.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/lstmbe.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/messagepattern.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/normalizer2.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/normalizer2impl.cpp
@@ -323,7 +325,6 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/nfrule.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/nfsubs.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/nortrans.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/nounit.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/nultrans.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_affixutils.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_asformat.cpp
@@ -348,6 +349,8 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_rounding.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_scientific.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_skeletons.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_symbolswrapper.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_usageprefs.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_utils.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numfmt.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numparse_affixes.cpp
@@ -359,11 +362,13 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numparse_scientific.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numparse_symbols.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numparse_validators.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numrange_capi.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numrange_fluent.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numrange_impl.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/numsys.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/olsontz.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/persncal.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/pluralranges.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/plurfmt.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/plurrule.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/quant.cpp
@@ -434,6 +439,10 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/umsg.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/unesctrn.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/uni2name.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/units_complexconverter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/units_converter.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/units_data.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/units_router.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/unum.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/unumsys.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/upluralrules.cpp
@@ -472,5 +481,5 @@ target_sources(contrib-libs-icu PRIVATE
 )
 target_rodata_sources(contrib-libs-icu
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/icudt67_dat.rodata
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/icudt70_dat.rodata
 )

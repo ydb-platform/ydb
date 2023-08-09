@@ -62,7 +62,7 @@ void RuleBasedTransliterator::_construct(const UnicodeString& rules,
  * @param rules         rules, separated by ';'
  * @param direction     either FORWARD or REVERSE.
  * @param adoptedFilter the filter for this transliterator.
- * @param parseError    Struct to recieve information on position 
+ * @param parseError    Struct to receive information on position 
  *                      of error if an error is encountered
  * @param status        Output param set to success/failure code.
  * @exception IllegalArgumentException if rules are malformed
@@ -101,7 +101,7 @@ RuleBasedTransliterator::RuleBasedTransliterator(
 }*/
 
 /**
- * Covenience constructor with no filter.
+ * Convenience constructor with no filter.
  */
 /*RuleBasedTransliterator::RuleBasedTransliterator(
                             const UnicodeString& id,
@@ -114,7 +114,7 @@ RuleBasedTransliterator::RuleBasedTransliterator(
 }*/
 
 /**
- * Covenience constructor with no filter and FORWARD direction.
+ * Convenience constructor with no filter and FORWARD direction.
  */
 /*RuleBasedTransliterator::RuleBasedTransliterator(
                             const UnicodeString& id,
@@ -126,7 +126,7 @@ RuleBasedTransliterator::RuleBasedTransliterator(
 }*/
 
 /**
- * Covenience constructor with FORWARD direction.
+ * Convenience constructor with FORWARD direction.
  */
 /*RuleBasedTransliterator::RuleBasedTransliterator(
                             const UnicodeString& id,

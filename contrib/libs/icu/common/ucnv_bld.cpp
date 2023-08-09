@@ -224,7 +224,7 @@ static UBool gDefaultConverterContainsOption;
 static const char DATA_TYPE[] = "cnv";
 
 /* ucnv_flushAvailableConverterCache. This is only called from ucnv_cleanup().
- *                       If it is ever to be called from elsewhere, synchronization 
+ *                       If it is ever to be called from elsewhere, synchronization
  *                       will need to be considered.
  */
 static void
@@ -262,7 +262,7 @@ static UBool U_CALLCONV ucnv_cleanup(void) {
 }
 
 U_CAPI void U_EXPORT2
-ucnv_enableCleanup() {
+ucnv_enableCleanup(void) {
     ucln_common_registerCleanup(UCLN_COMMON_UCNV, ucnv_cleanup);
 }
 
@@ -427,7 +427,7 @@ getAlgorithmicTypeFromName(const char *realName)
 #define UCNV_CACHE_LOAD_FACTOR 2
 
 /* Puts the shared data in the static hashtable SHARED_DATA_HASHTABLE */
-/*   Will always be called with the cnvCacheMutex alrady being held   */
+/*   Will always be called with the cnvCacheMutex already being held   */
 /*     by the calling function.                                       */
 /* Stores the shared data in the SHARED_DATA_HASHTABLE
  * @param data The shared data
@@ -1309,7 +1309,7 @@ ucnv_setDefaultName(const char *converterName) {
 
         /* The close may make the current name go away. */
         ucnv_close(cnv);
-  
+
         /* reset the converter cache */
         u_flushDefaultConverter();
     }

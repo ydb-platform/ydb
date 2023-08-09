@@ -8,7 +8,7 @@
 *
 *  uspoof_impl.h
 *
-*    Implemenation header for spoof detection
+*    Implementation header for spoof detection
 *
 */
 
@@ -31,7 +31,7 @@
 
 U_NAMESPACE_BEGIN
 
-// The maximium length (in UTF-16 UChars) of the skeleton replacement string resulting from
+// The maximum length (in UTF-16 UChars) of the skeleton replacement string resulting from
 //   a single input code point.  This is function of the unicode.org data.
 #define USPOOF_MAX_SKELETON_EXPANSION 20
 
@@ -93,7 +93,7 @@ public:
     static UChar32 ScanHex(const UChar *s, int32_t start, int32_t limit, UErrorCode &status);
 
     static UClassID U_EXPORT2 getStaticClassID(void);
-    virtual UClassID getDynamicClassID(void) const;
+    virtual UClassID getDynamicClassID(void) const override;
 
     //
     // Data Members
@@ -157,7 +157,7 @@ public:
 //
 //    String Table:
 //       The strings table contains all of the value strings (those of length two or greater)
-//       concatentated together into one long UChar (UTF-16) array.
+//       concatenated together into one long UChar (UTF-16) array.
 //
 //       There is no nul character or other mark between adjacent strings.
 //
@@ -222,7 +222,7 @@ class SpoofData: public UMemory {
     SpoofData(const void *serializedData, int32_t length, UErrorCode &status);
 
     //  Check raw Spoof Data Version compatibility.
-    //  Return TRUE it looks good.
+    //  Return true it looks good.
     UBool validateDataVersion(UErrorCode &status) const;
 
     ~SpoofData();                    // Destructor not normally used.
@@ -248,7 +248,7 @@ class SpoofData: public UMemory {
     // Get the confusable skeleton transform for a single code point.
     // The result is a string with a length between 1 and 18 as of Unicode 9.
     // This is the main public endpoint for this class.
-    // @return   The length in UTF-16 code units of the substition string.
+    // @return   The length in UTF-16 code units of the substitution string.
     int32_t confusableLookup(UChar32 inChar, UnicodeString &dest) const;
 
     // Get the number of confusable entries in this SpoofData.
@@ -301,7 +301,7 @@ struct SpoofDataHeader {
     int32_t       fMagic;                // (0x3845fdef)
     uint8_t       fFormatVersion[4];     // Data Format. Same as the value in struct UDataInfo
                                          //   if there is one associated with this data.
-    int32_t       fLength;               // Total lenght in bytes of this spoof data,
+    int32_t       fLength;               // Total length in bytes of this spoof data,
                                          //   including all sections, not just the header.
 
     // The following four sections refer to data representing the confusable data

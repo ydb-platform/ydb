@@ -91,6 +91,8 @@ static const char VAR_DELIM = '_';
 // Tag for localized display names (symbols) of currencies
 static const char CURRENCIES[] = "Currencies";
 static const char CURRENCIES_NARROW[] = "Currencies%narrow";
+static const char CURRENCIES_FORMAL[] = "Currencies%formal";
+static const char CURRENCIES_VARIANT[] = "Currencies%variant";
 static const char CURRENCYPLURALS[] = "CurrencyPlurals";
 
 // ISO codes mapping table
@@ -285,7 +287,7 @@ myUCharsToChars(char* resultOfLen4, const UChar* currency) {
  * four integers.  The first is the fraction digits.  The second is the
  * rounding increment, or 0 if none.  The rounding increment is in
  * units of 10^(-fraction_digits).  The third and fourth are the same
- * except that they are those used in cash transations ( cashDigits
+ * except that they are those used in cash transactions ( cashDigits
  * and cashRounding ).
  */
 static const int32_t*
@@ -649,7 +651,7 @@ ucurr_getName(const UChar* currency,
     }
 
     int32_t choice = (int32_t) nameStyle;
-    if (choice < 0 || choice > 2) {
+    if (choice < 0 || choice > 4) {
         *ec = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }
@@ -684,9 +686,22 @@ ucurr_getName(const UChar* currency,
     ec2 = U_ZERO_ERROR;
     LocalUResourceBundlePointer rb(ures_open(U_ICUDATA_CURR, loc, &ec2));
 
-    if (nameStyle == UCURR_NARROW_SYMBOL_NAME) {
+    if (nameStyle == UCURR_NARROW_SYMBOL_NAME || nameStyle == UCURR_FORMAL_SYMBOL_NAME || nameStyle == UCURR_VARIANT_SYMBOL_NAME) {
         CharString key;
-        key.append(CURRENCIES_NARROW, ec2);
+        switch (nameStyle) {
+        case UCURR_NARROW_SYMBOL_NAME:
+            key.append(CURRENCIES_NARROW, ec2);
+            break;
+        case UCURR_FORMAL_SYMBOL_NAME:
+            key.append(CURRENCIES_FORMAL, ec2);
+            break;
+        case UCURR_VARIANT_SYMBOL_NAME:
+            key.append(CURRENCIES_VARIANT, ec2);
+            break;
+        default:
+            *ec = U_UNSUPPORTED_ERROR;
+            return 0;
+        }
         key.append("/", ec2);
         key.append(buf, ec2);
         s = ures_getStringByKeyWithFallback(rb.getAlias(), key.data(), len, &ec2);
@@ -829,7 +844,7 @@ typedef struct {
 #endif
 
 
-// Comparason function used in quick sort.
+// Comparison function used in quick sort.
 static int U_CALLCONV currencyNameComparator(const void* a, const void* b) {
     const CurrencyNameStruct* currName_1 = (const CurrencyNameStruct*)a;
     const CurrencyNameStruct* currName_2 = (const CurrencyNameStruct*)b;
@@ -1297,7 +1312,7 @@ searchCurrencyName(const CurrencyNameStruct* currencyNames,
     // The 2nd round binary search search the second "B" in the text against
     // the 2nd char in currency names, and narrow the matching range to
     // "BB BBEX BBEXYZ" (and the maximum matching "BB").
-    // The 3rd round returnes the range as "BBEX BBEXYZ" (without changing
+    // The 3rd round returns the range as "BBEX BBEXYZ" (without changing
     // maximum matching).
     // The 4th round returns the same range (the maximum matching is "BBEX").
     // The 5th round returns no matching range.
@@ -1515,7 +1530,7 @@ uprv_parseCurrency(const char* locale,
 
     int32_t max = 0;
     int32_t matchIndex = -1;
-    // case in-sensitive comparision against currency names
+    // case in-sensitive comparison against currency names
     searchCurrencyName(currencyNames, total_currency_name_count, 
                        upperText, textLen, partialMatchLen, &max, &matchIndex);
 
@@ -1610,7 +1625,7 @@ ucurr_getDefaultFractionDigits(const UChar* currency, UErrorCode* ec) {
     return ucurr_getDefaultFractionDigitsForUsage(currency,UCURR_USAGE_STANDARD,ec);
 }
 
-U_DRAFT int32_t U_EXPORT2
+U_CAPI int32_t U_EXPORT2
 ucurr_getDefaultFractionDigitsForUsage(const UChar* currency, const UCurrencyUsage usage, UErrorCode* ec) {
     int32_t fracDigits = 0;
     if (U_SUCCESS(*ec)) {
@@ -1633,7 +1648,7 @@ ucurr_getRoundingIncrement(const UChar* currency, UErrorCode* ec) {
     return ucurr_getRoundingIncrementForUsage(currency, UCURR_USAGE_STANDARD, ec);
 }
 
-U_DRAFT double U_EXPORT2
+U_CAPI double U_EXPORT2
 ucurr_getRoundingIncrementForUsage(const UChar* currency, const UCurrencyUsage usage, UErrorCode* ec) {
     double result = 0.0;
 
@@ -1776,7 +1791,6 @@ static const struct CurrencyList {
     {"ECV", UCURR_UNCOMMON|UCURR_DEPRECATED},
     {"EEK", UCURR_COMMON|UCURR_DEPRECATED},
     {"EGP", UCURR_COMMON|UCURR_NON_DEPRECATED},
-    {"EQE", UCURR_COMMON|UCURR_DEPRECATED}, // questionable, remove?
     {"ERN", UCURR_COMMON|UCURR_NON_DEPRECATED},
     {"ESA", UCURR_UNCOMMON|UCURR_DEPRECATED},
     {"ESB", UCURR_UNCOMMON|UCURR_DEPRECATED},
@@ -1948,9 +1962,11 @@ static const struct CurrencyList {
     {"UYI", UCURR_UNCOMMON|UCURR_NON_DEPRECATED},
     {"UYP", UCURR_COMMON|UCURR_DEPRECATED},
     {"UYU", UCURR_COMMON|UCURR_NON_DEPRECATED},
+    {"UYW", UCURR_UNCOMMON|UCURR_NON_DEPRECATED},
     {"UZS", UCURR_COMMON|UCURR_NON_DEPRECATED},
     {"VEB", UCURR_COMMON|UCURR_DEPRECATED},
     {"VEF", UCURR_COMMON|UCURR_NON_DEPRECATED},
+    {"VES", UCURR_COMMON|UCURR_NON_DEPRECATED},
     {"VND", UCURR_COMMON|UCURR_NON_DEPRECATED},
     {"VNN", UCURR_COMMON|UCURR_DEPRECATED},
     {"VUV", UCURR_COMMON|UCURR_NON_DEPRECATED},
@@ -2259,7 +2275,6 @@ ucurr_countCurrencies(const char* locale,
         // local variables
         UErrorCode localStatus = U_ZERO_ERROR;
         char id[ULOC_FULLNAME_CAPACITY];
-        uloc_getKeywordValue(locale, "currency", id, ULOC_FULLNAME_CAPACITY, &localStatus);
 
         // get country or country_variant in `id'
         idForLocale(locale, id, sizeof(id), ec);
@@ -2375,7 +2390,6 @@ ucurr_forLocaleAndDate(const char* locale,
             // local variables
             UErrorCode localStatus = U_ZERO_ERROR;
             char id[ULOC_FULLNAME_CAPACITY];
-            resLen = uloc_getKeywordValue(locale, "currency", id, ULOC_FULLNAME_CAPACITY, &localStatus);
 
             // get country or country_variant in `id'
             idForLocale(locale, id, sizeof(id), ec);

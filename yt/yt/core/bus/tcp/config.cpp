@@ -44,6 +44,7 @@ TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
     UpdateYsonStructField(mergedConfig->ThreadPoolSize, dynamicConfig->ThreadPoolSize);
     UpdateYsonStructField(mergedConfig->Networks, dynamicConfig->Networks);
     UpdateYsonStructField(mergedConfig->MultiplexingBands, dynamicConfig->MultiplexingBands);
+    UpdateYsonStructField(mergedConfig->BusCertsDir, dynamicConfig->BusCertsDir);
     mergedConfig->Postprocess();
     return mergedConfig;
 }
@@ -64,6 +65,9 @@ void TTcpDispatcherDynamicConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("multiplexing_bands", &TThis::MultiplexingBands)
         .Optional();
+
+    registrar.Parameter("bus_certs_dir", &TThis::BusCertsDir)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

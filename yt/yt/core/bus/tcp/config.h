@@ -66,6 +66,9 @@ public:
 
     std::optional<TEnumIndexedVector<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
 
+     //! Used to store TLS/SSL certificate files.
+    std::optional<TString> BusCertsDir;
+
     REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
 
     static void Register(TRegistrar registrar);

@@ -360,10 +360,12 @@ namespace NUri {
             FeaturesEncodePChar = 0 | FeatureUpperEncoded | FeaturesEncodeDecode | FeaturesCheckSpecialChar,
 
             // http://wiki.yandex-team.ru/robot/newDesign/dups/normolization
+            // FeaturesRecommended is deprecated, use NewFeaturesRecommended: ROBOTQUALITY-718
             FeaturesRecommended = 0 | FeatureSchemeKnown | FeatureRemoteOnly | FeatureToLower | FeatureCheckHost | FeatureConvertHostIDN | FeatureHashBangToEscapedFragment | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodeExtendedASCII | FeatureUpperEncoded | FeatureDecodeUnreserved | FeaturePathOperation | FeaturePathStripRootParent,
 
             NewFeaturesRecommended = 0 | FeatureSchemeKnown | FeatureRemoteOnly | FeatureToLower | FeatureCheckHost | FeatureConvertHostIDN | FeatureFragmentToHashBang | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodeExtendedASCII | FeatureUpperEncoded | FeatureDecodeUnreserved | FeaturePathOperation | FeaturePathStripRootParent,
 
+            // FeaturesRobot is deprecated, use NewFeaturesRecommended: ROBOTQUALITY-718
             FeaturesRobot = FeaturesRecommended
         };
     };

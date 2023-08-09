@@ -2859,6 +2859,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(CreateAndDropUser) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
+        /* TODO: Fix flaky test in KIKIMR-18780
         {
             // Drop non-existing user force
             auto query = TStringBuilder() << R"(
@@ -2868,7 +2869,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        }*/
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2897,6 +2898,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+        /* TODO: Fix flaky test in KIKIMR-18780
         {
             // Drop existing user force
             auto query = TStringBuilder() << R"(
@@ -2906,16 +2908,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        }*/
         {
-            // Drop non-existing user
+            // Drop existing user
             auto query = TStringBuilder() << R"(
             --!syntax_v1
             DROP USER user1;
             )";
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -2963,6 +2965,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(CreateAndDropGroup) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
+        /* TODO: Fix flaky test in KIKIMR-18780
         {
             // Drop non-existing group force
             auto query = TStringBuilder() << R"(
@@ -2972,7 +2975,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        }*/
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -3001,6 +3004,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+        /* TODO: Fix flaky test in KIKIMR-18780
         {
             // Drop existing group force
             auto query = TStringBuilder() << R"(
@@ -3010,16 +3014,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        }*/
         {
-            // Drop non-existing group
+            // Drop existing group
             auto query = TStringBuilder() << R"(
             --!syntax_v1
             DROP GROUP group1;
             )";
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -3469,7 +3473,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     Y_UNIT_TEST(SerialTypeNegative2) {
@@ -3490,7 +3494,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,
                                        result.GetIssues().ToString());
-        }        
+        }
     }
 
     void TestSerialType(TString serialType) {

@@ -1,9 +1,19 @@
 PROGRAM(flex)
 
+LICENSE(
+    Bison-exception-2.2 AND
+    GPL-2.0-or-later AND
+    LicenseRef-scancode-flex-2.5
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 VERSION(2.5.4)
 
 NO_RUNTIME()
+
 NO_OPTIMIZE()
+
 NO_COMPILER_WARNINGS()
 
 SRCS(
@@ -22,7 +32,8 @@ SRCS(
     parse.c
 )
 
-INDUCED_DEPS(h+cpp
+INDUCED_DEPS(
+    h+cpp
     ${ARCADIA_ROOT}/contrib/tools/flex-old/FlexLexer.h
 )
 

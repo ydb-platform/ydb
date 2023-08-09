@@ -52,9 +52,7 @@ public:
            });
         }
 
-        const char* operationAttributes = options.OperationAttributes
-            ? options.OperationAttributes.ToString().data()
-            : nullptr;
+        auto operationAttributesString = options.OperationAttributes ? options.OperationAttributes.ToString() : "{}";
 
         const char* defaultCluster = options.DefaultCluster
             ? options.DefaultCluster->data()
@@ -66,7 +64,8 @@ public:
             .ClusterCount = static_cast<int>(bridgeClusters.size()),
             .Clusters = bridgeClusters.data(),
             .DefaultCluster = defaultCluster,
-            .OperationAttributes = operationAttributes,
+            .OperationAttributes = operationAttributesString.data(),
+            .OperationAttributesLength = static_cast<int>(operationAttributesString.size()),
             .YTTokenPath = options.YTTokenPath.data(),
             .LogBackend = &options.LogBackend,
         };
@@ -76,8 +75,8 @@ public:
 
     TQueryResult Run(TString impersonationUser, TString queryText, NYson::TYsonString settings) noexcept override
     {
-        const char* settingsData = settings ? settings.ToString().data() : nullptr;
-        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, impersonationUser.data(), queryText.data(), settingsData);
+        auto settingsString = settings ? settings.ToString() : "{}";
+        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, impersonationUser.data(), queryText.data(), settingsString.data());
         auto toString = [] (const char* str, size_t strLength) -> std::optional<TString> {
             if (!str) {
                 return std::nullopt;

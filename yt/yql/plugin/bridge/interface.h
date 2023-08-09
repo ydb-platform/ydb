@@ -24,6 +24,7 @@ struct TBridgeYqlPluginOptions
     const char* DefaultCluster;
 
     const char* OperationAttributes;
+    ssize_t OperationAttributesLength = 0;
 
     const char* YTTokenPath;
 

@@ -440,14 +440,30 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (ev->Get()->TabletId == TabletId && ev->Get()->Status != NKikimrProto::OK) {
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        auto msg = ev->Get();
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TEvClientConnected Status " << msg->Status << ", TabletId: " << msg->TabletId << ", NodeId " << msg->ServerId.NodeId() << ", Generation: " << msg->Generation);
+        Y_VERIFY_DEBUG(msg->TabletId == TabletId);
+
+        if (msg->Status != NKikimrProto::OK) {
+            LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") received TEvClientConnected with status " << ev->Get()->Status);
             Disconnected();
+            return;
+        }
+
+        Y_VERIFY_DEBUG_S(msg->Generation, "Tablet generation should be greater than 0");
+
+        if (ExpectedGeneration && *ExpectedGeneration != msg->Generation)
+        {
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
+            Disconnected();
+            PassAway();
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->TabletId == TabletId) {
+            LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") received TEvClientDestroyed");
             Disconnected();
         }
     }
@@ -469,11 +485,13 @@ public:
             const TActorId& client,
             ui64 tabletId,
             ui32 partitionId,
+            TMaybe<ui32> expectedGeneration,
             const TString& sourceId,
             const TPartitionWriterOpts& opts)
         : Client(client)
         , TabletId(tabletId)
         , PartitionId(partitionId)
+        , ExpectedGeneration(expectedGeneration)
         , SourceId(sourceId)
         , Opts(opts)
     {
@@ -495,8 +513,8 @@ public:
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -512,6 +530,7 @@ private:
     const TActorId Client;
     const ui64 TabletId;
     const ui32 PartitionId;
+    const TMaybe<ui32> ExpectedGeneration;
     const TString SourceId;
     const TPartitionWriterOpts Opts;
 
@@ -526,8 +545,7 @@ private:
 
 }; // TPartitionWriter
 
-IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, const TString& sourceId, const TPartitionWriterOpts& opts) {
-    return new TPartitionWriter(client, tabletId, partitionId, sourceId, opts);
+IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, TMaybe<ui32> expectedGeneration, const TString& sourceId, const TPartitionWriterOpts& opts) {
+    return new TPartitionWriter(client, tabletId, partitionId, expectedGeneration, sourceId, opts);
 }
-
 }

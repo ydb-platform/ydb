@@ -31,6 +31,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     basic_usage_ut.cpp
     describe_topic_ut.cpp
+    local_partition_ut.cpp
     managed_executor.h
     managed_executor.cpp
     topic_to_table_ut.cpp

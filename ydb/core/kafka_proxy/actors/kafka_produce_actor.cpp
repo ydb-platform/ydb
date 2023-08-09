@@ -524,8 +524,7 @@ TActorId TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 part
     }
 
     auto tabletId = pit->second;
-    auto* writerActor = CreatePartitionWriter(SelfId(), tabletId, partitionId, SourceId,
-         TPartitionWriterOpts().WithDeduplication(false));
+    auto* writerActor = CreatePartitionWriter(SelfId(), tabletId, partitionId, {}, SourceId, TPartitionWriterOpts().WithDeduplication(false));
 
     auto& writerInfo = partitionWriters[partitionId];
     writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);

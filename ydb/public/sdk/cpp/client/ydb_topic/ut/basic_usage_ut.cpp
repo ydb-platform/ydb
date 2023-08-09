@@ -84,27 +84,29 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             writeSession->Close();
         }
 
-        auto readSettings = TReadSessionSettings()
-            .ConsumerName(setup->GetTestConsumer())
-            .AppendTopics(setup->GetTestTopic());
-        auto readSession = client.CreateReadSession(readSettings);
+        {
+            auto readSettings = TReadSessionSettings()
+                .ConsumerName(setup->GetTestConsumer())
+                .AppendTopics(setup->GetTestTopic());
+            auto readSession = client.CreateReadSession(readSettings);
 
-        auto event = readSession->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
+            auto event = readSession->GetEvent(true);
+            UNIT_ASSERT(event.Defined());
 
-        auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
-        startPartitionSession.Confirm();
+            auto& startPartitionSession = std::get<TReadSessionEvent::TStartPartitionSessionEvent>(*event);
+            startPartitionSession.Confirm();
 
-        event = readSession->GetEvent(true);
-        UNIT_ASSERT(event.Defined());
+            event = readSession->GetEvent(true);
+            UNIT_ASSERT(event.Defined());
 
-        auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-        dataReceived.Commit();
+            auto& dataReceived = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
+            dataReceived.Commit();
 
-        auto& messages = dataReceived.GetMessages();
-        UNIT_ASSERT(messages.size() == 2);
-        UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
-        UNIT_ASSERT(messages[1].GetData() == "message_using_PartitionId");
+            auto& messages = dataReceived.GetMessages();
+            UNIT_ASSERT(messages.size() == 2);
+            UNIT_ASSERT(messages[0].GetData() == "message_using_MessageGroupId");
+            UNIT_ASSERT(messages[1].GetData() == "message_using_PartitionId");
+        }
     }
 
     Y_UNIT_TEST(MaxByteSizeEqualZero) {

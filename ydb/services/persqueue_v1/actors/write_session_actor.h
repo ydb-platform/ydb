@@ -228,6 +228,8 @@ private:
     NPersQueue::TTopicConverterPtr FullConverter;
     ui32 Partition;
     ui32 PreferedPartition;
+    TMaybe<ui32> ExpectedGeneration;
+
     bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
@@ -288,9 +290,7 @@ private:
     TInstant LogSessionDeadline;
 
     ui64 BalancerTabletId;
-    ui64 PartitionTabletId;
     TActorId PipeToBalancer;
-    TActorId PipeToPartition;
 
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;

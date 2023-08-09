@@ -281,7 +281,7 @@ public:
         auto opts = TPartitionWriterOpts()
             .WithCheckState(true)
             .WithAutoRegister(true);
-        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, SourceId, opts));
+        Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, {}, SourceId, opts));
         Become(&TThis::StateInit);
     }
 

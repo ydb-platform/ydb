@@ -120,7 +120,6 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithDeduplication(bool value) { UseDeduplication = value; return *this; }
 };
 
-IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, const TString& sourceId,
-    const TPartitionWriterOpts& opts = {});
-
+IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, TMaybe<ui32> expectedGeneration, const TString& sourceId,
+                              const TPartitionWriterOpts& opts = {});
 }

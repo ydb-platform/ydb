@@ -247,7 +247,7 @@ namespace NActors {
 
         TAtomic x = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-        do {
+        while (!RelaxedLoad(&StopFlag)) {
             if (!semaphore.OldSemaphore || semaphore.CurrentSleepThreadCount < 0) {
                 if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
                     timers.HPNow = GetCycleCountFast();
@@ -286,7 +286,7 @@ namespace NActors {
             SpinLockPause();
             x = AtomicGet(Semaphore);
             semaphore = TSemaphore::GetSemaphore(x);
-        } while (!RelaxedLoad(&StopFlag));
+        }
 
         return 0;
     }

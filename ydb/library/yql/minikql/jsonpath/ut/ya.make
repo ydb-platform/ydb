@@ -15,9 +15,9 @@ PEERDIR(
     library/cpp/json
     ydb/library/binary_json
     ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
+    ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/minikql/dom
-    ydb/library/yql/minikql/invoke_builtins
+    ydb/library/yql/minikql/invoke_builtins/llvm
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/core/issue/protos
     ydb/library/yql/sql/pg_dummy

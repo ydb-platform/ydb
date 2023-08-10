@@ -33,6 +33,7 @@ target_link_libraries(yql-minikql-jsonpath PUBLIC
   yql-minikql-dom
   yql-public-issue
   yql-public-udf
+  library-yql-ast
   library-yql-utils
   core-issue-protos
   yql-parser-proto_ast

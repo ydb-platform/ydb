@@ -227,7 +227,15 @@ private:
     }
 
     void Grow() {
-        auto newCapacity = FindNearestPrime(Capacity * 2);
+        ui64 growFactor;
+        if (Capacity < 100'000) {
+            growFactor = 8;
+        } else if (Capacity < 1'000'000) {
+            growFactor = 4;
+        } else {
+            growFactor = 2;
+        }
+        auto newCapacity = FindNearestPrime(Capacity * growFactor);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {

@@ -154,24 +154,22 @@ public:
                 e->OnInt64(TInstant::Zero(), recordCounter.second);
                 e->OnMetricEnd();
             }
-        } else {
-            const auto *descriptor = Ydb::Monitoring::SelfCheck_Result_descriptor();
-            auto result = descriptor->FindValueByNumber(ev->Get()->Result.self_check_result())->name();
-            e->OnMetricBegin(EMetricType::IGAUGE);
-            {
-                e->OnLabelsBegin();
-                e->OnLabel("sensor", "ydb_healthcheck");
-                e->OnLabel("DOMAIN", domain->Name);
-                e->OnLabel("DATABASE", filterDatabase);
-                e->OnLabel("MESSAGE", result);
-                e->OnLabel("STATUS", result);
-                e->OnLabel("TYPE", "ALL");
-                e->OnLabelsEnd();
-            }
-            e->OnInt64(TInstant::Zero(), 1);
-            e->OnMetricEnd();
         }
-
+        const auto *descriptor = Ydb::Monitoring::SelfCheck_Result_descriptor();
+        auto result = descriptor->FindValueByNumber(ev->Get()->Result.self_check_result())->name();
+        e->OnMetricBegin(EMetricType::IGAUGE);
+        {
+            e->OnLabelsBegin();
+            e->OnLabel("sensor", "ydb_healthcheck");
+            e->OnLabel("DOMAIN", domain->Name);
+            e->OnLabel("DATABASE", filterDatabase);
+            e->OnLabel("MESSAGE", result);
+            e->OnLabel("STATUS", result);
+            e->OnLabel("TYPE", "ALL");
+            e->OnLabelsEnd();
+        }
+        e->OnInt64(TInstant::Zero(), 1);
+        e->OnMetricEnd();
         e->OnStreamEnd();
 
         ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(HTTPOKTEXT + ss.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

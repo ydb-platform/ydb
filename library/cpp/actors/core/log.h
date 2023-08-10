@@ -529,7 +529,7 @@ namespace NActors {
     };
 }
 
-#define AFL_VERIFY(condition) if (condition); else TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_VERIFY(condition) if (condition); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\

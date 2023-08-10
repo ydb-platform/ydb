@@ -2285,6 +2285,38 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
     return PgValueFromString(s, type->GetTypeId());
 }
 
+void SkipSkiffPg(TPgType* type, NCommon::TInputBuf& buf) {
+    auto marker = buf.Read();
+    if (!marker) {
+        return;
+    }
+
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        buf.Read();
+        return;
+    }
+    case INT2OID:
+    case INT4OID:
+    case INT8OID: {
+        buf.SkipMany(sizeof(i64));
+        return;
+    }
+    case FLOAT4OID:
+    case FLOAT8OID: {
+        buf.SkipMany(sizeof(double));
+        return;
+    }
+    default: {
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        buf.SkipMany(size);
+        return;
+    }
+    }
+}
+
 NUdf::TUnboxedValue ReadSkiffPg(TPgType* type, NCommon::TInputBuf& buf) {
     auto marker = buf.Read();
     if (!marker) {

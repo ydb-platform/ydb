@@ -92,6 +92,12 @@ NUdf::TUnboxedValue ReadYsonValuePg(NKikimr::NMiniKQL::TPgType* type, char cmd, 
     throw yexception() << "ReadYsonValuePg: PG types are not supported";
 }
 
+void SkipSkiffPg(NKikimr::NMiniKQL::TPgType* type, NCommon::TInputBuf& buf) {
+    Y_UNUSED(type);
+    Y_UNUSED(buf);
+    throw yexception() << "SkipSkiffPg: PG types are not supported";
+}
+
 NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NCommon::TInputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(buf);

@@ -77,6 +77,8 @@ extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
     bool wrapOptional);
 
+void SkipSkiffField(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, TInputBuf& buf);
+
 NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, TInputBuf& buf);
 

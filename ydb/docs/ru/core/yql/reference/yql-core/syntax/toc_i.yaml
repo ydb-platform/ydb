@@ -5,18 +5,18 @@ items:
 - { name: ACTION,                       href: action.md }
 - { name: ALTER GROUP,                  href: alter-group.md,                when: feature_user_and_group }
 - { name: ALTER TABLE,                  href: alter_table.md,                when: feature_map_tables }
-- { name: ALTER TOPIC,                  href: alter_topic.md,                when: feature_topic_control_plane }
+- { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE TABLE,                 href: create_table.md }
-- { name: CREATE TOPIC,                 href: create_topic.md,               when: feature_topic_control_plane }
+- { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
 - { name: DECLARE,                      href: declare.md }
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
 - { name: DISCARD,                      href: discard.md }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
 - { name: DROP TABLE,                   href: drop_table.md }
-- { name: DROP TOPIC,                   href: drop_topic.md,                 when: feature_topic_control_plane }
+- { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
 - { name: DROP USER,                    href: drop-user.md,                  when: feature_user_and_group }
 - { name: GROUP BY,                     href: group_by.md }
 - { name: EXPORT и IMPORT,              href: export_import.md,              when: feature_mapreduce }

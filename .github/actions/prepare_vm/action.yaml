@@ -10,6 +10,12 @@ runs:
       run: |
         echo "distro_name=$(lsb_release -si)" | tee -a $GITHUB_OUTPUT
         echo "distro_release=$(lsb_release -sr)" | tee -a $GITHUB_OUTPUT
+    - name: Add ubuntu toolchain PPA for 18.04
+      shell: bash
+      if: steps.init.outputs.distro_name == 'Ubuntu' && steps.init.outputs.distro_release == '18.04'
+      run: |
+        apt-get install -y --no-install-recommends software-properties-common
+        add-apt-repository ppa:ubuntu-toolchain-r/test
     - name: Add cmake
       shell: bash
       if: steps.init.outputs.distro_name == 'Ubuntu' && contains(fromJSON('["18.04", "20.04"]'), steps.init.outputs.distro_release)

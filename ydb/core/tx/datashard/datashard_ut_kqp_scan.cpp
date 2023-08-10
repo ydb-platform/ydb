@@ -245,6 +245,122 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
+    Y_UNIT_TEST(ScanDuringSplit10) {
+       NKikimrConfig::TAppConfig appCfg;
+
+        auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+        rm->SetChannelBufferSize(100);
+        rm->SetMinChannelBufferSize(100);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetAppConfig(appCfg)
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        auto senderSplit = runtime.AllocateEdgeActor();
+
+        EnableLogging(runtime);
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, FillTableQuery());
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        for (const auto& shard: shards) {
+            Cerr << (TStringBuilder() << "-- shardId=" << shard << Endl);
+            Cerr.Flush();
+        }
+
+        TSet<TActorId> scans;
+        TActorId firstScanActor;
+        ui64 tabletId = 0;
+
+        ui64 result = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                        tabletId = shardId;
+                        Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
+                        Cerr.Flush();
+                    }
+                    break;
+                }
+
+                case TEvDataShard::EvKqpScan: {
+                    Cerr << (TStringBuilder() << "-- EvScan " << ev->Sender << " -> " << ev->Recipient << Endl);
+                    Cerr.Flush();
+                    break;
+                }
+
+                /*
+                 * Respond to streamData with acks. Without that execution pipeline will stop
+                 * producing new tuples.
+                 */
+                case NKqp::TKqpExecuterEvents::EvStreamData: {
+                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+
+                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
+                    Cerr.Flush();
+
+                    Y_ASSERT(record.GetResultSet().rows().size() == 1);
+                    Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
+                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    resp->Record.SetEnough(false);
+                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
+                    resp->Record.SetFreeSpace(100);
+
+                    runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                /* Drop message and kill tablet if we already had seen this tablet */
+                case NKqp::TKqpComputeEvents::EvScanData: {
+                    if (!firstScanActor) {
+                        firstScanActor = ev->Sender;
+                        AsyncSplitTable(server, senderSplit, "/Root/table-1", tabletId, 10 /* splitKey */);
+                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": pass and split" << Endl);
+                        Cerr.Flush();
+                    } else if (firstScanActor == ev->Sender) {
+                        // data from old table scan, drop it
+                        Cerr << (TStringBuilder() << "-- EvScanData from old tablet " << ev->Sender << ": drop" << Endl);
+                        Cerr.Flush();
+                        return TTestActorRuntime::EEventAction::DROP;
+                    } else {
+                        // data from new tablet scan, pass it
+                        Cerr << (TStringBuilder() << "-- EvScanData from new tablet" << ev->Sender << ": pass" << Endl);
+                        Cerr.Flush();
+                    }
+
+                    break;
+                }
+
+                default:
+                    break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(captureEvents);
+
+        auto streamSender = runtime.AllocateEdgeActor();
+        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+
+        UNIT_ASSERT_VALUES_EQUAL(result, 596400);
+    }
+
     Y_UNIT_TEST(ScanDuringSplitThenMerge) {
        NKikimrConfig::TAppConfig appCfg;
 

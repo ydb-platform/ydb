@@ -152,13 +152,13 @@ namespace NActors {
                 SafeTypeName(actorType));
     }
 
-    template <typename TMailbox, bool IsTailExecution>
-    bool TExecutorThread::Execute(TMailbox* mailbox, ui32 hint) {
+    template <typename TMailbox>
+    bool TExecutorThread::Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution) {
         Y_VERIFY_DEBUG(DyingActors.empty());
 
         bool reclaimAsFree = false;
 
-        if constexpr (!IsTailExecution) {
+        if (!isTailExecution) {
             Ctx.HPStart = GetCycleCountFast();
             Ctx.ExecutedEvents = 0;
         }
@@ -365,7 +365,7 @@ namespace NActors {
 
         bool needToStop = false;
 
-        auto executeActivation = [&]<bool IsTailExecution>(ui32 activation) {
+        auto executeActivation = [&](ui32 activation, bool isTailExecution) {
             LWTRACK(ActivationBegin, Ctx.Orbit, Ctx.CpuId, Ctx.PoolId, Ctx.WorkerId, NHPTimer::GetSeconds(Ctx.Lease.GetPreciseExpireTs()) * 1e3);
             readyActivationCount++;
             if (TMailboxHeader* header = Ctx.MailboxTable->Get(activation)) {
@@ -377,7 +377,7 @@ namespace NActors {
     case TMailboxType:: type: \
         { \
             using TMailBox = TMailboxTable:: T ## type ## Mailbox ; \
-            if (Execute<TMailBox, IsTailExecution>(static_cast<TMailBox*>(header), activation)) { \
+            if (Execute<TMailBox>(static_cast<TMailBox*>(header), activation, isTailExecution)) { \
                 TlsThreadContext->CapturedType = ESendingType::Lazy; \
             } \
         } \
@@ -421,11 +421,11 @@ namespace NActors {
             Ctx.Orbit.Reset();
         };
 
-        while (!needToStop) {
+        while (!needToStop && !StopFlag.load(std::memory_order_relaxed)) {
             if (TlsThreadContext->CapturedType == ESendingType::Tail) {
                 TlsThreadContext->CapturedType = ESendingType::Lazy;
                 ui32 activation = std::exchange(TlsThreadContext->CapturedActivation, 0);
-                executeActivation.operator()<true>(activation);
+                executeActivation(activation, true);
                 continue;
             }
             Ctx.IsNeededToWaitNextActivation = !TlsThreadContext->CapturedActivation && !isSharedThread;
@@ -439,7 +439,7 @@ namespace NActors {
             if (!activation) {
                 break;
             }
-            executeActivation.operator()<false>(activation);
+            executeActivation(activation, false);
         }
     }
 
@@ -481,7 +481,7 @@ namespace NActors {
         if (pools.size() <= 1) {
             ProcessExecutorPool(ExecutorPool, false);
         } else {
-            while (true) {
+            while (!StopFlag.load(std::memory_order_relaxed)) {
                 for (auto pool : pools) {
                     Ctx.Switch(
                         pool,
@@ -492,9 +492,6 @@ namespace NActors {
                         &Ctx.WorkerStats);
                     Ctx.WorkerId = -1;
                     ProcessExecutorPool(pool, true);
-                    if (RelaxedLoad(&StopFlag)) {
-                        return nullptr;
-                    }
                 }
             }
         }

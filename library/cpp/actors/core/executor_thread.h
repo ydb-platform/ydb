@@ -76,12 +76,12 @@ namespace NActors {
 
         void ProcessExecutorPool(IExecutorPool *pool, bool isSharedThread);
 
-        template <typename TMailbox, bool IsTailExecution = false>
-        bool Execute(TMailbox* mailbox, ui32 hint);
+        template <typename TMailbox>
+        bool Execute(TMailbox* mailbox, ui32 hint, bool isTailExecution);
 
     public:
         TActorSystem* const ActorSystem;
-        TAtomic StopFlag = false;
+        std::atomic<bool> StopFlag = false;
 
     private:
         // Pool-specific

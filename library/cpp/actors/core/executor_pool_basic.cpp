@@ -433,9 +433,9 @@ namespace NActors {
     void TBasicExecutorPool::PrepareStop() {
         AtomicStore(&StopFlag, true);
         for (i16 i = 0; i != PoolThreads; ++i) {
+            Threads[i].Thread->StopFlag = true;
             Threads[i].Pad.Interrupt();
             Threads[i].BlockedPad.Interrupt();
-            AtomicStore(&Threads[i].Thread->StopFlag, TAtomic(true));
         }
     }
 

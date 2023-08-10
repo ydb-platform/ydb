@@ -1924,7 +1924,7 @@ void TTcpConnection::TryEnqueueSslAck()
         0,
         SslAckPacketId);
 
-    YT_LOG_DEBUG("SslAck enqueued");
+    YT_LOG_DEBUG("TLS/SSL acknowledgement enqueued");
 }
 
 void TTcpConnection::TryEstablishSslSession()
@@ -1935,8 +1935,8 @@ void TTcpConnection::TryEstablishSslSession()
 
     YT_LOG_DEBUG("Starting TLS/SSL connection (VerificationMode: %v)", VerificationMode_);
 
-    if (Config_->LoadFromCertsDir && !TTcpDispatcher::TImpl::Get()->GetBusCertsDir()) {
-        Abort(TError(NBus::EErrorCode::SslError, "The bus_certs_dir is not set in static tcp dispatcher config"));
+    if (Config_->LoadCertsFromBusCertsDirectory && !TTcpDispatcher::TImpl::Get()->GetBusCertsDirectoryPath()) {
+        Abort(TError(NBus::EErrorCode::SslError, "bus_certs_directory_path is not set in tcp_dispatcher config"));
         return;
     }
 
@@ -1959,14 +1959,14 @@ void TTcpConnection::TryEstablishSslSession()
     }
 
 #define GET_CERT_FILE_PATH(file)    \
-    (Config_->LoadFromCertsDir ? JoinPaths(*TTcpDispatcher::TImpl::Get()->GetBusCertsDir(), (file)) : (file))
+    (Config_->LoadCertsFromBusCertsDirectory ? JoinPaths(*TTcpDispatcher::TImpl::Get()->GetBusCertsDirectoryPath(), (file)) : (file))
 
     if (ConnectionType_ == EConnectionType::Server) {
         SSL_set_accept_state(Ssl_.get());
 
         if (!Config_->UseKeyPairFromSslContext) {
             if (!Config_->CertificateChainFile) {
-                Abort(TError(NBus::EErrorCode::SslError, "The certificate chain file is not set in bus config"));
+                Abort(TError(NBus::EErrorCode::SslError, "Certificate chain file is not set in bus config"));
                 return;
             }
 
@@ -2006,7 +2006,7 @@ void TTcpConnection::TryEstablishSslSession()
             [[fallthrough]];
         case EVerificationMode::Ca: {
             if (!Config_->CAFile) {
-                Abort(TError(NBus::EErrorCode::SslError, "The CA file is not set in bus config"));
+                Abort(TError(NBus::EErrorCode::SslError, "CA file is not set in bus config"));
                 return;
             }
 

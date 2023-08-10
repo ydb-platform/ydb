@@ -23,6 +23,7 @@ RECURSE(
     providers
     public
     sql
+    tools
     udfs
     utils
 )

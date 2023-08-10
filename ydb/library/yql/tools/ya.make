@@ -1,0 +1,4 @@
+RECURSE(
+    mrjob
+    mrjob/test
+)

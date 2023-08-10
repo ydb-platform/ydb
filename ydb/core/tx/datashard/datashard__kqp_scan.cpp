@@ -535,7 +535,31 @@ private:
     TOwnedCellVec LastKey;
 };
 
+class TDataShard::TTxHandleSafeKqpScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHandleSafeKqpScan(TDataShard* self, TEvDataShard::TEvKqpScan::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev))
+    {}
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+        Self->HandleSafe(Ev, ctx);
+        return true;
+    }
+
+    void Complete(const TActorContext&) {
+        // nothing
+    }
+
+private:
+    TEvDataShard::TEvKqpScan::TPtr Ev;
+};
+
 void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
+    Execute(new TTxHandleSafeKqpScan(this, std::move(ev)));
+}
+
+void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&) {
     auto& request = ev->Get()->Record;
     auto scanComputeActor = ev->Sender;
     auto generation = request.GetGeneration();
@@ -616,6 +640,12 @@ void TDataShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext&
     if (!SnapshotManager.FindAvailable(snapshotKey)) {
         reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Snapshot is not valid, tabletId: " << TabletID() << ", step: " << snapshot.GetStep());
+        return;
+    }
+
+    if (!IsStateActive()) {
+        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            << " Shard " << TabletID() << " is not ready to process requests.");
         return;
     }
 

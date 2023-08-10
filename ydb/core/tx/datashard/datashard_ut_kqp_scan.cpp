@@ -1,9 +1,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/core/tx/datashard/datashard_ut_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -636,8 +638,151 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(incomingRangesSize, 3);
     }
 
+    Y_UNIT_TEST(ScanAfterSplitSlowMetaRead) {
+        NKikimrConfig::TAppConfig appCfg;
+
+        auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+        rm->SetChannelBufferSize(100);
+        rm->SetMinChannelBufferSize(100);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetNodeCount(2)
+            .SetAppConfig(appCfg)
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        EnableLogging(runtime);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, FillTableQuery());
+
+        auto waitFor = [&](const auto& condition, const TString& description) {
+            if (!condition()) {
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                runtime.DispatchEvents(options);
+                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+            }
+        };
+
+        std::optional<int> result;
+        std::optional<Ydb::StatusIds::StatusCode> status;
+        auto streamSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+            Cerr << "... response " << ev->GetTypeRewrite() << " " << ev->GetTypeName() << " " << ev->ToString() << Endl;
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TEvKqpExecuter::TEvStreamData::EventType: {
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>();
+                    auto& record = msg->Record;
+                    Y_ASSERT(record.GetResultSet().rows().size() == 1);
+                    Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
+                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    resp->Record.SetEnough(false);
+                    resp->Record.SetSeqNo(record.GetSeqNo());
+                    resp->Record.SetFreeSpace(100);
+                    ctx.Send(ev->Sender, resp.Release());
+                    break;
+                }
+                case NKqp::TEvKqp::TEvQueryResponse::EventType: {
+                    auto* msg = ev->Get<NKqp::TEvKqp::TEvQueryResponse>();
+                    auto& record = msg->Record.GetRef();
+                    status = record.GetYdbStatus();
+                    break;
+                }
+            }
+        }));
+
+        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+        waitFor([&]{ return bool(status); }, "request status");
+
+        UNIT_ASSERT_VALUES_EQUAL(*status, Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(*result, 596400);
+
+        SetSplitMergePartCountLimit(&runtime, -1);
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        TVector<THolder<IEventHandle>> blockedGets;
+        TVector<THolder<IEventHandle>> blockedSnapshots;
+        auto blockGetObserver = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TEvKqpSnapshot::TEvCreateSnapshotResponse::EventType: {
+                    Cerr << "... blocking snapshot response" << Endl;
+                    blockedSnapshots.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case TEvBlobStorage::TEvGet::EventType: {
+                    auto* msg = ev->Get<TEvBlobStorage::TEvGet>();
+                    bool block = false;
+                    for (ui32 i = 0; i < msg->QuerySize; ++i) {
+                        if (msg->Queries[i].Id.TabletID() == shards.at(0)) {
+                            Cerr << "... blocking get request to " << msg->Queries[i].Id << Endl;
+                            block = true;
+                        }
+                    }
+                    if (block) {
+                        blockedGets.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(blockGetObserver);
+
+        result = {};
+        status = {};
+        SendRequest(runtime, streamSender, MakeStreamRequest(streamSender, "SELECT sum(value) FROM `/Root/table-1`;", false));
+
+        waitFor([&]{ return blockedSnapshots.size() > 0; }, "snapshot response");
+
+        // Start a split, surprisingly it will succeed despite blocked events
+        auto senderSplit = runtime.AllocateEdgeActor();
+        ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards.at(0), 55 /* splitKey */);
+        WaitTxNotification(server, senderSplit, txId);
+
+        // Unblock snapshot and try waiting for results
+        runtime.SetObserverFunc(prevObserverFunc);
+        for (auto& ev : blockedSnapshots) {
+            ui32 nodeIdx = ev->GetRecipientRewrite().NodeId() - runtime.GetNodeId(0);
+            Cerr << "... unblocking snapshot" << Endl;
+            runtime.Send(ev.Release(), nodeIdx, true);
+        }
+        blockedSnapshots.clear();
+
+        SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_C(!status, "Query finished with status: " << *status);
+        UNIT_ASSERT_C(!result, "Query returned unexpected result: " << *result);
+
+        // Unblock storage reads and wait for result
+        for (auto& ev : blockedGets) {
+            ui32 nodeIdx = ev->GetRecipientRewrite().NodeId() - runtime.GetNodeId(0);
+            Cerr << "... unblocking get" << Endl;
+            runtime.Send(ev.Release(), nodeIdx, true);
+        }
+        blockedGets.clear();
+
+        waitFor([&]{ return bool(status); }, "request finish");
+        UNIT_ASSERT_VALUES_EQUAL(*status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(*result, 596400);
+    }
+
 }
 
 } // namespace NKqp
 } // namespace NKikimr
-

@@ -554,8 +554,31 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
         buildIndexId, target, seqNo, dataShardId, datashardActorId, schemeshardActorId, range, targetIndexColumns, targetDataColumns, tableInfo, limits);
 }
 
+class TDataShard::TTxHandleSafeBuildIndexScan : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHandleSafeBuildIndexScan(TDataShard* self, TEvDataShard::TEvBuildIndexCreateRequest::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev))
+    {}
 
-void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
+    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+        Self->HandleSafe(Ev, ctx);
+        return true;
+    }
+
+    void Complete(const TActorContext&) {
+        // nothing
+    }
+
+private:
+    TEvDataShard::TEvBuildIndexCreateRequest::TPtr Ev;
+};
+
+void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext&) {
+    Execute(new TTxHandleSafeBuildIndexScan(this, std::move(ev)));
+}
+
+void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -644,6 +667,12 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
                    << " , path id is " <<tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
                    << " , snapshot step is " <<  snapshotKey.Step
                    << " , snapshot tx is " <<  snapshotKey.TxId);
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
+    if (!IsStateActive()) {
+        badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         ctx.Send(ev->Sender, std::move(response));
         return;
     }

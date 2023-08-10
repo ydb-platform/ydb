@@ -32,7 +32,7 @@ java {
     withJavadocJar()
 }
 
-dependencies{
+dependencies {
 {% for target in targets -%}
 {% if target.junit5_test -%}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")

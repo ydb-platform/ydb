@@ -2,13 +2,13 @@
 
 LIBRARY()
 
-VERSION(0.8.0)
-
-ORIGINAL_SOURCE(https://github.com/Cyan4973/xxHash/archive/v0.8.0.tar.gz)
-
 LICENSE(BSD-2-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+VERSION(0.8.2)
+
+ORIGINAL_SOURCE(https://github.com/Cyan4973/xxHash/archive/v0.8.2.tar.gz)
 
 NO_COMPILER_WARNINGS()
 

@@ -11,7 +11,7 @@ bool TDqIntegrationBase::CanRead(const TExprNode&, TExprContext&, bool) {
     return false;
 }
 
-TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TExprNode &, TExprContext&) {
+TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TVector<const TExprNode*> &, TExprContext&) {
     return Nothing();
 }
 

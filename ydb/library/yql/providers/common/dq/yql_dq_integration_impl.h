@@ -9,7 +9,7 @@ public:
     ui64 Partition(const TDqSettings& config, size_t maxPartitions, const TExprNode& node,
         TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, bool canFallback) override;
     bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues) override;
-    TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TExprNode& node, TExprContext& ctx) override;
+    TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) override;
     TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) override;
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override;
     TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) override;

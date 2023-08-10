@@ -339,7 +339,7 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
                         && dqIntegration->EstimateReadSize(
                             TDqSettings::TDefault::DataSizePerJob,
                             TDqSettings::TDefault::MaxTasksPerStage,
-                            *node.Ptr(),
+                            {node.Raw()},
                             ctx))
                     {
                         txRes.Ops.insert(node.Raw());

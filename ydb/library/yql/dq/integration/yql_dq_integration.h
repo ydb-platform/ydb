@@ -42,7 +42,7 @@ public:
         TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, bool canFallback) = 0;
     virtual bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues = false) { Y_UNUSED(skipIssues); Y_UNUSED(node); Y_UNUSED(ctx); return true; }
     virtual bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues = true) = 0;
-    virtual TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TExprNode& node, TExprContext& ctx) = 0;
+    virtual TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) = 0;
 
     // Nothing if callable is not for writing,

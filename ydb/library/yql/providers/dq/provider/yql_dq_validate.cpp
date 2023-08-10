@@ -40,12 +40,11 @@ private:
             [](const TExprNode::TPtr& n) {
                 return !TDqConnection::Match(n.Get()) && !TDqPhyPrecompute::Match(n.Get()) && !TDqReadWrapBase::Match(n.Get());
             },
-            [&hasErrors, &ctx = Ctx_, &dataSize = DataSize_, &typeCtx = TypeCtx_, &state = State_](const TExprNode::TPtr& n) {
+            [&readPerProvider_ = ReadsPerProvider_, &hasErrors, &ctx = Ctx_, &typeCtx = TypeCtx_](const TExprNode::TPtr& n) {
                 if (TCoScriptUdf::Match(n.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(n->Head().Content()))) {
                     ReportError(ctx, *n, TStringBuilder() << "Cannot execute system python udf " << n->Content() << " in DQ");
                     hasErrors = true;
                 }
-                
                 if (!typeCtx.ForceDq && TDqReadWrapBase::Match(n.Get())) {
                     auto readNode = n->Child(0);
                     auto dataSourceName = readNode->Child(1)->Child(0)->Content();
@@ -54,13 +53,7 @@ private:
                         YQL_ENSURE(datasource);
                         auto dqIntegration = (*datasource)->GetDqIntegration();
                         YQL_ENSURE(dqIntegration);
-                        if (dqIntegration) {
-                            TMaybe<ui64> size;
-                            hasErrors |= !(size = dqIntegration->EstimateReadSize(state->Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob), state->Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage), *readNode, ctx));
-                            if (size) {
-                                dataSize += *size;
-                            }
-                        }
+                        readPerProvider_[dqIntegration].push_back(readNode);
                     }
                 }
                 return !hasErrors;
@@ -153,9 +146,22 @@ public:
         });
 
         bool hasError = false;
-        
+
         for (const auto n: dqNodes) {
             hasError |= !ValidateDqNode(*n);
+            if (hasError) {
+                break;
+            }
+        }
+
+        for (auto& [integration, nodes]: ReadsPerProvider_) {
+            TMaybe<ui64> size;
+            hasError |= !(size = integration->EstimateReadSize(State_->Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob), 
+                State_->Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage), nodes, Ctx_));
+            if (hasError) {
+                break;
+            }
+            DataSize_ += *size;
         }
 
         if (!hasError && hasJoin && DataSize_ > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB)) {
@@ -169,6 +175,7 @@ private:
     const TTypeAnnotationContext& TypeCtx_;
     TExprContext& Ctx_;
     TNodeSet Visited_;
+    THashMap<IDqIntegration*, TVector<const TExprNode*>> ReadsPerProvider_;
     size_t DataSize_ = 0;
     const TDqState::TPtr State_;
     

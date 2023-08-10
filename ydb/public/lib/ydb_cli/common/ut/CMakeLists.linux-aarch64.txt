@@ -30,6 +30,7 @@ target_link_options(ydb-public-lib-ydb_cli-common-ut PRIVATE
 )
 target_sources(ydb-public-lib-ydb_cli-common-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/csv_parser_ut.cpp
 )
 set_property(
   TARGET

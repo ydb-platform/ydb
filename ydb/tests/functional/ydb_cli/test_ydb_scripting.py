@@ -7,6 +7,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 import os
 import logging
+import pytest
 
 
 logger = logging.getLogger(__name__)
@@ -354,6 +355,7 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
         return self.script_from_file(["yql"])
 
 
+@pytest.mark.parametrize("command", ["scripting", "stream"])
 class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase):
     @classmethod
     def setup_class(cls):
@@ -367,6 +369,22 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
     def write_data(data, filename="stdin.txt"):
         with open(filename, "w") as file:
             file.write(data)
+
+    @staticmethod
+    def get_delim(format):
+        if format == "csv":
+            return ","
+        elif format == "tsv":
+            return "\t"
+        raise RuntimeError("Unknown format: {}".format(format))
+
+    @staticmethod
+    def get_command(name):
+        if name == "scripting":
+            return ["scripting", "yql"]
+        elif name == "stream":
+            return ["yql"]
+        raise RuntimeError("Unknown command name: {}".format(name))
 
     @classmethod
     def get_stdin(cls):
@@ -383,36 +401,53 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '   "val": 32\n' \
             '}'
         script = "DECLARE $s AS Utf8; "\
-                 "DECLARE $val AS Uint64; "\
-                 "SELECT $s AS s, $val AS val; "
+                "DECLARE $val AS Uint64; "\
+                "SELECT $s AS s, $val AS val; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script], self.get_stdin())
+        output = self.execute_ydb_cli_command(command + ["-s", script], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output)
 
-    def text_data(self, command):
+    def simple_csv_tsv(self, command, format):
+        param_data = 's{0}val\n' \
+            '\"Some_s{0}tring\"{0}32'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $s AS Utf8; "\
+                "DECLARE $val AS Uint64; "\
+                "SELECT $s AS s, $val AS val; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", format], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def stdin_par_raw(self, command):
         param_data = 'Line1\n' \
             'Line2\n' \
             'Line3\n'
         script = "DECLARE $s AS Utf8; " \
-                 "SELECT $s AS s; "
+                "SELECT $s AS s; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s"],
-            self.get_stdin()
-        )
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output)
 
-    def unnamed_json(self, command):
+    def stdin_par_json(self, command):
         param_data = "[1, 2, 3, 4]"
         script = "DECLARE $arr AS List<Uint64>; "\
-                 "SELECT $arr AS arr; "
+                "SELECT $arr AS arr; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-par", "arr"],
-            self.get_stdin()
-        )
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-par", "arr"], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def stdin_par_csv_tsv(self, command, format):
+        param_data = 'id{0}value\n' \
+            '1{0}"ab{0}a"'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $s AS Struct<id:UInt64,value:Utf8>; " \
+                "SELECT $s AS s; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", format, "--stdin-par", "s"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output)
 
@@ -425,19 +460,18 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '   "val": 32\n' \
             '}'
         script = "DECLARE $s AS String; " \
-                 "DECLARE $date AS Date; " \
-                 "DECLARE $val AS Uint64; " \
-                 "SELECT $s AS s, $date AS date, $val AS val; "
+                "DECLARE $date AS Date; " \
+                "DECLARE $val AS Uint64; " \
+                "SELECT $s AS s, $date AS date, $val AS val; "
         self.write_data(param_data1)
         self.write_data(param_data2, "params.json")
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-par", "s", "--stdin-format", "raw", "--param-file", "params.json"],
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-par", "s", "--stdin-format", "raw", "--param-file", "params.json"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def different_sources(self, command):
+    def different_sources_json(self, command):
         param_data1 = '{\n' \
             '   "s": "Строка utf-8"\n' \
             '}'
@@ -445,63 +479,91 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '   "date": "2000-09-01"\n' \
             '}'
         script = "DECLARE $s AS Utf8; " \
-                 "DECLARE $date AS Date; " \
-                 "DECLARE $val AS Uint64; " \
-                 "SELECT $s AS s, $date AS date, $val AS val; "
+                "DECLARE $date AS Date; " \
+                "DECLARE $val AS Uint64; " \
+                "SELECT $s AS s, $date AS date, $val AS val; "
         self.write_data(param_data1)
         self.write_data(param_data2, "params.json")
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--param-file", "params.json", "--param", "$val=100"],
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--param-file", "params.json", "--param", "$val=100"], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def different_sources_csv_tsv(self, command, format):
+        param_data1 = 's\n' \
+            '\"Some_s{0}tring\"'
+        param_data1 = param_data1.format(self.get_delim(format))
+        param_data2 = '{\n' \
+            '   "date": "2000-09-01"\n' \
+            '}'
+        script = "DECLARE $s AS Utf8; " \
+                "DECLARE $date AS Date; " \
+                "DECLARE $val AS Uint64; " \
+                "SELECT $s AS s, $date AS date, $val AS val; "
+        self.write_data(param_data1)
+        self.write_data(param_data2, "params.json")
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", format, "--param-file", "params.json", "--param", "$val=100"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def framing_newline_delimited(self, command):
+    def framing_newline_delimited_json(self, command):
         param_data = '{"s": "Some text", "num": 1}\n' \
             '{"s": "Строка 1\\nСтрока2", "num": 2}\n' \
             '{"s": "Abacaba", "num": 3}\n'
         script = "DECLARE $s AS Utf8; " \
-                 "DECLARE $num AS Uint64; " \
-                 "SELECT $s AS s, $num AS num; "
+                "DECLARE $num AS Uint64; " \
+                "SELECT $s AS s, $num AS num; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-format", "newline-delimited"],
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", "newline-delimited"], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def framing_newline_delimited_csv_tsv(self, command, format):
+        param_data = 's{0}num\n' \
+            'Some text{0}1\n' \
+            '"Строка 1\nСтрока2"{0}2\n' \
+            'Abacaba{0}3\n'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $s AS Utf8; " \
+                "DECLARE $num AS Uint64; " \
+                "SELECT $s AS s, $num AS num; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def text_data_framing(self, command):
+    def framing_newline_delimited_raw(self, command):
         param_data = 'Line1\n' \
             'Line2\n' \
             'Line3\n'
         script = "DECLARE $s AS Utf8; " \
-                 "SELECT $s AS s; "
+                "SELECT $s AS s; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
+        output = self.execute_ydb_cli_command(
             command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s", "--stdin-format", "newline-delimited"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def batching_full(self, command):
+    def batching_full_raw(self, command):
         param_data = 'Line1\n' \
             'Line2\n' \
             'Line3\n'
         script = "DECLARE $s AS List<Utf8>; " \
-                 "SELECT $s AS s; "
+                "SELECT $s AS s; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s",
-                       "--stdin-format", "newline-delimited", "--batch", "full"],
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s", "--stdin-format", "newline-delimited", "--batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def batching_adaptive(self, command):
+    def batching_full_json(self, command):
         param_data = '{"s": "Line1", "id": 1}\n' \
             '{"s": "Line2", "id": 2}\n' \
             '{"s": "Line3", "id": 3}\n' \
@@ -511,88 +573,273 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '{"s": "Line7", "id": 7}\n' \
             '{"s": "Line8", "id": 8}\n' \
             '{"s": "Line9", "id": 9}\n'
-        script = "DECLARE $arr AS List<Struct<s:Utf8, id:Uint64>>; " \
-                 "SELECT $arr AS arr; "
+        script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
+                "SELECT $arr as arr; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--stdin-par", "arr", "--stdin-format", "newline-delimited",
-                       "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-par", "arr", "--stdin-format", "newline-delimited", "--batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def ignore_excess_parameters(self, command):
+    def batching_full_csv_tsv(self, command, format):
+        param_data = 's{0}id\n' \
+            'Line1{0}1\n' \
+            'Line2{0}2\n' \
+            'Line3{0}3\n' \
+            'Line4{0}4\n' \
+            'Line5{0}5\n' \
+            'Line6{0}6\n' \
+            'Line7{0}7\n' \
+            'Line8{0}8\n' \
+            'Line9{0}9'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
+                "SELECT $arr as arr; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", format, "--stdin-par", "arr", "--stdin-format", "newline-delimited", "--batch", "full"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def batching_adaptive_raw(self, command):
+        param_data = 'Line1\n' \
+            'Line2\n' \
+            'Line3\n' \
+            'Line4\n' \
+            'Line5\n' \
+            'Line6\n' \
+            'Line7\n' \
+            'Line8\n' \
+            'Line9\n'
+        script = "DECLARE $s AS List<Utf8>; " \
+                "SELECT $s AS s; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s",
+             "--stdin-format", "newline-delimited", "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def batching_adaptive_json(self, command):
+        param_data = '{"s": "Line1", "id": 1}\n' \
+            '{"s": "Line2", "id": 2}\n' \
+            '{"s": "Line3", "id": 3}\n' \
+            '{"s": "Line4", "id": 4}\n' \
+            '{"s": "Line5", "id": 5}\n' \
+            '{"s": "Line6", "id": 6}\n' \
+            '{"s": "Line7", "id": 7}\n' \
+            '{"s": "Line8", "id": 8}\n' \
+            '{"s": "Line9", "id": 9}\n'
+        script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
+                "SELECT $arr as arr; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-par", "arr", "--stdin-format", "newline-delimited",
+             "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def batching_adaptive_csv_tsv(self, command, format):
+        param_data = 's{0}id\n' \
+            'Line1{0}1\n' \
+            'Line2{0}2\n' \
+            'Line3{0}3\n' \
+            'Line4{0}4\n' \
+            'Line5{0}5\n' \
+            'Line6{0}6\n' \
+            'Line7{0}7\n' \
+            'Line8{0}8\n' \
+            'Line9{0}9'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
+                "SELECT $arr as arr; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", format, "--stdin-par", "arr", "--stdin-format", "newline-delimited",
+             "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def ignore_excess_parameters_json(self, command):
         param_data = '{\n' \
             '   "a": 12,\n' \
             '   "b": 34' \
             '}'
         script = "DECLARE $a AS Uint64; " \
-                 "SELECT $a AS a; "
+                "SELECT $a AS a; "
         self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script],
+        output = self.execute_ydb_cli_command(command + ["-s", script], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def ignore_excess_parameters_csv_tsv(self, command, format):
+        param_data = 'a{0}b\n' \
+            '12{0}34\n'
+        param_data = param_data.format(self.get_delim(format))
+        print(param_data)
+        script = "DECLARE $a AS Uint64; " \
+                "SELECT $a AS a; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(command + ["-s", script, "--stdin-format", format], self.get_stdin())
+        self.close_stdin()
+        return self.canonical_result(output)
+
+    def columns_bad_header(self, command, format):
+        param_data = 'x{0}y\n' \
+            '1{0}1\n' \
+            '2{0}2\n' \
+            '3{0}3\n'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $a AS Uint64; " \
+                "DECLARE $b AS Uint64; " \
+                "SELECT $a AS a, $b AS b; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited",
+             "--columns", "a{0}b".format(self.get_delim(format)), "--skip-rows", "1"],
             self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output)
 
-    def test_simple_json(self):
-        return self.simple_json(["scripting", "yql"])
+    def columns_no_header(self, command, format):
+        param_data = '1{0}1\n' \
+            '2{0}2\n' \
+            '3{0}3\n'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $a AS Uint64; " \
+                "DECLARE $b AS Uint64; " \
+                "SELECT $a AS a, $b AS b; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited",
+             "--columns", "a{0}b".format(self.get_delim(format))],
+            self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
 
-    def test_text_data(self):
-        return self.text_data(["scripting", "yql"])
+    def skip_rows(self, command, format):
+        param_data = 'a{0}b\n' \
+            'x{0}x\n' \
+            'x{0}x\n' \
+            'x{0}x\n' \
+            '1{0}1\n' \
+            '2{0}2\n' \
+            '3{0}3\n'
+        param_data = param_data.format(self.get_delim(format))
+        script = "DECLARE $a AS Uint64; " \
+                "DECLARE $b AS Uint64; " \
+                "SELECT $a AS a, $b AS b; "
+        self.write_data(param_data)
+        output = self.execute_ydb_cli_command(
+            command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited", "--skip-rows", "3"], self.get_stdin()
+        )
+        self.close_stdin()
+        return self.canonical_result(output)
 
-    def test_unnamed_json(self):
-        return self.unnamed_json(["scripting", "yql"])
+    def test_simple_json(self, command):
+        return self.simple_json(self.get_command(command))
 
-    def test_mix_json_and_binary(self):
-        return self.mix_json_and_binary(["scripting", "yql"])
+    def test_simple_csv(self, command):
+        return self.simple_csv_tsv(self.get_command(command), "csv")
 
-    def test_different_sources(self):
-        return self.different_sources(["scripting", "yql"])
+    def test_simple_tsv(self, command):
+        return self.simple_csv_tsv(self.get_command(command), "tsv")
 
-    def test_framing_newline_delimited(self):
-        return self.framing_newline_delimited(["scripting", "yql"])
+    def test_stdin_par_raw(self, command):
+        return self.stdin_par_raw(self.get_command(command))
 
-    def test_text_data_framing(self):
-        return self.text_data_framing(["scripting", "yql"])
+    def test_stdin_par_json(self, command):
+        return self.stdin_par_json(self.get_command(command))
 
-    def test_batching_full(self):
-        return self.batching_full(["scripting", "yql"])
+    def test_stdin_par_csv(self, command):
+        return self.stdin_par_csv_tsv(self.get_command(command), "csv")
 
-    def test_batching_adaptive(self):
-        return self.batching_adaptive(["scripting", "yql"])
+    def test_stdin_par_tsv(self, command):
+        return self.stdin_par_csv_tsv(self.get_command(command), "tsv")
 
-    def test_ignore_excess_parameters(self):
-        return self.ignore_excess_parameters(["scripting", "yql"])
+    def test_mix_json_and_binary(self, command):
+        return self.mix_json_and_binary(self.get_command(command))
 
-    def test_stream_simple_json(self):
-        return self.simple_json(["yql"])
+    def test_different_sources_json(self, command):
+        return self.different_sources_json(self.get_command(command))
 
-    def test_stream_text_data(self):
-        return self.text_data(["yql"])
+    def test_different_sources_csv(self, command):
+        return self.different_sources_csv_tsv(self.get_command(command), "csv")
 
-    def test_stream_unnamed_json(self):
-        return self.unnamed_json(["yql"])
+    def test_different_sources_tsv(self, command):
+        return self.different_sources_csv_tsv(self.get_command(command), "tsv")
 
-    def test_stream_mix_json_and_binary(self):
-        return self.mix_json_and_binary(["yql"])
+    def test_framing_newline_delimited_json(self, command):
+        return self.framing_newline_delimited_json(self.get_command(command))
 
-    def test_stream_different_sources(self):
-        return self.different_sources(["yql"])
+    def test_framing_newline_delimited_csv(self, command):
+        return self.framing_newline_delimited_csv_tsv(self.get_command(command), "csv")
 
-    def test_stream_framing_newline_delimited(self):
-        return self.framing_newline_delimited(["yql"])
+    def test_framing_newline_delimited_tsv(self, command):
+        return self.framing_newline_delimited_csv_tsv(self.get_command(command), "tsv")
 
-    def test_stream_text_data_framing(self):
-        return self.text_data_framing(["yql"])
+    def test_framing_newline_delimited_raw(self, command):
+        return self.framing_newline_delimited_raw(self.get_command(command))
 
-    def test_stream_batching_full(self):
-        return self.batching_full(["yql"])
+    def test_batching_full_raw(self, command):
+        return self.batching_full_raw(self.get_command(command))
 
-    def test_stream_batching_adaptive(self):
-        return self.batching_adaptive(["yql"])
+    def test_batching_full_json(self, command):
+        return self.batching_full_json(self.get_command(command))
 
-    def test_stream_ignore_excess_parameters(self):
-        return self.ignore_excess_parameters(["yql"])
+    def test_batching_full_csv(self, command):
+        return self.batching_full_csv_tsv(self.get_command(command), "csv")
+
+    def test_batching_full_tsv(self, command):
+        return self.batching_full_csv_tsv(self.get_command(command), "tsv")
+
+    def test_batching_adaptive_raw(self, command):
+        return self.batching_adaptive_raw(self.get_command(command))
+
+    def test_batching_adaptive_json(self, command):
+        return self.batching_adaptive_json(self.get_command(command))
+
+    def test_batching_adaptive_csv(self, command):
+        return self.batching_adaptive_csv_tsv(self.get_command(command), "csv")
+
+    def test_batching_adaptive_tsv(self, command):
+        return self.batching_adaptive_csv_tsv(self.get_command(command), "tsv")
+
+    def test_ignore_excess_parameters_json(self, command):
+        return self.ignore_excess_parameters_json(self.get_command(command))
+
+    def test_ignore_excess_parameters_csv(self, command):
+        return self.ignore_excess_parameters_csv_tsv(self.get_command(command), "csv")
+
+    def test_ignore_excess_parameters_tsv(self, command):
+        return self.ignore_excess_parameters_csv_tsv(self.get_command(command), "tsv")
+
+    def test_columns_bad_header_csv(self, command):
+        return self.columns_bad_header(self.get_command(command), "csv")
+
+    def test_columns_bad_header_tsv(self, command):
+        return self.columns_bad_header(self.get_command(command), "tsv")
+
+    def test_columns_no_header_csv(self, command):
+        return self.columns_no_header(self.get_command(command), "csv")
+
+    def test_columns_no_header_tsv(self, command):
+        return self.columns_no_header(self.get_command(command), "tsv")
+
+    def test_skip_rows_csv(self, command):
+        return self.skip_rows(self.get_command(command), "csv")
+
+    def test_skip_rows_tsv(self, command):
+        return self.skip_rows(self.get_command(command), "tsv")

@@ -4,11 +4,13 @@ SRCS(
     aws.cpp
     command.cpp
     common.cpp
+    csv_parser.cpp
     examples.cpp
     format.cpp
     interactive.cpp
     interruptible.cpp
     normalize_path.cpp
+    parameter_stream.cpp
     parameters.cpp
     pretty_table.cpp
     print_operation.cpp
@@ -32,6 +34,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/json/writer
     library/cpp/yaml/as
+    library/cpp/string_utils/csv
     ydb/public/lib/json_value
     ydb/public/lib/operation_id
     ydb/public/lib/yson_value

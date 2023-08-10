@@ -49,6 +49,8 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         EOutputFormat::JsonUnicode,
         EOutputFormat::JsonBase64,
         EOutputFormat::Raw,
+        EOutputFormat::Csv,
+        EOutputFormat::Tsv
     }, {
         EOutputFormat::NoFraming,
         EOutputFormat::NewlineDelimited
@@ -110,7 +112,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
             ValidateResult = MakeHolder<NScripting::TExplainYqlResult>(
                 ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate));
             THolder<TParamsBuilder> paramBuilder;
-            while (GetNextParams(ValidateResult->GetParameterTypes(), InputFormat, StdinFormat, FramingFormat, paramBuilder)) {
+            while (GetNextParams(paramBuilder)) {
                 auto asyncResult = client.ExecuteYqlScript(
                         Script,
                         paramBuilder->Build(),

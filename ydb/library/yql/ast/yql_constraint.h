@@ -191,6 +191,9 @@ public:
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
+
+    const TSortedConstraintNode* GetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const;
+    const TSortedConstraintNode* GetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const;
 private:
     TContainerType Content_;
 };
@@ -228,6 +231,9 @@ public:
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
     const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
+
+    const TChoppedConstraintNode* GetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const;
+    const TChoppedConstraintNode* GetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const;
 private:
     TSetOfSetsType Sets_;
 };

@@ -372,7 +372,7 @@ private:
         }
 
         if (const auto sorted = DeduceSortConstraint(*input->Child(1), *input->Child(2), ctx)) {
-            input->AddConstraint(sorted);
+            input->AddConstraint(sorted->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
         }
 
         return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
@@ -470,7 +470,7 @@ private:
 
         if constexpr (UseSort) {
             if (const auto sorted = DeduceSortConstraint(*input->Child(2), *input->Child(3), ctx)) {
-                input->AddConstraint(sorted);
+                input->AddConstraint(sorted->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
             }
         }
 

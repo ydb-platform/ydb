@@ -148,6 +148,63 @@ bool TConstraintSet::FilterConstraints(const TPredicate& predicate) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+size_t GetElementsCount(const TTypeAnnotationNode* type) {
+    if (type) {
+        switch (type->GetKind()) {
+            case ETypeAnnotationKind::Tuple:  return type->Cast<TTupleExprType>()->GetSize();
+            case ETypeAnnotationKind::Multi:  return type->Cast<TMultiExprType>()->GetSize();
+            case ETypeAnnotationKind::Struct: return type->Cast<TStructExprType>()->GetSize();
+            default: break;
+        }
+    }
+    return 0U;
+}
+
+std::deque<std::string_view> GetAllItemTypeFields(const TTypeAnnotationNode* type, TExprContext& ctx) {
+    std::deque<std::string_view> fields;
+    if (type) {
+        switch (type->GetKind()) {
+            case ETypeAnnotationKind::Struct:
+                if (const auto structType = type->Cast<TStructExprType>()) {
+                    fields.resize(structType->GetSize());
+                    std::transform(structType->GetItems().cbegin(), structType->GetItems().cend(), fields.begin(), std::bind(&TItemExprType::GetName, std::placeholders::_1));
+                }
+                break;
+            case ETypeAnnotationKind::Tuple:
+                if (const auto size = type->Cast<TTupleExprType>()->GetSize()) {
+                    fields.resize(size);
+                    ui32 i = 0U;
+                    std::generate(fields.begin(), fields.end(), [&]() { return ctx.GetIndexAsString(i++); });
+                }
+                break;
+            case ETypeAnnotationKind::Multi:
+                if (const auto size = type->Cast<TMultiExprType>()->GetSize()) {
+                    fields.resize(size);
+                    ui32 i = 0U;
+                    std::generate(fields.begin(), fields.end(), [&]() { return ctx.GetIndexAsString(i++); });
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    return fields;
+}
+
+TConstraintNode::TSetOfSetsType MakeFullSet(const TConstraintNode::TSetType& keys) {
+    TConstraintNode::TSetOfSetsType sets;
+    sets.reserve(sets.size());
+    for (const auto& key : keys)
+        sets.insert_unique(TConstraintNode::TSetType{key});
+    return sets;
+}
+
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
     : TConstraintNode(ctx, Name()), Content_(std::move(content))
 {
@@ -406,62 +463,82 @@ const TConstraintNode* TSortedConstraintNode::OnlySimpleColumns(TExprContext& ct
     return FilterFields(ctx, std::bind(std::equal_to<TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
 }
 
+const TSortedConstraintNode*
+TSortedConstraintNode::GetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    const auto& rowType = GetSeqItemType(type);
+    bool changed = false;
+    auto content = Content_;
+    for (auto it = content.begin(); content.end() != it;) {
+        const auto subType = GetSubTypeByPath(it->first.front(), rowType);
+        auto fields = GetAllItemTypeFields(subType, ctx);
+        for (auto j = it->first.cbegin(); it->first.cend() != ++j;) {
+            if (!IsSameAnnotation(*GetSubTypeByPath(*j, rowType), *subType)) {
+                fields.clear();
+                break;
+            }
+        }
+
+        if (fields.empty() || ETypeAnnotationKind::Struct == subType->GetKind())
+            ++it;
+        else {
+            changed = true;
+            const bool dir = it->second;
+            auto set = it->first;
+            for (auto& path : set)
+                path.emplace_back();
+            for (it = content.erase(it); !fields.empty(); fields.pop_front()) {
+                auto paths = set;
+                for (auto& path : paths)
+                    path.back() = fields.front();
+                it = content.emplace(it, std::move(paths), dir);
+                ++it;
+            }
+        }
+    }
+
+    return changed ? ctx.MakeConstraint<TSortedConstraintNode>(std::move(content)) : this;
+}
+
+const TSortedConstraintNode*
+TSortedConstraintNode::GetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    if (Content_.size() == 1U && Content_.front().first.size() == 1U && Content_.front().first.front().size() == 1U && Content_.front().first.front().front().empty())
+        return GetComplicatedForType(type, ctx);
+
+    const auto& rowType = GetSeqItemType(type);
+    const auto getPrefix = [](TConstraintNode::TPathType path) {
+        path.pop_back();
+        return path;
+    };
+
+    bool changed = false;
+    auto content = Content_;
+    for (bool setChanged = true; setChanged;) {
+        setChanged = false;
+        for (auto it = content.begin(); content.end() != it;) {
+            if (it->first.size() != 1U || it->first.front().size() <= 1U)
+                ++it;
+            else {
+                const auto prefix = getPrefix(it->first.front());
+                if (const auto subType = GetSubTypeByPath(prefix, rowType); it->first.front().back() == ctx.GetIndexAsString(0U) && ETypeAnnotationKind::Struct != subType->GetKind()) {
+                    auto from = it++;
+                    for (auto i = 1U; content.cend() != it && it->first.size() == 1U && it->first.front().size() > 1U && ctx.GetIndexAsString(i) == it->first.front().back() && prefix == getPrefix(it->first.front()) && from->second == it->second; ++i)
+                        ++it;
+
+                    if (ssize_t(GetElementsCount(subType)) == std::distance(from, it)) {
+                        *from++ = std::make_pair(TConstraintNode::TSetType{std::move(prefix)}, from->second);
+                        it = content.erase(from, it);
+                        changed = setChanged = true;
+                    }
+                } else
+                    ++it;
+            }
+        }
+    }
+
+    return changed ? ctx.MakeConstraint<TSortedConstraintNode>(std::move(content)) : this;
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-size_t GetElementsCount(const TTypeAnnotationNode* type) {
-    if (type) {
-        switch (type->GetKind()) {
-            case ETypeAnnotationKind::Tuple:  return type->Cast<TTupleExprType>()->GetSize();
-            case ETypeAnnotationKind::Multi:  return type->Cast<TMultiExprType>()->GetSize();
-            case ETypeAnnotationKind::Struct: return type->Cast<TStructExprType>()->GetSize();
-            default: break;
-        }
-    }
-    return 0U;
-}
-
-std::deque<std::string_view> GetAllItemTypeFields(const TTypeAnnotationNode* type, TExprContext& ctx) {
-    std::deque<std::string_view> fields;
-    if (type) {
-        switch (type->GetKind()) {
-            case ETypeAnnotationKind::Struct:
-                if (const auto structType = type->Cast<TStructExprType>()) {
-                    fields.resize(structType->GetSize());
-                    std::transform(structType->GetItems().cbegin(), structType->GetItems().cend(), fields.begin(), std::bind(&TItemExprType::GetName, std::placeholders::_1));
-                }
-                break;
-            case ETypeAnnotationKind::Tuple:
-                if (const auto size = type->Cast<TTupleExprType>()->GetSize()) {
-                    fields.resize(size);
-                    ui32 i = 0U;
-                    std::generate(fields.begin(), fields.end(), [&]() { return ctx.GetIndexAsString(i++); });
-                }
-                break;
-            case ETypeAnnotationKind::Multi:
-                if (const auto size = type->Cast<TMultiExprType>()->GetSize()) {
-                    fields.resize(size);
-                    ui32 i = 0U;
-                    std::generate(fields.begin(), fields.end(), [&]() { return ctx.GetIndexAsString(i++); });
-                }
-                break;
-            default:
-                break;
-        }
-    }
-    return fields;
-}
-
-TConstraintNode::TSetOfSetsType MakeFullSet(const TConstraintNode::TSetType& keys) {
-    TConstraintNode::TSetOfSetsType sets;
-    sets.reserve(sets.size());
-    for (const auto& key : keys)
-        sets.insert_unique(TConstraintNode::TSetType{key});
-    return sets;
-}
-
-}
 
 TChoppedConstraintNode::TChoppedConstraintNode(TExprContext& ctx, TSetOfSetsType&& sets)
     : TConstraintNode(ctx, Name()), Sets_(std::move(sets))
@@ -687,6 +764,75 @@ bool TChoppedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type)
 
 const TConstraintNode* TChoppedConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
     return FilterFields(ctx, std::bind(std::equal_to<typename TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
+}
+
+const TChoppedConstraintNode*
+TChoppedConstraintNode::GetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    const auto& rowType = GetSeqItemType(type);
+    bool changed = false;
+    auto sets = Sets_;
+    for (auto it = sets.begin(); sets.end() != it;) {
+        auto fields = GetAllItemTypeFields(GetSubTypeByPath(it->front(), rowType), ctx);
+        for (auto j = it->cbegin(); it->cend() != ++j;) {
+            if (const auto& copy = GetAllItemTypeFields(GetSubTypeByPath(*j, rowType), ctx); copy != fields) {
+                fields.clear();
+                break;
+            }
+        }
+
+        if (fields.empty())
+            ++it;
+        else {
+            changed = true;
+            auto set = *it;
+            for (auto& path : set)
+                path.emplace_back();
+            for (it = sets.erase(it); !fields.empty(); fields.pop_front()) {
+                auto paths = set;
+                for (auto& path : paths)
+                    path.back() = fields.front();
+                it = sets.insert_unique(std::move(paths)).first;
+            }
+        }
+    }
+
+    return changed ? ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets)) : this;
+}
+
+const TChoppedConstraintNode*
+TChoppedConstraintNode::GetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
+    if (Sets_.size() == 1U && Sets_.front().size() == 1U && Sets_.front().front().empty())
+        return GetComplicatedForType(type, ctx);
+
+    const auto& rowType = GetSeqItemType(type);
+    const auto getPrefix = [](TConstraintNode::TPathType path) {
+        path.pop_back();
+        return path;
+    };
+
+    bool changed = false;
+    auto sets = Sets_;
+    for (bool setChanged = true; setChanged;) {
+        setChanged = false;
+        for (auto it = sets.begin(); sets.end() != it;) {
+            if (it->size() != 1U || it->front().size() <= 1U)
+                ++it;
+            else {
+                auto from = it++;
+                const auto prefix = getPrefix(from->front());
+                while (sets.cend() != it && it->size() == 1U && it->front().size() > 1U && prefix == getPrefix(it->front()))
+                    ++it;
+
+                if (ssize_t(GetElementsCount(GetSubTypeByPath(prefix, rowType))) == std::distance(from, it)) {
+                    *from++ = TConstraintNode::TSetType{std::move(prefix)};
+                    it = sets.erase(from, it);
+                    changed = setChanged = true;
+                }
+            }
+        }
+    }
+
+    return changed ? ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets)) : this;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////

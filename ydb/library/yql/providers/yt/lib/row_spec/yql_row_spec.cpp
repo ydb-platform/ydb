@@ -493,8 +493,8 @@ void TYqlRowSpecInfo::ParseDefValues(const NYT::TNode& rowSpecAttr) {
 }
 
 bool TYqlRowSpecInfo::HasNonTrivialSort() const {
-    return Sorted && std::any_of(Sorted->GetContent().cbegin(), Sorted->GetContent().cend(),
-        [](const TSortedConstraintNode::TContainerType::value_type& item) {return 1U != item.first.size() || 1U != item.first.front().size(); });
+    return Sorted && (HasAuxColumns() || std::any_of(Sorted->GetContent().cbegin(), Sorted->GetContent().cend(),
+        [](const TSortedConstraintNode::TContainerType::value_type& item) {return 1U != item.first.size() || 1U != item.first.front().size(); }));
 }
 
 NYT::TNode TYqlRowSpecInfo::GetConstraintsNode() const {

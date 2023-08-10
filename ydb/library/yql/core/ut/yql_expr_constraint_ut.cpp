@@ -191,6 +191,48 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/4[desc];tuple/2[desc])");
     }
 
+    Y_UNIT_TEST(SortByAllTupleElementsInRightOrder) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y) (String 'b) (String 'v))))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value '((String 'z) (String 'c) (String 'w))))
+            ))
+            (let sorted (Sort list (Bool 'False) (lambda '(item) '((Nth (Member item 'value) '0) (Nth (Member item 'value) '1) (Nth (Member item 'value) '2)))))
+            (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple (Member item 'value))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value[desc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple[desc])");
+    }
+
+    Y_UNIT_TEST(SortByAllTupleElementsInWrongOrder) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value '((String 'x) (String 'a) (String 'u))))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value '((String 'y) (String 'b) (String 'v))))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value '((String 'z) (String 'c) (String 'w))))
+            ))
+            (let sorted (Sort list (Bool 'True) (lambda '(item) '((Nth (Member item 'value) '1) (Nth (Member item 'value) '0) (Nth (Member item 'value) '2)))))
+            (let map (OrderedMap sorted (lambda '(item) (AsStruct '('tuple (Member item 'value))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) map '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(value/1[asc];value/0[asc];value/2[asc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMap", "Sorted(tuple/1[asc];tuple/0[asc];tuple/2[asc])");
+    }
+
     Y_UNIT_TEST(SortByColumnAndExpr) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))

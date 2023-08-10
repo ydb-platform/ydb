@@ -2349,6 +2349,7 @@ Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EK
         case NKikimrTxDataShard::TError::UNKNOWN:
         case NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED:
         case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
+        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
             return Ydb::StatusIds::INTERNAL_ERROR;
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:
         case NKikimrTxDataShard::TError::READONLY:

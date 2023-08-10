@@ -6,7 +6,7 @@
 
 * Анонимный доступ — включен по умолчанию и доступен сразу после [установки кластера](../deploy/index.md).
 * [Аутентификация с использованием стороннего IAM-провайдера](#iam), например [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
-* Аутентификация по [логину и паролю](#static-credentions).
+* Аутентификация по [логину и паролю](#static-credentials).
 
 ## Аутентификация с использованием стороннего IAM-провайдера {#iam}
 
@@ -35,7 +35,7 @@
 
 {% include [overlay/auth_choose.md](_includes/connect_overlay/auth_choose.md) %}
 
-## Аутентификация по логину и паролю {#static-credentions}
+## Аутентификация по логину и паролю {#static-credentials}
 
 Процесс аутентификации по логину и паролю включает следующие шаги:
 

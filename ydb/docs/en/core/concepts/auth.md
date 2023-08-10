@@ -6,7 +6,7 @@ The following authentication modes are supported:
 
 * Anonymous access is enabled by default and available immediately when you [install the cluster](../deploy/index.md).
 * [Authentication through a third-party IAM provider](#iam), for example, [Yandex Identity and Access Management]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/){% endif %}.
-* Authentication by [username and password](#static-credentions).
+* Authentication by [username and password](#static-credentials).
 
 ## Authentication through a third-party IAM provider {#iam}
 
@@ -36,7 +36,7 @@ When using modes in which the {{ ydb-short-name }} client accesses the IAM syste
 
 {% include [overlay/auth_choose.md](_includes/connect_overlay/auth_choose.md) %}
 
-## Authenticating by username and password {#static-credentions}
+## Authenticating by username and password {#static-credentials}
 
 Authentication by username and password includes the following steps:
 

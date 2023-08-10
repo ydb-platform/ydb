@@ -17,7 +17,7 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TBatchPayloadDeserializer::Do
 
     std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
     arrow::io::BufferReader reader(buffer);
-    AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", Schema->num_fields());
+    AFL_TRACE(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", Schema->num_fields());
     auto batchResult = arrow::ipc::ReadRecordBatch(Schema, &dictMemo, options, &reader);
     if (!batchResult.ok()) {
         return batchResult;

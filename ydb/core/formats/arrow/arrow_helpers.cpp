@@ -413,15 +413,18 @@ static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
         TRawReplaceKey current(&columns, i);
         if constexpr (desc) {
             if (prev < current) {
+                AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "prev < current")("current", current.DebugString())("prev", prev.DebugString());
                 return false;
             }
         } else {
             if (current < prev) {
+                AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "current < prev")("current", current.DebugString())("prev", prev.DebugString());
                 return false;
             }
         }
         if constexpr (uniq) {
             if (prev == current) {
+                AFL_DEBUG(NKikimrServices::ARROW_HELPER)("event", "equal")("current", current.DebugString())("prev", prev.DebugString());
                 return false;
             }
         }

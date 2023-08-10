@@ -5,6 +5,9 @@
 #include <ydb/core/base/defs.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
+
+#include <util/string/builder.h>
+
 #include <compare>
 
 namespace NKikimr::NArrow {
@@ -27,6 +30,19 @@ public:
             Columns = columnsNew;
             Position = 0;
         }
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        for (auto&& i : *Columns) {
+            auto res = i->GetScalar(Position);
+            if (!res.ok()) {
+                sb << res.status().ToString() << ";";
+            } else {
+                sb << (*res)->ToString() << ";";
+            }
+        }
+        return sb;
     }
 
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)

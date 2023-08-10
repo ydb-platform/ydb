@@ -15,6 +15,7 @@
 #include <util/generic/vector.h>
 #include <util/string/printf.h>
 #include <util/string/builder.h>
+#include <util/system/yassert.h>
 #include <library/cpp/logger/all.h>
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -392,7 +393,7 @@ namespace NActors {
         }
     };
 
-    class TFormatedStreamWriter {
+    class TFormatedStreamWriter: TNonCopyable {
     private:
         TStringBuilder Builder;
     protected:
@@ -416,7 +417,7 @@ namespace NActors {
         }
     };
 
-    class TLogContextBuilder: TNonCopyable, public TFormatedStreamWriter {
+    class TLogContextBuilder: public TFormatedStreamWriter {
     private:
         using TBase = TFormatedStreamWriter;
         std::optional<::NActors::NLog::EComponent> Component;
@@ -440,7 +441,7 @@ namespace NActors {
         }
     };
 
-    class TLogContextGuard: TNonCopyable, public TFormatedStreamWriter {
+    class TLogContextGuard: public TFormatedStreamWriter {
     private:
         using TBase = TFormatedStreamWriter;
         std::optional<::NActors::NLog::EComponent> Component;
@@ -468,6 +469,20 @@ namespace NActors {
 
     };
 
+    class TLogRecordConstructor: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+    public:
+
+        TLogRecordConstructor();
+
+        template <class TKey, class TValue>
+        TLogRecordConstructor& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+    };
+
     class TFormattedRecordWriter: public TFormatedStreamWriter {
     private:
         using TBase = TFormatedStreamWriter;
@@ -493,7 +508,28 @@ namespace NActors {
         }
     };
 
+    class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {
+    private:
+        using TBase = TFormatedStreamWriter;
+        const TString ConditionText;
+    public:
+
+        TVerifyFormattedRecordWriter(const TString& conditionText);
+
+        template <class TKey, class TValue>
+        TVerifyFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
+            TBase::Write(pName, pValue);
+            return *this;
+        }
+
+        ~TVerifyFormattedRecordWriter() {
+            const TString data = TBase::GetResult();
+            Y_FAIL("%s", data.data());
+        }
+    };
 }
+
+#define AFL_VERIFY(condition) if (condition); else TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\

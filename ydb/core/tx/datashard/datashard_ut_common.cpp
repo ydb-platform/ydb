@@ -1054,6 +1054,7 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                               ? NKikimrKqp::QUERY_TYPE_SQL_DML
                                               : NKikimrKqp::QUERY_TYPE_SQL_DDL);
     request->Record.MutableRequest()->SetQuery(sql);
+    request->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     return request;
 }
 

@@ -70,9 +70,9 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
 
         auto reply = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        auto results = reply->Get()->Record.GetRef().GetResponse().GetResults();
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(results[0].GetValue().GetStruct(0).ListSize(), 1000);
+        auto resp = reply->Get()->Record.GetRef().GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(resp.YdbResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetYdbResults(0).rows_size(), 1000);
     }
 
     Y_UNIT_TEST(ReadTableWithIndexDuringSplit) {
@@ -141,11 +141,10 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
 
         auto reply = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetRef().GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        auto results = reply->Get()->Record.GetRef().GetResponse().GetResults();
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(results[0].GetValue().GetStruct(0).ListSize(), 1);
+        auto resp = reply->Get()->Record.GetRef().GetResponse();
+        UNIT_ASSERT_VALUES_EQUAL(resp.YdbResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetYdbResults(0).rows_size(), 1);
     }
 
 } // Y_UNIT_TEST_SUITE(KqpStreamLookup)
 } // namespace NKikimr
-

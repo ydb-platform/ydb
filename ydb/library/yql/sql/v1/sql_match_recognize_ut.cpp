@@ -56,6 +56,18 @@ FROM Input MATCH_RECOGNIZE(
         UNIT_ASSERT(input->IsAtom() && input->GetContent() == "core");
     }
 
+    Y_UNIT_TEST(MatchRecognizeAndSample) {
+        auto matchRecognizeAndSample = R"(
+USE plato;
+SELECT *
+FROM Input  MATCH_RECOGNIZE(
+    PATTERN ( A )
+    DEFINE A as A
+    ) TABLESAMPLE BERNOULLI(1.0)
+)";
+        UNIT_ASSERT(not MatchRecognizeSqlToYql(matchRecognizeAndSample).IsOk());
+    }
+
     Y_UNIT_TEST(NoPartitionBy) {
         auto r = MatchRecognizeSqlToYql(minValidMatchRecognizeSql);
         UNIT_ASSERT(r.IsOk());

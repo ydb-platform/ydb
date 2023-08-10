@@ -522,6 +522,12 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
         return nullptr;
     }
     if (node.HasBlock2()) {
+        if (node.HasBlock4()) {
+            //CAN/CSA-ISO/IEC 9075-2:18 7.6 <table reference>
+            //4) TF shall not simply contain both a <sample clause> and a <row pattern recognition clause and name>.
+            Ctx.Error() << "Source shall not simply contain both a sample clause and a row pattern recognition clause";
+            return {};
+        }
         auto matchRecognizeClause = TSqlMatchRecognizeClause(Ctx, Mode);
         auto matchRecognize = matchRecognizeClause.CreateBuilder(node.GetBlock2().GetRule_row_pattern_recognition_clause1());
         singleSource->SetMatchRecognize(matchRecognize);

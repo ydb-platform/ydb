@@ -1,15 +1,18 @@
 #include "../kafka_events.h"
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 namespace NKafka {
 
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
-    TKafkaMetadataActor(const TActorId& parent, const ui64 correlationId, const TMetadataRequestData* message)
+    TKafkaMetadataActor(const TActorId& parent, const NACLib::TUserToken* userToken, const ui64 correlationId, const TMetadataRequestData* message, const NKikimrConfig::TKafkaProxyConfig& config)
         : Parent(parent)
+        , UserToken(userToken)
         , CorrelationId(correlationId)
         , Message(message)
+        , Config(config)
         , Response(new TMetadataResponseData())
     {}
 
@@ -34,8 +37,10 @@ private:
 
 private:
     const TActorId Parent;
+    const NACLib::TUserToken* UserToken;
     const ui64 CorrelationId;
     const TMetadataRequestData* Message;
+    const NKikimrConfig::TKafkaProxyConfig& Config;
 
     ui64 PendingResponses = 0;
 

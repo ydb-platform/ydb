@@ -18,9 +18,12 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
     }
 
     auto GetEvent(NPersQueue::TTestServer& server, const TActorId& edgeActor, const TVector<TString>& topics) {
+        NKikimrConfig::TKafkaProxyConfig Config;
+        NACLib::TUserToken userToken("root@builtin", {});
+
         auto* runtime = server.CleverServer->GetRuntime();
         auto request = GetMetadataRequest(topics);
-        auto actorId = runtime->Register(new TKafkaMetadataActor(edgeActor, 1, request.Get()));
+        auto actorId = runtime->Register(new TKafkaMetadataActor(edgeActor, &userToken, 1, request.Get(), Config));
         runtime->EnableScheduleForActor(actorId);
         runtime->DispatchEvents();
         Cerr << "Wait for response for topics: '";

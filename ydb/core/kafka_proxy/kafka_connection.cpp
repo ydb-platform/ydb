@@ -19,8 +19,8 @@ using namespace NKikimr;
 
 NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 correlationId, const TApiVersionsRequestData* message);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TActorId parent, const ui64 correlationId, const TInitProducerIdRequestData* message);
-NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const ui64 correlationId, const TMetadataRequestData* message);
-NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const TString& clientDC);
+NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const NACLib::TUserToken* userToken, const ui64 correlationId, const TMetadataRequestData* message, const NKikimrConfig::TKafkaProxyConfig& config);
+NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const NACLib::TUserToken* userToken, const TString& clientDC);
 NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const TSaslHandshakeRequestData* message);
 NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message);
     
@@ -77,7 +77,6 @@ public:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
     TString ClientDC;
 
-    i32 CorrelationId = 1;
     std::shared_ptr<Msg> Request;
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
     std::deque<Msg::TPtr> PendingRequestsQueue;
@@ -106,12 +105,10 @@ public:
         IsSslSupported = IsSslSupported && Socket->IsSslSupported();
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
         KAFKA_LOG_I("incoming connection opened " << Address);
-
-        ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(SelfId(), ClientDC));
 
         OnAccept();
     }
@@ -131,7 +128,7 @@ public:
 
 protected:
     void LogEvent(IEventHandle& ev) {
-        KAFKA_LOG_T("Event: " << ev.GetTypeName());
+        KAFKA_LOG_T("Received event: " << ev.GetTypeName());
     }
 
     void SetNonBlock() noexcept {
@@ -197,7 +194,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
-            hFunc(TEvKafka::TEvResponse, Handle);
+            HFunc(TEvKafka::TEvResponse, Handle);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }
@@ -207,7 +204,15 @@ protected:
         Register(CreateKafkaApiVersionsActor(SelfId(), header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message) {
+    void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message, const TActorContext& ctx) {
+        if (!UserToken) {
+            KAFKA_LOG_ERROR("Unauthenificated produce");
+            PassAway();
+        }
+        if (!ProduceActorId) {
+            ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(SelfId(), UserToken.Get(), ClientDC));
+        }
+
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
@@ -216,7 +221,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMetadataRequestData* message) {
-        Register(CreateKafkaMetadataActor(SelfId(), header->CorrelationId, message));
+        Register(CreateKafkaMetadataActor(SelfId(), UserToken.Get(), header->CorrelationId, message, Config));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TSaslAuthenticateRequestData* message) {
@@ -227,7 +232,7 @@ protected:
         Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, message));
     }
 
-    void ProcessRequest() {
+    void ProcessRequest(const TActorContext& ctx) {
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
@@ -239,7 +244,7 @@ protected:
 
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:
-                HandleMessage(&Request->Header, dynamic_cast<TProduceRequestData*>(message));
+                HandleMessage(&Request->Header, dynamic_cast<TProduceRequestData*>(message), ctx);
                 return;
 
             case API_VERSIONS:
@@ -268,16 +273,17 @@ protected:
         }
     }
 
-    void Handle(TEvKafka::TEvResponse::TPtr response) {
+    void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
-        Reply(r->CorrelationId, r->Response);
+        Reply(r->CorrelationId, r->Response, ctx);
     }
 
     void Handle(TEvKafka::TEvAuthSuccess::TPtr auth) {
         UserToken = auth->Get()->UserToken;
-    }
+        KAFKA_LOG_D("Authentificated successful. SID=" << UserToken->GetUserSID());
+   }
 
-    void Reply(const ui64 correlationId, TApiMessage::TPtr response) {
+    void Reply(const ui64 correlationId, TApiMessage::TPtr response, const TActorContext& ctx) {
         auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
             KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
@@ -290,7 +296,7 @@ protected:
 
         ProcessReplyQueue();
 
-        DoRead();
+        DoRead(ctx);
     }
 
     void ProcessReplyQueue() {
@@ -330,7 +336,7 @@ protected:
         KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
     }
 
-    void DoRead() {
+    void DoRead(const TActorContext& ctx) {
         KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
 
         for (;;) {
@@ -389,11 +395,18 @@ protected:
                     case MESSAGE_PROCESS:
                         TKafkaInt16 apiKey = *(TKafkaInt16*)Request->Buffer.Data();
                         TKafkaVersion apiVersion = *(TKafkaVersion*)(Request->Buffer.Data() + sizeof(TKafkaInt16));
+                        TKafkaInt32 correlationId = *(TKafkaInt32*)(Request->Buffer.Data() + sizeof(TKafkaInt16) + sizeof(TKafkaInt16));
 
                         NormalizeNumber(apiKey);
                         NormalizeNumber(apiVersion);
+                        NormalizeNumber(correlationId);
 
-                        KAFKA_LOG_D("received message. ApiKey=" << apiKey << ", Version=" << apiVersion);
+                        KAFKA_LOG_D("received message. ApiKey=" << apiKey << ", Version=" << apiVersion << ", CorrelationId=" << correlationId);
+
+                        if (PendingRequests.contains(correlationId)) {
+                            KAFKA_LOG_ERROR("CorrelationId " << correlationId << " already processing");
+                            return PassAway();
+                        }
 
                         // Print("received", Request->Buffer, Request->ExpectedSize);
 
@@ -402,23 +415,18 @@ protected:
                         Request->Message = CreateRequest(apiKey);
                         try {
                             Request->Header.Read(readable, RequestHeaderVersion(apiKey, apiVersion));
-                            if (Request->Header.CorrelationId != CorrelationId) {
-                                KAFKA_LOG_ERROR("Unexpected correlationId. Expected=" << CorrelationId << ", Received=" << Request->Header.CorrelationId);
-                                return PassAway();
-                            }
                             Request->Message->Read(readable, apiVersion);
-
-                            ++CorrelationId;
                         } catch(const yexception& e) {
-                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->Header.RequestApiKey
-                                                                << ", Version=" << Request->Header.RequestApiVersion 
-                                                                << ", Error=" <<  e.what());
+                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << apiKey
+                                                                    << ", Version=" << apiVersion
+                                                                    << ", CorrelationId=" << correlationId
+                                                                    << ", Error=" <<  e.what());
                             return PassAway();
                         }
 
                         Step = SIZE_READ;
 
-                        ProcessRequest();
+                        ProcessRequest(ctx);
 
                         break;
                 }
@@ -426,9 +434,9 @@ protected:
         }
     }
 
-    void HandleConnected(TEvPollerReady::TPtr event) {
+    void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
-            DoRead();
+            DoRead(ctx);
 
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
@@ -460,9 +468,9 @@ protected:
     STATEFN(StateConnected) {
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvPollerReady, HandleConnected);
+            HFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
-            hFunc(TEvKafka::TEvResponse, Handle);
+            HFunc(TEvKafka::TEvResponse, Handle);
             hFunc(TEvKafka::TEvAuthSuccess, Handle);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());

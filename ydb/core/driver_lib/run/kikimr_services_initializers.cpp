@@ -2639,7 +2639,7 @@ TIcNodeCacheServiceInitializer::TIcNodeCacheServiceInitializer(const TKikimrRunC
 void TIcNodeCacheServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     if (appData->FeatureFlags.GetEnableIcNodeCache()) {
         setup->LocalServices.emplace_back(
-            TActorId(),
+            NIcNodeCache::CreateICNodesInfoCacheServiceId(),
             TActorSetupCmd(NIcNodeCache::CreateICNodesInfoCacheService(appData->Counters),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );

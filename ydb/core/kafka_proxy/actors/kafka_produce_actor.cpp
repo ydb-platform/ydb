@@ -9,12 +9,14 @@
 namespace NKafka {
 
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
+static constexpr TDuration TOPIC_OK_EXPIRATION_INTERVAL = TDuration::Minutes(15);
 static constexpr TDuration TOPIC_NOT_FOUND_EXPIRATION_INTERVAL = TDuration::Seconds(15);
+static constexpr TDuration TOPIC_UNATHORIZED_EXPIRATION_INTERVAL = TDuration::Minutes(1);
 static constexpr TDuration REQUEST_EXPIRATION_INTERVAL = TDuration::Seconds(30);
 static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
-NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const TString& clientDC) {
-    return new TKafkaProduceActor(parent, clientDC);;
+NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const NACLib::TUserToken* userToken, const TString& clientDC) {
+    return new TKafkaProduceActor(parent, userToken, clientDC);
 }
 
 TString TKafkaProduceActor::LogPrefix() {
@@ -71,11 +73,11 @@ void TKafkaProduceActor::PassAway() {
 }
 
 void TKafkaProduceActor::CleanTopics(const TActorContext& ctx) {
-    const auto expired = ctx.Now() - TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
+    const auto now = ctx.Now();
 
     std::map<TString, TTopicInfo> newTopics;    
     for(auto& [topicPath, topicInfo] : Topics) {
-        if (!topicInfo.NotFound || topicInfo.NotFoundTime > expired) {
+        if (topicInfo.ExpirationTime > now) {
             newTopics[topicPath] = std::move(topicInfo);
         }
     }
@@ -109,6 +111,7 @@ void TKafkaProduceActor::EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr reques
 }
 
 void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    auto now = ctx.Now();
     auto* navigate = ev.Get()->Get()->Request.Get();
     for (auto& info : navigate->ResultSet) {
         if (NSchemeCache::TSchemeCacheNavigate::EStatus::Ok == info.Status) {
@@ -117,9 +120,19 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             TopicsForInitialization.erase(topicPath);
 
             auto& topic = Topics[topicPath];
-            for(auto& p : info.PQGroupInfo->Description.GetPartitions()) {
-                topic.partitions[p.GetPartitionId()] = p.GetTabletId();
+
+            if (info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *UserToken)) {
+                topic.Status = OK;
+                topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
+                for(auto& p : info.PQGroupInfo->Description.GetPartitions()) {
+                    topic.partitions[p.GetPartitionId()] = p.GetTabletId();
+                }
+            } else {
+                KAFKA_LOG_W("Unauthorized PRODUCE to topic '" << topicPath << "'");
+                topic.Status = UNAUTHORIZED;
+                topic.ExpirationTime = now + TOPIC_UNATHORIZED_EXPIRATION_INTERVAL;
             }
+
 
             auto pathId = info.TableId.PathId;
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(pathId));
@@ -129,8 +142,8 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     for(auto& topicPath : TopicsForInitialization) {
         KAFKA_LOG_D("Topic '" << topicPath << "' not found");
         auto& topicInfo = Topics[topicPath];
-        topicInfo.NotFound = true;
-        topicInfo.NotFoundTime = ctx.Now();
+        topicInfo.Status = NOT_FOUND;
+        topicInfo.ExpirationTime = now + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
     }
 
     TopicsForInitialization.clear();
@@ -155,20 +168,24 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TP
     }
 
     auto& topicInfo = Topics[path];
-    topicInfo.NotFound = true;
-    topicInfo.NotFoundTime = ctx.Now();
+    topicInfo.Status = NOT_FOUND;
+    topicInfo.ExpirationTime = ctx.Now() + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
     topicInfo.partitions.clear();
 }
 
-void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
+void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     auto* e = ev->Get();
     auto& path = e->Path;
     KAFKA_LOG_I("Topic '" << path << "' was updated");
 
     auto& topic = Topics[path];
+    if (topic.Status == UNAUTHORIZED) {
+        return;
+    }
+    topic.Status = OK;
+    topic.ExpirationTime = ctx.Now() + TOPIC_OK_EXPIRATION_INTERVAL;
     topic.partitions.clear();
     for (auto& p : e->Result->GetPathDescription().GetPersQueueGroup().GetPartitions()) {
-        topic.NotFound = false;
         topic.partitions[p.GetPartitionId()] = p.GetTabletId();
     }
 }
@@ -300,8 +317,8 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest& pendingRequest, const T
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
 
-            auto writerId = PartitionWriter(topicPath, partitionId, ctx);
-            if (writerId) {
+            auto writer = PartitionWriter(topicPath, partitionId, ctx);
+            if (OK == writer.first) {
                 auto ownCookie = ++Cookie;
                 auto& cookieInfo = Cookies[ownCookie];
                 cookieInfo.TopicPath = topicPath;
@@ -314,10 +331,17 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest& pendingRequest, const T
 
                 auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC);
 
-                Send(writerId, std::move(ev));
+                Send(writer.second, std::move(ev));
             } else {
                 auto& result = pendingRequest.Results[position];
-                result.ErrorCode = EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+                switch (writer.first) {
+                    case NOT_FOUND:
+                        result.ErrorCode = EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+                    case UNAUTHORIZED:
+                        result.ErrorCode = EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+                    default:
+                        result.ErrorCode = EKafkaErrors::UNKNOWN_SERVER_ERROR;
+                }
             }
 
             ++position;
@@ -497,30 +521,30 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }
 
-TActorId TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx) {
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx) {
+    auto it = Topics.find(topicPath);
+    if (it == Topics.end()) {
+        KAFKA_LOG_ERROR("Internal error: topic '" << topicPath << "' isn`t initialized");
+        return { NOT_FOUND, TActorId{} };
+    }
+
+    auto& topicInfo = it->second;
+    if (topicInfo.Status != OK) {
+        return { topicInfo.Status, TActorId{} };
+    }
+
     auto& partitionWriters = Writers[topicPath];
     auto itp = partitionWriters.find(partitionId);
     if (itp != partitionWriters.end()) {
         auto& writerInfo = itp->second;
         writerInfo.LastAccessed = ctx.Now();
-        return writerInfo.ActorId;
-    }
-
-    auto it = Topics.find(topicPath);
-    if (it == Topics.end()) {
-        KAFKA_LOG_ERROR("Internal error: topic '" << topicPath << "' isn`t initialized");
-        return TActorId{};
-    }
-
-    auto& topicInfo = it->second;
-    if (topicInfo.NotFound) {
-        return TActorId{};
+        return { OK, writerInfo.ActorId };
     }
 
     auto& partitions = topicInfo.partitions;
     auto pit = partitions.find(partitionId);
     if (pit == partitions.end()) {
-        return TActorId{};
+        return { NOT_FOUND, TActorId{} };
     }
 
     auto tabletId = pit->second;
@@ -529,7 +553,7 @@ TActorId TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 part
     auto& writerInfo = partitionWriters[partitionId];
     writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);
     writerInfo.LastAccessed = ctx.Now();
-    return writerInfo.ActorId;
+    return { OK, writerInfo.ActorId };
 }
 
 } // namespace NKafka

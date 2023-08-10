@@ -1577,21 +1577,21 @@ struct TAsyncViaHelper<R(TArgs...)>
     }
 
     static TFuture<TUnderlying> Outer(
-        const TSourceCallback& this_,
+        TSourceCallback this_,
         const IInvokerPtr& invoker,
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
         invoker->Invoke(BIND_NO_PROPAGATE(
             &Inner,
-            this_,
+            std::move(this_),
             promise,
             WrapToPassed(std::forward<TArgs>(args))...));
         return promise;
     }
 
     static TFuture<TUnderlying> OuterGuarded(
-        const TSourceCallback& this_,
+        TSourceCallback this_,
         const IInvokerPtr& invoker,
         NYT::TError cancellationError,
         TArgs... args)
@@ -1599,7 +1599,7 @@ struct TAsyncViaHelper<R(TArgs...)>
         auto promise = NewPromise<TUnderlying>();
         GuardedInvoke(
             invoker,
-            BIND_NO_PROPAGATE(&Inner, this_, promise, WrapToPassed(std::forward<TArgs>(args))...),
+            BIND_NO_PROPAGATE(&Inner, std::move(this_), promise, WrapToPassed(std::forward<TArgs>(args))...),
             BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
             }));
@@ -1618,7 +1618,11 @@ struct TAsyncViaHelper<R(TArgs...)>
         IInvokerPtr invoker,
         NYT::TError cancellationError)
     {
-        return BIND_NO_PROPAGATE(&OuterGuarded, std::move(this_), std::move(invoker), std::move(cancellationError));
+        return BIND_NO_PROPAGATE(
+            &OuterGuarded,
+            std::move(this_),
+            std::move(invoker),
+            std::move(cancellationError));
     }
 };
 
@@ -1626,16 +1630,30 @@ struct TAsyncViaHelper<R(TArgs...)>
 
 template <class R, class... TArgs>
 TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
-TExtendedCallback<R(TArgs...)>::AsyncVia(IInvokerPtr invoker) const
+TExtendedCallback<R(TArgs...)>::AsyncVia(IInvokerPtr invoker) const &
 {
     return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::Do(*this, std::move(invoker));
 }
 
 template <class R, class... TArgs>
 TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
-TExtendedCallback<R(TArgs...)>::AsyncViaGuarded(IInvokerPtr invoker, NYT::TError cancellationError) const
+TExtendedCallback<R(TArgs...)>::AsyncVia(IInvokerPtr invoker) &&
+{
+    return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::Do(std::move(*this), std::move(invoker));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
+TExtendedCallback<R(TArgs...)>::AsyncViaGuarded(IInvokerPtr invoker, NYT::TError cancellationError) const &
 {
     return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::DoGuarded(*this, std::move(invoker), std::move(cancellationError));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
+TExtendedCallback<R(TArgs...)>::AsyncViaGuarded(IInvokerPtr invoker, NYT::TError cancellationError) &&
+{
+    return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::DoGuarded(std::move(*this), std::move(invoker), std::move(cancellationError));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

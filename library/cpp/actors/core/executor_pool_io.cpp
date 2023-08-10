@@ -125,8 +125,10 @@ namespace NActors {
 
     void TIOExecutorPool::PrepareStop() {
         AtomicStore(&StopFlag, true);
-        for (i16 i = 0; i != PoolThreads; ++i)
+        for (i16 i = 0; i != PoolThreads; ++i) {
+            Threads[i].Thread->StopFlag = true;
             Threads[i].Pad.Interrupt();
+        }
     }
 
     void TIOExecutorPool::Shutdown() {

@@ -713,11 +713,23 @@ namespace NActors {
         return TlsLogContext.Get().GetCurrentComponent().value_or(defComponent);
     }
 
+    TLogRecordConstructor::TLogRecordConstructor() {
+        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
+    }
+
     TFormattedRecordWriter::TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
         : ActorContext(NActors::TlsActivationContext ? &NActors::TlsActivationContext->AsActorContext() : nullptr)
         , Priority(priority)
         , Component(component) {
         TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
+    }
+
+
+    TVerifyFormattedRecordWriter::TVerifyFormattedRecordWriter(const TString& conditionText)
+        : ConditionText(conditionText) {
+        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
+        TBase::Write("verification", ConditionText);
+
     }
 
 }

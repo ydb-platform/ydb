@@ -19,8 +19,10 @@ enum EApiKey {
     PRODUCE = 0, // [ZK_BROKER, BROKER] 
     FETCH = 1, // [ZK_BROKER, BROKER, CONTROLLER] 
     METADATA = 3, // [ZK_BROKER, BROKER] 
+    SASL_HANDSHAKE = 17, // [ZK_BROKER, BROKER, CONTROLLER] 
     API_VERSIONS = 18, // [ZK_BROKER, BROKER, CONTROLLER] 
     INIT_PRODUCER_ID = 22, // [ZK_BROKER, BROKER] 
+    SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER] 
 };
 
 
@@ -2080,6 +2082,94 @@ public:
 };
 
 
+class TSaslHandshakeRequestData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TSaslHandshakeRequestData> TPtr;
+    
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 1};
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+    
+    TSaslHandshakeRequestData();
+    ~TSaslHandshakeRequestData() = default;
+    
+    struct MechanismMeta {
+        using Type = TKafkaString;
+        using TypeDesc = NPrivate::TKafkaStringDesc;
+        
+        static constexpr const char* Name = "mechanism";
+        static constexpr const char* About = "The SASL mechanism chosen by the client.";
+        static const Type Default; // = {""};
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+    MechanismMeta::Type Mechanism;
+    
+    i16 ApiKey() const override { return SASL_HANDSHAKE; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+    
+    bool operator==(const TSaslHandshakeRequestData& other) const = default;
+};
+
+
+class TSaslHandshakeResponseData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TSaslHandshakeResponseData> TPtr;
+    
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 1};
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+    
+    TSaslHandshakeResponseData();
+    ~TSaslHandshakeResponseData() = default;
+    
+    struct ErrorCodeMeta {
+        using Type = TKafkaInt16;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+        
+        static constexpr const char* Name = "errorCode";
+        static constexpr const char* About = "The error code, or 0 if there was no error.";
+        static const Type Default; // = 0;
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+    ErrorCodeMeta::Type ErrorCode;
+    
+    struct MechanismsMeta {
+        using ItemType = TKafkaString;
+        using ItemTypeDesc = NPrivate::TKafkaStringDesc;
+        using Type = std::vector<TKafkaString>;
+        using TypeDesc = NPrivate::TKafkaArrayDesc;
+        
+        static constexpr const char* Name = "mechanisms";
+        static constexpr const char* About = "The mechanisms enabled in the server.";
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+    MechanismsMeta::Type Mechanisms;
+    
+    i16 ApiKey() const override { return SASL_HANDSHAKE; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+    
+    bool operator==(const TSaslHandshakeResponseData& other) const = default;
+};
+
+
 class TApiVersionsRequestData : public TApiMessage {
 public:
     typedef std::shared_ptr<TApiVersionsRequestData> TPtr;
@@ -2609,6 +2699,121 @@ public:
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
     
     bool operator==(const TInitProducerIdResponseData& other) const = default;
+};
+
+
+class TSaslAuthenticateRequestData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TSaslAuthenticateRequestData> TPtr;
+    
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 2};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    
+    TSaslAuthenticateRequestData();
+    ~TSaslAuthenticateRequestData() = default;
+    
+    struct AuthBytesMeta {
+        using Type = TKafkaBytes;
+        using TypeDesc = NPrivate::TKafkaBytesDesc;
+        
+        static constexpr const char* Name = "authBytes";
+        static constexpr const char* About = "The SASL authentication bytes from the client, as defined by the SASL mechanism.";
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    AuthBytesMeta::Type AuthBytes;
+    
+    i16 ApiKey() const override { return SASL_AUTHENTICATE; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+    
+    bool operator==(const TSaslAuthenticateRequestData& other) const = default;
+};
+
+
+class TSaslAuthenticateResponseData : public TApiMessage {
+public:
+    typedef std::shared_ptr<TSaslAuthenticateResponseData> TPtr;
+    
+    struct MessageMeta {
+        static constexpr TKafkaVersions PresentVersions = {0, 2};
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    
+    TSaslAuthenticateResponseData();
+    ~TSaslAuthenticateResponseData() = default;
+    
+    struct ErrorCodeMeta {
+        using Type = TKafkaInt16;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+        
+        static constexpr const char* Name = "errorCode";
+        static constexpr const char* About = "The error code, or 0 if there was no error.";
+        static const Type Default; // = 0;
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    ErrorCodeMeta::Type ErrorCode;
+    
+    struct ErrorMessageMeta {
+        using Type = TKafkaString;
+        using TypeDesc = NPrivate::TKafkaStringDesc;
+        
+        static constexpr const char* Name = "errorMessage";
+        static constexpr const char* About = "The error message, or null if there was no error.";
+        static const Type Default; // = {""};
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    ErrorMessageMeta::Type ErrorMessage;
+    
+    struct AuthBytesMeta {
+        using Type = TKafkaBytes;
+        using TypeDesc = NPrivate::TKafkaBytesDesc;
+        
+        static constexpr const char* Name = "authBytes";
+        static constexpr const char* About = "The SASL authentication bytes from the server, as defined by the SASL mechanism.";
+        
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    AuthBytesMeta::Type AuthBytes;
+    
+    struct SessionLifetimeMsMeta {
+        using Type = TKafkaInt64;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+        
+        static constexpr const char* Name = "sessionLifetimeMs";
+        static constexpr const char* About = "The SASL authentication bytes from the server, as defined by the SASL mechanism.";
+        static const Type Default; // = 0;
+        
+        static constexpr TKafkaVersions PresentVersions = {1, Max<TKafkaVersion>()};
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = {2, Max<TKafkaVersion>()};
+    };
+    SessionLifetimeMsMeta::Type SessionLifetimeMs;
+    
+    i16 ApiKey() const override { return SASL_AUTHENTICATE; };
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+    
+    bool operator==(const TSaslAuthenticateResponseData& other) const = default;
 };
 
 } // namespace NKafka 

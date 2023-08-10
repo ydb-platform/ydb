@@ -43,7 +43,7 @@ public:
     TTcpDispatcherConfigPtr ApplyDynamic(const TTcpDispatcherDynamicConfigPtr& dynamicConfig) const;
 
     //! Used to store TLS/SSL certificate files.
-    std::optional<TString> BusCertsDir;
+    std::optional<TString> BusCertsDirectoryPath;
 
     REGISTER_YSON_STRUCT(TTcpDispatcherConfig);
 
@@ -65,6 +65,9 @@ public:
     std::optional<THashMap<TString, std::vector<NNet::TIP6Network>>> Networks;
 
     std::optional<TEnumIndexedVector<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
+
+     //! Used to store TLS/SSL certificate files.
+    std::optional<TString> BusCertsDirectoryPath;
 
     REGISTER_YSON_STRUCT(TTcpDispatcherDynamicConfig);
 
@@ -97,7 +100,7 @@ public:
     std::optional<TString> CertificateChainFile;
     std::optional<TString> PrivateKeyFile;
     std::optional<TString> CipherList;
-    bool LoadFromCertsDir;
+    bool LoadCertsFromBusCertsDirectory;
     // For testing purposes.
     bool UseKeyPairFromSslContext;
 

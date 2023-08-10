@@ -210,8 +210,6 @@ public:
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
-        
         TString url(Event->Get()->Request->URL.Before('?'));
         TString status(response->Status);
         NMonitoring::THistogramPtr ResponseTimeHgram = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
@@ -220,6 +218,8 @@ public:
             ->GetSubgroup("status", status)
             ->GetHistogram("ResponseTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
         ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
+
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
     void ReplyOptionsAndPassAway() {

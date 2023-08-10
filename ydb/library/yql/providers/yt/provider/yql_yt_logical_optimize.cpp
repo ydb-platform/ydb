@@ -1718,17 +1718,22 @@ protected:
         const TExprNode* world = nullptr;
         bool first = true;
         TVector<TYtPath> paths;
+        TExprNode::TListType nonDQ;
+        TMaybe<TExprBase> anyDQ;
         for (auto child: extend) {
             if (!TDqReadWrapBase::Match(child.Raw())) {
-                return node;
+                nonDQ.push_back(child.Ptr());
+                continue;
             }
             auto dqReadWrap = child.Cast<TDqReadWrapBase>();
             if (!dqReadWrap.Input().Maybe<TYtReadTable>()) {
-                return node;
+                nonDQ.push_back(child.Ptr());
+                continue;
             }
             auto ytRead = dqReadWrap.Input().Cast<TYtReadTable>();
             if (ytRead.Input().Size() != 1 || ytRead.Input().Item(0).Settings().Size() != 0) {
-                return node;
+                nonDQ.push_back(child.Ptr());
+                continue;
             }
 
             if (first) {
@@ -1738,11 +1743,16 @@ protected:
                 world = ytRead.World().Raw();
                 first = false;
             } else if (flags != dqReadWrap.Flags().Raw() || token != dqReadWrap.Token().Raw() || cluster != ytRead.DataSource().Cluster().Value() || world != ytRead.World().Raw()) {
-                return node;
+                nonDQ.push_back(child.Ptr());
+                continue;
             }
+            anyDQ = child;
             paths.insert(paths.end(), ytRead.Input().Item(0).Paths().begin(), ytRead.Input().Item(0).Paths().end());
         }
-        auto dqReadWrap = extend.Arg(0);
+        if (!anyDQ || extend.Ref().ChildrenSize() - nonDQ.size() < 2 || (nonDQ.size() && node.Maybe<TCoOrderedExtend>())) {
+            return node;
+        }
+        auto dqReadWrap = *anyDQ;
         auto newRead = Build<TYtReadTable>(ctx, extend.Pos())
             .InitFrom(dqReadWrap.Cast<TDqReadWrapBase>().Input().Cast<TYtReadTable>())
             .Input()
@@ -1755,6 +1765,10 @@ protected:
                 .Build()
             .Build()
             .Done().Ptr();
+        if (!nonDQ.empty()) {
+            nonDQ.push_back(ctx.ChangeChild(dqReadWrap.Ref(), TDqReadWrapBase::idx_Input, std::move(newRead)));
+            return TExprBase(ctx.ChangeChildren(extend.Ref(), std::move(nonDQ)));
+        }
 
         return TExprBase(ctx.ChangeChild(dqReadWrap.Ref(), TDqReadWrapBase::idx_Input, std::move(newRead)));
     }

@@ -223,10 +223,12 @@ def create_embed_config(args):
         'Files': {},
     }
     for info in args.embed:
-        pattern = info[0]
+        embed_dir = os.path.normpath(info[0])
+        assert embed_dir == args.source_module_dir[:-1] or embed_dir.startswith((args.source_module_dir, args.build_root))
+        pattern = info[1]
         if pattern.endswith('/**/*'):
             pattern = pattern[:-3]
-        files = {os.path.relpath(f, args.source_module_dir).replace('\\', '/'): f for f in info[1:]}
+        files = {os.path.relpath(f, embed_dir).replace('\\', '/'): f for f in info[2:]}
         data['Patterns'][pattern] = list(files.keys())
         data['Files'].update(files)
     # sys.stderr.write('{}\n'.format(json.dumps(data, indent=4)))

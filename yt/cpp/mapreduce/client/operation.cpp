@@ -1144,7 +1144,9 @@ void DoExecuteReduce(
                 operationIo.OutputFormat,
                 fluent);
         })
-        .Item("sort_by").Value(spec.SortBy_)
+        .DoIf(!spec.SortBy_.Parts_.empty(), [&] (TFluentMap fluent) {
+            fluent.Item("sort_by").Value(spec.SortBy_);
+        })
         .Item("reduce_by").Value(spec.ReduceBy_)
         .DoIf(spec.JoinBy_.Defined(), [&] (TFluentMap fluent) {
             fluent.Item("join_by").Value(spec.JoinBy_.GetRef());

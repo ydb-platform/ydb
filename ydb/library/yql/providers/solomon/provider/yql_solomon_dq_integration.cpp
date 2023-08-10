@@ -78,7 +78,7 @@ public:
         YQL_ENSURE(false, "Unimplemented");
     }
 
-    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode&, TExprContext&) override {
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>&, TExprContext&) override {
         YQL_ENSURE(false, "Unimplemented");
     }
 

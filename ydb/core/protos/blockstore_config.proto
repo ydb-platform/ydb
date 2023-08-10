@@ -131,9 +131,6 @@ message TVolumeConfig {
     // Is disk filling finished.
     optional bool IsFillFinished = 49;
 
-    // TODO: delete this field.
-    optional string FillToken = 50;
-
     // Mount requests with incorrect FillGeneration will be rejected unless filling is finished.
     optional uint64 FillGeneration = 51;
 }

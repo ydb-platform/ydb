@@ -29,9 +29,9 @@ namespace NYql {
                 return TGenReadTable::Match(&read);
             }
 
-            TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read,
+            TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read,
                                           TExprContext&) override {
-                if (TGenReadTable::Match(&read)) {
+                if (AllOf(read, [](const auto val) { return TGenReadTable::Match(val); })) {
                     return 0ul; // TODO: return real size
                 }
                 return Nothing();

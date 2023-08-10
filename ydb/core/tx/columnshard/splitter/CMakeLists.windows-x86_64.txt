@@ -17,4 +17,8 @@ target_link_libraries(tx-columnshard-splitter PUBLIC
 )
 target_sources(tx-columnshard-splitter PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/splitter.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/batch_slice.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/chunks.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/simple.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/rb_splitter.cpp
 )

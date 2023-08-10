@@ -122,7 +122,7 @@ public:
         const NYql::IHTTPGateway::TPtr& httpGateway,
         const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
-        , ControlPlaneStorageConfig(controlPlaneStorageConfig, s3Config, commonConfig)
+        , ControlPlaneStorageConfig(controlPlaneStorageConfig, s3Config, commonConfig, {})
         , CommonConfig(commonConfig)
         , SharedResouces(sharedResources)
         , CredentialsFactory(credentialsFactory)

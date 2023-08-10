@@ -82,6 +82,7 @@ message TRequestHeader
      * multicell_sync_ext                   112
      * suppress_expiration_timeout_renewal  113
      * workload_descriptor                  114
+     * custom_metadata                      115
      * ssl_credentials_ext                  120
      * req_execute_ext                      200
      * req_multiread_ext                    201
@@ -120,6 +121,16 @@ message TCredentialsExt
     optional string ssl_session_id = 5;
     optional string user_ticket = 6;
     optional string service_ticket = 7;
+}
+
+message TCustomMetadataExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TCustomMetadataExt custom_metadata_ext = 115;
+    }
+
+    map<string, bytes> entries = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

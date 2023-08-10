@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 
 namespace NKikimr::NOlap {
 
@@ -38,6 +39,12 @@ public:
         : Transformer(transformer)
         , Serializer(serializer) {
         Y_VERIFY(Serializer);
+    }
+
+    TString Apply(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field) const {
+        auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
+        auto batch = arrow::RecordBatch::Make(schema, data->length(), {data});
+        return Apply(batch);
     }
 
     TString Apply(const std::shared_ptr<arrow::RecordBatch>& data) const {

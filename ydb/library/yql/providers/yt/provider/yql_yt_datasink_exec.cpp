@@ -549,14 +549,27 @@ private:
             return MakeTableForDqWrite(input, ctx);
         }
         else if (const auto& result = input->GetResult(); result.IsAtom()) {
+            const auto publicId = State_->Types->TranslateOperationId(input->UniqueId());
             if (result.IsAtom("")) {
                 // Second iteration: do the actual write.
+                if (publicId) {
+                    if (State_->HybridInFlightOprations.empty())
+                        State_->HybridStartTime = NMonotonic::TMonotonic::Now();
+                    YQL_ENSURE(State_->HybridInFlightOprations.emplace(*publicId).second, "Operation " << *publicId << " already started.");
+                }
                 return RunDqWrite(input, ctx, tmpTable);
-            } else if(result.IsAtom("FallbackOnError")) {
-                return SyncOk();
             } else {
+                if (publicId) {
+                    YQL_ENSURE(State_->HybridInFlightOprations.erase(*publicId), "Operation " << *publicId << " not found.");
+                    if (State_->HybridInFlightOprations.empty())
+                        State_->TimeSpentInHybrid += NMonotonic::TMonotonic::Now() - State_->HybridStartTime;
+                }
+
+                if (result.IsAtom("FallbackOnError"))
+                    return SyncOk();
+
+                YQL_ENSURE(result.IsAtom("DQ_completed"), "Unexpected result atom: " << result.Content());
                 // Third iteration: collect temporary table statistics.
-                Y_ENSURE(result.IsAtom("DQ_completed"), "Unexpected result atom: " << result.Content());
                 return CollectDqWrittenTableStats(input, ctx);
             }
         }

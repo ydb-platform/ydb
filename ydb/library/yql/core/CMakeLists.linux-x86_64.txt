@@ -24,6 +24,7 @@ add_subdirectory(url_lister)
 add_subdirectory(url_preprocessing)
 add_subdirectory(user_data)
 add_subdirectory(ut)
+add_subdirectory(ut_common)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

@@ -59,6 +59,7 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         ReadFloat
         ReadDouble
         ReadOptional
+        ReadVariantData
         SkipFixedData
         SkipVarData
         ReadTzDate

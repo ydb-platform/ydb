@@ -460,6 +460,7 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopic
             request->GetProtoRequest()->include_stats(),
             request->GetProtoRequest()->include_location()))
 {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribeTopicActor for request " << request->GetProtoRequest()->DebugString());
 }
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
@@ -470,8 +471,6 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * 
 {
 }
 
-
-
 TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request)
     : TBase(request, request->GetProtoRequest()->path())
     , TDescribeTopicActorImpl(TDescribeTopicActorSettings::DescribeConsumer(
@@ -479,6 +478,7 @@ TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescrib
             request->GetProtoRequest()->include_stats(),
             request->GetProtoRequest()->include_location()))
 {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribeConsumerActor for request " << request->GetProtoRequest()->DebugString());
 }
 
 TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
@@ -489,7 +489,6 @@ TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOp
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_location()))
 {
 }
-
 
 TDescribeTopicActorImpl::TDescribeTopicActorImpl(const TDescribeTopicActorSettings& settings)
     : Settings(settings)
@@ -727,7 +726,7 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
             return;
         }
     }
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Something wrong on location, retry");
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Something wrong on location, retry. Response: " << record.DebugString());
     //Something gone wrong, retry
     ctx.Schedule(TDuration::MilliSeconds(200), new TEvents::TEvWakeup());
 }
@@ -1288,6 +1287,7 @@ TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::TEvDescr
     : TBase(request, request->GetProtoRequest()->path())
     , TDescribeTopicActorImpl(SettingsFromDescribePartRequest(request->GetProtoRequest()))
 {
+    ALOG_DEBUG(NKikimrServices::PQ_READ_PROXY, "TDescribePartitionActor for request " << request->GetProtoRequest()->DebugString());
 }
 
 TDescribePartitionActor::TDescribePartitionActor(NKikimr::NGRpcService::IRequestOpCtx* ctx)

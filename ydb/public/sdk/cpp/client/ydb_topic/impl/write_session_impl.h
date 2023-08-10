@@ -301,6 +301,11 @@ private:
         bool Ok = true;
     };
 
+    struct TPartitionLocation {
+        TEndpointKey Endpoint;
+        i64 Generation;
+    };
+
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
 
 public:
@@ -355,11 +360,11 @@ private:
     void InitWriter();
 
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-            const NGrpc::IQueueClientContextPtr& connectContext);
+                const NGrpc::IQueueClientContextPtr& connectContext);
     void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);
-    void DoConnect(const TDuration& delay, const TString& endpoint);
+    void Connect(const TDuration& delay);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
@@ -390,6 +395,11 @@ private:
     void HandleWakeUpImpl();
     void UpdateTimedCountersImpl();
 
+    void ConnectToPreferedPartitionLocation(const TDuration& delay);
+    void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NGrpc::IQueueClientContextPtr& describePartitionContext);
+
+    TMaybe<TEndpointKey> GetPreferedEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
+
 private:
     TWriteSessionSettings Settings;
     std::shared_ptr<TTopicClient::TImpl> Client;
@@ -410,6 +420,7 @@ private:
     NGrpc::IQueueClientContextPtr ConnectContext;
     NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
     NGrpc::IQueueClientContextPtr ConnectDelayContext;
+    NGrpc::IQueueClientContextPtr DescribePartitionContext;
     size_t ConnectionGeneration = 0;
     size_t ConnectionAttemptsDone = 0;
     TAdaptiveLock Lock;
@@ -438,6 +449,7 @@ private:
     TAtomic Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
+    TPartitionLocation PreferedPartitionLocation = {};
     ui64 LastSeqNo = 0;
     ui64 MinUnsentSeqNo = 0;
     ui64 SeqNoShift = 0;
@@ -451,7 +463,6 @@ private:
     TInstant LastCountersLogTs;
     TWriterCounters::TPtr Counters;
     TDuration WakeupInterval;
-
 protected:
     ui64 MessagesAcquired = 0;
 };

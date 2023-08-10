@@ -68,6 +68,16 @@ TStringBuf TGrpcMetadataArray::Find(const char* key) const
     return TStringBuf();
 }
 
+THashMap<TString, TString> TGrpcMetadataArray::ToMap() const
+{
+    THashMap<TString, TString> result;
+    for (size_t index = 0; index < Native_.count; ++index) {
+        const auto& metadata = Native_.metadata[index];
+        result[ToString(metadata.key)] = ToString(metadata.value);
+    }
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TGrpcSlice::~TGrpcSlice()

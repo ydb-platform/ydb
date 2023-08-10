@@ -298,6 +298,7 @@ namespace NSQLTranslationV1 {
         bool EmitAggApply = false;
         bool UseBlocks = false;
         bool AnsiLike = false;
+        bool FeatureR010 = false; //Row pattern recognition: FROM clause
     };
 
     class TColumnRefScope {

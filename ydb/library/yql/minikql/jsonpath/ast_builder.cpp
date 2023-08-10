@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/rewrapper/proto/serialization.pb.h>
+#include <ydb/library/yql/ast/yql_ast_escaping.h>
 
 #include <util/generic/singleton.h>
 #include <util/system/compiler.h>
@@ -42,8 +43,21 @@ bool TryStringContent(const TString& str, TString& result, TString& error, bool 
         return false;
     }
 
-    result = str.substr(1, str.length() - 2);
-    return true;
+    char quoteChar = doubleQuoted ? '"' : '\'';
+    size_t readBytes = 0;
+    TStringBuf atom(str);
+    atom.Skip(1);
+    TStringOutput sout(result);
+    result.reserve(str.size());
+
+    auto unescapeResult = UnescapeArbitraryAtom(atom, quoteChar, &sout, &readBytes);
+
+    if (unescapeResult == EUnescapeResult::OK) {
+        return true;
+    } else {
+        error = UnescapeResultToString(unescapeResult);
+        return false;
+    }
 }
 
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "node.h"
+#include "match_recognize.h"
 
 namespace NSQLTranslationV1 {
 
@@ -49,6 +50,7 @@ namespace NSQLTranslationV1 {
         virtual bool AddAggregation(TContext& ctx, TAggregationPtr aggr);
         virtual bool AddFuncOverWindow(TContext& ctx, TNodePtr expr);
         virtual void AddTmpWindowColumn(const TString& column);
+        virtual void SetMatchRecognize(TMatchRecognizeBuilderPtr matchRecognize);
         virtual const TVector<TString>& GetTmpWindowColumns() const;
         virtual bool HasAggregations() const;
         virtual void AddWindowSpecs(TWinSpecs winSpecs);
@@ -90,7 +92,7 @@ namespace NSQLTranslationV1 {
         virtual bool ShouldUseSourceAsColumn(const TString& source) const;
         virtual bool IsJoinKeysInitializing() const;
         virtual const TString* GetWindowName() const;
-
+        virtual TNodePtr BuildMatchRecognize(TContext& ctx, TString&& inputTable);
         virtual bool DoInit(TContext& ctx, ISource* src);
         virtual TNodePtr Build(TContext& ctx) = 0;
 
@@ -107,13 +109,13 @@ namespace NSQLTranslationV1 {
         virtual TWindowSpecificationPtr FindWindowSpecification(TContext& ctx, const TString& windowName) const;
 
         TIntrusivePtr<ISource> CloneSource() const;
+        TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
     protected:
         ISource(TPosition pos);
         virtual TAstNode* Translate(TContext& ctx) const;
 
         void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
-        TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
         TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
         TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
@@ -142,6 +144,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, ui32> GenIndexes;
         TVector<TString> TmpWindowColumns;
         TNodePtr SamplingRate;
+        TMatchRecognizeBuilderPtr MatchRecognizeBuilder;
     };
 
     template<>

@@ -589,6 +589,9 @@ message TError {
         UNKNOWN = 17;
         REPLY_SIZE_EXCEEDED = 18;
         EXECUTION_CANCELLED = 19;
+        // This enum value is not supported in versions 23-2 and below and would be interpreted as OK due to how proto2 enums work.
+        // Version 23-3 can handle the value, so it is safe to use only in the next major release after 23-3.
+        DISK_SPACE_EXHAUSTED = 20;
     }
 
     optional EKind Kind = 1;

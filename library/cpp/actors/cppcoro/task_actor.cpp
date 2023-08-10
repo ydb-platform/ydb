@@ -1,4 +1,5 @@
 #include "task_actor.h"
+#include "await_callback.h"
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -25,20 +26,30 @@ namespace NActors {
 
     struct TEvResumeTask : public TEventLocal<TEvResumeTask, EvResumeTask> {
         std::coroutine_handle<> Handle;
+        TTaskResult<void>* Result;
 
-        explicit TEvResumeTask(std::coroutine_handle<> handle) noexcept
+        explicit TEvResumeTask(std::coroutine_handle<> handle, TTaskResult<void>* result) noexcept
             : Handle(handle)
+            , Result(result)
         {}
 
         ~TEvResumeTask() noexcept {
-            // TODO: actor may be dead already
+            if (Handle) {
+                Result->SetException(std::make_exception_ptr(TTaskCancelled()));
+                Handle.resume();
+            }
         }
+    };
+
+    class TTaskActorResult final : public TAtomicRefCount<TTaskActorResult> {
+    public:
+        bool Finished = false;
     };
 
     class TTaskActorImpl : public TActor<TTaskActorImpl> {
         friend class TTaskActor;
-        friend struct TAfterAwaiter;
-        friend struct TBindAwaiter;
+        friend class TAfterAwaiter;
+        friend class TBindAwaiter;
 
     public:
         TTaskActorImpl(TTask<void>&& task)
@@ -46,6 +57,15 @@ namespace NActors {
             , Task(std::move(task))
         {
             Y_VERIFY(Task);
+        }
+
+        ~TTaskActorImpl() {
+            Stopped = true;
+            while (EventAwaiter) {
+                // Unblock event awaiter until task stops trying
+                TCurrentTaskActorGuard guard(this);
+                std::exchange(EventAwaiter, {}).resume();
+            }
         }
 
         void Registered(TActorSystem* sys, const TActorId& parent) override {
@@ -57,7 +77,15 @@ namespace NActors {
             Y_VERIFY(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Expected bootstrap event");
             TCurrentTaskActorGuard guard(this);
             Become(&TThis::StateWork);
-            Task.Start();
+            AwaitThenCallback(std::move(Task).WhenDone(),
+                [result = Result](TTaskResult<void>&& outcome) noexcept {
+                    result->Finished = true;
+                    try {
+                        outcome.Value();
+                    } catch (TTaskCancelled&) {
+                        // ignore
+                    }
+                });
             Check();
         }
 
@@ -66,46 +94,50 @@ namespace NActors {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvResumeTask, Handle);
             default:
-                Y_VERIFY(EventWaiter);
+                Y_VERIFY(EventAwaiter);
                 Event.reset(ev.Release());
-                std::exchange(EventWaiter, {}).resume();
+                std::exchange(EventAwaiter, {}).resume();
             }
             Check();
         }
 
         void Handle(TEvResumeTask::TPtr& ev) {
             auto* msg = ev->Get();
+            msg->Result->SetValue();
             std::exchange(msg->Handle, {}).resume();
         }
 
         bool Check() {
-            if (Task.Done()) {
-                Y_VERIFY(!EventWaiter, "Task terminated while waiting for the next event");
-                Task.ExtractResult();
+            if (Result->Finished) {
+                Y_VERIFY(!EventAwaiter, "Task terminated while waiting for the next event");
                 PassAway();
                 return false;
             }
 
-            Y_VERIFY(EventWaiter, "Task suspended without waiting for the next event");
-            Event.reset();
+            Y_VERIFY(EventAwaiter, "Task suspended without waiting for the next event");
             return true;
         }
 
         void WaitForEvent(std::coroutine_handle<> h) noexcept {
-            Y_VERIFY(!EventWaiter, "Task cannot have multiple waiters for the next event");
-            EventWaiter = h;
+            Y_VERIFY(!EventAwaiter, "Task cannot have multiple awaiters for the next event");
+            EventAwaiter = h;
         }
 
-        std::unique_ptr<IEventHandle> FinishWaitForEvent() noexcept {
+        std::unique_ptr<IEventHandle> FinishWaitForEvent() {
+            if (Stopped) {
+                throw TTaskCancelled();
+            }
             Y_VERIFY(Event, "Task does not have current event");
             return std::move(Event);
         }
 
     private:
+        TIntrusivePtr<TTaskActorResult> Result = MakeIntrusive<TTaskActorResult>();
         TTask<void> Task;
         TActorId ParentId;
-        std::coroutine_handle<> EventWaiter;
+        std::coroutine_handle<> EventAwaiter;
         std::unique_ptr<IEventHandle> Event;
+        bool Stopped = false;
     };
 
     void TTaskActorNextEvent::await_suspend(std::coroutine_handle<> h) noexcept {
@@ -113,7 +145,7 @@ namespace NActors {
         TlsCurrentTaskActor->WaitForEvent(h);
     }
 
-    std::unique_ptr<IEventHandle> TTaskActorNextEvent::await_resume() noexcept {
+    std::unique_ptr<IEventHandle> TTaskActorNextEvent::await_resume() {
         Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
         return TlsCurrentTaskActor->FinishWaitForEvent();
     }
@@ -134,10 +166,7 @@ namespace NActors {
 
     void TAfterAwaiter::await_suspend(std::coroutine_handle<> h) noexcept {
         Y_VERIFY(TlsCurrentTaskActor, "Not in a task actor context");
-        TlsCurrentTaskActor->Schedule(Duration, new TEvResumeTask(h));
-    }
-
-    void TAfterAwaiter::await_resume() {
+        TlsCurrentTaskActor->Schedule(Duration, new TEvResumeTask(h, &Result));
     }
 
     bool TBindAwaiter::await_ready() noexcept {
@@ -148,10 +177,7 @@ namespace NActors {
     }
 
     void TBindAwaiter::await_suspend(std::coroutine_handle<> h) noexcept {
-        Sys->Send(new IEventHandle(ActorId, ActorId, new TEvResumeTask(h)));
-    }
-
-    void TBindAwaiter::await_resume() {
+        Sys->Send(new IEventHandle(ActorId, ActorId, new TEvResumeTask(h, &Result)));
     }
 
 } // namespace NActors

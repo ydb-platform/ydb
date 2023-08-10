@@ -18,7 +18,7 @@ def attach_filename(testcase, filename):
     add_junit_property(testcase, "shard", shardname)
 
 
-def postprocess_junit(is_mute_test, folder, dry_run):
+def postprocess_junit(is_mute_test, folder, no_attach_filename, dry_run):
     for fn in glob.glob(os.path.join(folder, "*.xml")):
         tree = ET.parse(fn)
         root = tree.getroot()
@@ -28,7 +28,8 @@ def postprocess_junit(is_mute_test, folder, dry_run):
             fail_cnt = error_cnt = 0
 
             for case, cls, method in case_iterator(suite):
-                attach_filename(case, os.path.basename(fn))
+                if not no_attach_filename:
+                    attach_filename(case, os.path.basename(fn))
 
                 if is_mute_test(cls, method):
                     if mute_target(case):
@@ -57,6 +58,7 @@ def postprocess_junit(is_mute_test, folder, dry_run):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--filter-file", required=True)
+    parser.add_argument("--no-attach-filename", action="store_true", default=False)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("yunit_path")
     args = parser.parse_args()
@@ -72,7 +74,7 @@ def main():
         print("nothing to mute")
         return
 
-    postprocess_junit(is_mute_test, args.yunit_path, args.dry_run)
+    postprocess_junit(is_mute_test, args.yunit_path, args.no_attach_filename, args.dry_run)
 
 
 if __name__ == "__main__":

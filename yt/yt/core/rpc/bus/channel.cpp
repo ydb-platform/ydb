@@ -191,7 +191,7 @@ private:
                         .MultiplexingBand = options.MultiplexingBand
                     });
 
-                auto& attrs = bus->GetEndpointAttributes();
+                const auto& attrs = bus->GetEndpointAttributes();
                 YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
                     attrs.Get<EVerificationMode>("verification_mode"),
                     attrs.Get<EEncryptionMode>("encryption_mode"),

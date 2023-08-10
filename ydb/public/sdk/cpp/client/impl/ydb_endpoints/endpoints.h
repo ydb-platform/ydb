@@ -62,6 +62,12 @@ struct TEndpointKey {
     const ui64& GetNodeId() const {
         return NodeId;
     }
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TEndpointKey& value)
+    {
+        out << "{ Endpoint: " << value.Endpoint << ", NodeId: " << value.NodeId << "}";
+        return out;
+    }
 };
 
 class IObjRegistryHandle {

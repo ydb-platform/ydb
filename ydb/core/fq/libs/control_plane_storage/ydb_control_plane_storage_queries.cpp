@@ -104,7 +104,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
     }
 
-    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, TenantName);
+    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
 
     if (event.Quotas) {
         TQuotaMap::const_iterator it = event.Quotas->end();
@@ -760,7 +760,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
     }
 
-    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, TenantName);
+    auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
 
     if (issues) {
         CPS_LOG_W("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());

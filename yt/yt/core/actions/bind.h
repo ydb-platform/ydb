@@ -150,12 +150,13 @@ struct TFutureTraits<TFuture<T>>
 
 
 template <class TSignature>
-struct TExtendedCallback;
+class TExtendedCallback;
 
 template <class TR, class... TAs>
-struct TExtendedCallback<TR(TAs...)>
+class TExtendedCallback<TR(TAs...)>
     : public TCallback<TR(TAs...)>
 {
+public:
     using TCallback<TR(TAs...)>::TCallback;
 
     TExtendedCallback(const TCallback<TR(TAs...)>& callback)
@@ -165,11 +166,15 @@ struct TExtendedCallback<TR(TAs...)>
     using TCallback<TR(TAs...)>::operator ==;
     using TCallback<TR(TAs...)>::operator !=;
 #endif
-    // TODO: Make &&
-    TExtendedCallback Via(TIntrusivePtr<IInvoker> invoker) const;
+
+    TExtendedCallback Via(TIntrusivePtr<IInvoker> invoker) const &;
+    TExtendedCallback Via(TIntrusivePtr<IInvoker> invoker) &&;
 
     TExtendedCallback<typename TFutureTraits<TR>::TWrapped(TAs...)>
-    AsyncVia(TIntrusivePtr<IInvoker> invoker) const;
+    AsyncVia(TIntrusivePtr<IInvoker> invoker) const &;
+
+    TExtendedCallback<typename TFutureTraits<TR>::TWrapped(TAs...)>
+    AsyncVia(TIntrusivePtr<IInvoker> invoker) &&;
 
     //! This version of AsyncVia is designed for cases when invoker may discard submitted callbacks
     //! (for example, if it is cancellable invoker). Regular AsyncVia results in "Promise abandoned"
@@ -177,7 +182,13 @@ struct TExtendedCallback<TR(TAs...)>
     //! allows you to specify the cancellation error, which costs a bit more allocations
     //! but much more convenient.
     TExtendedCallback<typename TFutureTraits<TR>::TWrapped(TAs...)>
-    AsyncViaGuarded(TIntrusivePtr<IInvoker> invoker, TError cancellationError) const;
+    AsyncViaGuarded(TIntrusivePtr<IInvoker> invoker, TError cancellationError) const &;
+
+    TExtendedCallback<typename TFutureTraits<TR>::TWrapped(TAs...)>
+    AsyncViaGuarded(TIntrusivePtr<IInvoker> invoker, TError cancellationError) &&;
+
+private:
+    static TExtendedCallback ViaImpl(TExtendedCallback callback, TIntrusivePtr<IInvoker> invoker);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

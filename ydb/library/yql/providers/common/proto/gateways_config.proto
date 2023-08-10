@@ -568,6 +568,10 @@ message TGenericClusterConfig {
     optional string ServiceAccountIdSignature = 7;
     optional string Token = 11;
 
+    // If true, the generic provider will ask connector server to use secure connections 
+    // to access remote data sources.
+    optional bool UseSsl = 12;
+
     reserved 2, 3, 5;
 }
 
@@ -576,9 +580,9 @@ message TGenericConnectorConfig {
     required NYql.NConnector.NApi.TEndpoint Endpoint = 3;
     // If true, GRPC Client will use TLS encryption.
     // Server cert will be verified with system CA cert pool.
-    required bool UseTLS = 2;
+    required bool UseSsl = 4;
 
-    reserved 1;
+    reserved 1, 2;
 }
 
 message TGenericGatewayConfig {

@@ -461,7 +461,7 @@ void ResumeFiber(TFiberPtr targetFiber)
     auto currentFiber = MakeStrong(GetCurrentFiber());
 
     SetResumerFiber(currentFiber);
-    SetAfterSwitch(BIND([currentFiber = std::move(currentFiber)] {
+    SetAfterSwitch(BIND_NO_PROPAGATE([currentFiber = std::move(currentFiber)] {
         currentFiber->SetWaiting();
     }));
 

@@ -3,6 +3,7 @@
 #include "sql_expression.h"
 #include "sql_group_by.h"
 #include "sql_values.h"
+#include "sql_match_recognize.h"
 
 namespace NSQLTranslationV1 {
 
@@ -500,11 +501,11 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
 }
 
 TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, bool unorderedSubquery) {
-    // named_single_source: single_source (((AS an_id) | an_id_pure) pure_column_list?)? (sample_clause | tablesample_clause)?;
+    // named_single_source: single_source match_recognize_clause? (((AS an_id) | an_id_as_compat) pure_column_list?)? (sample_clause | tablesample_clause)?;
     TVector<TString> derivedColumns;
     TPosition derivedColumnsPos;
-    if (node.HasBlock2() && node.GetBlock2().HasBlock2()) {
-        const auto& columns = node.GetBlock2().GetBlock2().GetRule_pure_column_list1();
+    if (node.HasBlock3() && node.GetBlock3().HasBlock2()) {
+        const auto& columns = node.GetBlock3().GetBlock2().GetRule_pure_column_list1();
         Token(columns.GetToken1());
         derivedColumnsPos = Ctx.Pos();
 
@@ -521,33 +522,44 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
         return nullptr;
     }
     if (node.HasBlock2()) {
+        if (node.HasBlock4()) {
+            //CAN/CSA-ISO/IEC 9075-2:18 7.6 <table reference>
+            //4) TF shall not simply contain both a <sample clause> and a <row pattern recognition clause and name>.
+            Ctx.Error() << "Source shall not simply contain both a sample clause and a row pattern recognition clause";
+            return {};
+        }
+        auto matchRecognizeClause = TSqlMatchRecognizeClause(Ctx, Mode);
+        auto matchRecognize = matchRecognizeClause.CreateBuilder(node.GetBlock2().GetRule_row_pattern_recognition_clause1());
+        singleSource->SetMatchRecognize(matchRecognize);
+    }
+    if (node.HasBlock3()) {
         TString label;
-        switch (node.GetBlock2().GetBlock1().Alt_case()) {
-            case TRule_named_single_source_TBlock2_TBlock1::kAlt1:
-                label = Id(node.GetBlock2().GetBlock1().GetAlt1().GetBlock1().GetRule_an_id2(), *this);
+        switch (node.GetBlock3().GetBlock1().Alt_case()) {
+            case TRule_named_single_source_TBlock3_TBlock1::kAlt1:
+                label = Id(node.GetBlock3().GetBlock1().GetAlt1().GetBlock1().GetRule_an_id2(), *this);
                 break;
-            case TRule_named_single_source_TBlock2_TBlock1::kAlt2:
-                label = Id(node.GetBlock2().GetBlock1().GetAlt2().GetRule_an_id_as_compat1(), *this);
+            case TRule_named_single_source_TBlock3_TBlock1::kAlt2:
+                label = Id(node.GetBlock3().GetBlock1().GetAlt2().GetRule_an_id_as_compat1(), *this);
                 if (!Ctx.AnsiOptionalAs) {
                     // AS is mandatory
                     Ctx.Error() << "Expecting mandatory AS here. Did you miss comma? Please add PRAGMA AnsiOptionalAs; for ANSI compatibility";
                     return {};
                 }
                 break;
-            case TRule_named_single_source_TBlock2_TBlock1::ALT_NOT_SET:
+            case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
                 Y_FAIL("You should change implementation according to grammar changes");
         }
         singleSource->SetLabel(label);
     }
-    if (node.HasBlock3()) {
+    if (node.HasBlock4()) {
         ESampleMode mode = ESampleMode::Auto;
         TSqlExpression expr(Ctx, Mode);
         TNodePtr samplingRateNode;
         TNodePtr samplingSeedNode;
-        const auto& sampleBlock = node.GetBlock3();
+        const auto& sampleBlock = node.GetBlock4();
         TPosition pos;
         switch (sampleBlock.Alt_case()) {
-        case TRule_named_single_source::TBlock3::kAlt1:
+        case TRule_named_single_source::TBlock4::kAlt1:
             {
                 const auto& sampleExpr = sampleBlock.GetAlt1().GetRule_sample_clause1().GetRule_expr2();
                 samplingRateNode = expr.Build(sampleExpr);
@@ -558,7 +570,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 Ctx.IncrementMonCounter("sql_features", "SampleClause");
             }
             break;
-        case TRule_named_single_source::TBlock3::kAlt2:
+        case TRule_named_single_source::TBlock4::kAlt2:
             {
                 const auto& tableSampleClause = sampleBlock.GetAlt2().GetRule_tablesample_clause1();
                 const auto& modeToken = tableSampleClause.GetRule_sampling_mode2().GetToken1();
@@ -588,7 +600,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 Ctx.IncrementMonCounter("sql_features", "SampleClause");
             }
             break;
-        case TRule_named_single_source::TBlock3::ALT_NOT_SET:
+        case TRule_named_single_source::TBlock4::ALT_NOT_SET:
             Y_FAIL("SampleClause: does not corresond to grammar changes");
         }
         if (!singleSource->SetSamplingOptions(Ctx, pos, mode, samplingRateNode, samplingSeedNode)) {
@@ -903,11 +915,11 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
 }
 
 TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSettings& settings, TPosition& selectPos,
-    TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy)
+    TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrderBy, bool& selectOpAssumeOrderBy)
 {
     // (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT column_list)? (FROM join_source)? (WHERE expr)?
     // group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
-    selectOpOrederBy = {};
+    selectOpOrderBy = {};
     selectOpAssumeOrderBy = false;
     if (node.HasBlock1()) {
         Token(node.GetBlock1().GetToken1());
@@ -1047,7 +1059,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         );
 
         if (!NeedPassLimitOrderByToUnderlyingSelect(placement)) {
-            selectOpOrederBy.swap(orderBy);
+            selectOpOrderBy.swap(orderBy);
             std::swap(selectOpAssumeOrderBy, assumeSorted);
         }
     }

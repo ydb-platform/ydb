@@ -405,7 +405,7 @@ private:
         );
 
         auto configService = CreateControlPlaneConfigActor(NFq::TYqSharedResources::TPtr{}, NKikimr::TYdbCredentialsProviderFactory(nullptr),
-            NConfig::TControlPlaneStorageConfig{}, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+            NConfig::TControlPlaneStorageConfig{}, NConfig::TComputeConfig{}, MakeIntrusive<::NMonitoring::TDynamicCounters>());
         runtime->AddLocalService(
             NFq::ControlPlaneConfigActorId(),
             TActorSetupCmd(configService, TMailboxType::Simple, 0),

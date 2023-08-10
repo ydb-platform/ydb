@@ -84,6 +84,7 @@ void Init(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
+                protoConfig.GetCompute(),
                 yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage"),
                 yqSharedResources,
                 NKikimr::CreateYdbCredentialsProviderFactory,
@@ -92,7 +93,7 @@ void Init(
 
         actorRegistrator(NFq::ControlPlaneConfigActorId(),
             CreateControlPlaneConfigActor(yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory, protoConfig.GetControlPlaneStorage(),
-                yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig"))
+                protoConfig.GetCompute(), yqCounters->GetSubgroup("subsystem", "ControlPlaneConfig"))
         );
     }
 

@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/counters
+    ydb/core/kqp/proxy_service/proto
     ydb/core/kqp/run_script_actor
     ydb/core/mind
     ydb/core/protos
@@ -35,6 +36,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    proto
+)
 
 RECURSE_FOR_TESTS(
     ut

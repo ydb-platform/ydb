@@ -4,6 +4,7 @@
 #include "events.h"
 
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/utils.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -13,8 +14,6 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/digest/md5/md5.h>
-
-#define PUT_UNIT_SIZE 40960u // 40Kb
 
 namespace NKikimr::NDataStreams::V1 {
 
@@ -115,10 +114,7 @@ namespace NKikimr::NDataStreams::V1 {
             }
 
             if (ShouldBeCharged) {
-                ui64 putUnitsCount = totalSize / PUT_UNIT_SIZE;
-                if (totalSize % PUT_UNIT_SIZE != 0)
-                    putUnitsCount++;
-                request.MutablePartitionRequest()->SetPutUnitsSize(putUnitsCount);
+                request.MutablePartitionRequest()->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
             }
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);

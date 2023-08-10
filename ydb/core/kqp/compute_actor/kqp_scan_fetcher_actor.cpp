@@ -367,6 +367,14 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
 
     if (!state.LastKey.empty()) {
         PendingShards.front().LastKey = std::move(state.LastKey);
+        while(!PendingShards.empty() && PendingShards.front().GetScanRanges(KeyColumnTypes).empty()) {
+            CA_LOG_D("Nothing to read " << PendingShards.front().ToString(KeyColumnTypes));
+            auto readShard = std::move(PendingShards.front());
+            PendingShards.pop_front();
+            PendingShards.front().LastKey = std::move(readShard.LastKey);
+        }
+
+        YQL_ENSURE(!PendingShards.empty());
     }
 
     if (IsDebugLogEnabled(TlsActivationContext->ActorSystem(), NKikimrServices::KQP_COMPUTE)

@@ -142,6 +142,10 @@ public:
         return Server;
     }
 
+    NActors::TTestActorRuntime& GetRuntime() {
+        return *Server.CleverServer->GetRuntime();
+    }
+
     template <class TConsumerOrProducer>
     void Start(const THolder<TConsumerOrProducer>& obj) {
         auto startFuture = obj->Start();

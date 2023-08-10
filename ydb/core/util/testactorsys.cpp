@@ -6,7 +6,45 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
+#include <util/generic/singleton.h>
+
 namespace NKikimr {
+
+class TActorNameTracker {
+public:
+    static TActorNameTracker& GetInstance() {
+        auto* instance = Singleton<TActorNameTracker>();
+        return *instance;
+    }
+
+    void Register(const TActorId& actorId, const TString& name) {
+        TGuard<TMutex> guard{Mutex};
+        NameByActorIdString[actorId] = name + actorId.ToString();
+    }
+
+    TString GetName(const TActorId& actorId) const {
+        TGuard<TMutex> guard{Mutex};
+        auto it = NameByActorIdString.find(actorId);
+        if (it == NameByActorIdString.end()) {
+            return "[unknown_actor]" + actorId.ToString();
+        }
+
+        return it->second;
+    }
+
+private:
+    THashMap<TActorId, TString> NameByActorIdString;
+    TMutex Mutex;
+
+};
+
+void RegisterActorName(const TActorId& actorId, const TString& name) {
+    TActorNameTracker::GetInstance().Register(actorId, name);
+}
+
+TString GetRegisteredActorName(const TActorId& actorId) {
+    return TActorNameTracker::GetInstance().GetName(actorId);
+}
 
 class TTestExecutorPool : public IExecutorPool {
     TTestActorSystem *Context;

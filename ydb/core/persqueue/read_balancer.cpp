@@ -666,22 +666,28 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
 void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx)
 {
     auto tabletId = ev->Get()->TabletId;
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected TabletId " << tabletId);
 
     PipesRequested.erase(tabletId);
 
     if (ev->Get()->Status != NKikimrProto::OK) {
         ClosePipe(ev->Get()->TabletId, ctx);
         RequestTabletIfNeeded(ev->Get()->TabletId, ctx);
-    } else {
-        auto it = TabletPipes.find(tabletId);
-        if (!it.IsEnd()) {
-            it->second.Generation = ev->Get()->Generation;
-            it->second.NodeId = ev->Get()->ServerId.NodeId();
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Generation " << ev->Get()->Generation << ", NodeId " << ev->Get()->ServerId.NodeId());
-        }
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Status " << ev->Get()->Status << ", TabletId " << tabletId);
+        return;
     }
+
+    Y_VERIFY_DEBUG_S(ev->Get()->Generation, "Tablet generation should be greater than 0");
+
+    auto it = TabletPipes.find(tabletId);
+    if (!it.IsEnd()) {
+        it->second.Generation = ev->Get()->Generation;
+        it->second.NodeId = ev->Get()->ServerId.NodeId();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected TabletId " << tabletId << ", NodeId " << ev->Get()->ServerId.NodeId() << ", Generation " << ev->Get()->Generation);
+    }
+    else
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "TEvClientConnected Pipe is not found, TabletId " << tabletId);
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
@@ -690,6 +696,7 @@ void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext&
     if (it != TabletPipes.end()) {
         NTabletPipe::CloseClient(ctx, it->second.PipeActor);
         TabletPipes.erase(it);
+        PipesRequested.erase(tabletId);
     }
 }
 

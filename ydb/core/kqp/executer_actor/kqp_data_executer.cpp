@@ -708,7 +708,12 @@ private:
                         case NKikimrTxDataShard::TError::SCHEME_ERROR:
                             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
                                 TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
-
+                        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
+                        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED: {
+                            auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
+                            AddDataShardErrors(result, issue);
+                            return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
+                        }
                         default:
                             break;
                     }

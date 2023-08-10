@@ -4,6 +4,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/aclib/aclib.h>
 
 #include "../kafka_events.h"
 
@@ -28,9 +29,17 @@ using namespace NKikimrClient;
 //
 class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor> {
     struct TPendingRequest;
+
+    enum ETopicStatus {
+        OK,
+        NOT_FOUND,
+        UNAUTHORIZED
+    };
+
 public:
-    TKafkaProduceActor(const TActorId& client, const TString& clientDC)
+    TKafkaProduceActor(const TActorId& client, const NACLib::TUserToken* userToken, const TString& clientDC)
         : Client(client)
+        , UserToken(userToken)
         , ClientDC(clientDC) {
     }
 
@@ -120,13 +129,14 @@ private:
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
 
-    TActorId PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx);
+    std::pair<ETopicStatus, TActorId> PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);
 
 private:
     const TActorId Client;
+    const NACLib::TUserToken* UserToken;
     TString SourceId;
 
     TString ClientDC;
@@ -167,8 +177,8 @@ private:
     std::set<TString> TopicsForInitialization;
 
     struct TTopicInfo {
-        bool NotFound = false;
-        TInstant NotFoundTime;
+        ETopicStatus Status = OK;
+        TInstant ExpirationTime;
 
         // partitioId -> tabletId
         std::unordered_map<ui32, ui64> partitions;

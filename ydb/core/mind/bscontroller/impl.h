@@ -1493,7 +1493,6 @@ private:
         enum EEv {
             EvUpdateSystemViews = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvUpdateSelfHealCounters,
-            EvHostRecordsTimeToLiveExceeded,
             EvDropDonor,
             EvScrub,
             EvVSlotReadyUpdate,
@@ -1504,7 +1503,6 @@ private:
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
         struct TEvUpdateSelfHealCounters : TEventLocal<TEvUpdateSelfHealCounters, EvUpdateSelfHealCounters> {};
-        struct TEvHostRecordsTimeToLiveExceeded : TEventLocal<TEvHostRecordsTimeToLiveExceeded, EvHostRecordsTimeToLiveExceeded> {};
 
         struct TEvDropDonor : TEventLocal<TEvDropDonor, EvDropDonor> {
             std::vector<TVSlotId> VSlotIds;
@@ -1681,6 +1679,8 @@ private:
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, GetNameserviceActorId(), SelfId(),
+            nullptr, 0));
         return TActor::PassAway();
     }
 
@@ -1728,7 +1728,6 @@ private:
 
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
-    void HandleHostRecordsTimeToLiveExceeded();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -1996,7 +1995,6 @@ public:
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             fFunc(TEvPrivate::EvUpdateSelfHealCounters, EnqueueIncomingEvent);
-            cFunc(TEvPrivate::EvHostRecordsTimeToLiveExceeded, HandleHostRecordsTimeToLiveExceeded);
             fFunc(TEvPrivate::EvDropDonor, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerScrubQueryStartQuantum, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerScrubQuantumFinished, EnqueueIncomingEvent);

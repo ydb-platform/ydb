@@ -54,6 +54,27 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
         });
     }
 
+    Y_UNIT_TEST(TestAnd) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::And, blockBoolType, blockBoolType, blockBoolType);
+        });
+    }
+
+    Y_UNIT_TEST(TestOr) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Or, blockBoolType, blockBoolType, blockBoolType);
+        });
+    }
+
+    Y_UNIT_TEST(TestXor) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
+            return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Xor, blockBoolType, blockBoolType, blockBoolType);
+        });
+    }    
+
     Y_UNIT_TEST(TestAdd) {
         TestOne([](auto& b,auto& ctx) {
             auto blockInt32Type = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Int32));

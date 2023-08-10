@@ -163,7 +163,7 @@ private:
 
                 if (!error) {
                     UNIT_ASSERT_EQUAL_C(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS, response.Utf8DebugString());
-                    UNIT_ASSERT(response.GetResponse().GetResults().empty());
+                    UNIT_ASSERT(response.GetResponse().GetYdbResults().empty());
 
                     writer.OnEndList();
                     UNIT_ASSERT_STRINGS_EQUAL(ReformatYson(R"(

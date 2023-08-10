@@ -54,7 +54,7 @@
 * [EXPORT и IMPORT](export_import.md)
 {% endif %}
 {% if feature_topic_control_plane %}
-* [CREATE TOPIC](create_topic.md)
-* [ALTER TOPIC](alter_topic.md)
-* [DROP TOPIC](drop_topic.md)
+* [CREATE TOPIC](create-topic.md)
+* [ALTER TOPIC](alter-topic.md)
+* [DROP TOPIC](drop-topic.md)
 {% endif %}

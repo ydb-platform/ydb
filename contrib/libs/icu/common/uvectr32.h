@@ -86,12 +86,12 @@ public:
      * equal if they are of the same size and all elements are equal,
      * as compared using this object's comparer.
      */
-    UBool operator==(const UVector32& other);
+    bool operator==(const UVector32& other);
 
     /**
      * Equivalent to !operator==()
      */
-    inline UBool operator!=(const UVector32& other);
+    inline bool operator!=(const UVector32& other);
 
     //------------------------------------------------------------
     // java.util.Vector API
@@ -181,7 +181,7 @@ public:
     /**
      * ICU "poor man's RTTI", returns a UClassID for the actual class.
      */
-    virtual UClassID getDynamicClassID() const;
+    virtual UClassID getDynamicClassID() const override;
 
 private:
     void _init(int32_t initialCapacity, UErrorCode &status);
@@ -214,7 +214,7 @@ public:
 
 inline UBool UVector32::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
     if ((minimumCapacity >= 0) && (capacity >= minimumCapacity)) {
-        return TRUE;
+        return true;
     } else {
         return expandCapacity(minimumCapacity, status);
     }
@@ -233,7 +233,7 @@ inline void UVector32::addElement(int32_t elem, UErrorCode &status) {
 }
 
 inline int32_t *UVector32::reserveBlock(int32_t size, UErrorCode &status) {
-    if (ensureCapacity(count+size, status) == FALSE) {
+    if (ensureCapacity(count+size, status) == false) {
         return NULL;
     }
     int32_t  *rp = elements+count;
@@ -268,7 +268,7 @@ inline int32_t UVector32::lastElementi(void) const {
     return elementAti(count-1);
 }
 
-inline UBool UVector32::operator!=(const UVector32& other) {
+inline bool UVector32::operator!=(const UVector32& other) {
     return !operator==(other);
 }
 

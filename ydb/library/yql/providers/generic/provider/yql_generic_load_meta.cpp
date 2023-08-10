@@ -124,6 +124,8 @@ namespace NYql {
                 dsi->set_database(TString(db));
                 request.set_table(TString(dbTable));
 
+                dsi->set_use_tls(clusterConfig.GetUseSsl());
+
                 // NOTE: errors will be checked further in DoApplyAsyncChanges
                 Results_.emplace(item, TGenericTableDescription(request.data_source_instance(), Client_->DescribeTable(request)));
 

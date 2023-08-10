@@ -13,6 +13,12 @@ using namespace NYdb::NTable;
 static const ui32 LargeTableShards = 8;
 static const ui32 LargeTableKeysPerShard = 1000000;
 
+namespace {
+    bool IsRetryable(const EStatus& status) {
+        return status == EStatus::OVERLOADED;    
+    }
+}
+
 static void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
     ui32 dataTextSize, ui32 batchSizeRows = 100, ui32 fillShardsCount = LargeTableShards)
 {
@@ -193,7 +199,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             rowsBuilder.EndList();
 
             auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
-            if (result.GetStatus() == EStatus::OVERLOADED) {
+            if (IsRetryable(result.GetStatus())) {
                 continue;
             } 
             if (result.GetStatus() != EStatus::SUCCESS) {
@@ -260,12 +266,13 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
-            if (result.GetStatus() == EStatus::OVERLOADED) {
+            if (IsRetryable(result.GetStatus())) {
                 continue;
             } 
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "OUT_OF_SPACE");
                 failedToInsert = true;
                 break;
             }

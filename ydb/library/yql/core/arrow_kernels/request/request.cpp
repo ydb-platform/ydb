@@ -39,15 +39,24 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     auto arg1 = MakeArg(arg1Type);
     auto arg2 = MakeArg(arg2Type);
     switch (op) {
+    case EBinaryOp::And:
+        Items_.emplace_back(Pb_.BlockAnd(arg1, arg2));
+        break;
+    case EBinaryOp::Or:
+        Items_.emplace_back(Pb_.BlockOr(arg1, arg2));
+        break;
+    case EBinaryOp::Xor:
+        Items_.emplace_back(Pb_.BlockXor(arg1, arg2));
+        break;
     case EBinaryOp::Add:
         Items_.emplace_back(Pb_.BlockFunc("Add", returnType, { arg1, arg2 }));
         break;
     case EBinaryOp::Sub:
         Items_.emplace_back(Pb_.BlockFunc("Sub", returnType, { arg1, arg2 }));
-        break;        
+        break;
     case EBinaryOp::Mul:
         Items_.emplace_back(Pb_.BlockFunc("Mul", returnType, { arg1, arg2 }));
-        break;                
+        break;
     case EBinaryOp::Div:
         Items_.emplace_back(Pb_.BlockFunc("Div", returnType, { arg1, arg2 }));
         break;

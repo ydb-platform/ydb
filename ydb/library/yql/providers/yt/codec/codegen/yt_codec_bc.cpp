@@ -205,6 +205,17 @@ extern "C" ui8 ReadOptional(void* vbuf) {
     return buf.Read();
 }
 
+extern "C" ui16 ReadVariantData(void* vbuf, ui8 oneByte) {
+    NCommon::TInputBuf& buf = *(NCommon::TInputBuf*)vbuf;
+    if (oneByte) {
+        return buf.Read();
+    } else {
+        ui16 data = 0;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return data;
+    }
+}
+
 extern "C" void SkipFixedData(void* vbuf, ui64 size) {
     NCommon::TInputBuf& buf = *(NCommon::TInputBuf*)vbuf;
     buf.SkipMany(size);

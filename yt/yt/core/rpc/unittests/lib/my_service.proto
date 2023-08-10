@@ -208,3 +208,14 @@ message TRspGetTraceBaggage
 {
     required string baggage = 1;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqCustomMetadata
+{
+}
+
+message TRspCustomMetadata
+{
+    map<string, bytes> parsed_custom_metadata = 1;
+}

@@ -33,7 +33,7 @@ void TTcpDispatcherConfig::Register(TRegistrar registrar)
     registrar.Parameter("multiplexing_bands", &TThis::MultiplexingBands)
         .Default();
 
-    registrar.Parameter("bus_certs_dir", &TThis::BusCertsDir)
+    registrar.Parameter("bus_certs_directory_path", &TThis::BusCertsDirectoryPath)
         .Default();
 }
 
@@ -44,6 +44,7 @@ TTcpDispatcherConfigPtr TTcpDispatcherConfig::ApplyDynamic(
     UpdateYsonStructField(mergedConfig->ThreadPoolSize, dynamicConfig->ThreadPoolSize);
     UpdateYsonStructField(mergedConfig->Networks, dynamicConfig->Networks);
     UpdateYsonStructField(mergedConfig->MultiplexingBands, dynamicConfig->MultiplexingBands);
+    UpdateYsonStructField(mergedConfig->BusCertsDirectoryPath, dynamicConfig->BusCertsDirectoryPath);
     mergedConfig->Postprocess();
     return mergedConfig;
 }
@@ -64,6 +65,9 @@ void TTcpDispatcherDynamicConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("multiplexing_bands", &TThis::MultiplexingBands)
         .Optional();
+
+    registrar.Parameter("bus_certs_directory_path", &TThis::BusCertsDirectoryPath)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -126,7 +130,7 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("use_key_pair_from_ssl_context", &TThis::UseKeyPairFromSslContext)
         .Default(false);
-    registrar.Parameter("load_from_certs_dir", &TThis::LoadFromCertsDir)
+    registrar.Parameter("load_certs_from_bus_certs_directory", &TThis::LoadCertsFromBusCertsDirectory)
         .Default(false);
 }
 

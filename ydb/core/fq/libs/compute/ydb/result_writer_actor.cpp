@@ -90,12 +90,13 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
 
         StartTime = TInstant::Now();
+        Truncated |= response.ResultSet->Truncated();
         FetchToken = response.NextFetchToken;
         auto emptyResultSet = response.ResultSet->RowsCount() == 0;
         const auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
@@ -131,7 +132,7 @@ public:
         } else {
             writeResultCounters->Error->Inc();
             LOG_E("Error writing result for offset " << Offset);
-            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error writing result for offset " << Offset}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error writing result for offset " << Offset}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -144,7 +145,7 @@ public:
     }
 
     void SendReplyAndPassAway() {
-        Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(Offset));
+        Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, Offset, Truncated));
         PassAway();
     }
 
@@ -167,6 +168,7 @@ private:
     TCounters Counters;
     TInstant StartTime;
     int64_t Offset = 0;
+    bool Truncated = false;
     TString FetchToken;
 };
 
@@ -256,7 +258,6 @@ public:
             for (const auto& column: resultSetMeta.columns()) {
                 *meta.add_column() = column;
             }
-            meta.set_truncated(resultSetMeta.truncated());
         }
 
         WriteNextResultSet();
@@ -287,7 +288,15 @@ public:
             FailedAndPassAway();
             return;
         }
-        PingTaskRequest.mutable_result_set_meta(CurrentResultSetId - 1)->set_rows_count(ev->Get()->RowsCount);
+        if (response.ResultSetId >= static_cast<ui64>(PingTaskRequest.result_set_meta_size())) {
+            LOG_E("Can't fetch script result: internal error");
+            Send(Parent, new TEvYdbCompute::TEvResultWriterResponse(ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
+            FailedAndPassAway();
+            return;
+        }
+        auto* meta = PingTaskRequest.mutable_result_set_meta(response.ResultSetId);
+        meta->set_rows_count(response.RowsCount);
+        meta->set_truncated(response.Truncated);
         WriteNextResultSet();
     }
 

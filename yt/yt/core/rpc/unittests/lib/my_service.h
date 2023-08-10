@@ -45,6 +45,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NMyRpc, ServerNotWriting,
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NMyRpc, GetTraceBaggage);
+    DEFINE_RPC_PROXY_METHOD(NMyRpc, CustomMetadata);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

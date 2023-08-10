@@ -5,6 +5,7 @@
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/query_actor/query_actor.h>
@@ -1883,7 +1884,7 @@ public:
                 return;
             }
 
-            Ydb::Query::ResultSetMeta meta;
+            Ydb::Query::Internal::ResultSetMeta meta;
             NProtobufJson::Json2Proto(*metaValue, meta);
 
             *Response->Record.MutableResultSet()->mutable_columns() = meta.columns();

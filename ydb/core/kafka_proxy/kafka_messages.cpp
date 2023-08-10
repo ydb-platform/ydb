@@ -14,10 +14,14 @@ std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
             return std::make_unique<TFetchRequestData>();
         case METADATA:
             return std::make_unique<TMetadataRequestData>();
+        case SASL_HANDSHAKE:
+            return std::make_unique<TSaslHandshakeRequestData>();
         case API_VERSIONS:
             return std::make_unique<TApiVersionsRequestData>();
         case INIT_PRODUCER_ID:
             return std::make_unique<TInitProducerIdRequestData>();
+        case SASL_AUTHENTICATE:
+            return std::make_unique<TSaslAuthenticateRequestData>();
         default:
             ythrow yexception() << "Unsupported request API key " <<  apiKey;
     }
@@ -31,10 +35,14 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey) {
             return std::make_unique<TFetchResponseData>();
         case METADATA:
             return std::make_unique<TMetadataResponseData>();
+        case SASL_HANDSHAKE:
+            return std::make_unique<TSaslHandshakeResponseData>();
         case API_VERSIONS:
             return std::make_unique<TApiVersionsResponseData>();
         case INIT_PRODUCER_ID:
             return std::make_unique<TInitProducerIdResponseData>();
+        case SASL_AUTHENTICATE:
+            return std::make_unique<TSaslAuthenticateResponseData>();
         default:
             ythrow yexception() << "Unsupported response API key " <<  apiKey;
     }
@@ -60,6 +68,8 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             } else {
                 return 1;
             }
+        case SASL_HANDSHAKE:
+            return 1;
         case API_VERSIONS:
             if (_version >= 3) {
                 return 2;
@@ -67,6 +77,12 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
                 return 1;
             }
         case INIT_PRODUCER_ID:
+            if (_version >= 2) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case SASL_AUTHENTICATE:
             if (_version >= 2) {
                 return 2;
             } else {
@@ -98,11 +114,19 @@ TKafkaVersion ResponseHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             } else {
                 return 0;
             }
+        case SASL_HANDSHAKE:
+            return 0;
         case API_VERSIONS:
             // ApiVersionsResponse always includes a v0 header.
             // See KIP-511 for details.
             return 0;
         case INIT_PRODUCER_ID:
+            if (_version >= 2) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case SASL_AUTHENTICATE:
             if (_version >= 2) {
                 return 1;
             } else {
@@ -1855,6 +1879,115 @@ i32 TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::S
 
 
 //
+// TSaslHandshakeRequestData
+//
+const TSaslHandshakeRequestData::MechanismMeta::Type TSaslHandshakeRequestData::MechanismMeta::Default = {""};
+
+TSaslHandshakeRequestData::TSaslHandshakeRequestData() 
+        : Mechanism(MechanismMeta::Default)
+{}
+
+void TSaslHandshakeRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TSaslHandshakeRequestData";
+    }
+    NPrivate::Read<MechanismMeta>(_readable, _version, Mechanism);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        int _numTaggedFields = _readable.readUnsignedVarint();
+        for (int _i = 0; _i < _numTaggedFields; ++_i) {
+            int _tag = _readable.readUnsignedVarint();
+            int _size = _readable.readUnsignedVarint();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TSaslHandshakeRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TSaslHandshakeRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<MechanismMeta>(_collector, _writable, _version, Mechanism);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TSaslHandshakeRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<MechanismMeta>(_collector, _version, Mechanism);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TSaslHandshakeResponseData
+//
+const TSaslHandshakeResponseData::ErrorCodeMeta::Type TSaslHandshakeResponseData::ErrorCodeMeta::Default = 0;
+
+TSaslHandshakeResponseData::TSaslHandshakeResponseData() 
+        : ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TSaslHandshakeResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TSaslHandshakeResponseData";
+    }
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<MechanismsMeta>(_readable, _version, Mechanisms);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        int _numTaggedFields = _readable.readUnsignedVarint();
+        for (int _i = 0; _i < _numTaggedFields; ++_i) {
+            int _tag = _readable.readUnsignedVarint();
+            int _size = _readable.readUnsignedVarint();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TSaslHandshakeResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TSaslHandshakeResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<MechanismsMeta>(_collector, _writable, _version, Mechanisms);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TSaslHandshakeResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<MechanismsMeta>(_collector, _version, Mechanisms);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
 // TApiVersionsRequestData
 //
 const TApiVersionsRequestData::ClientSoftwareNameMeta::Type TApiVersionsRequestData::ClientSoftwareNameMeta::Default = {""};
@@ -2322,6 +2455,123 @@ i32 TInitProducerIdResponseData::Size(TKafkaVersion _version) const {
     NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
     NPrivate::Size<ProducerIdMeta>(_collector, _version, ProducerId);
     NPrivate::Size<ProducerEpochMeta>(_collector, _version, ProducerEpoch);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TSaslAuthenticateRequestData
+//
+
+TSaslAuthenticateRequestData::TSaslAuthenticateRequestData() 
+{}
+
+void TSaslAuthenticateRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TSaslAuthenticateRequestData";
+    }
+    NPrivate::Read<AuthBytesMeta>(_readable, _version, AuthBytes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        int _numTaggedFields = _readable.readUnsignedVarint();
+        for (int _i = 0; _i < _numTaggedFields; ++_i) {
+            int _tag = _readable.readUnsignedVarint();
+            int _size = _readable.readUnsignedVarint();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TSaslAuthenticateRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TSaslAuthenticateRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<AuthBytesMeta>(_collector, _writable, _version, AuthBytes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TSaslAuthenticateRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<AuthBytesMeta>(_collector, _version, AuthBytes);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TSaslAuthenticateResponseData
+//
+const TSaslAuthenticateResponseData::ErrorCodeMeta::Type TSaslAuthenticateResponseData::ErrorCodeMeta::Default = 0;
+const TSaslAuthenticateResponseData::ErrorMessageMeta::Type TSaslAuthenticateResponseData::ErrorMessageMeta::Default = {""};
+const TSaslAuthenticateResponseData::SessionLifetimeMsMeta::Type TSaslAuthenticateResponseData::SessionLifetimeMsMeta::Default = 0;
+
+TSaslAuthenticateResponseData::TSaslAuthenticateResponseData() 
+        : ErrorCode(ErrorCodeMeta::Default)
+        , ErrorMessage(ErrorMessageMeta::Default)
+        , SessionLifetimeMs(SessionLifetimeMsMeta::Default)
+{}
+
+void TSaslAuthenticateResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TSaslAuthenticateResponseData";
+    }
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
+    NPrivate::Read<AuthBytesMeta>(_readable, _version, AuthBytes);
+    NPrivate::Read<SessionLifetimeMsMeta>(_readable, _version, SessionLifetimeMs);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        int _numTaggedFields = _readable.readUnsignedVarint();
+        for (int _i = 0; _i < _numTaggedFields; ++_i) {
+            int _tag = _readable.readUnsignedVarint();
+            int _size = _readable.readUnsignedVarint();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TSaslAuthenticateResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TSaslAuthenticateResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<ErrorMessageMeta>(_collector, _writable, _version, ErrorMessage);
+    NPrivate::Write<AuthBytesMeta>(_collector, _writable, _version, AuthBytes);
+    NPrivate::Write<SessionLifetimeMsMeta>(_collector, _writable, _version, SessionLifetimeMs);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TSaslAuthenticateResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<ErrorMessageMeta>(_collector, _version, ErrorMessage);
+    NPrivate::Size<AuthBytesMeta>(_collector, _version, AuthBytes);
+    NPrivate::Size<SessionLifetimeMsMeta>(_collector, _version, SessionLifetimeMs);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);

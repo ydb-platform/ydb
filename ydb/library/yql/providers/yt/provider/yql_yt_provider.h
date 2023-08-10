@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/ast/yql_constraint.h>
 
+#include <library/cpp/time_provider/monotonic.h>
 #include <library/cpp/yson/writer.h>
 
 #include <util/generic/string.h>
@@ -98,6 +99,9 @@ struct TYtState : public TThrRefBase {
     THolder<IDqIntegration> DqIntegration_;
     ui32 NextEpochId = 1;
     bool OnlyNativeExecution = false;
+    TDuration TimeSpentInHybrid;
+    NMonotonic::TMonotonic HybridStartTime;
+    std::unordered_set<ui32> HybridInFlightOprations;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;

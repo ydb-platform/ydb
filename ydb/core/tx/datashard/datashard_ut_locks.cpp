@@ -705,14 +705,15 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
         auto &resp = reply->Record.GetRef().GetResponse();
-        UNIT_ASSERT_VALUES_EQUAL(resp.ResultsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.YdbResultsSize(), 1);
+
         if (waitForLocksStore)
-            UNIT_ASSERT_VALUES_EQUAL(resp.GetResults(0).GetValue().GetStruct(0).ListSize(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetYdbResults(0).rows_size(), 4);
         else {
             // We don't actually know whether we killed tablet before locks were stored or after.
             // So either 2 or 4 records are allowed.
-            UNIT_ASSERT(resp.GetResults(0).GetValue().GetStruct(0).ListSize() == 4
-                        || resp.GetResults(0).GetValue().GetStruct(0).ListSize() == 2);
+            UNIT_ASSERT(resp.GetYdbResults(0).rows_size() == 4
+                        || resp.GetYdbResults(0).rows_size() == 2);
         }
     }
 }

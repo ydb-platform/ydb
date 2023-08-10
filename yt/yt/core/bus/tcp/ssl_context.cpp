@@ -5,6 +5,8 @@
 
 #include <library/cpp/openssl/init/init.h>
 
+#include <library/cpp/yt/threading/spin_lock.h>
+
 #include <util/system/mutex.h>
 
 #include <openssl/err.h>
@@ -80,7 +82,7 @@ public:
     //! This function is for testing purposes.
     void LoadCAFile(const TString& filePath)
     {
-        TGuard<TMutex> guard(Mutex_);
+        auto guard = Guard(SpinLock_);
 
         LoadCAFileUnlocked(filePath);
 
@@ -93,7 +95,7 @@ public:
             return;
         }
 
-        TGuard<TMutex> guard(Mutex_);
+        auto guard = Guard(SpinLock_);
 
         if (CAIsLoaded_) {
             return;
@@ -123,7 +125,7 @@ public:
     //! This function is for testing purposes.
     void UseCA(const TString& ca)
     {
-        TGuard<TMutex> guard(Mutex_);
+        auto guard = Guard(SpinLock_);
 
         UseCAUnlocked(ca);
 
@@ -179,7 +181,7 @@ public:
             return;
         }
 
-        TGuard<TMutex> guard(Mutex_);
+        auto guard = Guard(SpinLock_);
 
         if (CipherListIsSet_) {
             return;
@@ -193,7 +195,7 @@ public:
     //! This function is for testing purposes.
     void SetCipherList(const TString& cipherList)
     {
-        TGuard<TMutex> guard(Mutex_);
+        auto guard = Guard(SpinLock_);
 
         SetCipherListUnlocked(cipherList);
 
@@ -244,7 +246,7 @@ private:
     }
 
 private:
-    TMutex Mutex_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     std::atomic<bool> CAIsLoaded_ = false;
     std::atomic<bool> CipherListIsSet_ = false;
     std::unique_ptr<SSL_CTX, TDeleter> SslCtx_;

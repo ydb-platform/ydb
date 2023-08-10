@@ -128,7 +128,7 @@ public:
 
             FuncRegistry_->SetSystemModulePaths(systemModules);
 
-            NYql::TUserDataTable userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, {}, Clusters_, {});
+            auto userDataTable = GetYqlModuleResolver(ExprContext_, ModuleResolver_, {}, Clusters_, {});
 
             if (!userDataTable) {
                 TStringStream err;
@@ -261,13 +261,12 @@ private:
     THashMap<TString, TString> Clusters_;
     std::optional<TString> DefaultCluster_;
     THashMap<TString, TString> Modules_;
-    THashSet<TString> Libraries_;
     TYsonString OperationAttributes_;
 
     TString PatchQueryAttributes(TYsonString configAttributes, TYsonString querySettings)
     {
-        NYT::TNode querySettingsMap = NodeFromYsonString(querySettings.ToString());
-        NYT::TNode resultAttributesMap = NodeFromYsonString(configAttributes.ToString());
+        auto querySettingsMap = NodeFromYsonString(querySettings.ToString());
+        auto resultAttributesMap = NodeFromYsonString(configAttributes.ToString());
 
         for (const auto& item: querySettingsMap.AsMap()) {
             resultAttributesMap[item.first] = item.second;

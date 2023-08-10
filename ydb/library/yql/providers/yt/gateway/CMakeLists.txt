@@ -6,5 +6,6 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(file)
 add_subdirectory(lib)
 add_subdirectory(native)

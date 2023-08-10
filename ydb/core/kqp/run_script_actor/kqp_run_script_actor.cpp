@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -169,7 +170,7 @@ private:
                                                      Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst)));
             return;
         }
-        
+
         if (RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
             RunState = ERunState::Finished;
             TerminateActorExecution(Ydb::StatusIds::PRECONDITION_FAILED, { NYql::TIssue("Already finished") });
@@ -220,7 +221,7 @@ private:
         if (resultSetIndex >= ExpireAt.size()) {
             // we don't know result set count, so just accept all of them
             // it's possible to have several result sets per script
-            // they can arrive in any order and may be missed for some indices 
+            // they can arrive in any order and may be missed for some indices
             ResultSetRowCount.resize(resultSetIndex + 1);
             ResultSetByteCount.resize(resultSetIndex + 1);
             Truncated.resize(resultSetIndex + 1);
@@ -255,7 +256,7 @@ private:
             }
 
             if (firstRow == 0 || Truncated[resultSetIndex]) {
-                Ydb::Query::ResultSetMeta meta;
+                Ydb::Query::Internal::ResultSetMeta meta;
                 *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
                 meta.set_truncated(Truncated[resultSetIndex]);
 
@@ -299,10 +300,10 @@ private:
             return;
         }
         auto& record = ev->Get()->Record.GetRef();
-        
+
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::IssuesFromMessage(issueMessage, Issues);
-        
+
         if (record.GetResponse().HasQueryPlan()) {
             QueryPlan = record.GetResponse().GetQueryPlan();
         }

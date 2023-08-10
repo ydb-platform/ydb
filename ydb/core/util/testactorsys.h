@@ -17,6 +17,9 @@
 
 namespace NKikimr {
 
+void RegisterActorName(const TActorId& actorId, const TString& name);
+TString GetRegisteredActorName(const TActorId& actorId);
+
 class TTestExecutorPool;
 
 class TTestActorSystem {
@@ -106,6 +109,7 @@ class TTestActorSystem {
     TProgramShouldContinue ProgramShouldContinue;
     TAppData AppData;
     TIntrusivePtr<NLog::TSettings> LoggerSettings_;
+    NActors::NLog::EPrio OwnLogPriority = NActors::NLog::EPrio::Error;
     TActorId CurrentRecipient;
     ui32 CurrentNodeId = 0;
     ui64 EventsProcessed = 0;
@@ -365,6 +369,10 @@ public:
         Y_VERIFY(!res, "failed to set log level: %s", explanation.data());
     }
 
+    void SetOwnLogPriority(NActors::NLog::EPrio priority) {
+        OwnLogPriority = priority;
+    }
+
     bool Send(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {
         if (!ev) {
             return false;
@@ -387,6 +395,12 @@ public:
 
         nodeId = nodeId ? nodeId : CurrentNodeId;
         Y_VERIFY(nodeId);
+
+        if (OwnLogPriority >= NActors::NLog::EPrio::Info) {
+            auto actor = GetActor(TransformEvent(ev.Get(), nodeId));
+            const auto targetActorId = actor ? (actor->SelfId()) : TActorId{0, 0};
+            *LogStream << "[TestActorSystem] Send event from " << GetRegisteredActorName(ev->Sender) << " to " << GetRegisteredActorName(targetActorId) << ": " << ev->ToString() << Endl;
+        }
 
         // check if the target actor exists; we have to transform the event recipient early to keep behaviour of real
         // actor system here
@@ -436,7 +450,7 @@ public:
         // count stats
         TString name = TypeName(*actor);
         ++ActorStats[name].Created;
-        const bool inserted = ActorName.emplace(actor, std::move(name)).second;
+        const bool inserted = ActorName.emplace(actor, name).second;
         Y_VERIFY(inserted);
 
         // specify node id if not provided
@@ -457,6 +471,10 @@ public:
         // generate actor id
         const TActorId actorId(nodeId, poolId, mbox.ActorLocalId, mboxId);
         ++mbox.ActorLocalId;
+        if (OwnLogPriority >= NActors::NLog::EPrio::Info) {
+            *LogStream << "[TestActorSystem] Register actor \"" << name << "\" with id " << actorId.ToString() << Endl;
+            RegisterActorName(actorId, name);
+        }
 
         // initialize actor in actor system
         DoActorInit(info->ActorSystem.get(), actor, actorId, parentId ? parentId : CurrentRecipient);

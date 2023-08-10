@@ -259,6 +259,12 @@ struct TEnvironmentSetup {
         for (const auto& comp : debug) {
             Runtime->SetLogPriority(comp, NLog::PRI_DEBUG);
         }
+
+        // toggle the flag to enable logging of actor names and events
+        bool printActorNamesAndEvents = false;
+        if (printActorNamesAndEvents) {
+            Runtime->SetOwnLogPriority(NActors::NLog::EPrio::Info);
+        }
     }
 
     void SetupStaticStorage() {

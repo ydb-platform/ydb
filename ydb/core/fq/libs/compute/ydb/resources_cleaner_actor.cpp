@@ -81,13 +81,13 @@ public:
 
     void Handle(const TEvYdbCompute::TEvForgetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
-        if (response.Status != NYdb::EStatus::SUCCESS) {
+        if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
             LOG_E("Can't forget operation: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse(ev->Get()->Issues, ev->Get()->Status));
             FailedAndPassAway();
             return;
         }
-        LOG_I("Operation successfully forgotten");
+        LOG_I("Operation successfully forgotten " << response.Status);
         Send(Parent, new TEvYdbCompute::TEvResourcesCleanerResponse({}, NYdb::EStatus::SUCCESS));
         CompleteAndPassAway();
     }

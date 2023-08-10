@@ -116,6 +116,10 @@ static void OutOfSpace(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
 }
 
+static void DiskSpaceExhausted(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
+    response.SetStatus(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED);
+}
+
 static void WrongShardState(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
 }
@@ -125,6 +129,11 @@ static void ReadOnly(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
 }
 
 static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
+    // NOTE: this function is never called, because erase is allowed when out of space
+    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+}
+
+static void DiskSpaceExhausted(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     // NOTE: this function is never called, because erase is allowed when out of space
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
 }
@@ -161,6 +170,8 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     TString rejectReason;
     bool reject = self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason);
     bool outOfSpace = false;
+    bool isDiskSpaceExhausted = false;
+
 
     if (!reject && isWrite) {
         if (self->IsAnyChannelYellowStop()) {
@@ -172,6 +183,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
             reject = true;
             outOfSpace = true;
             rejectReason = "Cannot perform writes: database is out of disk space";
+            isDiskSpaceExhausted = true;
             self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
         }
     }
@@ -181,7 +193,11 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     }
 
     if (outOfSpace) {
-        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &OutOfSpace, ctx);
+        if (isDiskSpaceExhausted) {
+            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &DiskSpaceExhausted, ctx);
+        } else {
+            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &OutOfSpace, ctx);
+        }
     } else {
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &WrongShardState, ctx);
     }

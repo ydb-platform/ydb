@@ -1272,6 +1272,11 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! Using this option is not recommended unless you know for sure why you need it.
     FLUENT_SETTING_OPTIONAL(ui32, PartitionId);
 
+    //! Direct write to the partition host
+    //! If both PartitionId and DirectWriteToPartition are set, write session goes directly to the partition host
+    //! DirectWriteToPartition without PartitionId will be ignored.
+    FLUENT_SETTING_DEFAULT(bool, DirectWriteToPartition, false);
+
     //! codec and level to use for data compression prior to write.
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
     FLUENT_SETTING_DEFAULT(i32, CompressionLevel, 4);

@@ -52,6 +52,7 @@ message TYdbCompute {
     bool Enable = 1;
     TYdbComputeControlPlane ControlPlane = 2;
     TSynchronizationService SynchronizationService = 3;
+    repeated string PinTenantName = 4;
 }
 
 enum EComputeType {

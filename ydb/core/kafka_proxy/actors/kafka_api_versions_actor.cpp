@@ -8,7 +8,7 @@ NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 c
 
 TApiVersionsResponseData::TPtr GetApiVersions() {
     TApiVersionsResponseData::TPtr response = std::make_shared<TApiVersionsResponseData>();
-    response->ApiKeys.resize(4);
+    response->ApiKeys.resize(6);
 
     response->ApiKeys[0].ApiKey = PRODUCE;
     response->ApiKeys[0].MinVersion = 3; // From version 3 record batch format is 2. Supported only 2th batch format.
@@ -25,6 +25,14 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     response->ApiKeys[3].ApiKey = INIT_PRODUCER_ID;
     response->ApiKeys[3].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;
     response->ApiKeys[3].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
+
+    response->ApiKeys[4].ApiKey = SASL_HANDSHAKE;
+    response->ApiKeys[4].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;//savnik: check
+    response->ApiKeys[4].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
+
+    response->ApiKeys[5].ApiKey = SASL_AUTHENTICATE;
+    response->ApiKeys[5].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;
+    response->ApiKeys[5].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
 
     return response;
 }

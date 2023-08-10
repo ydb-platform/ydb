@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/codec/yql_restricted_yson.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h>
@@ -913,18 +914,27 @@ protected:
         case TType::EKind::Variant: {
             auto varType = static_cast<TVariantType*>(type);
             CHECK_EXPECTED(cmd, BeginListSymbol);
-            EXPECTED(Buf_, Uint64Marker);
-            ui64 index = Buf_.ReadVarUI64();
-            YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
-                varType->GetAlternativesCount() << " are available");
+            cmd = Buf_.Read();
+            YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker, "Excepted [U]Int64 marker, but got: " << int(cmd));
             auto underlyingType = varType->GetUnderlyingType();
             YQL_ENSURE(underlyingType->IsTuple() || underlyingType->IsStruct(), "Wrong underlying type");
             TType* itemType;
+            i64 index;
+
+            if (cmd == Int64Marker) {
+                index = Buf_.ReadVarI64();
+            } else {
+                index = Buf_.ReadVarUI64();
+            }
+
+            YQL_ENSURE(index > -1 && index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
+                varType->GetAlternativesCount() << " are available");
             if (underlyingType->IsTuple()) {
                 itemType = static_cast<TTupleType*>(underlyingType)->GetElementType(index);
             } else {
                 itemType = static_cast<TStructType*>(underlyingType)->GetMemberType(index);
             }
+
 
             EXPECTED(Buf_, ListItemSeparatorSymbol);
             cmd = Buf_.Read();
@@ -1004,18 +1014,42 @@ protected:
 
         case TType::EKind::Struct: {
             auto structType = static_cast<TStructType*>(type);
-            CHECK_EXPECTED(cmd, BeginListSymbol);
-            cmd = Buf_.Read();
+            YQL_ENSURE(cmd == BeginMapSymbol || cmd == BeginListSymbol);
+            if (cmd == BeginListSymbol) {
+                cmd = Buf_.Read();
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    SkipValue(structType->GetMemberType(i), cmd);
 
+                    cmd = Buf_.Read();
+                    if (cmd == ListItemSeparatorSymbol) {
+                        cmd = Buf_.Read();
+                    }
+                }
+                CHECK_EXPECTED(cmd, EndMapSymbol);
+                break;
+            }
+
+            cmd = Buf_.Read();
             for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                SkipValue(structType->GetMemberType(i), cmd);
+                CHECK_EXPECTED(cmd, StringMarker);
+                const i32 length = Buf_.ReadVarI32();
+                CHECK_STRING_LENGTH(length);
+                TString name(length, '\0');
+                Buf_.ReadMany((char*)name.data(), length);
+                cmd = Buf_.Read();
+                CHECK_EXPECTED(cmd, KeyValueSeparatorSymbol);
+
+                auto idx = structType->FindMemberIndex(name);
+                YQL_ENSURE(idx);
+                cmd = Buf_.Read();
+                SkipValue(structType->GetMemberType(*idx), cmd);
 
                 cmd = Buf_.Read();
                 if (cmd == ListItemSeparatorSymbol) {
                     cmd = Buf_.Read();
                 }
             }
-            CHECK_EXPECTED(cmd, EndListSymbol);
+            CHECK_EXPECTED(cmd, EndMapSymbol);
             break;
         }
 
@@ -1331,89 +1365,7 @@ protected:
     }
 
     void SkipSkiffField(TType* type, ui64 nativeYtTypeFlags) {
-        const bool isOptional = type->IsOptional();
-        TType* uwrappedType = type;
-        if (type->IsOptional()) {
-            uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
-        }
-
-        if (isOptional) {
-            auto marker = Buf_.Read();
-            if (!marker) {
-                return;
-            }
-        }
-
-        if (uwrappedType->IsData()) {
-            auto schemeType = static_cast<TDataType*>(uwrappedType)->GetSchemeType();
-            switch (schemeType) {
-            case NUdf::TDataType<bool>::Id:
-                Buf_.SkipMany(sizeof(ui8));
-                break;
-
-            case NUdf::TDataType<ui8>::Id:
-            case NUdf::TDataType<ui16>::Id:
-            case NUdf::TDataType<ui32>::Id:
-            case NUdf::TDataType<ui64>::Id:
-            case NUdf::TDataType<NUdf::TDate>::Id:
-            case NUdf::TDataType<NUdf::TDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTimestamp>::Id:
-                Buf_.SkipMany(sizeof(ui64));
-                break;
-
-            case NUdf::TDataType<i8>::Id:
-            case NUdf::TDataType<i16>::Id:
-            case NUdf::TDataType<i32>::Id:
-            case NUdf::TDataType<i64>::Id:
-            case NUdf::TDataType<NUdf::TInterval>::Id:
-                Buf_.SkipMany(sizeof(i64));
-                break;
-
-            case NUdf::TDataType<float>::Id:
-            case NUdf::TDataType<double>::Id:
-                Buf_.SkipMany(sizeof(double));
-                break;
-
-            case NUdf::TDataType<NUdf::TUtf8>::Id:
-            case NUdf::TDataType<char*>::Id:
-            case NUdf::TDataType<NUdf::TJson>::Id:
-            case NUdf::TDataType<NUdf::TYson>::Id:
-            case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TDyNumber>::Id:
-            case NUdf::TDataType<NUdf::TTzDate>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
-                ui32 size;
-                Buf_.ReadMany((char*)&size, sizeof(size));
-                CHECK_STRING_LENGTH_UNSIGNED(size);
-                Buf_.SkipMany(size);
-                break;
-            }
-            case NUdf::TDataType<NUdf::TDecimal>::Id: {
-                if (nativeYtTypeFlags & NTCF_DECIMAL) {
-                    auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
-                    if (params.first < 10) {
-                        Buf_.SkipMany(sizeof(i32));
-                    } else if (params.first < 19) {
-                        Buf_.SkipMany(sizeof(i64));
-                    } else {
-                        Buf_.SkipMany(sizeof(NDecimal::TInt128));
-                    }
-                } else {
-                    ui32 size;
-                    Buf_.ReadMany((char*)&size, sizeof(size));
-                    CHECK_STRING_LENGTH_UNSIGNED(size);
-                    Buf_.SkipMany(size);
-                }
-                break;
-            }
-            default:
-                YQL_ENSURE(false, "Unsupported data type: " << schemeType);
-            }
-        } else {
-            ythrow yexception() << "Skip of complex types is not supported";
-        }
+        return NCommon::SkipSkiffField(type, nativeYtTypeFlags, Buf_);
     }
 };
 

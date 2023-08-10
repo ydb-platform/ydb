@@ -18,9 +18,9 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
         clusters[Cluster.Cluster] = Cluster.Proxy;
     }
 
-    TYsonString operationAttributes = bridgeOptions->OperationAttributes
-        ? TYsonString(TString(bridgeOptions->OperationAttributes))
-        : TYsonString{};
+    auto operationAttributes = bridgeOptions->OperationAttributes
+        ? TYsonString(TString(bridgeOptions->OperationAttributes, bridgeOptions->OperationAttributesLength))
+        : TYsonString();
 
     TYqlPluginOptions options{
         .MRJobBinary = TString(bridgeOptions->MRJobBinary),
@@ -53,7 +53,7 @@ void BridgeFreeQueryResult(TBridgeQueryResult* result)
 
 TBridgeQueryResult* BridgeRun(TBridgeYqlPlugin* plugin, const char* impersonationUser, const char* queryText, const char* settings)
 {
-    static const TYsonString EmptyMap = TYsonString(TString("{}"));
+    static const auto EmptyMap = TYsonString(TString("{}"));
 
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
     auto* bridgeResult = new TBridgeQueryResult;

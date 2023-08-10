@@ -1,0 +1,12 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Query.Internal;
+
+import "ydb/public/api/protos/ydb_value.proto";
+
+message ResultSetMeta {
+    repeated Ydb.Column columns = 1;
+
+    bool truncated = 2;
+}

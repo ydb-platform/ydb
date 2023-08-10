@@ -293,8 +293,9 @@ protected:
     TControlPlaneStorageUtils(
         const NConfig::TControlPlaneStorageConfig& config,
         const NYql::TS3GatewayConfig& s3Config,
-        const NConfig::TCommonConfig& common)
-    : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, s3Config, common))
+        const NConfig::TCommonConfig& common,
+        const NConfig::TComputeConfig& computeConfig)
+    : Config(std::make_shared<::NFq::TControlPlaneStorageConfig>(config, s3Config, common, computeConfig))
     {
     }
 
@@ -594,11 +595,12 @@ public:
         const NConfig::TControlPlaneStorageConfig& config,
         const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& common,
+        const NConfig::TComputeConfig& computeConfig,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
-        : TControlPlaneStorageUtils(config, s3Config, common)
+        : TControlPlaneStorageUtils(config, s3Config, common, computeConfig)
         , Counters(counters, *Config)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)

@@ -26,10 +26,17 @@ enum EDataSourceKind {
     POSTGRESQL = 2;
 }
 
-// TDataSourceInstance helps to identify the instance of a data source to route request to.
+// TDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TDataSourceInstance {
+    // Data source kind
     EDataSourceKind kind = 1;
+    // Network address
     TEndpoint endpoint = 2;
+    // Database name
     string database = 3;
+    // Credentials to access database
     TCredentials credentials = 4;
+    // If true, Connector server will use secure connections to access remote data sources.
+    // Certificates will be obtained from the standard system paths.
+    bool use_tls = 5;
 }

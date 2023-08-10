@@ -865,7 +865,7 @@ TFuture<T> ApplyTimeoutHelper(TFutureBase<T> this_, D timeoutOrDeadline, IInvoke
     auto promise = NewPromise<T>();
 
     auto cookie = NConcurrency::TDelayedExecutor::Submit(
-        BIND([=, cancelable = this_.AsCancelable()] (bool aborted) {
+        BIND_NO_PROPAGATE([=, cancelable = this_.AsCancelable()] (bool aborted) {
             NYT::TError error;
             if (aborted) {
                 error = NYT::TError(NYT::EErrorCode::Canceled, "Operation aborted");
@@ -1577,17 +1577,21 @@ struct TAsyncViaHelper<R(TArgs...)>
     }
 
     static TFuture<TUnderlying> Outer(
-        const TSourceCallback& this_,
+        TSourceCallback this_,
         const IInvokerPtr& invoker,
         TArgs... args)
     {
         auto promise = NewPromise<TUnderlying>();
-        invoker->Invoke(BIND(&Inner, this_, promise, WrapToPassed(std::forward<TArgs>(args))...));
+        invoker->Invoke(BIND_NO_PROPAGATE(
+            &Inner,
+            std::move(this_),
+            promise,
+            WrapToPassed(std::forward<TArgs>(args))...));
         return promise;
     }
 
     static TFuture<TUnderlying> OuterGuarded(
-        const TSourceCallback& this_,
+        TSourceCallback this_,
         const IInvokerPtr& invoker,
         NYT::TError cancellationError,
         TArgs... args)
@@ -1595,8 +1599,8 @@ struct TAsyncViaHelper<R(TArgs...)>
         auto promise = NewPromise<TUnderlying>();
         GuardedInvoke(
             invoker,
-            BIND(&Inner, this_, promise, WrapToPassed(std::forward<TArgs>(args))...),
-            BIND([promise, cancellationError = std::move(cancellationError)] {
+            BIND_NO_PROPAGATE(&Inner, std::move(this_), promise, WrapToPassed(std::forward<TArgs>(args))...),
+            BIND_NO_PROPAGATE([promise, cancellationError = std::move(cancellationError)] {
                 promise.Set(std::move(cancellationError));
             }));
         return promise;
@@ -1614,7 +1618,11 @@ struct TAsyncViaHelper<R(TArgs...)>
         IInvokerPtr invoker,
         NYT::TError cancellationError)
     {
-        return BIND_NO_PROPAGATE(&OuterGuarded, std::move(this_), std::move(invoker), std::move(cancellationError));
+        return BIND_NO_PROPAGATE(
+            &OuterGuarded,
+            std::move(this_),
+            std::move(invoker),
+            std::move(cancellationError));
     }
 };
 
@@ -1622,16 +1630,30 @@ struct TAsyncViaHelper<R(TArgs...)>
 
 template <class R, class... TArgs>
 TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
-TExtendedCallback<R(TArgs...)>::AsyncVia(IInvokerPtr invoker) const
+TExtendedCallback<R(TArgs...)>::AsyncVia(IInvokerPtr invoker) const &
 {
     return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::Do(*this, std::move(invoker));
 }
 
 template <class R, class... TArgs>
 TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
-TExtendedCallback<R(TArgs...)>::AsyncViaGuarded(IInvokerPtr invoker, NYT::TError cancellationError) const
+TExtendedCallback<R(TArgs...)>::AsyncVia(IInvokerPtr invoker) &&
+{
+    return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::Do(std::move(*this), std::move(invoker));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
+TExtendedCallback<R(TArgs...)>::AsyncViaGuarded(IInvokerPtr invoker, NYT::TError cancellationError) const &
 {
     return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::DoGuarded(*this, std::move(invoker), std::move(cancellationError));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<typename TFutureTraits<R>::TWrapped(TArgs...)>
+TExtendedCallback<R(TArgs...)>::AsyncViaGuarded(IInvokerPtr invoker, NYT::TError cancellationError) &&
+{
+    return NYT::NDetail::TAsyncViaHelper<R(TArgs...)>::DoGuarded(std::move(*this), std::move(invoker), std::move(cancellationError));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2059,14 +2081,14 @@ public:
                 OnFutureSet(index, future.Get());
             } else {
                 cookie = future.Subscribe(
-                    BIND(&TAnyNFutureCombiner::OnFutureSet, MakeStrong(this), index));
+                    BIND_NO_PROPAGATE(&TAnyNFutureCombiner::OnFutureSet, MakeStrong(this), index));
             }
             subscriptionCookies.push_back(cookie);
         }
         this->RegisterSubscriptionCookies(std::move(subscriptionCookies));
 
         if (Options_.PropagateCancelationToInput) {
-            Promise_.OnCanceled(BIND(&TAnyNFutureCombiner::OnCanceled, MakeWeak(this)));
+            Promise_.OnCanceled(BIND_NO_PROPAGATE(&TAnyNFutureCombiner::OnCanceled, MakeWeak(this)));
         }
 
         return Promise_;
@@ -2229,10 +2251,10 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
     std::vector<TPromise<T>> promises(futures.size());
     for (int index = 0; index < static_cast<int>(futures.size()); ++index) {
         auto promise = NewPromise<T>();
-        futures[index].Subscribe(BIND([promise] (const NYT::TErrorOr<T>& value) {
+        futures[index].Subscribe(BIND_NO_PROPAGATE([promise] (const NYT::TErrorOr<T>& value) {
             promise.TrySet(value);
         }));
-        promise.OnCanceled(BIND([future = futures[index]] (const NYT::TError& error) {
+        promise.OnCanceled(BIND_NO_PROPAGATE([future = futures[index]] (const NYT::TError& error) {
             future.Cancel(error);
         }));
         promises[index] = promise;
@@ -2246,7 +2268,7 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
     auto combinedFuture = AllSet(wrappedFutures, options);
 
     auto cookie = NConcurrency::TDelayedExecutor::Submit(
-        BIND([promises, futures] {
+        BIND_NO_PROPAGATE([promises, futures] {
             for (int index = 0; index < static_cast<int>(futures.size()); ++index) {
                 auto error = NYT::TError(NYT::EErrorCode::Timeout, "Operation timed out");
                 promises[index].TrySet(error);
@@ -2256,7 +2278,7 @@ TFuture<std::vector<TErrorOr<T>>> AllSetWithTimeout(
         timeout,
         std::move(invoker));
 
-    combinedFuture.AsVoid().Subscribe(BIND([cookie] (const NYT::TError& /*error*/) {
+    combinedFuture.AsVoid().Subscribe(BIND_NO_PROPAGATE([cookie] (const NYT::TError& /*error*/) {
         NConcurrency::TDelayedExecutor::Cancel(cookie);
     }));
 
@@ -2323,7 +2345,7 @@ public:
             RunCallback(index);
         }
 
-        Promise_.OnCanceled(BIND(&TCancelableBoundedConcurrencyRunner::OnCanceled, MakeWeak(this)));
+        Promise_.OnCanceled(BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnCanceled, MakeWeak(this)));
 
         return Promise_;
     }
@@ -2362,7 +2384,7 @@ private:
         }
 
         future.Subscribe(
-            BIND(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
+            BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
     }
 
     void OnResult(int index, const NYT::TErrorOr<T>& result)
@@ -2453,7 +2475,7 @@ private:
             OnResult(index, future.Get());
         } else {
             future.Subscribe(
-                BIND(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
+                BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
         }
     }
 

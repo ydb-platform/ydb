@@ -107,6 +107,10 @@ public:
             {R"({"key": 123, "_another_28_key_$_": 456})", "$._another_28_key_$_", {"456"}},
             {R"({"key": 123, "another_key": 456})", "           $.another_key    ", {"456"}},
 
+            {R"({"key": 123, "another_key": 456})", "$.key", {"123"}},
+            {R"({"k\"ey": 123, "another_key": 456})", "$.\"k\\\"ey\"", {"123"}},
+            {R"({"k\"ey": 123, "another_key": 456})", "$.'k\\\"ey'", {"123"}},
+
             {R"({"key": 123, "another_key": 456})", "$.'key'", {"123"}},
             {R"({"key": 123, "_another_28_key_$_": 456})", "$.'_another_28_key_$_'", {"456"}},
             {R"({"key": 123, "another_key": 456})", "           $.'another_key'    ", {"456"}},

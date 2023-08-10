@@ -73,11 +73,10 @@ public:
         return TYdbReadTable::Match(&read);
     }
     
-    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TExprNode& read, TExprContext& ) override {
-        if (TYdbReadTable::Match(&read)) {
+    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
+        if (AllOf(read, [](const auto val) { return TYdbReadTable::Match(val); })) {
             return 0ul; // TODO: return real size
         }
-
         return Nothing();
     }
 

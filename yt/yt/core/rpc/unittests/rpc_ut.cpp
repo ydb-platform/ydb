@@ -896,6 +896,19 @@ TYPED_TEST(TRpcTest, NoMoreRequestsAfterStop)
     EXPECT_FALSE(reqResult.Get().IsOK());
 }
 
+TYPED_TEST(TRpcTest, CustomMetadata)
+{
+    TMyProxy proxy(this->CreateChannel());
+    auto req = proxy.CustomMetadata();
+    NYT::NRpc::NProto::TCustomMetadataExt customMetadataExt;
+    (*customMetadataExt.mutable_entries())["key1"] = "value1";
+    *req->Header().MutableExtension(NYT::NRpc::NProto::TCustomMetadataExt::custom_metadata_ext) = customMetadataExt;
+
+    auto rsp = WaitFor(req->Invoke()).ValueOrThrow();
+    EXPECT_EQ(rsp->parsed_custom_metadata().size(), 1u);
+    EXPECT_EQ(rsp->parsed_custom_metadata().at("key1"), "value1");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TYPED_TEST(TGrpcTest, SendMessageLimit)

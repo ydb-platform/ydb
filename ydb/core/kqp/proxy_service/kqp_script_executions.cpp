@@ -1201,7 +1201,7 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        if (status == Ydb::StatusIds::SUCCESS) {
+        if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ABORTED && LeaseExpired) {
             TMaybe<google::protobuf::Any> metadata;
             metadata.ConstructInPlace().PackFrom(Metadata);
 

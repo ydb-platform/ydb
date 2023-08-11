@@ -173,12 +173,13 @@ public:
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
-        : LogConfig(logConfig)
+        : HttpGatewayConfig(CreateHttpGatewayConfig())
+        , LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , TokenAccessorConfig(tokenAccessorConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
-        , HttpGateway(NYql::IHTTPGateway::Make()) // TODO: pass config and counters
+        , HttpGateway(NYql::IHTTPGateway::Make(&HttpGatewayConfig)) // TODO: pass config and counters
         , PendingRequests()
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
@@ -1521,7 +1522,18 @@ private:
         }
     }
 
+    static NYql::THttpGatewayConfig CreateHttpGatewayConfig() {
+        NYql::THttpGatewayConfig config;
+        config.SetMaxInFlightCount(2000);
+        config.SetMaxSimulatenousDownloadsSize(2000000000);
+        config.SetBuffersSizePerStream(5000000);
+        config.SetConnectionTimeoutSeconds(15);
+        config.SetRequestTimeoutSeconds(0);
+        return config;
+    }
+
 private:
+    NYql::THttpGatewayConfig HttpGatewayConfig;
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrProto::TTokenAccessorConfig TokenAccessorConfig;

@@ -17,13 +17,13 @@ Y_UNIT_TEST_SUITE(TLogCache) {
         UNIT_ASSERT_STRINGS_EQUAL(buf, "a");
 
         UNIT_ASSERT(cache.Insert("c", 3, 1));
-        UNIT_ASSERT(cache.Pop()); // 2 must be evicted
+        UNIT_ASSERT_EQUAL(1, cache.EraseRange(2, 3));  // 2 was removed
         UNIT_ASSERT_EQUAL(cache.Size(), 2);
         UNIT_ASSERT(!cache.Find(2, 1, buf));
         UNIT_ASSERT(cache.Find(3, 1, buf));
         UNIT_ASSERT_STRINGS_EQUAL(buf, "c");
 
-        UNIT_ASSERT(cache.Pop()); // 1 must be evicted
+        UNIT_ASSERT_EQUAL(1, cache.EraseRange(1, 2));  // 1 was removed
         UNIT_ASSERT(cache.Insert("d", 4, 1));
 
         UNIT_ASSERT_EQUAL(cache.Size(), 2);
@@ -31,16 +31,14 @@ Y_UNIT_TEST_SUITE(TLogCache) {
         UNIT_ASSERT(cache.Find(4, 1, buf));
         UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
 
-        UNIT_ASSERT(cache.Pop()); // 3 must be evicted
+        UNIT_ASSERT_EQUAL(1, cache.EraseRange(3, 4));  // 3 was removed
         UNIT_ASSERT_EQUAL(cache.Size(), 1);
         UNIT_ASSERT(!cache.Find(3, 1, buf));
         UNIT_ASSERT(cache.Find(4, 1, buf));
         UNIT_ASSERT_STRINGS_EQUAL(buf, "d");
 
 
-        UNIT_ASSERT_EQUAL(1, cache.EraseRange(3, 5));
-        UNIT_ASSERT_EQUAL(cache.Size(), 0);
-        UNIT_ASSERT(!cache.Pop());
+        UNIT_ASSERT_EQUAL(1, cache.EraseRange(4, 5));
         UNIT_ASSERT_EQUAL(cache.Size(), 0);
     }
 
@@ -189,6 +187,33 @@ Y_UNIT_TEST_SUITE(TLogCache) {
             UNIT_ASSERT(!cache.Find(3, 10, buf3));
             UNIT_ASSERT_STRINGS_EQUAL(buf3, "");
         }
+
+        {
+            TLogCache cache;
+
+            UNIT_ASSERT(cache.Insert("abcdefghij", 0, 10));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+
+            UNIT_ASSERT(cache.Insert("klmno", 10, 5));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+
+            UNIT_ASSERT(!cache.Insert("fghijklmno", 5, 10));
+            
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+        }
+
+        {
+            TLogCache cache;
+
+            UNIT_ASSERT(cache.Insert("abcdefghij", 0, 10));
+            UNIT_ASSERT_EQUAL(1, cache.Size());
+
+            UNIT_ASSERT(cache.Insert("klmno", 10, 5));
+            UNIT_ASSERT_EQUAL(2, cache.Size());
+
+            UNIT_ASSERT(cache.Insert("fghijklmnopq", 5, 12));
+            UNIT_ASSERT_EQUAL(3, cache.Size());
+        }
     }
 
     TLogCache SetupCache(const TVector<std::pair<ui64, TString>>& content = {{5, "x"}, {1, "y"}, {10, "z"}}) {
@@ -207,15 +232,15 @@ Y_UNIT_TEST_SUITE(TLogCache) {
         char buf[2] = {};
 
         for (auto pair : content) {
-            UNIT_ASSERT(cache.FindWithoutPromote(pair.first, 1, buf));
+            UNIT_ASSERT(cache.Find(pair.first, 1, buf));
 
             UNIT_ASSERT_STRINGS_EQUAL(pair.second, buf);
         }
 
         for (auto pair : content) {
-            UNIT_ASSERT(cache.Pop());
+            cache.EraseRange(pair.first, pair.first + 1);
 
-            UNIT_ASSERT(!cache.FindWithoutPromote(pair.first, 1, buf));
+            UNIT_ASSERT(!cache.Find(pair.first, 1, buf));
         }
     }
 

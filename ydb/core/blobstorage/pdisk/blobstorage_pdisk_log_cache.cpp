@@ -15,14 +15,6 @@ TLogCache::TCacheRecord::TCacheRecord(TCacheRecord&& other)
     , BadOffsets(std::move(other.BadOffsets))
 {}
 
-TLogCache::TItem::TItem(TItem&& other) 
-    : Value(std::move(other.Value))
-{}
-
-TLogCache::TItem::TItem(TCacheRecord&& value)
-    : Value(std::move(value))
-{}
-
 size_t TLogCache::Size() const {
     return Index.size();
 }
@@ -52,15 +44,7 @@ FindKeyLessEqual(C& c, const typename C::key_type& key) {
 }
 
 bool TLogCache::Find(ui64 offset, ui32 size, char* buffer, TBadOffsetsHandler func) {
-    return Find(offset, size, buffer, func, true);
-}
-
-bool TLogCache::FindWithoutPromote(ui64 offset, ui32 size, char* buffer, TBadOffsetsHandler func) {
-    return Find(offset, size, buffer, func, false);
-}
-
-bool TLogCache::Find(ui64 offset, ui32 size, char* buffer, std::function<void(const std::vector<ui64>&)> func, bool promote) {
-    TVector<TItem*> res;
+    TVector<TCacheRecord*> res;
 
     auto indexIt = FindKeyLessEqual(Index, offset);
 
@@ -73,7 +57,7 @@ bool TLogCache::Find(ui64 offset, ui32 size, char* buffer, std::function<void(co
 
     while (indexIt != Index.end() && cur < end) {
         ui64 recStart = indexIt->first;
-        ui64 recEnd = recStart + indexIt->second.Value.Data.Size();
+        ui64 recEnd = recStart + indexIt->second.Data.Size();
 
         if (cur >= recStart && cur < recEnd) {
             res.push_back(&indexIt->second);
@@ -90,9 +74,7 @@ bool TLogCache::Find(ui64 offset, ui32 size, char* buffer, std::function<void(co
         return false;
     }
 
-    for (auto item : res) {
-        auto cacheRecord = &item->Value;
-
+    for (auto cacheRecord : res) {
         ui64 recStart = cacheRecord->Offset;
         ui64 recEnd = recStart + cacheRecord->Data.Size();
 
@@ -109,21 +91,8 @@ bool TLogCache::Find(ui64 offset, ui32 size, char* buffer, std::function<void(co
 
         // Notify callee of bad offsets.
         func(cacheRecord->BadOffsets);
-
-        if (promote) {
-            List.PushFront(item);
-        }
     }
 
-    return true;
-}
-
-bool TLogCache::Pop() {
-    if (Index.empty())
-        return false;
-
-    TItem* item = List.PopBack();
-    Index.erase(item->Value.Offset);
     return true;
 }
 
@@ -136,7 +105,7 @@ std::pair<i64, i64> TLogCache::PrepareInsertion(ui64 start, ui32 size) {
     auto it1 = FindKeyLessEqual(Index, start);
     if (it1 != Index.end()) {
         ui64 maybeStart = it1->first;
-        ui64 maybeEnd = maybeStart + it1->second.Value.Data.Size();
+        ui64 maybeEnd = maybeStart + it1->second.Data.Size();
 
         if (start < maybeEnd) {
             if (end <= maybeEnd) {
@@ -146,24 +115,36 @@ std::pair<i64, i64> TLogCache::PrepareInsertion(ui64 start, ui32 size) {
         }
     }
 
+    ui64 offsetStart = start + leftPadding;
+
     // Check if there is a block that overlaps with the new insertion's end.
     auto it2 = FindKeyLess(Index, end);
     if (it2 != Index.end()) {
+        ui64 dataSize = it2->second.Data.Size();
+
         ui64 maybeStart = it2->first;
-        ui64 maybeEnd = maybeStart + it2->second.Value.Data.Size();
+        ui64 maybeEnd = maybeStart + dataSize;
+
+        if (offsetStart == maybeStart) {
+            // There is an overlapping block; return {-1, -1} to indicate it.
+            if (end <= maybeEnd) {
+                return {-1, -1};
+            }
+            
+            leftPadding += dataSize;
+        }
 
         if (end < maybeEnd) {
             rightPadding = end - maybeStart;
         }
     }
-
-    // Remove any blocks that are completely covered by the new insertion.
-    ui64 offsetStart = start + leftPadding;
+    
     ui64 offsetEnd = start + (size - rightPadding);
 
+    // Remove any blocks that are completely covered by the new insertion.
     auto it = Index.upper_bound(offsetStart);
     while (it != Index.end()) {
-        ui64 blockEnd = it->first + it->second.Value.Data.Size();
+        ui64 blockEnd = it->first + it->second.Data.Size();
         if (blockEnd < offsetEnd) {
             it = Index.erase(it);
         } else {
@@ -193,8 +174,6 @@ bool TLogCache::Insert(const char* dataPtr, ui64 offset, ui32 size, const TVecto
     ));
 
     Y_VERIFY_DEBUG(inserted);
-
-    List.PushFront(&it->second); 
 
     return true;
 }

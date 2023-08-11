@@ -8,8 +8,9 @@ namespace NKikimr {
 namespace NPDisk {
 
 /**
- * Key-value LRU cache without automatic eviction, but able to erase range of keys.
- **/
+ * Key-value cache without automatic eviction, but able to erase range of keys.
+ * Entries do not intersect with each other.
+ */
 class TLogCache {
 private:
     struct TCacheRecord {
@@ -22,20 +23,7 @@ private:
         TCacheRecord(ui64 offset, TRcBuf data, TVector<ui64> badOffsets);
     };
 
-    /**
-     * Nested class representing a cache entry in the doubly linked list.
-     * Inherits from TIntrusiveListItem to maintain the LRU order.
-     */
-    struct TItem : public TIntrusiveListItem<TItem> {
-        TCacheRecord Value;
-
-        // custom constructors ignoring TIntrusiveListItem
-        TItem(TItem&& other);
-        explicit TItem(TCacheRecord&& value);
-    };
-
-    using TListType = TIntrusiveList<TItem>;
-    using TIndex = TMap<ui64, TItem>;
+    using TIndex = TMap<ui64, TCacheRecord>;
 
 public:
     using TBadOffsetsHandler = std::function<void(const std::vector<ui64>&)>;
@@ -46,17 +34,6 @@ public:
     size_t Size() const;
 
     /**
-     * Finds a cache record by its offset and a specified size, copies the data to the buffer,
-     * and promotes the record to the front of the cache list.
-     * @param offset The offset key to search for.
-     * @param size The size of data to copy.
-     * @param buffer The buffer to store the copied data.
-     * @param func Optional custom function to handle bad offsets.
-     * @return True if the cache record is found and data is copied; otherwise, false.
-     */
-    bool Find(ui64 offset, ui32 size, char* buffer, TBadOffsetsHandler func = [](const std::vector<ui64>&) {});
-
-    /**
      * Finds a cache record by its offset and a specified size, copies the data to the buffer.
      * @param offset The offset key to search for.
      * @param size The size of data to copy.
@@ -64,13 +41,7 @@ public:
      * @param func Optional custom function to handle bad offsets.
      * @return True if the cache record is found and data is copied; otherwise, false.
      */
-    bool FindWithoutPromote(ui64 offset, ui32 size, char* buffer, TBadOffsetsHandler func = [](const std::vector<ui64>&) {});
-
-    /**
-     * Removes the least recently used cache record from the cache.
-     * @return True if a cache record was removed; otherwise, false (cache is empty).
-     */
-    bool Pop();
+    bool Find(ui64 offset, ui32 size, char* buffer, TBadOffsetsHandler func = [](const std::vector<ui64>&) {});
 
     /**
      * Inserts a new cache record into the cache.
@@ -96,7 +67,6 @@ public:
     void Clear();
 
 private:
-    TListType List;
     TIndex Index;
 
     /**
@@ -107,8 +77,6 @@ private:
      * @return A pair of i64 values representing left and right data paddings.
      */
     std::pair<i64, i64> PrepareInsertion(ui64 offset, ui32 size);
-
-    bool Find(ui64 offset, ui32 size, char* buffer, TBadOffsetsHandler func, bool promote);
 };
 
 } // NPDisk

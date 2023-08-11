@@ -27,12 +27,12 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     response->ApiKeys[3].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
 
     response->ApiKeys[4].ApiKey = SASL_HANDSHAKE;
-    response->ApiKeys[4].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;//savnik: check
-    response->ApiKeys[4].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
+    response->ApiKeys[4].MinVersion = TSaslHandshakeRequestData::MessageMeta::PresentVersions.Min;
+    response->ApiKeys[4].MaxVersion = TSaslHandshakeRequestData::MessageMeta::PresentVersions.Max;
 
     response->ApiKeys[5].ApiKey = SASL_AUTHENTICATE;
-    response->ApiKeys[5].MinVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Min;
-    response->ApiKeys[5].MaxVersion = TInitProducerIdRequestData::MessageMeta::PresentVersions.Max;
+    response->ApiKeys[5].MinVersion = TSaslAuthenticateRequestData::MessageMeta::PresentVersions.Min;
+    response->ApiKeys[5].MaxVersion = TSaslAuthenticateRequestData::MessageMeta::PresentVersions.Max;
 
     return response;
 }

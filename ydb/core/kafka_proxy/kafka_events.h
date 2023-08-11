@@ -5,6 +5,7 @@
 
 #include "kafka_messages.h"
 #include "ydb/library/aclib/aclib.h"
+#include "actors/actors.h"
 
 using namespace NActors;
 
@@ -14,7 +15,8 @@ struct TEvKafka {
     enum EEv {
         EvRequest = EventSpaceBegin(NKikimr::TKikimrEvents::TKikimrEvents::ES_KAFKA),
         EvProduceRequest,
-        EvAuthSuccess,
+        EvAuthResult,
+        EvHandshakeResult,
         EvWakeup,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
@@ -36,14 +38,6 @@ struct TEvKafka {
         const TProduceRequestData* Request;
     };
 
-    struct TEvAuthSuccess : public TEventLocal<TEvAuthSuccess, EvAuthSuccess> {
-        TEvAuthSuccess(TIntrusiveConstPtr<NACLib::TUserToken> token)
-        : UserToken(token)
-        {}
-
-        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    };
-
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
         TEvResponse(const ui64 correlationId, const TApiMessage::TPtr response)
             : CorrelationId(correlationId)
@@ -52,6 +46,37 @@ struct TEvKafka {
 
         const ui64 CorrelationId;
         const TApiMessage::TPtr Response;
+    };
+
+    struct TEvAuthResult : public TEventLocal<TEvAuthResult, EvAuthResult> {
+        TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString database, TString error = "")
+        : AuthStep(authStep),
+          UserToken(token),
+          Database(database),
+          Error(error),
+          ClientResponse(std::move(clientResponse))
+        {}
+
+        EAuthSteps AuthStep;
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+        TString Database;
+        TString Error;
+        TString SaslMechanism;
+        std::shared_ptr<TEvKafka::TEvResponse> ClientResponse;
+    };
+
+    struct TEvHandshakeResult : public TEventLocal<TEvHandshakeResult, EvHandshakeResult> {
+        TEvHandshakeResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TString saslMechanism, TString error = "")
+        : AuthStep(authStep),
+          Error(error),
+          SaslMechanism(saslMechanism),
+          ClientResponse(std::move(clientResponse))
+        {}
+        
+        EAuthSteps AuthStep;
+        TString Error;
+        TString SaslMechanism;
+        std::shared_ptr<TEvKafka::TEvResponse> ClientResponse;
     };
 
     struct TEvWakeup : public TEventLocal<TEvWakeup, EvWakeup> {

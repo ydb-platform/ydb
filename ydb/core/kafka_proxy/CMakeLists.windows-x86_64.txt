@@ -25,6 +25,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_metadata_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_produce_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_sasl_auth_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_sasl_handshake_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp

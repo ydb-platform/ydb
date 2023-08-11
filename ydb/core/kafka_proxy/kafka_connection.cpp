@@ -6,6 +6,7 @@
 #include "kafka_events.h"
 #include "kafka_messages.h"
 #include "kafka_log_impl.h"
+#include "actors/actors.h"
 
 #include <strstream>
 #include <sstream>
@@ -21,8 +22,8 @@ NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 c
 NActors::IActor* CreateKafkaInitProducerIdActor(const TActorId parent, const ui64 correlationId, const TInitProducerIdRequestData* message);
 NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const NACLib::TUserToken* userToken, const ui64 correlationId, const TMetadataRequestData* message, const NKikimrConfig::TKafkaProxyConfig& config);
 NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const NACLib::TUserToken* userToken, const TString& clientDC);
-NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const TSaslHandshakeRequestData* message);
-NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message);
+NActors::IActor* CreateKafkaSaslHandshakeActor(const TActorId parent, const ui64 correlationId, const EAuthSteps authStep, const TSaslHandshakeRequestData* message);
+NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const EAuthSteps authStep, const TString saslMechanism, const TSaslAuthenticateRequestData* message);
     
 
 char Hex(const unsigned char c) {
@@ -91,6 +92,9 @@ public:
     TActorId ProduceActorId;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    EAuthSteps AuthStep;
+    TString Database;
+    TString SaslMechanism;
 
 
     TKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
@@ -100,7 +104,8 @@ public:
         , Config(config)
         , Step(SIZE_READ)
         , Demand(NoDemand)
-        , InflightSize(0) {
+        , InflightSize(0)
+        , AuthStep(EAuthSteps::WAIT_HANDSHAKE) {
         SetNonBlock();
         IsSslSupported = IsSslSupported && Socket->IsSslSupported();
     }
@@ -225,11 +230,11 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TSaslAuthenticateRequestData* message) {
-        Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, Address, message));
+        Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, Address, AuthStep, SaslMechanism, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TSaslHandshakeRequestData* message) {
-        Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, message));
+        Register(CreateKafkaSaslHandshakeActor(SelfId(), header->CorrelationId, AuthStep, message));
     }
 
     void ProcessRequest(const TActorContext& ctx) {
@@ -278,10 +283,35 @@ protected:
         Reply(r->CorrelationId, r->Response, ctx);
     }
 
-    void Handle(TEvKafka::TEvAuthSuccess::TPtr auth) {
-        UserToken = auth->Get()->UserToken;
+    void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
+        auto event = ev->Get();
+        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, ctx);
+
+        auto authStep = event->AuthStep;
+        if (authStep == EAuthSteps::FAILED) {
+            KAFKA_LOG_ERROR(event->Error);
+            PassAway();
+            return;
+        }
+        UserToken = event->UserToken;
+        Database = event->Database;
+        AuthStep = authStep;
         KAFKA_LOG_D("Authentificated successful. SID=" << UserToken->GetUserSID());
-   }
+    }
+
+    void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
+        auto event = ev->Get();
+        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, ctx);
+
+        auto authStep = event->AuthStep;
+        if (authStep == EAuthSteps::FAILED) {
+            KAFKA_LOG_ERROR(event->Error);
+            PassAway();
+            return;
+        }
+        SaslMechanism = event->SaslMechanism;
+        AuthStep = authStep;  
+    }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, const TActorContext& ctx) {
         auto it = PendingRequests.find(correlationId);
@@ -471,7 +501,8 @@ protected:
             HFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);
             HFunc(TEvKafka::TEvResponse, Handle);
-            hFunc(TEvKafka::TEvAuthSuccess, Handle);
+            HFunc(TEvKafka::TEvAuthResult, Handle);
+            HFunc(TEvKafka::TEvHandshakeResult, Handle);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }

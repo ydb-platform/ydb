@@ -11,7 +11,7 @@ TInitProducerIdResponseData::TPtr GetResponse() {
 
     response->ProducerEpoch = 1;
     response->ProducerId = 1;
-    response->ErrorCode = 0;
+    response->ErrorCode = EKafkaErrors::NONE_ERROR;
     response->ThrottleTimeMs = 0;
 
     return response;

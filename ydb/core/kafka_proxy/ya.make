@@ -6,6 +6,7 @@ SRCS(
     actors/kafka_metadata_actor.cpp
     actors/kafka_produce_actor.cpp
     actors/kafka_sasl_auth_actor.cpp
+    actors/kafka_sasl_handshake_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_listener.h

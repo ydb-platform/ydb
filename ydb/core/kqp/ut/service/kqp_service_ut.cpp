@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             return false;
         };
 
-        size_t InFlight = 1;
+        size_t InFlight = 10;
         NPar::LocalExecutor().RunAdditionalThreads(InFlight);
         NPar::LocalExecutor().ExecRange([&](int /*id*/) {
             NYdb::NTable::TTableClient db(driver);

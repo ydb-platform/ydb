@@ -50,7 +50,7 @@ private:
         LoadPatternsToCompileIfNeeded(patternCache);
 
         TSimpleTimer timer;
-        i64 compilationIntervalMs = std::max(static_cast<i64>(WakeupInterval.MilliSeconds()) / 10, MaxCompilationIntervalMs);
+        i64 compilationIntervalMs = MaxCompilationIntervalMs;
 
         size_t patternsToCompileSize = PatternsToCompile.size();
         for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
@@ -107,7 +107,7 @@ private:
         ctx.Schedule(WakeupInterval, new TEvents::TEvWakeup());
     }
 
-    static constexpr i64 MaxCompilationIntervalMs = 100;
+    static constexpr i64 MaxCompilationIntervalMs = 300;
 
     TDuration WakeupInterval;
     TIntrusivePtr<TKqpCounters> Counters;

@@ -184,7 +184,7 @@ public:
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {}
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext &ctx) {
         if (TokenAccessorConfig.GetEnabled()) {
             TString caContent;
             if (const auto& path = TokenAccessorConfig.GetSslCaCert()) {
@@ -241,8 +241,9 @@ public:
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
         if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
-            CompileComputationPatternService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileComputationPatternService(TableServiceConfig,
-                Counters));
+            IActor* ComputationPatternServiceActor = CreateKqpCompileComputationPatternService(TableServiceConfig, Counters);
+            ui32 batchPoolId = AppData(ctx)->BatchPoolId;
+            CompileComputationPatternService = ctx.Register(ComputationPatternServiceActor, TMailboxType::HTSwap, batchPoolId);
             TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
                 MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
         }
@@ -430,7 +431,7 @@ public:
     void PassAway() override {
         Send(CompileService, new TEvents::TEvPoisonPill());
 
-        if (TableServiceConfig.enableasynccomputationpatterncompilation()) {
+        if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
             Send(CompileComputationPatternService, new TEvents::TEvPoisonPill());
         }
 

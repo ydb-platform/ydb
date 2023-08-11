@@ -75,6 +75,9 @@ TKqpPhyTxHolder::TKqpPhyTxHolder(const std::shared_ptr<const NKikimrKqp::TPrepar
         auto& result = TxResultsMeta[i];
 
         result.MkqlItemType = ImportTypeFromProto(txResult.GetItemType(), Alloc->TypeEnv);
+        //Hack to prevent data race. Side effect of IsPresortSupported - fill cached value.
+        //So no more concurent write subsequently
+        result.MkqlItemType->IsPresortSupported();
         if (txResult.ColumnHintsSize() > 0) {
             result.ColumnOrder.reserve(txResult.GetColumnHints().size());
             auto* structType = static_cast<NKikimr::NMiniKQL::TStructType*>(result.MkqlItemType);

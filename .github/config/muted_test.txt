@@ -18,3 +18,9 @@ KqpQuerySession::NoLocalAttach
 TSentinelTests::PDiskErrorState
 TSentinelTests::PDiskFaultyState
 Describe::Statistics
+CountingEvents::Get_Mirror3of4
+TPDiskFIT::Basic
+KqpScanArrowInChanels::AllTypesColumns
+KqpScanArrowFormat::AllTypesColumnsCellvec
+TEST_BACKTRACE_AND_SYMBOLIZE::TEST_NO_KIKIMR
+YdbSdkSessionsPool::StressTestSync10

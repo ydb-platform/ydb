@@ -666,6 +666,7 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
     if test_main_package is None:
         lines.append('    "os"')
     lines.extend(['    "testing"', '    "testing/internal/testdeps"'])
+    lines.extend(['    _ "a.yandex-team.ru/library/go/test/yatest"'])
 
     if len(tests) > 0:
         lines.append('    _test "{}"'.format(test_module_path))

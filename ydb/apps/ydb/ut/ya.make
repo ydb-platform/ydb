@@ -1,5 +1,12 @@
 UNITTEST()
 
+FORK_SUBTESTS()
+
+IF (SANDBOXING)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ENDIF()
+
 DEPENDS(
     ydb/apps/ydb
 )
@@ -18,7 +25,5 @@ PEERDIR(
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
-
-REQUIREMENTS(ram:16)
 
 END()

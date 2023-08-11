@@ -37,7 +37,7 @@ set_property(
   ydb-apps-ydb-ut
   PROPERTY
   SPLIT_FACTOR
-  1
+  10
 )
 add_yunittest(
   NAME

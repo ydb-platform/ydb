@@ -14,9 +14,11 @@ SRCS(
 )
 
 IF (OS_WINDOWS)
-    CFLAGS(
-        -Wno-unused-command-line-argument
-    )
+    IF (NOT MSVC)
+        CFLAGS(
+            -Wno-unused-command-line-argument
+        )
+    ENDIF()
 ENDIF()
 
 END()

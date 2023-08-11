@@ -1720,6 +1720,122 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DefaultValueColumn2) {
+        auto res = SqlToYql(R"( use plato;
+            $lambda = () -> {
+                RETURN CAST(RandomUuid(2) as String)
+            };
+
+            CREATE TABLE tableName (
+                Key Uint32 DEFAULT RandomNumber(1),
+                Value String DEFAULT $lambda,
+                PRIMARY KEY (Key)
+            );
+        )");
+
+        UNIT_ASSERT_C(res.Root, Err2Str(res));
+
+        const auto program = GetPrettyPrint(res);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("RandomNumber"));
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("RandomUuid"));
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("columnsDefaultValues"));
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("columnsDefaultValues"));
+        UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("Write"));
+        
+#if 0
+        Cerr << program << Endl;
+#endif
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);        
+    }
+
+    Y_UNIT_TEST(DefaultValueColumn3) {
+        auto res = SqlToYql(R"( use plato;
+
+            CREATE TABLE tableName (
+                database_id Utf8,
+                cloud_id Utf8,
+                global_id Utf8 DEFAULT database_id || "=====",
+                PRIMARY KEY (database_id)
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:6:40: Error: Column reference \"database_id\" is not allowed in current scope\n");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(DefaultValueColumn4) {
+        auto res = SqlToYql(R"( use plato;
+
+            CREATE TABLE tableName (
+                database_id Utf8,
+                cloud_id Utf8,
+                global_id Utf8 DEFAULT Utf8("Data") DEFAULT Utf8("Other"),
+                PRIMARY KEY (database_id)
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:6:45: Error: multiple default values are not allowed\n");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(DefaultValueColumn5) {
+        auto res = SqlToYql(R"( use plato;
+
+            CREATE TABLE tableName (
+                database_id Utf8,
+                cloud_id Utf8,
+                global_id Utf8 NULL NOT NULL,
+                PRIMARY KEY (database_id)
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:6:27: Error: not null constraint is ambiguous\n");
+        UNIT_ASSERT(!res.Root);
+    }
+
+    Y_UNIT_TEST(DefaultValueColumn) {
+        auto res = SqlToYql(R"( use plato;
+            CREATE TABLE tableName (
+                Key Uint32 FAMILY cold DEFAULT 5,
+                Value String FAMILY default DEFAULT "empty",
+                PRIMARY KEY (Key),
+                FAMILY default (
+                     DATA = "test",
+                     COMPRESSION = "lz4"
+                ),
+                FAMILY cold (
+                     DATA = "test",
+                     COMPRESSION = "off"
+                )
+            );
+        )");
+
+        UNIT_ASSERT_C(res.Root, Err2Str(res));
+
+#if 0
+        const auto program = GetPrettyPrint(res);
+        Cerr << program << Endl;
+#endif
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("default"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnsDefaultValues"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnFamilies"));   
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(ChangefeedParseCorrect) {
         auto res = SqlToYql(R"( USE plato;
             CREATE TABLE tableName (

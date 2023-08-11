@@ -661,6 +661,7 @@ public:
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
+                        .ColumnsDefaultValues(settings.ColumnsDefaultValues.Cast())
                         .TableSettings(settings.TableSettings.Cast())
                         .TableType(tableType)
                         .Done()

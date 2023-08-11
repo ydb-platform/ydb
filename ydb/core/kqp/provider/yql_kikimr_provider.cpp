@@ -2,10 +2,11 @@
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+
 #include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 namespace NYql {
@@ -464,6 +465,82 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     }
 
     return protoOps;
+}
+
+template<typename TProto>
+void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
+    auto type = literal.Ref().GetTypeAnn();
+
+    // TODO: support pg types
+    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+
+    auto slot = type->Cast<TDataExprType>()->GetSlot();
+    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+
+    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
+        NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+
+    auto& protoType = *proto.MutableType();
+    auto& protoValue = *proto.MutableValue();
+
+    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    protoType.MutableData()->SetScheme(typeId);
+
+    auto value = literal.Literal().Value();
+
+    switch (slot) {
+        case EDataSlot::Bool:
+            protoValue.SetBool(FromString<bool>(value));
+            break;
+        case EDataSlot::Uint8:
+        case EDataSlot::Uint32:
+        case EDataSlot::Date:
+        case EDataSlot::Datetime:
+            protoValue.SetUint32(FromString<ui32>(value));
+            break;
+        case EDataSlot::Int32:
+            protoValue.SetInt32(FromString<i32>(value));
+            break;
+        case EDataSlot::Int64:
+        case EDataSlot::Interval:
+            protoValue.SetInt64(FromString<i64>(value));
+            break;
+        case EDataSlot::Uint64:
+        case EDataSlot::Timestamp:
+            protoValue.SetUint64(FromString<ui64>(value));
+            break;
+        case EDataSlot::String:
+        case EDataSlot::DyNumber:
+            protoValue.SetBytes(value.Data(), value.Size());
+            break;
+        case EDataSlot::Utf8:
+            protoValue.SetText(ToString(value));
+            break;
+        case EDataSlot::Decimal: {
+            const auto paramsDataType = type->Cast<TDataExprParamsType>();
+            auto precision = FromString<ui8>(paramsDataType->GetParamOne());
+            auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
+            protoType.MutableData()->MutableDecimalParams()->SetPrecision(precision);
+            protoType.MutableData()->MutableDecimalParams()->SetScale(scale);
+
+            auto v = NDecimal::FromString(literal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
+            const auto p = reinterpret_cast<ui8*>(&v);
+            protoValue.SetLow128(*reinterpret_cast<ui64*>(p));
+            protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8));
+            break;
+        }
+
+        default:
+            YQL_ENSURE(false, "Unexpected type slot " << slot);
+    }
+}
+
+void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto) {
+    FillLiteralProtoImpl(literal, proto);
+}
+
+void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKikimrMiniKQL::TResult& proto) {
+    FillLiteralProtoImpl(literal, proto);
 }
 
 template<class OutputIterator>

@@ -41,6 +41,7 @@ public:
     }
 
 private:
+
     STATEFN(ResolveKeysState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolveKeys);

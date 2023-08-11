@@ -83,6 +83,7 @@ message TColumnDescription {
     optional string FamilyName = 6; // set Family by name (0 - "default")
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
+        NKikimrMiniKQL.TResult DefaultFromLiteral = 10; // Literal default value
     }
     optional bool NotNull = 8;
 }

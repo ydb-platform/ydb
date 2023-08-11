@@ -46,6 +46,7 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoChangefeedList> Changefeeds;
     NNodes::TCoNameValueTupleList Other;
     NNodes::TMaybeNode<NNodes::TExprList> ColumnFamilies;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> ColumnsDefaultValues;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TableSettings;
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions;
     NNodes::TMaybeNode<NNodes::TCoAtom> TableType;

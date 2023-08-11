@@ -1085,6 +1085,10 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
             case ETableColumnDefaultKind::FromSequence:
                 colDescr->SetDefaultFromSequence(cinfo.DefaultValue);
                 break;
+            case ETableColumnDefaultKind::FromLiteral:
+                Y_VERIFY(colDescr->MutableDefaultFromLiteral()->ParseFromString(
+                    cinfo.DefaultValue));
+                break;
         }
     }
     Y_VERIFY(!tableInfo->KeyColumnIds.empty());

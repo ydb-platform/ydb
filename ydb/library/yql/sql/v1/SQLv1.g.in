@@ -661,8 +661,11 @@ alter_table_rename_index_to: RENAME INDEX an_id TO an_id;
 alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
+column_constraint:
+    NOT? NULL
+    | DEFAULT expr;
 
-column_schema: an_id_schema type_name_or_bind family_relation? (NOT? NULL)?;
+column_schema: an_id_schema type_name_or_bind family_relation? column_constraint*;
 family_relation: FAMILY an_id;
 column_order_by_specification: an_id (ASC | DESC)?;
 

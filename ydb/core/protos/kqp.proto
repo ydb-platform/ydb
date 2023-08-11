@@ -122,6 +122,13 @@ message TIndexDescriptionProto {
 };
 
 message TKqpColumnMetadataProto {
+    enum EDefaultKind {
+        DEFAULT_KIND_UNSPECIFIED = 0;
+        DEFAULT_KIND_NULL = 1;
+        DEFAULT_KIND_SEQUENCE = 2;
+        DEFAULT_KIND_LITERAL = 3;
+    };
+
     optional string Name = 1;
     optional uint32 Id = 2;
     optional string Type = 3;
@@ -130,6 +137,8 @@ message TKqpColumnMetadataProto {
     repeated string Family = 5;
     optional bool NotNull = 6 [default = false];
     optional string DefaultFromSequence = 8;
+    optional EDefaultKind DefaultKind = 9;
+    optional NKikimrMiniKQL.TResult DefaultFromLiteral = 10;
 };
 
 message TKqpTableMetadataProto {

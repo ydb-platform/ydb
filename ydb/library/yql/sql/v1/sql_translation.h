@@ -107,6 +107,8 @@ std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWit
 
 std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
 
+TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx);
+
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);
 

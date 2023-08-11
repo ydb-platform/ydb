@@ -40,22 +40,54 @@ const NActors::TActorId SequenceProxyId = NSequenceProxy::MakeSequenceProxyServi
 class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 
     struct TColumnSequenceInfo {
+        using TCProto = NKikimrKqp::TKqpColumnMetadataProto;
+
         TString DefaultFromSequence;
         std::set<i64> AllocatedSequenceValues;
         NScheme::TTypeInfo TypeInfo;
+        NUdf::TUnboxedValue UvLiteral;
+        NKikimrMiniKQL::TResult Literal;
+        bool InitialiedLiteral = false;
+        TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED; 
 
         explicit TColumnSequenceInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto)
-            : DefaultFromSequence(proto.GetDefaultFromSequence())
-            , TypeInfo(BuildTypeInfo(proto))
+            : TypeInfo(BuildTypeInfo(proto))
+            , DefaultKind(proto.GetDefaultKind())
         {
+            if (DefaultKind == TCProto::DEFAULT_KIND_SEQUENCE) {
+                DefaultFromSequence = proto.GetDefaultFromSequence();
+            }
+
+            if (DefaultKind == TCProto::DEFAULT_KIND_LITERAL) {
+                Literal = proto.GetDefaultFromLiteral();
+            }
         }
 
-        bool IsAutoIncrement() const {
-            return !DefaultFromSequence.empty();
+        bool IsDefaultFromLiteral() const {
+            return DefaultKind == TCProto::DEFAULT_KIND_LITERAL;
+        }
+
+        bool IsDefaultFromSequence() const {
+            return DefaultKind == TCProto::DEFAULT_KIND_SEQUENCE;
         }
 
         bool HasValues() const {
             return AllocatedSequenceValues.size() > 0;
+        }
+
+        NUdf::TUnboxedValue GetDefaultLiteral(
+            const NMiniKQL::TTypeEnvironment& env, const NMiniKQL::THolderFactory& factory)
+        {
+            YQL_ENSURE(IsDefaultFromLiteral());
+            if (InitialiedLiteral) {
+                return UvLiteral;
+            }
+
+            InitialiedLiteral = true;
+            NKikimr::NMiniKQL::TType* type = nullptr;
+            std::tie(type, UvLiteral) = NMiniKQL::ImportValueFromProto(
+                Literal.GetType(), Literal.GetValue(), env, factory);
+            return UvLiteral;
         }
 
         i64 AcquireNextVal() {
@@ -95,6 +127,11 @@ public:
 
             NKikimr::NMiniKQL::TUnboxedValueDeque emptyList;
             emptyList.swap(PendingRows);
+
+            for(int columnIdx = 0; columnIdx < Settings.GetColumns().size(); ++columnIdx) {
+                auto& columnInfo = ColumnSequenceInfo[columnIdx];
+                columnInfo.UvLiteral.Clear();
+            }
         }
     }
 
@@ -122,6 +159,11 @@ private:
             Input.Clear();
             NKikimr::NMiniKQL::TUnboxedValueDeque emptyList;
             emptyList.swap(PendingRows);
+
+            for(int columnIdx = 0; columnIdx < Settings.GetColumns().size(); ++columnIdx) {
+                auto& columnInfo = ColumnSequenceInfo[columnIdx];
+                columnInfo.UvLiteral.Clear();
+            }
         }
 
         TActorBootstrapped<TKqpSequencerActor>::PassAway();
@@ -135,6 +177,10 @@ private:
 
         finished = (status == NUdf::EFetchStatus::Finish)
             && (UnprocessedRows == 0);
+
+        if (WaitingReplies == 0) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        } 
 
         CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
         return totalDataSize;
@@ -162,7 +208,7 @@ private:
 
         for(int columnIdx = 0; columnIdx < Settings.GetColumns().size(); ++columnIdx) {
             auto& columnInfo = ColumnSequenceInfo[columnIdx];
-            if (columnInfo.IsAutoIncrement()) {
+            if (columnInfo.IsDefaultFromSequence()) {
                 hasSequences &= columnInfo.HasValues();
             }
         }
@@ -180,7 +226,11 @@ private:
             int inputColIdx = 0;
             for(int columnIdx = 0; columnIdx < Settings.GetColumns().size(); ++columnIdx) {
                 auto& columnInfo = ColumnSequenceInfo[columnIdx];
-                if (columnInfo.IsAutoIncrement()) {
+                if (columnInfo.IsDefaultFromLiteral()) {
+                    NUdf::TUnboxedValue defaultV = columnInfo.GetDefaultLiteral(TypeEnv, HolderFactory);
+                    rowSize += NMiniKQL::GetUnboxedValueSize((defaultV), columnInfo.TypeInfo).AllocatedBytes;
+                    *rowItems++ = defaultV;
+                } else if (columnInfo.IsDefaultFromSequence()) {
                     i64 nextVal = columnInfo.AcquireNextVal();
                     *rowItems++ = NUdf::TUnboxedValuePod(nextVal);
                     rowSize += sizeof(NUdf::TUnboxedValuePod);
@@ -207,7 +257,7 @@ private:
             for(size_t colIdx = 0; colIdx < ColumnSequenceInfo.size(); ++colIdx) {
                 const auto& col = ColumnSequenceInfo[colIdx];
 
-                if (!col.IsAutoIncrement()) {
+                if (!col.IsDefaultFromSequence()) {
                     continue;
                 }
 

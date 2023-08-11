@@ -755,7 +755,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
-                column.DefaultFromSequence = columnDesc.GetDefaultFromSequence();
+
+                if (columnDesc.HasDefaultFromSequence()) {
+                    column.SetDefaultFromSequence();
+                    column.DefaultFromSequence = columnDesc.GetDefaultFromSequence();
+                } else if (columnDesc.HasDefaultFromLiteral()) {
+                    column.SetDefaultFromLiteral();
+                    column.DefaultFromLiteral = columnDesc.GetDefaultFromLiteral();
+                }
 
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());

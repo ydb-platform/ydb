@@ -383,9 +383,8 @@ private:
             const auto& columnInfo = table->Metadata->Columns.at(keyColumnName);
             if (rowType->FindItem(keyColumnName)) {
                 continue;
-            }
-
-            if (!columnInfo.IsAutoIncrement())  {
+            }            
+            if (!columnInfo.IsDefaultKindDefined())  {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Missing key column in input: " << keyColumnName
                     << " for table: " << table->Metadata->Name));
@@ -400,7 +399,7 @@ private:
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
                 if (meta.NotNull) {
-                    if (!rowType->FindItem(name) && !meta.IsAutoIncrement()) {
+                    if (!rowType->FindItem(name) && !meta.IsDefaultKindDefined()) {
                         ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
                             << "Missing not null column in input: " << name
                             << ". All not null columns should be initialized"));
@@ -629,6 +628,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             serialColumns.emplace(column.Value());
         }
 
+        THashMap<TString, const TTypeAnnotationNode*> typeAnnotations;
+
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
@@ -639,6 +640,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
+
+            typeAnnotations.emplace(columnName, type);
 
             auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
             auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
@@ -675,8 +678,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
             columnMeta.Type = GetColumnTypeName(actualType);
+
+            if (columnMeta.IsDefaultKindDefined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder() << "Default setting for "
+                    << columnName << " column is already set: "
+                    << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
+                return TStatus::Error;
+            }
+
             if (isSerial) {
                 columnMeta.DefaultFromSequence = "_serial_column_" + columnMeta.Name;
+                columnMeta.SetDefaultFromSequence();
             }
 
             if (actualType->GetKind() == ETypeAnnotationKind::Pg) {
@@ -757,6 +769,49 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             ctx.AddError(TIssue(ctx.GetPosition(changefeed.Pos()), TStringBuilder()
                 << "Cannot create table with changefeed"));
             return TStatus::Error;
+        }
+
+        for(auto defaultSettingExpr : create.ColumnsDefaultValues()) {
+            auto name = defaultSettingExpr.Name().Value();
+            auto type = defaultSettingExpr.Value().Ref().GetTypeAnn();
+            auto columnInfo = typeAnnotations.find(name);
+            auto columnMetaIt = meta->Columns.find(name);
+
+            if (columnInfo == typeAnnotations.end() || columnMetaIt == meta->Columns.end()) {
+                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder()
+                    << "Unexpected default expr for column " << name));
+                return TStatus::Error;
+            }
+
+            TKikimrColumnMetadata& columnMeta = columnMetaIt->second;
+
+            if (type->HasOptionalOrNull() && columnMeta.NotNull) {
+                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder() << "Default expr " << name
+                    << " is nullable or optional, but column has not null constraint. "));
+                return TStatus::Error;
+            }
+
+            const TTypeAnnotationNode* columnAnnotation = columnInfo->second;
+
+            if (columnAnnotation->HasOptional()) {
+                columnAnnotation = columnAnnotation->Cast<TOptionalExprType>()->GetItemType();   
+            }
+
+            if (!IsSameAnnotation(*type, *columnAnnotation)) {
+                  ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder() << "Default expr " << name
+                    << " type mismatch, expected: " << (*type) << ", actual: " << *(columnInfo->second)));
+                return TStatus::Error;
+            }
+
+            if (columnMeta.IsDefaultKindDefined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(defaultSettingExpr.Pos()), TStringBuilder() << "Default setting for " << name
+                    << " column is already set: "
+                    << NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind_Name(columnMeta.DefaultKind)));
+                return TStatus::Error;
+            }
+
+            columnMeta.SetDefaultFromLiteral();
+            FillLiteralProto(defaultSettingExpr.Value().Cast<TCoDataCtor>(), columnMeta.DefaultFromLiteral);
         }
 
         for (auto columnFamily : create.ColumnFamilies()) {

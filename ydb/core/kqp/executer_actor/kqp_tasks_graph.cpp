@@ -304,8 +304,17 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
         auto aic = autoIncrementColumns.find(column);
         if (aic != autoIncrementColumns.end()) {
             auto sequenceIt = tableInfo->Sequences.find(column);
-            YQL_ENSURE(sequenceIt != tableInfo->Sequences.end());
-            columnProto->SetDefaultFromSequence(sequenceIt->second);
+            if (sequenceIt != tableInfo->Sequences.end()) {
+                columnProto->SetDefaultFromSequence(sequenceIt->second);
+                columnProto->SetDefaultKind(
+                    NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE);
+            } else {
+                auto literalIt = tableInfo->DefaultFromLiteral.find(column);
+                YQL_ENSURE(literalIt != tableInfo->DefaultFromLiteral.end());
+                columnProto->MutableDefaultFromLiteral()->CopyFrom(literalIt->second);
+                columnProto->SetDefaultKind(
+                    NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+            }
         }
     }
 

@@ -791,6 +791,9 @@ public:
         auto notNullColumns = Y();
         auto columns = Y();
         THashSet<TString> serialColumnsSet;
+        THashSet<TString> columnsWithDefaultValue;
+        auto columnsDefaultValueSettings = Y();
+
         auto serialColumns = Y();
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
@@ -806,6 +809,20 @@ public:
                 if (notNullColumnsSet.insert(col.Name).second)
                     notNullColumns = L(notNullColumns, BuildQuotedAtom(Pos, col.Name));
             }
+            if (col.DefaultExpr) {
+                if (!col.DefaultExpr->Init(ctx, src)) {
+                    return false;
+                }
+
+                if (!columnsWithDefaultValue.insert(col.Name).second)
+                    continue;
+
+                columnsDefaultValueSettings = L(
+                    columnsDefaultValueSettings,
+                    Q(Y(Q(col.Name), col.DefaultExpr))
+                );
+            }
+
             columnDesc = L(columnDesc, type);
             if (col.Families) {
                 auto familiesDesc = Y();
@@ -821,6 +838,10 @@ public:
             columns = L(columns, Q(columnDesc));
         }
         opts = L(opts, Q(Y(Q("columns"), Q(columns))));
+
+        if (!columnsWithDefaultValue.empty()) {
+            opts = L(opts, Q(Y(Q("columnsDefaultValues"), Q(columnsDefaultValueSettings))));
+        }
 
         if (Table.Service == RtmrProviderName) {
             if (!Params.PkColumns.empty() && !Params.PartitionByColumns.empty()) {

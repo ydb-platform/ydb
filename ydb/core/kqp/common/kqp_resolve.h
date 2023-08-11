@@ -33,6 +33,7 @@ public:
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         ETableKind TableKind = ETableKind::Unknown;
         THashMap<TString, TString> Sequences;
+        THashMap<TString, NKikimrMiniKQL::TResult> DefaultFromLiteral;
 
         TTableConstInfo() {}
         TTableConstInfo(const TString& path) : Path(path) {}
@@ -60,6 +61,12 @@ public:
                 }
 
                 Sequences.emplace(phyColumn.GetId().GetName(), seq);
+            }
+
+            if (phyColumn.HasDefaultFromLiteral()) {
+                DefaultFromLiteral.emplace(
+                    phyColumn.GetId().GetName(),
+                    phyColumn.GetDefaultFromLiteral());
             }
         }
 
@@ -118,6 +125,7 @@ public:
     private:
         TIntrusivePtr<TTableConstInfo> TableConstInfo;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfo;
+        THashMap<TString, NKikimrMiniKQL::TResult> DefaultFromLiteral;
 
     public:
         TTable() : TableConstInfo(MakeIntrusive<TTableConstInfo>()) {}

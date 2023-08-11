@@ -155,7 +155,11 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
         phyColumn.MutableId()->SetId(column->Id);
         phyColumn.MutableId()->SetName(column->Name);
         phyColumn.SetTypeId(column->TypeInfo.GetTypeId());
-        phyColumn.SetDefaultFromSequence(column->DefaultFromSequence);
+        if (column->IsDefaultFromSequence()) {
+            phyColumn.SetDefaultFromSequence(column->DefaultFromSequence);
+        } else if (column->IsDefaultFromLiteral()) {
+            phyColumn.MutableDefaultFromLiteral()->CopyFrom(column->DefaultFromLiteral);
+        }
 
         if (column->TypeInfo.GetTypeId() == NScheme::NTypeIds::Pg) {
             phyColumn.SetPgTypeName(NPg::PgTypeNameFromTypeDesc(column->TypeInfo.GetTypeDesc()));
@@ -187,71 +191,6 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
     }
 }
 
-void FillLiteralKeyBound(const TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto) {
-    auto type = literal.Ref().GetTypeAnn();
-
-    // TODO: support pg types
-    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
-
-    auto slot = type->Cast<TDataExprType>()->GetSlot();
-    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
-
-    YQL_ENSURE(NScheme::NTypeIds::IsYqlType(typeId) && NSchemeShard::IsAllowedKeyType(NScheme::TTypeInfo(typeId)));
-
-    auto& protoType = *proto.MutableType();
-    auto& protoValue = *proto.MutableValue();
-
-    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    protoType.MutableData()->SetScheme(typeId);
-
-    auto value = literal.Literal().Value();
-
-    switch (slot) {
-        case EDataSlot::Bool:
-            protoValue.SetBool(FromString<bool>(value));
-            break;
-        case EDataSlot::Uint8:
-        case EDataSlot::Uint32:
-        case EDataSlot::Date:
-        case EDataSlot::Datetime:
-            protoValue.SetUint32(FromString<ui32>(value));
-            break;
-        case EDataSlot::Int32:
-            protoValue.SetInt32(FromString<i32>(value));
-            break;
-        case EDataSlot::Int64:
-        case EDataSlot::Interval:
-            protoValue.SetInt64(FromString<i64>(value));
-            break;
-        case EDataSlot::Uint64:
-        case EDataSlot::Timestamp:
-            protoValue.SetUint64(FromString<ui64>(value));
-            break;
-        case EDataSlot::String:
-        case EDataSlot::DyNumber:
-            protoValue.SetBytes(value.Data(), value.Size());
-            break;
-        case EDataSlot::Utf8:
-            protoValue.SetText(ToString(value));
-            break;
-        case EDataSlot::Decimal: {
-            const auto paramsDataType = type->Cast<TDataExprParamsType>();
-            auto precision = FromString<ui8>(paramsDataType->GetParamOne());
-            auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
-            protoType.MutableData()->MutableDecimalParams()->SetPrecision(precision);
-            protoType.MutableData()->MutableDecimalParams()->SetScale(scale);
-
-            auto v = NDecimal::FromString(literal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
-            const auto p = reinterpret_cast<ui8*>(&v);
-            protoValue.SetLow128(*reinterpret_cast<ui64*>(p));
-            protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8));
-            break;
-        }
-
-        default:
-            YQL_ENSURE(false, "Unexpected type slot " << slot);
-    }
-}
 
 void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKeyBound& boundProto) {
     if (bound.Maybe<TKqlKeyInc>()) {
@@ -275,7 +214,7 @@ void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKey
             paramElementProto.SetParamName(TString(maybeParam.Cast().Name()));
             paramElementProto.SetElementIndex(FromString<ui32>(key.Cast<TCoNth>().Index().Value()));
         } else if (auto maybeLiteral = key.Maybe<TCoDataCtor>()) {
-            FillLiteralKeyBound(maybeLiteral.Cast(), *protoValue.MutableLiteralValue());
+            FillLiteralProto(maybeLiteral.Cast(), *protoValue.MutableLiteralValue());
         } else {
             YQL_ENSURE(false, "Unexpected key bound: " << key.Ref().Content());
         }
@@ -404,7 +343,7 @@ void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& looku
                     protoColumn.MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue());
                 } else {
                     YQL_ENSURE(tuple.Value().Maybe<TCoDataCtor>(), "" << tuple.Value().Ref().Dump());
-                    FillLiteralKeyBound(tuple.Value().Cast<TCoDataCtor>(), *protoColumn.MutableLiteralValue());
+                    FillLiteralProto(tuple.Value().Cast<TCoDataCtor>(), *protoColumn.MutableLiteralValue());
                 }
             }
         }

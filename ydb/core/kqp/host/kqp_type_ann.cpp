@@ -542,7 +542,7 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
         const auto& columnInfo = table.second->Metadata->Columns.at(keyColumnName);
-        if (!rowType->FindItem(keyColumnName) && !columnInfo.IsAutoIncrement()) {
+        if (!rowType->FindItem(keyColumnName) && !columnInfo.IsDefaultKindDefined()) {
             ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
@@ -1253,7 +1253,7 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
         const auto& infoIt = table->Metadata->Columns.find(key);
         YQL_ENSURE(infoIt != table->Metadata->Columns.end());
         const auto& info = infoIt->second;
-        if (info.IsAutoIncrement()) {
+        if (info.IsDefaultKindDefined()) {
             auto [_, inserted] = missingKeyColumns.emplace(key);
             YQL_ENSURE(inserted, "unexpected duplicates in key columns.");
         }

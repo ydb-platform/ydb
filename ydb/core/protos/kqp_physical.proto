@@ -63,7 +63,10 @@ message TKqpPhyColumn {
     TKqpPhyColumnId Id = 1;
     uint32 TypeId = 2;
     string PgTypeName = 3;
-    string DefaultFromSequence = 4;
+    oneof DefaultKind {
+        string DefaultFromSequence = 4;
+        NKikimrMiniKQL.TResult DefaultFromLiteral = 5;
+    }
 }
 
 enum EKqpPhyTableKind {

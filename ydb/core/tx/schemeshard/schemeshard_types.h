@@ -112,6 +112,7 @@ struct TVirtualTimestamp
 enum class ETableColumnDefaultKind : ui32 {
     None = 0,
     FromSequence = 1,
+    FromLiteral = 2,
 };
 
 enum class EAttachChildResult : ui32 {

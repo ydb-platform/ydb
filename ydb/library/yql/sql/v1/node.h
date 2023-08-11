@@ -533,6 +533,13 @@ namespace NSQLTranslationV1 {
             , Name(name) {}
     };
 
+    struct TColumnConstraints {
+        TNodePtr DefaultExpr;
+        bool Nullable = true;
+
+        TColumnConstraints(TNodePtr defaultExpr, bool nullable);
+    };
+
     struct TColumnSchema {
         TPosition Pos;
         TString Name;
@@ -540,9 +547,10 @@ namespace NSQLTranslationV1 {
         bool Nullable;
         TVector<TIdentifier> Families;
         bool Serial;
+        TNodePtr DefaultExpr;
 
         TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-            TVector<TIdentifier> families, bool serial);
+            TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr);
     };
 
     struct TColumns: public TSimpleRefCount<TColumns> {

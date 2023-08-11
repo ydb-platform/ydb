@@ -1175,7 +1175,7 @@ bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node
     TVector<TIdentifier> families;
     const auto& familyRelation = node.GetRule_family_relation5();
     families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false);
+    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr);
     return true;
 }
 
@@ -2310,10 +2310,14 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
 }
 namespace {
 
-    static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& transaction) {
-        const bool nullable = !columnSchema.HasBlock4() || !columnSchema.GetBlock4().HasBlock1();
-        const TString columnName(Id(columnSchema.GetRule_an_id_schema1(), transaction));
+    static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_column_schema& columnSchema, const NYql::TPosition& pos, TSqlTranslation& translation) {
+        const TString columnName(Id(columnSchema.GetRule_an_id_schema1(), translation));
         TString columnType;
+
+        const auto constraints = ColumnConstraints(columnSchema, translation);
+        if (!constraints) {
+            return false;
+        }
 
         auto& typeBind = columnSchema.GetRule_type_name_or_bind2();
         switch (typeBind.Alt_case()) {
@@ -2326,7 +2330,7 @@ namespace {
                 auto& alt = typeNameOrBind.GetAlt_type_name2();
                 auto& block = alt.GetBlock1();
                 auto& simpleType = block.GetAlt2().GetRule_type_name_simple1();
-                columnType = Id(simpleType.GetRule_an_id_pure1(), transaction);
+                columnType = Id(simpleType.GetRule_an_id_pure1(), translation);
                 if (columnType.empty()) {
                     return false;
                 }
@@ -2341,7 +2345,7 @@ namespace {
         result["NAME"] = TDeferredAtom(pos, columnName);
         YQL_ENSURE(columnType, "Unknown column type");
         result["TYPE"] = TDeferredAtom(pos, columnType);
-        if (!nullable) {
+        if (!constraints->Nullable) {
             result["NOT_NULL"] = TDeferredAtom(pos, "true");
         }
         return true;

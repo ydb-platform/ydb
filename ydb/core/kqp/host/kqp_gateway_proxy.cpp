@@ -279,6 +279,7 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
     for (const auto& name : metadata->ColumnOrder) {
         auto columnIt = metadata->Columns.find(name);
         Y_ENSURE(columnIt != metadata->Columns.end());
+        const auto& cMeta = columnIt->second;
 
         auto& columnDesc = *tableDesc.AddColumns();
         columnDesc.SetName(columnIt->second.Name);
@@ -288,9 +289,14 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             columnDesc.SetFamilyName(*columnIt->second.Families.begin());
         }
 
-        const auto& seq = columnIt->second.DefaultFromSequence;
-        if (!seq.empty()) {
-            columnDesc.SetDefaultFromSequence(seq);
+        if (cMeta.IsDefaultFromSequence()) {
+            columnDesc.SetDefaultFromSequence(
+                cMeta.DefaultFromSequence);
+        }
+
+        if (cMeta.IsDefaultFromLiteral()) {
+            columnDesc.MutableDefaultFromLiteral()->CopyFrom(
+                cMeta.DefaultFromLiteral);
         }
     }
 

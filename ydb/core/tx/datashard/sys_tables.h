@@ -2,28 +2,65 @@
 #include <ydb/core/scheme/scheme_types_auto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
+
 #include <util/system/unaligned_mem.h>
+
+namespace NKikimrMiniKQL {
+class TResult;
+};
 
 namespace NKikimr {
 
 struct TSysTables {
     struct TTableColumnInfo {
+
+        enum EDefaultKind {
+            DEFAULT_UNDEFINED = 0,
+            DEFAULT_SEQUENCE = 1,
+            DEFAULT_LITERAL = 2
+        };
+
         TString Name;
         ui32 Id = 0;
         NScheme::TTypeInfo PType;
         TString PTypeMod;
         i32 KeyOrder = -1;
         TString DefaultFromSequence;
+        EDefaultKind DefaultKind;
+        NKikimrMiniKQL::TResult DefaultFromLiteral;
 
         TTableColumnInfo() = default;
 
-        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type, const TString& typeMod = {}, i32 keyOrder = -1, const TString& defaultFromSequence = {})
+        void SetDefaultFromSequence() {
+            DefaultKind = DEFAULT_SEQUENCE;
+        }
+
+        void SetDefaultFromLiteral() {
+            DefaultKind = DEFAULT_LITERAL;
+        }
+
+        bool IsDefaultFromSequence() const {
+            return DefaultKind == DEFAULT_SEQUENCE;
+        }
+
+        bool IsDefaultFromLiteral() const {
+            return DefaultKind == DEFAULT_LITERAL;
+        }
+
+        TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type,
+            const TString& typeMod = {}, i32 keyOrder = -1,
+            const TString& defaultFromSequence = {},
+            EDefaultKind defaultKind = EDefaultKind::DEFAULT_UNDEFINED,
+            const NKikimrMiniKQL::TResult& defaultFromLiteral = {})
             : Name(name)
             , Id(colId)
             , PType(type)
             , PTypeMod(typeMod)
             , KeyOrder(keyOrder)
             , DefaultFromSequence(defaultFromSequence)
+            , DefaultKind(defaultKind)
+            , DefaultFromLiteral(defaultFromLiteral)
         {}
     };
 

@@ -164,6 +164,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (col.HasDefaultFromSequence()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromSequence;
                 column.DefaultValue = col.GetDefaultFromSequence();
+            } else if (col.HasDefaultFromLiteral()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
+                column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
             }
         }
     }

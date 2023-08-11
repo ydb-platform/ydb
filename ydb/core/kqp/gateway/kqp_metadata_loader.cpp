@@ -151,11 +151,19 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         const auto& columnDesc = pair.second;
         auto notNull = entry.NotNullColumns.contains(columnDesc.Name);
         const TString typeName = GetTypeName(NScheme::TTypeInfoMod{columnDesc.PType, columnDesc.PTypeMod});
+        auto defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
+        if (columnDesc.IsDefaultFromSequence())
+            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
+        else if (columnDesc.IsDefaultFromLiteral())
+            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+
         tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
                 columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType, columnDesc.PTypeMod,
-                columnDesc.DefaultFromSequence
+                columnDesc.DefaultFromSequence,
+                defaultKind,
+                columnDesc.DefaultFromLiteral
             )
         );
         if (columnDesc.KeyOrder >= 0) {
@@ -197,6 +205,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
         const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
             columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
         const TString typeName = GetTypeName(typeInfoMod);
+        
         tableMeta->Columns.emplace(
             columnDesc.GetName(),
             NYql::TKikimrColumnMetadata(

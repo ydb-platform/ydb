@@ -19,11 +19,14 @@ target_link_libraries(columnshard-engines-portions PUBLIC
   contrib-libs-cxxsupp
   yutil
   columnshard-engines-scheme
+  tx-columnshard-splitter
+  tx-columnshard-common
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(columnshard-engines-portions PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/portion_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/column_record.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/meta.cpp
 )
 generate_enum_serilization(columnshard-engines-portions
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/portion_info.h

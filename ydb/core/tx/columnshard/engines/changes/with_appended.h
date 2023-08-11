@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 #include <util/generic/hash.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
 
 namespace NKikimr::NOlap {
 

@@ -1,22 +1,29 @@
 #include "portion_info.h"
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
 namespace NKikimr::NOlap {
 
-TString TPortionInfo::SerializeColumn(const std::shared_ptr<arrow::Array>& array,
-    const std::shared_ptr<arrow::Field>& field,
-    const TColumnSaver saver) {
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
-    auto batch = arrow::RecordBatch::Make(schema, array->length(), { array });
-    Y_VERIFY(batch);
-
-    return saver.Apply(batch);
-}
-
-void TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) {
-    record.Chunk = 0;
+const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) {
+    Y_VERIFY(record.ColumnId);
+    std::optional<ui32> maxChunk;
+    for (auto&& i : Records) {
+        if (i.ColumnId == record.ColumnId) {
+            if (!maxChunk) {
+                maxChunk = i.Chunk;
+            } else {
+                Y_VERIFY(*maxChunk + 1 == i.Chunk);
+                maxChunk = i.Chunk;
+            }
+        }
+    }
+    if (maxChunk) {
+        Y_VERIFY(*maxChunk + 1 == record.Chunk);
+    } else {
+        Y_VERIFY(0 == record.Chunk);
+    }
     Records.emplace_back(std::move(record));
+    return Records.back();
 }
 
 void TPortionInfo::AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted) {
@@ -240,6 +247,48 @@ TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnI
         }
     }
     return result;
+}
+
+ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
+    ui64 sum = 0;
+    const ui32 numRows = NumRows();
+    for (auto&& i : columnIds) {
+        if (TIndexInfo::IsSpecialColumn(i)) {
+            sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
+        } else {
+            auto it = Meta.ColumnMeta.find(i);
+            if (it != Meta.ColumnMeta.end()) {
+                sum += it->second.RawBytes;
+            }
+        }
+    }
+    return sum;
+}
+
+int TPortionInfo::CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
+    return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
+}
+
+int TPortionInfo::CompareMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
+    return CompareMinByColumnIds(item, info.KeyColumns);
+}
+
+TString TPortionInfo::DebugString() const {
+    TStringBuilder sb;
+    sb << "(portion_id:" << Portion << ";" <<
+        "granule_id:" << Granule << ";records_count:" << NumRows() << ";"
+        "min_snapshot:(" << MinSnapshot.DebugString() << ");" <<
+        "size:" << BlobsBytes() << ";" <<
+        "meta:(" << Meta.DebugString() << ");";
+    if (RemoveSnapshot.Valid()) {
+        sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
+    }
+    sb << "meta:(" << Meta << ");";
+    sb << "chunks:(" << Records.size() << ");";
+    if (TierName) {
+        sb << "tier:" << TierName << ";";
+    }
+    return sb << ")";
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

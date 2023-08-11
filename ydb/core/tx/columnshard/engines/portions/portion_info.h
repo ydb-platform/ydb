@@ -1,99 +1,14 @@
 #pragma once
 #include "column_record.h"
-
-#include <ydb/core/formats/arrow/replace_key.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/formats/arrow/dictionary/conversion.h>
-#include <ydb/core/tx/columnshard/common/portion.h>
-#include <ydb/core/tx/columnshard/counters/indexation.h>
+#include "meta.h"
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NOlap {
 
-struct TPortionMeta {
-    using EProduced = NPortion::EProduced;
-
-    struct TColumnMeta {
-        ui32 NumRows{0};
-        ui32 RawBytes{0};
-        std::shared_ptr<arrow::Scalar> Min;
-        std::shared_ptr<arrow::Scalar> Max;
-
-        bool HasMinMax() const noexcept {
-            return Min.get() && Max.get();
-        }
-    };
-
-    EProduced GetProduced() const {
-        return Produced;
-    }
-
-    EProduced Produced{EProduced::UNSPECIFIED};
-    THashMap<ui32, TColumnMeta> ColumnMeta;
-    ui32 FirstPkColumn = 0;
-    std::shared_ptr<arrow::RecordBatch> ReplaceKeyEdges; // first and last PK rows
-    std::optional<NArrow::TReplaceKey> IndexKeyStart;
-    std::optional<NArrow::TReplaceKey> IndexKeyEnd;
-
-    TString DebugString() const {
-        return TStringBuilder() <<
-            "produced:" << Produced << ";"
-            ;
-    }
-
-    bool HasMinMax(ui32 columnId) const {
-        if (!ColumnMeta.contains(columnId)) {
-            return false;
-        }
-        return ColumnMeta.find(columnId)->second.HasMinMax();
-    }
-
-    bool HasPkMinMax() const {
-        return HasMinMax(FirstPkColumn);
-    }
-
-    ui32 NumRows() const {
-        if (FirstPkColumn) {
-            Y_VERIFY(ColumnMeta.contains(FirstPkColumn));
-            return ColumnMeta.find(FirstPkColumn)->second.NumRows;
-        }
-        return 0;
-    }
-
-    friend IOutputStream& operator << (IOutputStream& out, const TPortionMeta& info) {
-        out << "reason" << (ui32)info.Produced;
-        for (const auto& [_, meta] : info.ColumnMeta) {
-            if (meta.NumRows) {
-                out << " " << meta.NumRows << " rows";
-                break;
-            }
-        }
-        return out;
-    }
-};
-
-class TPortionAddress {
-private:
-    YDB_READONLY(ui64, GranuleId, 0);
-    YDB_READONLY(ui64, PortionId, 0);
-public:
-    TPortionAddress(const ui64 granuleId, const ui64 portionId)
-        : GranuleId(granuleId)
-        , PortionId(portionId)
-    {
-
-    }
-
-    bool operator<(const TPortionAddress& item) const {
-        return std::tie(GranuleId, PortionId) < std::tie(item.GranuleId, item.PortionId);
-    }
-
-    bool operator==(const TPortionAddress& item) const {
-        return std::tie(GranuleId, PortionId) == std::tie(item.GranuleId, item.PortionId);
-    }
-};
+struct TIndexInfo;
 
 struct TPortionInfo {
 private:
@@ -138,14 +53,7 @@ public:
 
     }
 
-    TString DebugString() const {
-        return TStringBuilder() <<
-            "portion_id:" << Portion << ";" <<
-            "granule_id:" << Granule << ";" <<
-            "min_snapshot:" << MinSnapshot.DebugString() << ";" <<
-            "meta:(" << Meta.DebugString() << ");"
-            ;
-    }
+    TString DebugString() const;
 
     bool CheckForCleanup(const TSnapshot& snapshot) const {
         if (!CheckForCleanup()) {
@@ -278,21 +186,7 @@ public:
         return Meta.NumRows();
     }
 
-    ui64 GetRawBytes(const std::vector<ui32>& columnIds) const {
-        ui64 sum = 0;
-        const ui32 numRows = NumRows();
-        for (auto&& i : columnIds) {
-            if (TIndexInfo::IsSpecialColumn(i)) {
-                sum += numRows * TIndexInfo::GetSpecialColumnByteWidth(i);
-            } else {
-                auto it = Meta.ColumnMeta.find(i);
-                if (it != Meta.ColumnMeta.end()) {
-                    sum += it->second.RawBytes;
-                }
-            }
-        }
-        return sum;
-    }
+    ui64 GetRawBytes(const std::vector<ui32>& columnIds) const;
 
     ui64 RawBytesSum() const {
         ui64 sum = 0;
@@ -336,13 +230,9 @@ private:
         return 0;
     }
 public:
-    int CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
-        return CompareByColumnIdsImpl<TMaxGetter, TMinGetter>(item, info.KeyColumns);
-    }
+    int CompareSelfMaxItemMinByPk(const TPortionInfo& item, const TIndexInfo& info) const;
 
-    int CompareMinByPk(const TPortionInfo& item, const TIndexInfo& info) const {
-        return CompareMinByColumnIds(item, info.KeyColumns);
-    }
+    int CompareMinByPk(const TPortionInfo& item, const TIndexInfo& info) const;
 
     int CompareMinByColumnIds(const TPortionInfo& item, const std::vector<ui32>& columnIds) const {
         return CompareByColumnIdsImpl<TMinGetter>(item, columnIds);
@@ -481,7 +371,7 @@ public:
             auto pos = dataSchema.GetFieldIndex(rec.ColumnId);
             Y_ASSERT(pos >= 0);
             positionsMap[resulPos] = pos;
-            columnChunks[resulPos][rec.Chunk] = rec.BlobRange;
+            Y_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second);
             auto columnMeta = Meta.ColumnMeta.FindPtr(rec.ColumnId);
             if (columnMeta) {
                 Y_VERIFY_S(rowsCount == columnMeta->NumRows, TStringBuilder() << "Inconsistent rows " << rowsCount << "/" << columnMeta->NumRows);
@@ -524,23 +414,10 @@ public:
         return batch;
     }
 
-    static TString SerializeColumn(const std::shared_ptr<arrow::Array>& array,
-        const std::shared_ptr<arrow::Field>& field,
-        const TColumnSaver saver);
-
-    void AppendOneChunkColumn(TColumnRecord&& record);
+    const TColumnRecord& AppendOneChunkColumn(TColumnRecord&& record);
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfo& info) {
-        for (auto& rec : info.Records) {
-            out << " " << rec;
-            out << " (1 of " << info.Records.size() << " blobs shown)";
-            break;
-        }
-        out << ";activity=" << info.IsActive() << ";";
-        if (!info.TierName.empty()) {
-            out << " tier: " << info.TierName;
-        }
-        out << " " << info.Meta;
+        out << info.DebugString();
         return out;
     }
 };

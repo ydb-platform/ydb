@@ -192,7 +192,7 @@ bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TP
         auto field = resultSchema->GetFieldByIndex(pos);
         auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
 
-        auto blob = TPortionInfo::SerializeColumn(batch->GetColumnByName(field->name()), field, columnSaver);
+        auto blob = columnSaver.Apply(batch->GetColumnByName(field->name()), field);
         if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
             portionInfo = undo;
             newBlobs.resize(undoSize);

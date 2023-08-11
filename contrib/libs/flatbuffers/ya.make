@@ -2,16 +2,17 @@
 
 LIBRARY()
 
-VERSION(2.0.0)
+VERSION(23.5.9)
 
-ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v2.0.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v23.5.9.tar.gz)
 
-LICENSE(
-    Apache-2.0 AND
-    BSD-3-Clause
-)
+LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+PEERDIR(
+    contrib/restricted/abseil-cpp/absl/base
+)
 
 ADDINCL(
     contrib/libs/flatbuffers/include

@@ -6,6 +6,10 @@ WITHOUT_LICENSE_TEXTS()
 
 LICENSE(Apache-2.0)
 
+PEERDIR(
+    contrib/restricted/abseil-cpp/absl/base
+)
+
 ADDINCL(
     contrib/libs/flatbuffers/grpc
     contrib/libs/flatbuffers/include
@@ -28,8 +32,16 @@ SRCS(
     grpc/src/compiler/python_generator.cc
     grpc/src/compiler/swift_generator.cc
     grpc/src/compiler/ts_generator.cc
+    src/annotated_binary_text_gen.cpp
+    src/bfbs_gen_lua.cpp
+    src/bfbs_gen_nim.cpp
+    src/binary_annotator.cpp
     src/code_generators.cpp
+    src/file_binary_writer.cpp
+    src/file_name_saving_file_manager.cpp
+    src/file_writer.cpp
     src/flatc.cpp
+    src/idl_gen_binary.cpp
     src/idl_gen_cpp.cpp
     src/idl_gen_cpp_yandex_maps_iter.cpp
     src/idl_gen_csharp.cpp

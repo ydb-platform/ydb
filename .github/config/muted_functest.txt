@@ -1,4 +1,3 @@
-open_source.test_yatest_common.TestYaTestContext::test_source_path
 ::suite_tests.test_postgres
 sqs.common.test_queues_managing.TestQueuesManagingWithTenant
 sqs.common.test_queues_managing.TestQueuesManagingWithPathTestQueuesManagingWithPath
@@ -15,3 +14,7 @@ tenants.test_tenants.TestTenants
 tenants.test_tenants
 tenants.test_dynamic_tenants
 tenants.test_storage_config.TestStorageConfig
+ydb_cli.test_ydb_impex.TestImpex::test_simple[csv-additional_args0-column]
+ydb_cli.test_ydb_impex.TestImpex::test_simple[csv-additional_args1-row]
+ydb_cli.test_ydb_impex.TestImpex::test_multiple_files_and_stdin[tsv-additional_args2-row]
+suite_tests.test_stream_query.TestStreamQuery::test_sql_suite[results-window.test]

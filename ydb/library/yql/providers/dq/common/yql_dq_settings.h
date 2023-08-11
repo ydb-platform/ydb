@@ -15,6 +15,12 @@ namespace NYql {
 
 struct TDqSettings {
 
+    enum class ETaskRunnerStats {
+        Disable,
+        Basic,
+        Profile
+    };
+
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
@@ -41,6 +47,7 @@ struct TDqSettings {
         static constexpr bool AggregateStatsByStage = true;
         static constexpr bool EnableChannelStats = false;
         static constexpr bool ExportStats = false;
+        static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -105,6 +112,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> AggregateStatsByStage;
     NCommon::TConfSetting<bool, false> EnableChannelStats;
     NCommon::TConfSetting<bool, false> ExportStats;
+    NCommon::TConfSetting<ETaskRunnerStats, false> TaskRunnerStats;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
@@ -158,6 +166,7 @@ struct TDqSettings {
         SAVE_SETTING(AggregateStatsByStage);
         SAVE_SETTING(EnableChannelStats);
         SAVE_SETTING(ExportStats);
+        SAVE_SETTING(TaskRunnerStats);
 #undef SAVE_SETTING
     }
 

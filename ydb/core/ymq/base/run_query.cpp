@@ -19,6 +19,7 @@ namespace NKikimr::NSQS {
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         request->SetKeepSession(false);
         request->SetQuery(query);
+        request->SetUsePublicResponseDataFormat(true);
 
         if (database) {
             request->SetDatabase(database);

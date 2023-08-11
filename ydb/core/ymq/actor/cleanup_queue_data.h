@@ -42,8 +42,8 @@ public:
     void HandleError(const TString& error, const TActorContext& ctx);
     void LockQueueToRemove(TDuration runAfter, const TActorContext& ctx);
     void UpdateLock(const TActorContext& ctx);
-    void ContinueRemoveData(const NKikimrMiniKQL::TValue& queueRow, const TActorContext& ctx);
-    void StartRemoveData(const NKikimrMiniKQL::TValue& queueRow, const TActorContext& ctx);
+    void ContinueRemoveData(NYdb::TResultSetParser& queueRow, const TActorContext& ctx);
+    void StartRemoveData(NYdb::TResultSetParser& queueRow, const TActorContext& ctx);
 
     std::optional<std::pair<TString, bool>> GetNextTable() const;
     void ClearNextTable(const TActorContext& ctx);

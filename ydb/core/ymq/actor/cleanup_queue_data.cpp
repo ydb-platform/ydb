@@ -132,26 +132,29 @@ namespace NKikimr::NSQS {
             }
             case EState::GetQueueAfterLockUpdate:
             case EState::GetQueue: {
-                Y_VERIFY(response.GetResults().size() == 1);
-                const auto& rr = response.GetResults(0).GetValue().GetStruct(0);
-                if (rr.GetList().empty()) {
+                Y_VERIFY(response.YdbResultsSize() == 1);
+                NYdb::TResultSetParser parser(response.GetYdbResults(0));
+                if (parser.RowsCount() == 0) {
                     LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] there are no queues to delete");
                     LockQueueToRemove(IDLE_TIMEOUT, ctx);
                     return;
                 }
-                Y_VERIFY(rr.GetList().size() == 1);
-                const auto& row = rr.GetList()[0];
+                Y_VERIFY(parser.RowsCount() == 1);
+                parser.TryNextRow();
                 if (State == EState::GetQueueAfterLockUpdate) {
-                    ContinueRemoveData(row, ctx);
+                    ContinueRemoveData(parser, ctx);
                 } else {
-                    StartRemoveData(row, ctx);
+                    StartRemoveData(parser, ctx);
                 }
                 return;
             }
             case EState::RemoveData: {
-                Y_VERIFY(response.GetResults().size() == 1);
-                const auto& rr = response.GetResults(0).GetValue().GetStruct(0);
-                ui64 removedRows = rr.GetList()[0].GetStruct(0).GetUint64();
+                Y_VERIFY(response.YdbResultsSize() == 1);
+                NYdb::TResultSetParser parser(response.GetYdbResults(0));
+                ui64 removedRows = 0;
+                if (parser.TryNextRow()) {
+                    removedRows = parser.ColumnParser(0).GetUint64();
+                }
                 OnRemovedData(removedRows, ctx);
                 break;
             }
@@ -226,13 +229,13 @@ namespace NKikimr::NSQS {
         RunYqlQuery(UpdateLockQueueQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
     }
 
-    void TCleanupQueueDataActor::ContinueRemoveData(const NKikimrMiniKQL::TValue& queueRow, const TActorContext& ctx) {
+    void TCleanupQueueDataActor::ContinueRemoveData(NYdb::TResultSetParser& parser, const TActorContext& ctx) {
         // Select RemoveTimestamp, QueueIdNumber, FifoQueue, Shards, TablesFormat
-        ui64 queueIdNumber = queueRow.GetStruct(1).GetOptional().GetUint64();
+        ui64 queueIdNumber = *parser.ColumnParser(1).GetOptionalUint64();
         if (queueIdNumber != QueueIdNumber) {
             LOG_WARN_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to continue remove data queue_id_number=" << queueIdNumber 
                 << ", but was locked queue_id_number=" << QueueIdNumber);
-            StartRemoveData(queueRow, ctx);
+            StartRemoveData(parser, ctx);
             return;
         }
         
@@ -240,16 +243,16 @@ namespace NKikimr::NSQS {
         RunRemoveData(ctx);
     }
 
-    void TCleanupQueueDataActor::StartRemoveData(const NKikimrMiniKQL::TValue& queueRow, const TActorContext& ctx) {
+    void TCleanupQueueDataActor::StartRemoveData(NYdb::TResultSetParser& parser, const TActorContext& ctx) {
         State = EState::RemoveData;
         ClearedTablesCount = 0;
 
         // Select RemoveTimestamp, QueueIdNumber, FifoQueue, Shards, TablesFormat
-        RemoveQueueTimetsamp = queueRow.GetStruct(0).GetOptional().GetUint64();
-        QueueIdNumber = queueRow.GetStruct(1).GetOptional().GetUint64();
-        IsFifoQueue = queueRow.GetStruct(2).GetOptional().GetBool();
-        Shards = queueRow.GetStruct(3).GetOptional().GetUint32();
-        TablesFormat = queueRow.GetStruct(4).GetOptional().GetUint32();
+        RemoveQueueTimetsamp = *parser.ColumnParser(0).GetOptionalUint64();
+        QueueIdNumber = *parser.ColumnParser(1).GetOptionalUint64();
+        IsFifoQueue = *parser.ColumnParser(2).GetOptionalBool();
+        Shards = *parser.ColumnParser(3).GetOptionalUint32();
+        TablesFormat = *parser.ColumnParser(4).GetOptionalUint32();
         
         LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to remove data: removed at " << RemoveQueueTimetsamp 
             << " queue_id_number=" << QueueIdNumber << " tables_format=" << TablesFormat);

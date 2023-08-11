@@ -543,6 +543,7 @@ struct TEvBlobStorage {
         EvRegisterPDiskLoadActor,
         EvStatusUpdate,
         EvDropDonor,
+        EvPutVDiskToReadOnly,
 
         EvCntReply = EvPut + 7 * 512,                           /// 268 635 648
         EvVGenerationChangeResult,
@@ -2329,6 +2330,7 @@ struct TEvBlobStorage {
     struct TEvControllerGroupDecommittedNotify;
     struct TEvControllerGroupDecommittedResponse;
     struct TEvControllerGroupMetricsExchange;
+    struct TEvPutVDiskToReadOnly;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

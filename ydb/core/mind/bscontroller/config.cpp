@@ -149,6 +149,10 @@ namespace NKikimr::NBsController {
                         item.SetDoWipe(true);
                         break;
 
+                    case TMood::ReadOnly:
+                        item.SetReadOnly(true);
+                        break;
+
                     default:
                         Y_FAIL();
                 }

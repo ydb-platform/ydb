@@ -254,6 +254,7 @@ namespace NKikimr::NStorage {
                 TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
                 ui32 OrderNumber;
                 bool DonorMode;
+                bool ReadOnly;
             };
             std::optional<TRuntimeData> RuntimeData;
 

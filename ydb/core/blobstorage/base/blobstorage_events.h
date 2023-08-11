@@ -537,6 +537,14 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerGroupMetricsExchange, EvControllerGroupMetricsExchange>
     {};
 
+    struct TEvBlobStorage::TEvPutVDiskToReadOnly : TEventLocal<TEvPutVDiskToReadOnly, EvPutVDiskToReadOnly> {
+        const TVDiskID VDiskId;
+
+        TEvPutVDiskToReadOnly(TVDiskID vDiskId)
+            : VDiskId(std::move(vDiskId))
+        {}
+    };
+
     struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo,
             TEvBlobStorage::EvNodeWardenQueryGroupInfo> {
         TEvNodeWardenQueryGroupInfo() = default;

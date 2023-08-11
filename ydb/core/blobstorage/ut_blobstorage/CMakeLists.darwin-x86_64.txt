@@ -12,6 +12,7 @@ add_subdirectory(ut_blob_depot_fat)
 add_subdirectory(ut_donor)
 add_subdirectory(ut_group_reconfiguration)
 add_subdirectory(ut_osiris)
+add_subdirectory(ut_read_only_vdisk)
 add_subdirectory(ut_replication)
 add_subdirectory(ut_scrub)
 

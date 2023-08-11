@@ -98,6 +98,10 @@ struct TEnvironmentSetup {
         Cerr << "RandomSeed# " << seed << Endl;
     }
 
+    TInstant Now() {
+        return TAppData::TimeProvider->Now();
+    }
+
     TString GenerateRandomString(ui32 len) {
         TString res = TString::Uninitialized(len);
         char *p = res.Detach();
@@ -673,6 +677,18 @@ struct TEnvironmentSetup {
         request.AddCommand()->MutableEnableDonorMode()->SetEnable(true);
         auto response = Invoke(request);
         UNIT_ASSERT(response.GetSuccess());
+    }
+
+    void PutVDiskToReadOnly(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *roCmd = request.AddCommand()->MutablePutVDiskToReadOnly();
+        auto *vslot = roCmd->MutableVSlotId();
+        vslot->SetNodeId(nodeId);
+        vslot->SetPDiskId(pdiskId);
+        vslot->SetVSlotId(vslotId);
+        VDiskIDFromVDiskID(vdiskId, roCmd->MutableVDiskId());
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
     void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,

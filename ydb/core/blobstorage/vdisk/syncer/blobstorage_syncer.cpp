@@ -221,7 +221,7 @@ namespace NKikimr {
         void SyncGuid(const TActorContext &ctx) {
             Become(&TThis::SyncGuidStateFunc);
             GuidRecoveryId = ctx.Register(CreateVDiskGuidRecoveryActor(SyncerCtx->VCtx, GInfo, CommitterId, SelfId(),
-                LocalSyncerState));
+                LocalSyncerState, SyncerCtx->Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(GuidRecoveryId);
             Phase = TPhaseVal::PhaseSyncGuid;
         }
@@ -289,6 +289,14 @@ namespace NKikimr {
         // Recover Lost Data
         ////////////////////////////////////////////////////////////////////////
         void RecoverLostData(const TActorContext &ctx) {
+            if (SyncerCtx->Config->BaseInfo.ReadOnly) {
+                LOG_WARN(ctx, BS_SYNCER,
+                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                        "Unable to recover lost data in read-only mode. Transitioning to inconsistent state."));
+                InconsistentState(ctx);
+                return;
+            }
+
             Become(&TThis::RecoverLostDataStateFunc);
             const TVDiskEternalGuid guid = GuidRecovOutcome->Guid;
             RecoverLostDataId = ctx.Register(CreateSyncerRecoverLostDataActor(SyncerCtx, GInfo, CommitterId, ctx.SelfID, guid));
@@ -330,8 +338,17 @@ namespace NKikimr {
                      new TEvSyncGuidRecoveryDone(NKikimrProto::OK, LocalSyncerState.DbBirthLsn));
             SyncerData->Neighbors->DbBirthLsn = LocalSyncerState.DbBirthLsn;
             Become(&TThis::StandardModeStateFunc);
-            SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId));
-            ActiveActors.Insert(SchedulerId);
+            if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
+                LOG_DEBUG(ctx, BS_SYNCER,
+                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                        "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
+                SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId));
+                ActiveActors.Insert(SchedulerId);
+            } else {
+                LOG_WARN(ctx, BS_SYNCER,
+                    VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                        "%s: Skipping scheduler start due to read-only", __PRETTY_FUNCTION__));
+            }
             Phase = TPhaseVal::PhaseStandardMode;
         }
 
@@ -363,17 +380,25 @@ namespace NKikimr {
                 // FIXME: check that this CACHE works correctly. It can be a good
                 // idea to forward all this messages directly to Committer, because
                 // is knows exact values
+                const ui64 prevGuidInMemory = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo.Info.GetGuid();
                 auto &data = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo;
                 data.Info = info;
                 // create reply
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
                     TAppData::TimeProvider->Now(), nullptr, nullptr, ev->GetChannel());
-                // put reply into the queue and wait until it would be committed
-                ui64 seqNum = DelayedQueue.WriteRequest(ev->Sender, std::move(result));
-                // commit
-                void *cookie = reinterpret_cast<void*>(intptr_t(seqNum));
-                auto msg = TEvSyncerCommit::Remote(vdisk, state, guid, cookie);
-                ctx.Send(CommitterId, msg.release());
+                if (!SyncerCtx->Config->BaseInfo.ReadOnly) {
+                    // put reply into the queue and wait until it would be committed
+                    ui64 seqNum = DelayedQueue.WriteRequest(ev->Sender, std::move(result));
+                    // commit
+                    void *cookie = reinterpret_cast<void*>(intptr_t(seqNum));
+                    auto msg = TEvSyncerCommit::Remote(vdisk, state, guid, cookie);
+                    ctx.Send(CommitterId, msg.release());
+                } else {
+                    LOG_WARN(ctx, BS_SYNCER,
+                        VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
+                            "%s: Skipping commit of incoming EvVSyncGuid: saved guid %s",
+                            __PRETTY_FUNCTION__, prevGuidInMemory != guid ? "differs" : "matches"));
+                }
             } else {
                 // handle READ request
                 auto &data = (*SyncerData->Neighbors)[vdisk].Get().PeerGuidInfo.Info;
@@ -465,7 +490,7 @@ namespace NKikimr {
         // Other handlers
         ////////////////////////////////////////////////////////////////////////
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
-            if (Phase == TPhaseVal::PhaseStandardMode) {
+            if (Phase == TPhaseVal::PhaseStandardMode && SchedulerId) {
                 ctx.Send(ev->Forward(SchedulerId));
             } else {
                 auto result = std::make_unique<TEvLocalStatusResult>();
@@ -502,7 +527,9 @@ namespace NKikimr {
 
             GInfo = msg->NewInfo;
             // reconfigure scheduler
-            ctx.Send(SchedulerId, msg->Clone());
+            if (SchedulerId) {
+                ctx.Send(SchedulerId, msg->Clone());
+            }
             // reconfigure propagators
             for (const auto &aid : PropagatorIds) {
                 ctx.Send(aid, msg->Clone());

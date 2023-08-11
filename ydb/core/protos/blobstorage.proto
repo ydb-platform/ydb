@@ -179,7 +179,7 @@ message TEvVPatchDiff {
     optional uint32 ExpectedXorDiffs = 7;
     optional bool ForceEnd = 8;
     optional bool NotifyIfNotReady = 9;
-    
+
     optional NKikimrBlobStorage.EPutHandleClass HandleClass = 11;
 
     optional TMsgQoS MsgQoS = 10;
@@ -1027,6 +1027,7 @@ message TNodeWardenServiceSet {
         optional string StoragePoolName = 8;
         optional TDonorMode DonorMode = 9; // vdisk runs in read-only limited mode without interaction with other disks of group
         repeated TDonor Donors = 10; // a set of donor disks used to accelerate replication
+        optional bool ReadOnly = 11;
     }
 
     message TReplBrokerConfig {

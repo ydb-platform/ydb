@@ -54,7 +54,8 @@ namespace NKikimr {
         AnubisTimeout = TDuration::Minutes(60);
         RunSyncer = true;
         RunAnubis = false;                                          // FIXME: turn on by default
-        RunDefrag = true;
+        RunDefrag = !baseInfo.ReadOnly;
+        RunScrubber = !baseInfo.ReadOnly;
 
         SyncLogMaxDiskAmount = 0; //ui64(2) << ui64(30);                 // 2 GB
         SyncLogMaxEntryPointSize = ui64(128) << ui64(10);           // 128 KB
@@ -76,7 +77,7 @@ namespace NKikimr {
         HandoffMaxInFlightSize = 1000;
         HandoffMaxInFlightByteSize = 16u << 20u;
         HandoffTimeout = TDuration::Seconds(10);
-        RunRepl = true;
+        RunRepl = !baseInfo.ReadOnly;
         RunHandoff = false;
 
         SkeletonFrontGets_MaxInFlightCount = 24;

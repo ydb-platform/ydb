@@ -330,6 +330,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(WipeVDisk)
                     HANDLE_COMMAND(SanitizeGroup)
                     HANDLE_COMMAND(CancelVirtualGroup)
+                    HANDLE_COMMAND(PutVDiskToReadOnly)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

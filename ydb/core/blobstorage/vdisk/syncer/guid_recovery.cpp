@@ -638,6 +638,7 @@ namespace NKikimr {
             std::unique_ptr<TDecision> Decision;
             EPhase Phase = PhaseNotSet;
             TActorId FirstRunActorId;
+            const bool ReadOnly;
 
 
             ////////////////////////////////////////////////////////////////////////
@@ -777,6 +778,14 @@ namespace NKikimr {
             // FirstRun Phase
             ////////////////////////////////////////////////////////////////////////
             void FirstRunPhase(const TActorContext &ctx, EFirstRunStep f) {
+                if (ReadOnly) {
+                    const TString explanation = "unable to establish new GUID while in read-only";
+                    LOG_WARN(ctx, BS_SYNCER,
+                        VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: %s", explanation.data()));
+                    *Decision = TDecision::Inconsistency(explanation);
+                    Finish(ctx, *Decision);
+                    return;
+                }
                 auto guid = Decision->GetGuid();
                 Become(&TThis::WaitForFirstRunStateFunc);
                 FirstRunActorId = ctx.Register(CreateVDiskGuidFirstRunActor(VCtx, GInfo, CommitterId, ctx.SelfID, f, guid));
@@ -886,7 +895,8 @@ namespace NKikimr {
                                     TIntrusivePtr<TBlobStorageGroupInfo> info,
                                     const TActorId &committerId,
                                     const TActorId &notifyId,
-                                    const TLocalSyncerState &locallyRecoveredState)
+                                    const TLocalSyncerState &locallyRecoveredState,
+                                    bool readOnly)
                 : TActorBootstrapped<TVDiskGuidRecoveryActor>()
                 , VCtx(std::move(vctx))
                 , GInfo(std::move(info))
@@ -896,6 +906,7 @@ namespace NKikimr {
                                 GInfo->PickTopology(),
                                 locallyRecoveredState)
                 , Decision()
+                , ReadOnly(readOnly)
             {}
         };
 
@@ -905,9 +916,10 @@ namespace NKikimr {
                                          TIntrusivePtr<TBlobStorageGroupInfo> info,
                                          const TActorId &committerId,
                                          const TActorId &notifyId,
-                                         const NSyncer::TLocalSyncerState &localState) {
+                                         const NSyncer::TLocalSyncerState &localState,
+                                         bool readOnly) {
         return new NSyncer::TVDiskGuidRecoveryActor(std::move(vctx), std::move(info), committerId,
-            notifyId, localState);
+            notifyId, localState, readOnly);
     }
 
 } // NKikimr

@@ -427,8 +427,10 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
     if (vslot.IsBeingDeleted()) {
         vDisk->SetDoDestroy(true);
         vDisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
-    } else {
-        vDisk->SetDoWipe(vslot.Mood == TMood::Wipe);
+    } else if (vslot.Mood == TMood::Wipe) {
+        vDisk->SetDoWipe(true);
+    } else if (vslot.Mood == TMood::ReadOnly) {
+        vDisk->SetReadOnly(true);
     }
 
     if (TGroupInfo *group = FindGroup(vslot.GroupId)) {

@@ -480,6 +480,11 @@ message TCancelVirtualGroup {
     uint32 GroupId = 1; // id of a group we are going to cancel
 }
 
+message TPutVDiskToReadOnly {
+    NKikimrBlobStorage.TVSlotId VSlotId = 1;
+    NKikimrBlobStorage.TVDiskID VDiskId = 2;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -522,6 +527,7 @@ message TConfigRequest {
             TSanitizeGroup SanitizeGroup = 42;
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
+            TPutVDiskToReadOnly PutVDiskToReadOnly = 45;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

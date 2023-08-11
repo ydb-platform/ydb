@@ -901,7 +901,7 @@ namespace NKikimr {
                 if (record.HasCookie())
                     cookie = record.GetCookie();
                 auto handleClass = ev->Get()->Record.GetHandleClass();
-                
+
                 std::unique_ptr<TEvBlobStorage::TEvVGetResult> result;
                 if (ev->Get()->IsInternal) {
                     result.reset(new TEvBlobStorage::TEvVGetResult(NKikimrProto::OK, SelfVDiskId, now,
@@ -1725,6 +1725,32 @@ namespace NKikimr {
             UpdateVDiskStatus(NKikimrBlobStorage::ERROR);
         }
 
+        void StartDefrag(const TActorContext &ctx) {
+            auto defragCtx = std::make_shared<TDefragCtx>(VCtx, HugeBlobCtx, PDiskCtx, ctx.SelfID,
+                Db->HugeKeeperID, true);
+            DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
+            ActiveActors.Insert(DefragId); // keep forever
+        }
+
+        void StartScrubberActor(const TActorContext &ctx, NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint, ui64 scrubEntrypointLsn) {
+            auto scrubCtx = MakeIntrusive<TScrubContext>(
+                VCtx,
+                PDiskCtx,
+                GInfo,
+                SelfId(),
+                Hull->GetHullDs()->LogoBlobs->LIActor,
+                SelfId().NodeId(),
+                Config->BaseInfo.PDiskId,
+                Config->BaseInfo.VDiskSlotId,
+                Config->BaseInfo.ScrubCookie,
+                Db->GetVDiskIncarnationGuid(),
+                Db->LsnMngr,
+                Db->LoggerID,
+                Db->LogCutterID);
+            ScrubId = ctx.Register(CreateScrubActor(std::move(scrubCtx), std::move(scrubEntrypoint), scrubEntrypointLsn));
+            ActiveActors.Insert(ScrubId);
+        }
+
         void Handle(TEvBlobStorage::TEvLocalRecoveryDone::TPtr &ev, const TActorContext &ctx) {
             LocalRecovInfo = ev->Get()->RecovInfo;
             LocalDbRecoveryID = TActorId();
@@ -1875,31 +1901,15 @@ namespace NKikimr {
                 }
 
                 if (Config->RunDefrag && AppData()->FeatureFlags.GetAllowVDiskDefrag()) {
-                    auto defragCtx = std::make_shared<TDefragCtx>(VCtx, HugeBlobCtx, PDiskCtx, ctx.SelfID,
-                            Db->HugeKeeperID, true);
-                    DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
-                    ActiveActors.Insert(DefragId); // keep forever
+                    StartDefrag(ctx);
                 }
 
                 // create scrubber actor
-                auto scrubCtx = MakeIntrusive<TScrubContext>(
-                    VCtx,
-                    PDiskCtx,
-                    GInfo,
-                    SelfId(),
-                    Hull->GetHullDs()->LogoBlobs->LIActor,
-                    SelfId().NodeId(),
-                    Config->BaseInfo.PDiskId,
-                    Config->BaseInfo.VDiskSlotId,
-                    Config->BaseInfo.ScrubCookie,
-                    Db->GetVDiskIncarnationGuid(),
-                    Db->LsnMngr,
-                    Db->LoggerID,
-                    Db->LogCutterID);
-                ScrubId = ctx.Register(CreateScrubActor(std::move(scrubCtx), std::move(ev->Get()->ScrubEntrypoint),
-                        ev->Get()->ScrubEntrypointLsn));
-                ActiveActors.Insert(ScrubId);
+                if (Config->RunScrubber) {
+                    StartScrubberActor(ctx, std::move(ev->Get()->ScrubEntrypoint), ev->Get()->ScrubEntrypointLsn);
+                }
 
+                // create syncer actor
                 if (Config->RunSyncer && !Config->BaseInfo.DonorMode) {
                     // switch to syncronization step
                     Become(&TThis::StateSyncGuidRecovery);

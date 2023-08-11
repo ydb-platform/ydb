@@ -286,6 +286,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TSanitizeGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TCancelVirtualGroup& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TPutVDiskToReadOnly& cmd, TStatus& status);
         };
 
     } // NBsController

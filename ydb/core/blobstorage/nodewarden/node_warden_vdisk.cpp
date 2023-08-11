@@ -57,6 +57,8 @@ namespace NKikimr::NStorage {
         const ui64 pdiskGuid = vdisk.Config.GetVDiskLocation().GetPDiskGuid();
         const bool restartInFlight = InFlightRestartedPDisks.count({vslotId.NodeId, vslotId.PDiskId});
         const bool donorMode = vdisk.Config.HasDonorMode();
+        const bool readOnly = vdisk.Config.GetReadOnly();
+        Y_VERIFY_S(!donorMode || !readOnly, "Only one of modes should be enabled: donorMode " << donorMode << ", readOnly " << readOnly);
 
         STLOG(PRI_DEBUG, BS_NODE, NW23, "StartLocalVDiskActor", (RestartInFlight, restartInFlight),
             (SlayInFlight, SlayInFlight.contains(vslotId)), (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
@@ -158,7 +160,7 @@ namespace NKikimr::NStorage {
 
         TVDiskConfig::TBaseInfo baseInfo(vdiskId, pdiskServiceId, pdiskGuid, vslotId.PDiskId, deviceType,
             vslotId.VDiskSlotId, kind, NextLocalPDiskInitOwnerRound(), groupInfo->GetStoragePoolName(), donorMode,
-            donorDiskIds, scrubCookie, whiteboardInstanceGuid);
+            donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
         baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
         baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -197,7 +199,8 @@ namespace NKikimr::NStorage {
         vdisk.RuntimeData.emplace(TVDiskRecord::TRuntimeData{
             .GroupInfo = groupInfo,
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
-            .DonorMode = donorMode
+            .DonorMode = donorMode,
+            .ReadOnly = readOnly,
         });
 
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
@@ -221,9 +224,10 @@ namespace NKikimr::NStorage {
         // 4. Deleting VSlot during group reconfiguration or donor termination.
         // 5. Making VDisk a donor one.
         // 6. Updating VDisk generation when modifying group.
+        // 7. Putting VDisk into or out of read-only
         //
         // The main idea of this command is when VDisk is created, it does not change its configuration. It may be
-        // wiped out several times, it may become a donor and then it may be destroyed. That is a possible life cycle
+        // wiped out several times, it may become a donor or read-only and then it may be destroyed. That is a possible life cycle
         // of a VDisk in the occupied slot.
 
         if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
@@ -261,7 +265,7 @@ namespace NKikimr::NStorage {
             Slay(record);
         } else if (!record.RuntimeData) {
             StartLocalVDiskActor(record, TDuration::Zero());
-        } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode()) {
+        } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
             PoisonLocalVDisk(record);
             StartLocalVDiskActor(record, TDuration::Seconds(15) /* PDisk confidence delay */);
         }

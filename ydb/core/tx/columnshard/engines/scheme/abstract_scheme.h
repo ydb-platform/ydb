@@ -12,6 +12,8 @@ namespace NKikimr::NOlap {
 struct TIndexInfo;
 
 class ISnapshotSchema {
+protected:
+    virtual TString DoDebugString() const = 0;
 public:
     using TPtr = std::shared_ptr<ISnapshotSchema>;
 
@@ -37,6 +39,9 @@ public:
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const;
 
+    TString DebugString() const {
+        return DoDebugString();
+    }
     virtual const std::shared_ptr<arrow::Schema>& GetSchema() const = 0;
     virtual const TIndexInfo& GetIndexInfo() const = 0;
     virtual const TSnapshot& GetSnapshot() const = 0;

@@ -1,4 +1,5 @@
 #include "filtered_scheme.h"
+#include <util/string/join.h>
 
 
 namespace NKikimr::NOlap {
@@ -65,6 +66,14 @@ ui32 TFilteredSnapshotSchema::GetColumnsCount() const {
 
 ui64 TFilteredSnapshotSchema::GetVersion() const {
     return OriginalSnapshot->GetIndexInfo().GetVersion();
+}
+
+TString TFilteredSnapshotSchema::DoDebugString() const {
+    return TStringBuilder() << "("
+        << "original=" << OriginalSnapshot->DebugString() << ";"
+        << "column_ids=[" << JoinSeq(",", ColumnIds) << "];"
+        << ")"
+        ;
 }
 
 }

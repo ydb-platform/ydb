@@ -11,6 +11,15 @@ private:
     TIndexInfo IndexInfo;
     std::shared_ptr<arrow::Schema> Schema;
     TSnapshot Snapshot;
+protected:
+    virtual TString DoDebugString() const override {
+        return TStringBuilder() << "("
+            "schema=" << Schema->ToString() << ";" <<
+            "snapshot=" << Snapshot.DebugString() << ";" <<
+            "index_info=" << IndexInfo.DebugString() << ";" <<
+            ")"
+            ;
+    }
 public:
     TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot);
 

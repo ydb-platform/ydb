@@ -10,6 +10,8 @@ class TFilteredSnapshotSchema: public ISnapshotSchema {
     ISnapshotSchema::TPtr OriginalSnapshot;
     std::shared_ptr<arrow::Schema> Schema;
     std::set<ui32> ColumnIds;
+protected:
+    virtual TString DoDebugString() const override;
 public:
     TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::vector<ui32>& columnIds);
     TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<ui32>& columnIds);

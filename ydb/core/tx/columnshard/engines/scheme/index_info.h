@@ -49,6 +49,14 @@ public:
         TX_ID,
     };
 
+    TString DebugString() const {
+        return TStringBuilder() << "("
+            << "id=" << Id << ";"
+            << "version=" << Version << ";"
+            << "name=" << Name << ";"
+            << ")";
+    }
+
     /// Appends the special columns to the batch.
     static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(
         const std::shared_ptr<arrow::RecordBatch>& batch,

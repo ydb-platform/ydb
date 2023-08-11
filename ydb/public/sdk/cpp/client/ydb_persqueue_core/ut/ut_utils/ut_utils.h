@@ -17,8 +17,11 @@ class TPersQueueYdbSdkTestSetup : public ::NPersQueue::SDKTestSetup {
     TAdaptiveLock Lock;
 public:
     TPersQueueYdbSdkTestSetup(const TString& testCaseName, bool start = true,
-                              const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG, size_t topicPartitionsCount = 1)
-        : SDKTestSetup(testCaseName, start, logServices, logPriority, topicPartitionsCount)
+                              const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES,
+                              NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
+                              ui32 nodeCount = 2,
+                              size_t topicPartitionsCount = 1)
+        : SDKTestSetup(testCaseName, start, logServices, logPriority, nodeCount, topicPartitionsCount)
     {
     }
 

@@ -18,6 +18,10 @@ using namespace NYdb::NPersQueue::NTests;
 namespace NYdb::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(LocalPartition) {
+        std::shared_ptr<TPersQueueYdbSdkTestSetup> CreateSetup(TString testCaseName, ui32 nodeCount = 1) {
+            return std::make_shared<TPersQueueYdbSdkTestSetup>(testCaseName, true, ::NPersQueue::TTestServer::LOGGED_SERVICES, NActors::NLog::PRI_DEBUG, nodeCount, 1);
+        }
+
         NYdb::TDriverConfig CreateConfig(TString discoveryAddr)
         {
             return NYdb::TDriverConfig()
@@ -138,9 +142,9 @@ namespace NYdb::NTopic::NTests {
 
                 UNIT_ASSERT(context);
 
-                if(Delay)
+                if (Delay)
                 {
-                    Cerr << "==== Delay " <<  Delay << " before ListEndpoints request" << Endl;
+                    Cerr << "==== Delay " << Delay << " before ListEndpoints request" << Endl;
                     TInstant start = TInstant::Now();
                     while (start + Delay < TInstant::Now())
                     {
@@ -186,7 +190,7 @@ namespace NYdb::NTopic::NTests {
                 std::shared_ptr<TMockDiscoveryService> MockDiscoveryService;
             };
 
-            auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(testCaseName);
+            auto setup = CreateSetup(testCaseName);
 
             if (!mockDiscoveryService)
             {
@@ -220,15 +224,16 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(DescribeBadPartition) {
-            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            auto setup = CreateSetup(TEST_CASE_NAME);
+
 
             TMockDiscoveryService discovery;
-            discovery.SetGoodEndpoints(setup);
+            discovery.SetGoodEndpoints(*setup);
 
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
             // Set non-existing partition
-            auto writeSettings = CreateWriteSessionSettings(setup);
+            auto writeSettings = CreateWriteSessionSettings(*setup);
             writeSettings.RetryPolicy(retryPolicy);
             writeSettings.PartitionId(1);
 
@@ -245,7 +250,7 @@ namespace NYdb::NTopic::NTests {
             Cerr << "=== Alter partition count\n";
             TAlterTopicSettings alterSettings;
             alterSettings.AlterPartitioningSettings(2, 2);
-            auto alterResult = client.AlterTopic(setup.GetTestTopicPath(), alterSettings).GetValueSync();
+            auto alterResult = client.AlterTopic(setup->GetTestTopicPath(), alterSettings).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
 
             Cerr << "=== Wait for repair\n";
@@ -256,14 +261,14 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(DiscoveryServiceBadPort) {
-            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            auto setup = CreateSetup(TEST_CASE_NAME);
 
             TMockDiscoveryService discovery;
             discovery.SetEndpoints(9999, 2, 0);
 
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
-            auto writeSettings = CreateWriteSessionSettings(setup);
+            auto writeSettings = CreateWriteSessionSettings(*setup);
             writeSettings.RetryPolicy(retryPolicy);
 
             retryPolicy->Initialize();
@@ -276,7 +281,7 @@ namespace NYdb::NTopic::NTests {
             Cerr << "=== Wait for retries\n";
             retryPolicy->WaitForRetriesSync(3);
 
-            discovery.SetGoodEndpoints(setup);
+            discovery.SetGoodEndpoints(*setup);
 
             Cerr << "=== Wait for repair\n";
             retryPolicy->WaitForRepairSync();
@@ -286,14 +291,14 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(DiscoveryServiceBadNodeId) {
-            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            auto setup = CreateSetup(TEST_CASE_NAME);
 
             TMockDiscoveryService discovery;
-            discovery.SetEndpoints(9999, setup.GetRuntime().GetNodeCount(), setup.GetGrpcPort());
+            discovery.SetEndpoints(9999, setup->GetRuntime().GetNodeCount(), setup->GetGrpcPort());
 
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
 
-            auto writeSettings = CreateWriteSessionSettings(setup);
+            auto writeSettings = CreateWriteSessionSettings(*setup);
             writeSettings.RetryPolicy(retryPolicy);
 
             retryPolicy->Initialize();
@@ -306,7 +311,7 @@ namespace NYdb::NTopic::NTests {
             Cerr << "=== Wait for retries\n";
             retryPolicy->WaitForRetriesSync(3);
 
-            discovery.SetGoodEndpoints(setup);
+            discovery.SetGoodEndpoints(*setup);
 
             Cerr << "=== Wait for repair\n";
             retryPolicy->WaitForRepairSync();
@@ -316,14 +321,14 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(DescribeHang) {
-            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            auto setup = CreateSetup(TEST_CASE_NAME);
 
             TMockDiscoveryService discovery;
             discovery.SetEndpoints(9999, 2, 0);
 
             auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>(TDuration::Days(1));
 
-            auto writeSettings = CreateWriteSessionSettings(setup);
+            auto writeSettings = CreateWriteSessionSettings(*setup);
             writeSettings.RetryPolicy(retryPolicy);
 
             retryPolicy->Initialize();
@@ -338,15 +343,15 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(DiscoveryHang) {
-            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            auto setup = CreateSetup(TEST_CASE_NAME);
 
             TMockDiscoveryService discovery;
-            discovery.SetGoodEndpoints(setup);
+            discovery.SetGoodEndpoints(*setup);
             discovery.SetDelay(TDuration::Days(1));
 
             Cerr << "=== Create write session\n";
             TTopicClient client(TDriver(CreateConfig(discovery.GetDiscoveryAddr())));
-            auto writeSession = client.CreateWriteSession(CreateWriteSessionSettings(setup));
+            auto writeSession = client.CreateWriteSession(CreateWriteSessionSettings(*setup));
 
             Cerr << "=== Close write session\n";
             writeSession->Close();

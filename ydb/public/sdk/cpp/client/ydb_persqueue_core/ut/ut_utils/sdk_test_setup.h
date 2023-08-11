@@ -23,21 +23,23 @@ public:
     SDKTestSetup(const TString& testCaseName, bool start = true,
                  const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES,
                  NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
+                 ui32 nodeCount = 2,
                  size_t topicPartitionsCount = 1)
         : TestCaseName(testCaseName)
         , Server(false, Nothing(), logServices, logPriority)
         , TopicPartitionsCount(topicPartitionsCount)
     {
-        InitOptions();
+        InitOptions(nodeCount);
         if (start) {
             Start();
         }
     }
 
-    void InitOptions() {
+    void InitOptions(ui32 nodeCount = 2) {
         Log.SetFormatter([testCaseName = TestCaseName](ELogPriority priority, TStringBuf message) {
             return TStringBuilder() << TInstant::Now() << " :" << testCaseName << " " << priority << ": " << message << Endl;
         });
+        Server.ServerSettings.SetNodeCount(nodeCount);
         Server.GrpcServerOptions.SetGRpcShutdownDeadline(TDuration::Max());
         // Default TTestServer value for 'MaxReadCookies' is 10. With this value the tests are flapping with two errors:
         // 1. 'got more than 10 unordered cookies to commit 12'

@@ -453,11 +453,20 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter> {
 
         Y_VERIFY_DEBUG_S(msg->Generation, "Tablet generation should be greater than 0");
 
-        if (ExpectedGeneration && *ExpectedGeneration != msg->Generation)
+        if (ExpectedGeneration)
         {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
-            Disconnected();
-            PassAway();
+            if(*ExpectedGeneration != msg->Generation)
+            {
+                LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
+                Disconnected();
+                PassAway();
+            }
+            if (NActors::TActivationContext::ActorSystem()->NodeId != msg->ServerId.NodeId())
+            {
+                LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "TPartitionWriter " << TabletId << " (partition=" << PartitionId << ") received TEvClientConnected with wrong NodeId. Expected: " << NActors::TActivationContext::ActorSystem()->NodeId << ", received " << msg->ServerId.NodeId());
+                Disconnected();
+                PassAway();
+            }
         }
     }
 

@@ -29,12 +29,14 @@ void TCoordinatorStateActor::ConfirmPersistent() {
 
 void TCoordinatorStateActor::OnTabletDestroyed() {
     Y_VERIFY(Owner, "Unexpected OnTabletDestroyed from detached tablet");
+    Y_VERIFY(Owner->CoordinatorStateActor == nullptr, "OnTabletDestroyed called with state actor still attached");
     PreserveState();
     Owner = nullptr;
 }
 
 void TCoordinatorStateActor::OnTabletDead() {
     Y_VERIFY(Owner, "Unexpected OnTabletDead from detached tablet");
+    Y_VERIFY(Owner->CoordinatorStateActor == nullptr, "OnTabletDead called with state actor still attached");
     PreserveState();
     Owner = nullptr;
 
@@ -93,6 +95,7 @@ void TCoordinatorStateActor::Handle(TEvTxCoordinator::TEvCoordinatorStateRequest
 
     if (Owner) {
         // New generation may request state before current tablet dies
+        Owner->DetachStateActor();
         OnTabletDead();
     }
 

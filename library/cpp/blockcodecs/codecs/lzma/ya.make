@@ -13,4 +13,10 @@ SRCS(
     GLOBAL lzma.cpp
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -Wno-unused-command-line-argument
+    )
+ENDIF()
+
 END()

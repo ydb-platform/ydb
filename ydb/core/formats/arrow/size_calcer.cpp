@@ -4,6 +4,7 @@
 #include "dictionary/conversion.h"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/system/yassert.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NArrow {
 
@@ -259,6 +260,10 @@ bool TSerializedBatch::BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch,
         result.emplace_back(std::move(*sbR));
     }
     return true;
+}
+
+TString TSerializedBatch::DebugString() const {
+    return TStringBuilder() << "(data_size=" << Data.size() << ";schema_data_size=" << SchemaData.size() << ";rows_count=" << RowsCount << ";raw_bytes=" << RawBytes << ";)";
 }
 
 }

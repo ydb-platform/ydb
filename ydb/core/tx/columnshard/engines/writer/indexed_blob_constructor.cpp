@@ -51,6 +51,11 @@ bool TIndexedWriteController::TBlobConstructor::Init() {
         return false;
     }
     BlobsSplitted = splitResult.ReleaseResult();
+    if (BlobsSplitted.size() > 1) {
+        for (auto&& i : BlobsSplitted) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "strange_blobs_splitting")("blob", i.DebugString())("original_size", Owner.WriteData.GetSize());
+        }
+    }
     return true;
 }
 

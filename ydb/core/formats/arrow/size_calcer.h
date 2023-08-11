@@ -56,6 +56,8 @@ public:
         return Data.size();
     }
 
+    TString DebugString() const;
+
     static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::vector<TSerializedBatch>& result, TString* errorMessage);
     static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch);

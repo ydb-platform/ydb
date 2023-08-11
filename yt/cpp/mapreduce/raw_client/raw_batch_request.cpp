@@ -552,17 +552,20 @@ TFuture<void> TRawBatchRequest::UpdateOperationParameters(
 
 TFuture<TRichYPath> TRawBatchRequest::CanonizeYPath(const TRichYPath& path)
 {
-    if (path.Path_.find_first_of("<>{}[]") != TString::npos) {
+    TRichYPath result = path;
+    // Out of the symbols in the canonization branch below, only '<' can appear in the beggining of a valid rich YPath.
+    if (!result.Path_.StartsWith("<")) {
+        result.Path_ = AddPathPrefix(result.Path_, Config_->Prefix);
+    }
+
+    if (result.Path_.find_first_of("<>{}[]") != TString::npos) {
         return AddRequest<TCanonizeYPathResponseParser>(
             "parse_ypath",
-            SerializeParamsForParseYPath(path),
+            SerializeParamsForParseYPath(result),
             Nothing(),
-            MakeIntrusive<TCanonizeYPathResponseParser>(Config_->Prefix, path));
-    } else {
-        TRichYPath result = path;
-        result.Path_ = AddPathPrefix(result.Path_, Config_->Prefix);
-        return NThreading::MakeFuture(result);
+            MakeIntrusive<TCanonizeYPathResponseParser>(Config_->Prefix, result));
     }
+    return NThreading::MakeFuture(result);
 }
 
 TFuture<TVector<TTableColumnarStatistics>> TRawBatchRequest::GetTableColumnarStatistics(

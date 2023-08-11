@@ -337,7 +337,6 @@ public:
     }
 
     TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) override {
-        
         TVector<bool> hasErasurePerNode;
         hasErasurePerNode.reserve(nodes.size());
         TVector<ui64> dataSizes(nodes.size());
@@ -354,7 +353,7 @@ public:
                 auto& groupIdPathInfo = clusterToGroups[cluster];
 
                 const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
-                
+
                 auto input = maybeRead.Cast().Input();
                 for (auto section: input) {
                     groupIdPathInfo.emplace_back();
@@ -383,7 +382,7 @@ public:
                 }
                 if (chunksCount > maxChunks) {
                     AddErrorWrap(ctx, node_->Pos(), "table with too many chunks");
-                    return false;
+                    return Nothing();
                 }
                 clusterToNodesAndErasure[cluster].push_back({node_, hasErasure});
             } else {

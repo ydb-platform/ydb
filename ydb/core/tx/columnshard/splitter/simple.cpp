@@ -2,48 +2,50 @@
 
 namespace NKikimr::NOlap {
 
-std::vector<NKikimr::NOlap::TSaverSplittedChunk> TSimpleSplitter::Split(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const {
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
     auto batch = arrow::RecordBatch::Make(schema, data->length(), {data});
     return Split(batch, maxBlobSize);
 }
 
-std::vector<NKikimr::NOlap::TSaverSplittedChunk> TSimpleSplitter::Split(std::shared_ptr<arrow::RecordBatch> data, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(std::shared_ptr<arrow::RecordBatch> data, const ui32 maxBlobSize) const {
     Y_VERIFY(data->num_columns() == 1);
-    ui32 splitFactor = 1;
+    ui64 splitFactor = Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1;
     while (true) {
         Y_VERIFY(splitFactor < 100);
         std::vector<TSaverSplittedChunk> result;
         result.reserve(splitFactor);
         bool isCorrect = true;
+        ui64 serializedDataBytes = 0;
         if (splitFactor == 1) {
             TString blob = ColumnSaver.Apply(data);
             isCorrect = blob.size() < maxBlobSize;
+            serializedDataBytes += blob.size();
             result.emplace_back(TSaverSplittedChunk(data, std::move(blob)));
         } else {
-            const ui32 sliceSize = data->num_rows() / splitFactor;
-            Y_VERIFY(sliceSize);
-            ui32 idx = 0;
-            for (ui32 i = 0; i < data->num_rows();) {
-                const ui32 sliceCurrentSize = (++idx == splitFactor) ? data->num_rows() - i : sliceSize;
-                Y_VERIFY(sliceCurrentSize);
-                auto slice = data->Slice(i, sliceCurrentSize);
+            TLinearSplitInfo linearSplitting = TSimpleSplitter::GetLinearSplittingByMax(data->num_rows(), data->num_rows() / splitFactor);
+            for (auto it = linearSplitting.StartIterator(); it.IsValid(); it.Next()) {
+                auto slice = data->Slice(it.GetPosition(), it.GetCurrentPackSize());
                 result.emplace_back(slice, ColumnSaver.Apply(slice));
+                serializedDataBytes += result.back().GetSerializedChunk().size();
                 if (result.back().GetSerializedChunk().size() >= maxBlobSize) {
                     isCorrect = false;
+                    Y_VERIFY(!linearSplitting.IsMinimalGranularity());
                     break;
                 }
-                i += slice->num_rows();
             }
         }
         if (isCorrect) {
+            Counters->SimpleSplitter.OnCorrectSerialized(serializedDataBytes);
             return result;
+        } else {
+            Counters->SimpleSplitter.OnTrashSerialized(serializedDataBytes);
         }
         ++splitFactor;
     }
 }
 
-std::vector<NKikimr::NOlap::TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const {
     std::vector<TSaverSplittedChunk> result;
     ui64 position = 0;
     for (auto&& i : recordsCount) {
@@ -55,7 +57,8 @@ std::vector<NKikimr::NOlap::TSaverSplittedChunk> TSimpleSplitter::SplitByRecords
     return result;
 }
 
-std::vector<NKikimr::NOlap::TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
+    Counters->BySizeSplitter.OnTrashSerialized(dataSerialization.size());
     auto splitPartSizesLocal = splitPartSizesExt;
     Y_VERIFY(data);
     {

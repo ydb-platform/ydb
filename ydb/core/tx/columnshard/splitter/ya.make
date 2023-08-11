@@ -6,6 +6,7 @@ SRCS(
     chunks.cpp
     simple.cpp
     rb_splitter.cpp
+    stats.cpp
 )
 
 PEERDIR(

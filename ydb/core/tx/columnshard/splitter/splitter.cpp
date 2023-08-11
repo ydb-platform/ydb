@@ -59,18 +59,12 @@ bool TSplitLimiter::Next(std::vector<TString>& portionBlobs, std::shared_ptr<arr
             auto array = currentBatch->GetColumnByName(columnName);
             Y_VERIFY(array);
             auto columnSaver = Schema->GetColumnSaver(columnSummary.GetColumnId(), saverContext);
-            TString blob = TPortionInfo::SerializeColumn(array, field, columnSaver);
+            TString blob = columnSaver.Apply(array, field);
             if (blob.size() >= TCompactionLimits::MAX_BLOB_SIZE) {
-                Counters.TrashDataSerializationBytes->Add(blob.size());
-                Counters.TrashDataSerialization->Add(1);
-                Counters.TrashDataSerializationHistogramBytes->Collect(blob.size());
                 const double kffNew = 1.0 * ExpectedBlobSize / blob.size() * ReduceCorrectionKff;
                 CurrentStepRecordsCount = currentBatch->num_rows() * kffNew;
                 Y_VERIFY(CurrentStepRecordsCount);
                 break;
-            } else {
-                Counters.CorrectDataSerializationBytes->Add(blob.size());
-                Counters.CorrectDataSerialization->Add(1);
             }
 
             portionBlobs[idx] = std::move(blob);

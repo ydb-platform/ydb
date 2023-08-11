@@ -1,6 +1,8 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include "common/owner.h"
+#include "splitter.h"
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -24,11 +26,7 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr MovedPortions;
     NMonitoring::TDynamicCounters::TCounterPtr MovedPortionBytes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerializationBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerialization;
-    NMonitoring::THistogramPtr TrashDataSerializationHistogramBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerializationBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr CorrectDataSerialization;
+    std::shared_ptr<TSplitterCounters> SplitterCounters;
 
     NMonitoring::THistogramPtr SplittedPortionLargestColumnSize;
     NMonitoring::THistogramPtr SimpleSplitPortionLargestColumnSize;

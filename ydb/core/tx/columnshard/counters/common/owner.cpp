@@ -50,4 +50,8 @@ void TCommonCountersOwner::DeepSubGroup(const TString& id, const TString& value)
     SubGroup = SubGroup->GetSubgroup(id, value);
 }
 
+void TCommonCountersOwner::DeepSubGroup(const TString& componentName) {
+    SubGroup = SubGroup->GetSubgroup("component", componentName);
+}
+
 }

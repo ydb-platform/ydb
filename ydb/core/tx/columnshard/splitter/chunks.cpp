@@ -2,8 +2,8 @@
 
 namespace NKikimr::NOlap {
 
-std::vector<TSplittedColumnChunk> TSplittedColumnChunk::InternalSplit(const TColumnSaver& saver) {
-    auto chunks = TSimpleSplitter(saver).SplitBySizes(Data.GetSlicedBatch(), Data.GetSerializedChunk(), SplitSizes);
+std::vector<TSplittedColumnChunk> TSplittedColumnChunk::InternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
+    auto chunks = TSimpleSplitter(saver, counters).SplitBySizes(Data.GetSlicedBatch(), Data.GetSerializedChunk(), SplitSizes);
     Y_VERIFY(chunks.size() == SplitSizes.size() + 1);
     std::vector<TSplittedColumnChunk> newChunks;
     for (auto&& i : chunks) {

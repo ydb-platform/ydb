@@ -49,20 +49,18 @@ bool TBatchSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
                         Y_VERIFY(chunksInProgress[i].GetSize() > TSplitSettings::MinBlobSize - partSize);
                         Y_VERIFY(otherSize - (TSplitSettings::MinBlobSize - partSize) >= TSplitSettings::MinBlobSize);
                         chunksInProgress[i].AddSplit(TSplitSettings::MinBlobSize - partSize);
-                    }
-                    if (!hasNoSplitChanges) {
-                        std::vector<TSplittedColumnChunk> newChunks = chunksInProgress[i].InternalSplit(Schema->GetColumnSaver(chunksInProgress[i].GetColumnId()));
+
+                        std::vector<TSplittedColumnChunk> newChunks = chunksInProgress[i].InternalSplit(Schema->GetColumnSaver(chunksInProgress[i].GetColumnId()), Counters);
                         chunksInProgress.erase(chunksInProgress.begin() + i);
                         chunksInProgress.insert(chunksInProgress.begin() + i, newChunks.begin(), newChunks.end());
 
-                        result.emplace_back(TSplittedBlob());
+                        TSplittedBlob newBlob;
                         for (ui32 chunk = 0; chunk <= i; ++chunk) {
-                            Y_VERIFY(result.back().Take(chunksInProgress[chunk]));
+                            Y_VERIFY(newBlob.Take(chunksInProgress[chunk]));
                         }
-                        if (result.back().GetSize() < TSplitSettings::MaxBlobSize) {
+                        if (newBlob.GetSize() < TSplitSettings::MaxBlobSize) {
                             chunksInProgress.erase(chunksInProgress.begin(), chunksInProgress.begin() + i + 1);
-                        } else {
-                            result.pop_back();
+                            result.emplace_back(std::move(newBlob));
                         }
                     }
                     break;
@@ -75,9 +73,10 @@ bool TBatchSerializedSlice::GroupBlobs(std::vector<TSplittedBlob>& blobs) {
     return true;
 }
 
-TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema)
+TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters)
     : Schema(schema)
     , Batch(batch)
+    , Counters(counters)
 {
     Y_VERIFY(batch);
     RecordsCount = batch->num_rows();
@@ -91,7 +90,10 @@ TBatchSerializedSlice::TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch>
     for (auto&& i : batch->columns()) {
         auto& c = Columns[idx];
         auto columnSaver = schema->GetColumnSaver(c.GetColumnId());
-        c.SetBlobs(TSimpleSplitter(columnSaver).Split(i, c.GetField(), TSplitSettings::MaxBlobSize));
+        auto stats = schema->GetColumnSerializationStats(c.GetColumnId());
+        TSimpleSplitter splitter(columnSaver, Counters);
+        splitter.SetStats(stats);
+        c.SetBlobs(splitter.Split(i, c.GetField(), TSplitSettings::MaxBlobSize));
         Size += c.GetSize();
         ++idx;
     }

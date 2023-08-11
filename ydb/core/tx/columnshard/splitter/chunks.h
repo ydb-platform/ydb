@@ -1,6 +1,6 @@
 #pragma once
 #include "simple.h"
-#include <ydb/core/tx/columnshard/counters/indexation.h>
+#include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -9,10 +9,10 @@ namespace NKikimr::NOlap {
 
 class TSplitSettings {
 public:
-    static const inline ui64 MaxBlobSize = 8 * 1024 * 1024;
-    static const inline ui64 MaxBlobSizeWithGap = 7 * 1024 * 1024;
-    static const inline ui64 MinBlobSize = 4 * 1024 * 1024;
-    static const inline ui64 MinRecordsCount = 10000;
+    static const inline i64 MaxBlobSize = 8 * 1024 * 1024;
+    static const inline i64 MaxBlobSizeWithGap = 7 * 1024 * 1024;
+    static const inline i64 MinBlobSize = 4 * 1024 * 1024;
+    static const inline i64 MinRecordsCount = 10000;
 };
 
 class TSplittedColumn;
@@ -26,7 +26,7 @@ public:
     void AddSplit(const ui64 size) {
         SplitSizes.emplace_back(size);
     }
-    std::vector<TSplittedColumnChunk> InternalSplit(const TColumnSaver& saver);
+    std::vector<TSplittedColumnChunk> InternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 
     ui64 GetSize() const {
         return Data.GetSerializedChunk().size();
@@ -66,6 +66,7 @@ public:
     void SetBlobs(const std::vector<TSaverSplittedChunk>& data) {
         Y_VERIFY(Chunks.empty());
         for (auto&& i : data) {
+            Y_VERIFY(i.IsCompatibleColumn(Field));
             Size += i.GetSerializedChunk().size();
             Chunks.emplace_back(ColumnId, i);
         }

@@ -39,25 +39,25 @@ public:
     }
 };
 
-TRBSplitLimiter::TRBSplitLimiter(const TGranuleMeta* /*granuleMeta*/, const NColumnShard::TIndexationCounters& counters, ISchemaDetailInfo::TPtr schemaInfo,
+TRBSplitLimiter::TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters> counters, ISchemaDetailInfo::TPtr schemaInfo,
     const std::shared_ptr<arrow::RecordBatch> batch)
     : Counters(counters)
-    , Batch(batch) {
+    , Batch(batch)
+{
     Y_VERIFY(Batch->num_rows());
     std::vector<TBatchSerializedSlice> slices;
-    const ui32 countPacks = std::max<ui32>(1, (ui32)round(1.0 * Batch->num_rows() / TSplitSettings::MinRecordsCount));
-    const ui32 stepPack = Batch->num_rows() / countPacks;
-    ui32 position = 0;
-    for (ui32 i = 0; i < countPacks; ++i) {
-        const ui32 packSize = (i + 1 == countPacks) ? Batch->num_rows() - position : stepPack;
-        std::shared_ptr<arrow::RecordBatch> current;
-        current = batch->Slice(position, packSize);
-        position += current->num_rows();
-        TBatchSerializedSlice slice(current, schemaInfo);
+    auto stats = schemaInfo->GetBatchSerializationStats(Batch);
+    ui32 recordsCount = TSplitSettings::MinRecordsCount;
+    if (stats) {
+        const ui32 recordsCountForMinSize = stats->PredictOptimalPackRecordsCount(Batch->num_rows(), TSplitSettings::MinBlobSize).value_or(recordsCount);
+        recordsCount = std::max(recordsCount, recordsCountForMinSize);
+    }
+    auto linearSplitInfo = TSimpleSplitter::GetOptimalLinearSplitting(Batch->num_rows(), recordsCount);
+    for (auto it = linearSplitInfo.StartIterator(); it.IsValid(); it.Next()) {
+        std::shared_ptr<arrow::RecordBatch> current = batch->Slice(it.GetPosition(), it.GetCurrentPackSize());
+        TBatchSerializedSlice slice(current, schemaInfo, Counters);
         slices.emplace_back(std::move(slice));
     }
-    Y_VERIFY(position == batch->num_rows());
-    Y_VERIFY(slices.size() == countPacks);
 
     const std::vector<ui32> chunks = TSimilarSlicer(TSplitSettings::MinBlobSize).Split(slices);
     ui32 chunkStartPosition = 0;
@@ -84,6 +84,11 @@ bool TRBSplitLimiter::Next(std::vector<std::vector<TOrderedColumnChunk>>& portio
     Slices.front().GroupBlobs(blobs);
     std::vector<std::vector<TOrderedColumnChunk>> result;
     for (auto&& i : blobs) {
+        if (blobs.size() == 1) {
+            Counters->MonoBlobs.OnBlobData(i.GetSize());
+        } else {
+            Counters->SplittedBlobs.OnBlobData(i.GetSize());
+        }
         std::vector<TOrderedColumnChunk> chunksForBlob;
         for (auto&& c : i.GetChunks()) {
             chunksForBlob.emplace_back(c.GetColumnId(), c.GetData().GetRecordsCount(), c.GetData().GetSerializedChunk());

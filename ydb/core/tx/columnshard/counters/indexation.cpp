@@ -21,12 +21,6 @@ TIndexationCounters::TIndexationCounters(const TString& module)
     MovedPortions = TBase::GetDeriviative("Moved/Portions");
     MovedPortionBytes = TBase::GetDeriviative("Moved/Bytes");
 
-    TrashDataSerializationBytes = TBase::GetDeriviative("TrashDataSerialization/Bytes");
-    TrashDataSerialization = TBase::GetDeriviative("TrashDataSerialization/Count");
-    TrashDataSerializationHistogramBytes = TBase::GetHistogram("TrashDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
-    CorrectDataSerializationBytes = TBase::GetDeriviative("CorrectDataSerialization/Bytes");
-    CorrectDataSerialization = TBase::GetDeriviative("CorrectDataSerialization/Count");
-
     CompactionDuration = TBase::GetHistogram("CompactionDuration", NMonitoring::ExponentialHistogram(18, 2, 20));
     HistogramCompactionInputBytes = TBase::GetHistogram("CompactionInput/Bytes", NMonitoring::ExponentialHistogram(18, 2, 1024));
     CompactionInputBytes = TBase::GetDeriviative("CompactionInput/Bytes");
@@ -39,6 +33,8 @@ TIndexationCounters::TIndexationCounters(const TString& module)
     TooSmallBlob = TBase::GetDeriviative("TooSmallBlob/Count");
     TooSmallBlobFinish = TBase::GetDeriviative("TooSmallBlobFinish/Count");
     TooSmallBlobStart = TBase::GetDeriviative("TooSmallBlobStart/Count");
+
+    SplitterCounters = std::make_shared<TSplitterCounters>(*this);
 }
 
 }

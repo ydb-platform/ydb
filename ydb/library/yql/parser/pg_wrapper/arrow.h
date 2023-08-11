@@ -145,7 +145,7 @@ struct TInputArgsAccessor {
                         FixedArrays[j] = array.GetValues<ui64>(1);
                     } else {
                         StringOffsetsArrays[j] = array.GetValues<ui32>(1);
-                        StringDataArrays[j] = array.GetValues<ui8>(2);
+                        StringDataArrays[j] = array.GetValues<ui8>(2, 0);
                     }
                 }
             }

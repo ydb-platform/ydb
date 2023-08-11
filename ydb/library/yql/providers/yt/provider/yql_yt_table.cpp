@@ -2913,13 +2913,6 @@ const NCommon::TStructMemberMapper& TYtPathInfo::GetColumnMapper() {
             for (auto& c: *Columns->GetColumns()) {
                 filterColumns.insert(c.Name);
             }
-            for (auto& c: Table->RowSpec->SortMembers) {
-                auto column = c;
-                if (auto r = renames.find(c); r != renames.cend()) {
-                    column = r->second;
-                }
-                filterColumns.insert(column);
-            }
         }
     }
     if (useAllColumns && renames.empty()) {

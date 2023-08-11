@@ -1497,6 +1497,7 @@ private:
         state->CredentialsFactory = CredentialsFactory;
 
         NYql::TS3GatewayConfig cfg;
+        cfg.SetMaxReadSizePerQuery(100_GB);
         state->Configuration->Init(cfg, TypesCtx);
 
         auto dataSource = NYql::CreateS3DataSource(state, HttpGateway);

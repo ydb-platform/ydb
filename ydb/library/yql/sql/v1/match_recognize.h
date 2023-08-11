@@ -36,16 +36,25 @@ struct TAfterMatchSkipTo {
     TString Var;
 };
 
-struct TRowPatternFactor{
-    TString Name;
-    uint64_t QuantityMin; //uint64 literal
-    uint64_t QuantityMax; //uint64 literal
-    bool Greedy; //bool literal;
-    bool Output; //bool literal, include in output with ALL ROW PER MATCH
-};
-using TRowPatternTerm = TVector<TRowPatternFactor>;
-using TRowPattern = TVector<TRowPatternTerm>;
+struct TRowPattern;
 
+using TRowPatternPtr = std::unique_ptr<TRowPattern>;
+
+using TRowPatternPrimary = std::variant<TString, TRowPatternPtr>;
+
+struct TRowPatternFactor{
+    TRowPatternPrimary Primary;
+    uint64_t QuantityMin;
+    uint64_t QuantityMax;
+    bool Greedy;
+    bool Output; //include in output with ALL ROW PER MATCH
+};
+
+using TRowPatternTerm = std::vector<TRowPatternFactor>;
+
+struct TRowPattern {
+    std::vector<TRowPatternTerm> Terms;
+};
 
 class TMatchRecognizeBuilder: public TSimpleRefCount<TMatchRecognizeBuilder> {
 public:
@@ -56,7 +65,7 @@ public:
             std::pair<TPosition, TVector<TNamedLambda>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, TRowPattern>&& pattern,
+            std::pair<TPosition, TRowPatternPtr>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
             )
@@ -79,7 +88,7 @@ private:
     std::pair<TPosition, TVector<TNamedLambda>> Measures;
     std::pair<TPosition, ERowsPerMatch> RowsPerMatch;
     std::pair<TPosition, TAfterMatchSkipTo> SkipTo;
-    std::pair<TPosition, TRowPattern> Pattern;
+    std::pair<TPosition, TRowPatternPtr> Pattern;
     std::pair<TPosition, TNodePtr> Subset;
     std::pair<TPosition, TVector<TNamedLambda>> Definitions;
 };

@@ -135,7 +135,7 @@ FROM Input MATCH_RECOGNIZE(
         //TODO https://st.yandex-team.ru/YQL-16186
     }
     Y_UNIT_TEST(PatternSimple) {
-        auto stmt = R"(
+        const auto stmt = R"(
 USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
@@ -145,45 +145,91 @@ FROM Input MATCH_RECOGNIZE(
 )";
         const auto& r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
-        auto pattern = FindMatchRecognizeParam(r.Root, "pattern");
-        UNIT_ASSERT(IsQuotedListOfSize(pattern, 1));
-        const auto& term = pattern->GetChild(1)->GetChild(0);
+        const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
+        UNIT_ASSERT_EQUAL(patternCallable->GetChild(0)->GetContent(), "MatchRecognizePattern");
+        UNIT_ASSERT_EQUAL(patternCallable->GetChildrenCount(), 1 + 1);
+        const auto& term = patternCallable->GetChild(1);
         UNIT_ASSERT(IsQuotedListOfSize(term, 3));
     }
 
-    Y_UNIT_TEST(PatternMedium) {
-        auto stmt = R"(
+    Y_UNIT_TEST(PatternMultiTerm) {
+        const auto stmt = R"(
 USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
-    PATTERN ($ A+ B{1,3} | C{3} D{1,4} E? | F?? | G{3,}? H*? ^)
+    PATTERN ($ A+ B{1,3} | C{3} D{1,4} E? | F?? | G{3,}? H*? I J ^)
     DEFINE A as A
     )
 )";
         const auto& r = MatchRecognizeSqlToYql(stmt);
         UNIT_ASSERT(r.IsOk());
-        auto pattern = FindMatchRecognizeParam(r.Root, "pattern");
-        UNIT_ASSERT(IsQuotedListOfSize(pattern, 4));
+        const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
+        UNIT_ASSERT_EQUAL(patternCallable->GetChild(0)->GetContent(), "MatchRecognizePattern");
+        UNIT_ASSERT_EQUAL(patternCallable->GetChildrenCount(), 1 + 4);
+        const auto& lastTerm = patternCallable->GetChild(4);
+        UNIT_ASSERT(IsQuotedListOfSize(lastTerm, 5));
     }
 
-    //TODO add tests for factors, quantifiers and greediness https://st.yandex-team.ru/YQL-16186
-
-
-    Y_UNIT_TEST(PatternDieHard) {
-        auto stmt = R"(
+    Y_UNIT_TEST(PatternWithParanthesis) {
+        const auto stmt = R"(
 USE plato;
 SELECT *
 FROM Input MATCH_RECOGNIZE(
-    PATTERN (^ S1 S2*? ( {- S3 -} S4 )+ | PERMUTE(S1, S2){1,2} $)
+    PATTERN (
+        A | ($ B)+ C D
+    )
     DEFINE A as A
     )
 )";
-        Y_UNUSED(stmt);
-        //TODO implement me
-        //UNIT_ASSERT( MatchRecognizeSqlToYql(stmt).IsOk());
+        const auto& r = MatchRecognizeSqlToYql(stmt);
+        UNIT_ASSERT(r.IsOk());
+        const auto& patternCallable = FindMatchRecognizeParam(r.Root, "pattern");
+        UNIT_ASSERT_EQUAL(patternCallable->GetChild(0)->GetContent(), "MatchRecognizePattern");
+        UNIT_ASSERT_EQUAL(patternCallable->GetChildrenCount(), 1 + 2);
+        const auto& firstTerm = patternCallable->GetChild(1);
+        UNIT_ASSERT(IsQuotedListOfSize(firstTerm, 1));
+        const auto& lastTerm = patternCallable->GetChild(2);
+        UNIT_ASSERT(IsQuotedListOfSize(lastTerm, 3));
+        const auto& firstFactorOfLastTerm = lastTerm->GetChild(1)->GetChild(0);
+        UNIT_ASSERT(IsQuotedListOfSize(firstFactorOfLastTerm, 5));
+        const auto nestedPattern = firstFactorOfLastTerm->GetChild(1)->GetChild(0);
+        UNIT_ASSERT_EQUAL(nestedPattern->GetChildrenCount(), 1 + 1);
+        UNIT_ASSERT_EQUAL(nestedPattern->GetChild(0)->GetContent(), "MatchRecognizePattern");
+        UNIT_ASSERT(IsQuotedListOfSize(nestedPattern->GetChild(1), 2));
     }
 
-    Y_UNIT_TEST(row_pattern_subset_clause) {
+    Y_UNIT_TEST(PatternLimietedNesting) {
+        const size_t MaxNesting = 20;
+        for (size_t extraNesting = 0; extraNesting <= 1; ++extraNesting) {
+            std::string pattern;
+            for (size_t i = 0; i != MaxNesting + extraNesting; ++i)
+                pattern.push_back('(');
+            pattern.push_back('A');
+            for (size_t i = 0; i != MaxNesting + extraNesting; ++i)
+                pattern.push_back(')');
+            const auto stmt = TString(R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+        PATTERN(
+)") + pattern + R"(
+            )
+    DEFINE A as A
+    )
+)";
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            if (not extraNesting) {
+                UNIT_ASSERT(r.IsOk());
+            } else {
+                UNIT_ASSERT(not r.IsOk());
+            }
+        }
+    }
+
+
+    //TODO add tests for factors, quantifiers and greediness https://st.yandex-team.ru/YQL-16186
+
+   Y_UNIT_TEST(row_pattern_subset_clause) {
         //TODO https://st.yandex-team.ru/YQL-16186
     }
 

@@ -75,7 +75,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         return {};
     }
 
-    const auto& pattern = ParsePattern(commonSyntax.GetRule_row_pattern5());
+    auto pattern = ParsePattern(commonSyntax.GetRule_row_pattern5());
     const auto& patternPos = TokenPosition(commonSyntax.token3());
 
     TNodePtr subset;
@@ -207,24 +207,31 @@ TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_patte
     TPosition pos;
     for (const auto& factor: node.GetBlock1()) {
         const auto& primaryVar = factor.GetRule_row_pattern_factor1().GetRule_row_pattern_primary1();
-        TString varName;
+        TRowPatternPrimary primary;
         bool output = true;
         switch(primaryVar.GetAltCase()){
             case TRule_row_pattern_primary::kAltRowPatternPrimary1:
-                varName = PatternVar(primaryVar.GetAlt_row_pattern_primary1().GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1(), *this);
+                primary = PatternVar(primaryVar.GetAlt_row_pattern_primary1().GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1(), *this);
                 break;
             case TRule_row_pattern_primary::kAltRowPatternPrimary2:
-                varName = primaryVar.GetAlt_row_pattern_primary2().GetToken1().GetValue();
-                Y_ENSURE("$" == varName);
+                primary = primaryVar.GetAlt_row_pattern_primary2().GetToken1().GetValue();
+                Y_ENSURE("$" == std::get<0>(primary));
                 break;
             case TRule_row_pattern_primary::kAltRowPatternPrimary3:
-                varName = primaryVar.GetAlt_row_pattern_primary3().GetToken1().GetValue();
-                Y_ENSURE("^" == varName);
+                primary = primaryVar.GetAlt_row_pattern_primary3().GetToken1().GetValue();
+                Y_ENSURE("^" == std::get<0>(primary));
                 break;
-            case TRule_row_pattern_primary::kAltRowPatternPrimary4:
-                Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
-                    << "Grouping is not supported yet"; //https://st.yandex-team.ru/YQL-16226
+            case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
+                constexpr size_t MaxNesting = 20; //Limit recursion
+                if (++PatternNestingLevel <= MaxNesting) {
+                    primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary4().GetBlock2().GetRule_row_pattern1());
+                } else {
+                    Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
+                            << "To big nesting level in the pattern";
+                    return TRowPatternTerm{};
+                }
                 break;
+            }
             case TRule_row_pattern_primary::kAltRowPatternPrimary5:
                 output = false;
                 Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
@@ -280,16 +287,17 @@ TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_patte
                     Y_FAIL("You should change implementation according to grammar changes");
             }
         }
-        term.push_back(TRowPatternFactor{varName, quantityMin, quantityMax, greedy, output});
+        term.push_back(TRowPatternFactor{std::move(primary), quantityMin, quantityMax, greedy, output});
     }
     return term;
 }
 
-TVector<TRowPatternTerm> TSqlMatchRecognizeClause::ParsePattern(const TRule_row_pattern& node){
-    TVector<TRowPatternTerm> result{ ParsePatternTerm(node.GetRule_row_pattern_term1()) };
+TRowPatternPtr TSqlMatchRecognizeClause::ParsePattern(const TRule_row_pattern& node){
+    TVector<TRowPatternTerm> result;
+    result.emplace_back(ParsePatternTerm(node.GetRule_row_pattern_term1()));
     for (const auto& term: node.GetBlock2())
         result.push_back(ParsePatternTerm(term.GetRule_row_pattern_term2()));
-    return result;
+    return std::make_unique<TRowPattern>(TRowPattern{std::move(result)});
 }
 
 TNamedLambda TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node){

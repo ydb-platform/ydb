@@ -14,7 +14,7 @@ public:
             std::pair<TPosition, TVector<TNamedLambda>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, TVector<TRowPatternTerm>>&& pattern,
+            std::pair<TPosition, TRowPatternPtr>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
             ): TCallNode(pos, "block", {BuildBlockStatements(
@@ -41,18 +41,15 @@ private:
             std::pair<TPosition, TVector<TNamedLambda>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, TVector<TRowPatternTerm>>&& pattern,
+            std::pair<TPosition, TRowPatternPtr>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
             ) {
         Y_UNUSED(pos);
 
         auto inputRowType = Y("ListItemType",Y("TypeOf", inputTable));
-        TNodePtr patternNode = Y();
-        for (const auto& t: pattern.second) {
-           patternNode->Add(PatternTerm(pos, t));
-        }
-        patternNode = Q(patternNode);
+
+        auto patternNode = Pattern(pattern.first, pattern.second);
 
         auto partitionColumns = Y();
         for (const auto& p: partitioners.second){
@@ -113,7 +110,9 @@ private:
 
     TPtr PatternFactor(const TPosition& pos, const TRowPatternFactor& factor) {
         return BuildTuple(pos, {
-                BuildQuotedAtom(pos, factor.Name),
+                factor.Primary.index() == 0 ?
+                    BuildQuotedAtom(pos, std::get<0>(factor.Primary)) :
+                    Pattern(pos, std::get<1>(factor.Primary)),
                 BuildQuotedAtom(pos, ToString(factor.QuantityMin)),
                 BuildQuotedAtom(pos, ToString(factor.QuantityMax)),
                 BuildQuotedAtom(pos, ToString(factor.Greedy)),
@@ -128,6 +127,15 @@ private:
             factors->Add(PatternFactor(pos, f));
         return Q(std::move(factors));
     }
+
+    TPtr Pattern(const TPosition& pos, const TRowPatternPtr& pattern) {
+        TNodePtr patternNode = Y("MatchRecognizePattern");
+        for (const auto& t: pattern->Terms) {
+            patternNode->Add(PatternTerm(pos, t));
+        }
+        return patternNode;
+    }
+
     TPtr DoClone() const final{
         return new TMatchRecognize(*this);
     }

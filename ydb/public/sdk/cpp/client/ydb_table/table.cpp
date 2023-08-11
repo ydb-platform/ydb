@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/scheme_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -1352,11 +1353,6 @@ struct TRetryState {
     THandleStatusFunc HandleStatusFunc;
 };
 
-static void Backoff(const TBackoffSettings& settings, ui32 retryNumber) {
-    auto durationMs = CalcBackoffTime(settings, retryNumber);
-    Sleep(TDuration::MilliSeconds(durationMs));
-}
-
 class TRetryOperationContext : public TThrRefBase, TNonCopyable {
 public:
     using TRetryContextPtr = TIntrusivePtr<TRetryOperationContext>;
@@ -1390,12 +1386,12 @@ protected:
     virtual void Reset() {}
 
     static void DoRetry(TRetryContextPtr self, bool fast) {
-        self->TableClient.Impl_->AsyncBackoff(
-                    fast ? self->Settings.FastBackoffSettings_ : self->Settings.SlowBackoffSettings_,
-                    self->RetryNumber,
-                    [self]() {
-                        RunOp(self);
-                    }
+        AsyncBackoff(self->TableClient.Impl_,
+            fast ? self->Settings.FastBackoffSettings_ : self->Settings.SlowBackoffSettings_,
+            self->RetryNumber,
+            [self]() {
+                RunOp(self);
+            }
         );
     }
 

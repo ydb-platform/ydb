@@ -24,6 +24,7 @@ target_link_libraries(cpp-client-ydb_table PUBLIC
   api-protos
   impl-ydb_internal-make_request
   impl-ydb_internal-kqp_session_common
+  impl-ydb_internal-retry
   cpp-client-ydb_driver
   cpp-client-ydb_params
   cpp-client-ydb_proto

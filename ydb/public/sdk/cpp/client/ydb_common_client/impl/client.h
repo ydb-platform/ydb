@@ -1,5 +1,7 @@
 #pragma once
 
+#include "iface.h"
+
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -12,7 +14,9 @@
 namespace NYdb {
 
 template<typename T>
-class TClientImplCommon : public std::enable_shared_from_this<T> {
+class TClientImplCommon
+    : public IClientImplCommon
+    , public std::enable_shared_from_this<T> {
 public:
     TClientImplCommon(
         std::shared_ptr<TGRpcConnectionsImpl>&& connections,
@@ -22,7 +26,8 @@ public:
         const TMaybe<TSslCredentials>& sslCredentials,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory)
         : Connections_(std::move(connections))
-        , DbDriverState_(Connections_->GetDriverState(database, discoveryEndpoint, discoveryMode, sslCredentials, credentialsProviderFactory))
+        , DbDriverState_(Connections_->GetDriverState(
+            database, discoveryEndpoint, discoveryMode, sslCredentials, credentialsProviderFactory))
     {
         Y_VERIFY(DbDriverState_);
     }
@@ -46,6 +51,17 @@ public:
 
     NThreading::TFuture<void> DiscoveryCompleted() const {
         return DbDriverState_->DiscoveryCompleted();
+    }
+
+    void ScheduleTask(const std::function<void()>& fn, TDuration timeout) override {
+        std::weak_ptr<IClientImplCommon> weak = this->shared_from_this();
+        auto cbGuard = [weak, fn]() {
+            auto strongClient = weak.lock();
+            if (strongClient) {
+                fn();
+            }
+        };
+        Connections_->ScheduleOneTimeTask(std::move(cbGuard), timeout);
     }
 
 protected:

@@ -17,20 +17,6 @@ TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings) {
     return Max(settings.CloseIdleThreshold_, settings.KeepAliveIdleThreshold_);
 }
 
-ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber) {
-    ui32 backoffSlots = 1 << std::min(retryNumber, settings.Ceiling_);
-    TDuration maxDuration = settings.SlotDuration_ * backoffSlots;
-
-    double uncertaintyRatio = std::max(std::min(settings.UncertainRatio_, 1.0), 0.0);
-    double uncertaintyMultiplier = RandomNumber<double>() * uncertaintyRatio - uncertaintyRatio + 1.0;
-
-    double durationMs = round(maxDuration.MilliSeconds() * uncertaintyMultiplier);
-
-    return std::max(std::min(durationMs, (double)MAX_BACKOFF_DURATION_MS), 0.0);
-}
-
-
-
 TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
     : TClientImplCommon(std::move(connections), settings)
     , Settings_(settings)
@@ -92,24 +78,8 @@ NThreading::TFuture<void> TTableClient::TImpl::Stop() {
     return Drain();
 }
 
-void TTableClient::TImpl::ScheduleTask(const std::function<void()>& fn, TDuration timeout) {
-    std::weak_ptr<TTableClient::TImpl> weak = shared_from_this();
-    auto cbGuard = [weak, fn]() {
-        auto strongClient = weak.lock();
-        if (strongClient) {
-            fn();
-        }
-    };
-    Connections_->ScheduleOneTimeTask(std::move(cbGuard), timeout);
-}
-
 void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) {
     Connections_->ScheduleOneTimeTask(std::move(fn), timeout);
-}
-
-void TTableClient::TImpl::AsyncBackoff(const TBackoffSettings& settings, ui32 retryNumber, const std::function<void()>& fn) {
-    auto durationMs = CalcBackoffTime(settings, retryNumber);
-    ScheduleTask(fn, TDuration::MilliSeconds(durationMs));
 }
 
 void TTableClient::TImpl::StartPeriodicSessionPoolTask() {

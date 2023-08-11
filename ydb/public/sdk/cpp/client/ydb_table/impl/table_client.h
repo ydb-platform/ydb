@@ -24,12 +24,8 @@ namespace NTable {
 
 //How ofter run host scan to perform session balancing
 constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
-constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 
-TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
-TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
-ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
 TDuration GetMaxTimeToTouch(const TSessionPoolSettings& settings);
 
@@ -45,9 +41,7 @@ public:
     void InitStopper();
     NThreading::TFuture<void> Drain();
     NThreading::TFuture<void> Stop();
-    void ScheduleTask(const std::function<void()>& fn, TDuration timeout);
     void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout);
-    void AsyncBackoff(const TBackoffSettings& settings, ui32 retryNumber, const std::function<void()>& fn);
     void StartPeriodicSessionPoolTask();
     static ui64 ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client);
     static std::pair<ui64, size_t> ScanLocation(std::shared_ptr<TTableClient::TImpl> client,

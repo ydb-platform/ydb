@@ -11,6 +11,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/impl/ydb_internal/kqp_session_common
+    ydb/public/sdk/cpp/client/impl/ydb_internal/retry
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_params
     ydb/public/sdk/cpp/client/ydb_proto

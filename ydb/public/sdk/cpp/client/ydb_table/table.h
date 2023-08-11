@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -872,39 +873,8 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
 
-struct TBackoffSettings {
-    using TSelf = TBackoffSettings;
-
-    FLUENT_SETTING_DEFAULT(TDuration, SlotDuration, TDuration::Seconds(1));
-    FLUENT_SETTING_DEFAULT(ui32, Ceiling, 6);
-    FLUENT_SETTING_DEFAULT(double, UncertainRatio, 0.5);
-};
-
-struct TRetryOperationSettings {
-    using TSelf = TRetryOperationSettings;
-
-    FLUENT_SETTING_DEFAULT(ui32, MaxRetries, 10);
-    FLUENT_SETTING_DEFAULT(bool, RetryNotFound, true);
-    FLUENT_SETTING_DEFAULT(TDuration, GetSessionClientTimeout, TDuration::Seconds(5));
-    FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings());
-    FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings());
-    FLUENT_SETTING_FLAG(Idempotent);
-    FLUENT_SETTING_FLAG(Verbose);
-
-    static TBackoffSettings DefaultFastBackoffSettings() {
-        return TBackoffSettings()
-            .Ceiling(10)
-            .SlotDuration(TDuration::MilliSeconds(5))
-            .UncertainRatio(0.5);
-    }
-
-    static TBackoffSettings DefaultSlowBackoffSettings() {
-        return TBackoffSettings()
-            .Ceiling(6)
-            .SlotDuration(TDuration::Seconds(1))
-            .UncertainRatio(0.5);
-    }
-};
+using TBackoffSettings = NYdb::NRetry::TBackoffSettings;
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
 
 struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;

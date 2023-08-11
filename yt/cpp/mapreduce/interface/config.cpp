@@ -283,7 +283,11 @@ TProcessState::TProcessState()
     try {
         UserName = ::GetUsername();
     } catch (const yexception& e) {
+#ifdef _win_
         ythrow yexception() << "Cannot get user name: " << e.what();
+#else
+        UserName = "u" + ToString(geteuid());
+#endif
     }
 
     Pid = static_cast<int>(getpid());

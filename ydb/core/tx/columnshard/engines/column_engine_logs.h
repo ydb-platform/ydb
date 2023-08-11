@@ -314,6 +314,7 @@ private:
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot;
+    bool ReadOnly = false;
 
     void ClearIndex() {
         Granules.clear();

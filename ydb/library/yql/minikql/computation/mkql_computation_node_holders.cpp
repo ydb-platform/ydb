@@ -912,8 +912,8 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
-            NUdf::ICompare::TPtr compare,
-            NUdf::IEquate::TPtr equate,
+            const NUdf::ICompare* compare,
+            const NUdf::IEquate* equate,
             const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
@@ -1036,8 +1036,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     const EDictSortMode Mode;
-    NUdf::ICompare::TPtr Compare;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::ICompare* Compare;
+    const NUdf::IEquate* Equate;
     mutable bool IsBuilt;
     const THolderFactory& HolderFactory;
     mutable TItems Items;
@@ -1114,8 +1114,8 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
-            NUdf::ICompare::TPtr compare,
-            NUdf::IEquate::TPtr equate,
+            const NUdf::ICompare* compare,
+            const NUdf::IEquate* equate,
             const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
@@ -1238,8 +1238,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     const EDictSortMode Mode;
-    NUdf::ICompare::TPtr Compare;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::ICompare* Compare;
+    const NUdf::IEquate* Equate;
     mutable bool IsBuilt;
     const THolderFactory& HolderFactory;
     mutable TItems Items;
@@ -1302,7 +1302,7 @@ public:
 
     THashedSetHolder(TMemoryUsageInfo* memInfo, THashedSetFiller filler,
         const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
-        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, const THolderFactory& holderFactory)
+        const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
@@ -2090,7 +2090,7 @@ public:
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
         const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
-        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, const THolderFactory& holderFactory)
+        const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
@@ -2764,7 +2764,7 @@ public:
                 };
 
         return ctx.HolderFactory.CreateDirectHashedDictHolder(
-                filler, Types, IsTuple, true, EncodedType, Hash, Equate);
+                filler, Types, IsTuple, true, EncodedType, Hash.Get(), Equate.Get());
     }
 
 private:
@@ -3145,9 +3145,9 @@ public:
             bool isTuple,
             ui32 dictFlags,
             TType* encodeType,
-            NUdf::IHash::TPtr hash,
-            NUdf::IEquate::TPtr equate,
-            NUdf::ICompare::TPtr compare)
+            const NUdf::IHash* hash,
+            const NUdf::IEquate* equate,
+            const NUdf::ICompare* compare)
         : HolderFactory_(holderFactory)
         , Types_(types)
         , IsTuple_(isTuple)
@@ -3298,9 +3298,9 @@ private:
     const bool IsTuple_;
     const ui32 DictFlags_;
     TType* const EncodeType_;
-    NUdf::IHash::TPtr Hash_;
-    NUdf::IEquate::TPtr Equate_;
-    NUdf::ICompare::TPtr Compare_;
+    const NUdf::IHash* Hash_;
+    const NUdf::IEquate* Equate_;
+    const NUdf::ICompare* Compare_;
     TKeyPayloadPairVector Items_;
 };
 
@@ -3375,6 +3375,18 @@ NUdf::TUnboxedValuePod THolderFactory::NewVectorHolder() const {
 
 NUdf::TUnboxedValuePod THolderFactory::NewTemporaryVectorHolder() const {
     return NUdf::TUnboxedValuePod(new TTemporaryVectorHolder(&MemInfo));
+}
+
+const NUdf::IHash* THolderFactory::GetHash(const TType& type, bool useIHash) const {
+    return useIHash ? HashRegistry.FindOrEmplace(type) : nullptr;
+}
+
+const NUdf::IEquate* THolderFactory::GetEquate(const TType& type, bool useIHash) const {
+    return useIHash ? EquateRegistry.FindOrEmplace(type) : nullptr;
+}
+
+const NUdf::ICompare* THolderFactory::GetCompare(const TType& type, bool useIHash) const {
+    return useIHash ? CompareRegistry.FindOrEmplace(type) : nullptr;
 }
 
 NUdf::TUnboxedValuePod THolderFactory::VectorAsVectorHolder(TUnboxedValueVector&& list) const {
@@ -3686,8 +3698,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedSetHolder(
         EDictSortMode mode,
         bool eagerFill,
         TType* encodedType,
-        NUdf::ICompare::TPtr compare,
-        NUdf::IEquate::TPtr equate) const
+        const NUdf::ICompare* compare,
+        const NUdf::IEquate* equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedSetHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, mode, eagerFill, encodedType, compare, equate, *this));
@@ -3700,8 +3712,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedDictHolder(
         EDictSortMode mode,
         bool eagerFill,
         TType* encodedType,
-        NUdf::ICompare::TPtr compare,
-        NUdf::IEquate::TPtr equate) const
+        const NUdf::ICompare* compare,
+        const NUdf::IEquate* equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedDictHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, mode, eagerFill, encodedType, compare, equate, *this));
@@ -3713,8 +3725,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedDictHolder(
         bool isTuple,
         bool eagerFill,
         TType* encodedType,
-        NUdf::IHash::TPtr hash,
-        NUdf::IEquate::TPtr equate) const
+        const NUdf::IHash* hash,
+        const NUdf::IEquate* equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<THashedDictHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
@@ -3726,8 +3738,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSetHolder(
     bool isTuple,
     bool eagerFill,
     TType* encodedType,
-    NUdf::IHash::TPtr hash,
-    NUdf::IEquate::TPtr equate) const {
+    const NUdf::IHash* hash,
+    const NUdf::IEquate* equate) const {
     return NUdf::TUnboxedValuePod(AllocateOn<THashedSetHolder>(CurrentAllocState, &MemInfo,
         filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
 }
@@ -3823,8 +3835,8 @@ NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
     bool useIHash;
     GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
     return new TDictValueBuilder(*this, types, isTuple, flags, encoded ? keyType : nullptr,
-        useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr,
-        useIHash ? MakeCompareImpl(keyType) : nullptr);
+        GetHash(*keyType, useIHash), GetEquate(*keyType, useIHash),
+        GetCompare(*keyType, useIHash));
 }
 
 #define DEFINE_HASHED_SINGLE_FIXED_MAP_OPT(xType) \

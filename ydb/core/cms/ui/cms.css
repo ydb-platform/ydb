@@ -543,3 +543,9 @@ td {
 }
 
 }
+
+#yaml-configs-enabled-warning {
+  background: rgb(201, 48, 44);
+  border-color: rgb(172, 41, 37);
+  color: white;
+}

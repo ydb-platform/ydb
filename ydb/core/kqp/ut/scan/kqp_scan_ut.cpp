@@ -2352,6 +2352,57 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto limit = FindPlanNodeByKv(indexRead, "Limit", "2");
         UNIT_ASSERT(limit.IsDefined());
     }
+
+    Y_UNIT_TEST(Like) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Utf8,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            result = session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
+                    ('SomeString1', '100'),
+                    ('SomeString2', '200'),
+                    ('SomeString3', '300'),
+                    ('SomeString4', '400'),
+                    ('SomeString5', '500'),
+                    ('SomeString6', '600'),
+                    ('SomeString7', '700'),
+                    ('SomeString8', '800');
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TStreamExecScanQuerySettings querySettings;
+        querySettings.Explain(true);
+        auto it = db.StreamExecuteScanQuery(R"(
+            SELECT * FROM `/Root/TestTable` WHERE Key like "SomeString%";
+        )", querySettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto res = CollectStreamResult(it);
+        UNIT_ASSERT(res.PlanJson);
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+        UNIT_ASSERT_VALUES_EQUAL(plan["tables"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["name"], "/Root/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["reads"].GetArray().size(), 1);
+        auto& read = plan["tables"][0]["reads"][0];
+        UNIT_ASSERT_VALUES_EQUAL(read["type"], "Scan");
+        UNIT_ASSERT_VALUES_EQUAL(read["scan_by"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(read["scan_by"][0], "Key [SomeString, SomeStrinh)");
+    }
 }
 
 } // namespace NKqp

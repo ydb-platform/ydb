@@ -468,6 +468,8 @@ public:
         bool encoded;
         GetDictionaryKeyTypes(keyType, KeyTypes, IsTuple, encoded, UseIHash);
         Y_VERIFY(!encoded, "TODO");
+        Equate = UseIHash ? MakeEquateImpl(KeyType) : nullptr;
+        Hash = UseIHash ? MakeHashImpl(KeyType) : nullptr;
     }
 
     NUdf::TUnboxedValuePod CreateStream(TComputationContext& ctx) const {
@@ -491,8 +493,8 @@ public:
         return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime,
                                                       (ui64)intervalHopCount, (ui64)delayHopCount,
                                                       dataWatermarks, watermarkMode, ctx,
-                                                      TValueHasher(KeyTypes, IsTuple, UseIHash ? MakeHashImpl(KeyType) : nullptr),
-                                                      TValueEqual(KeyTypes, IsTuple, UseIHash ? MakeEquateImpl(KeyType) : nullptr),
+                                                      TValueHasher(KeyTypes, IsTuple, Hash.Get()),
+                                                      TValueEqual(KeyTypes, IsTuple, Equate.Get()),
                                                       Watermark);
     }
 
@@ -570,6 +572,9 @@ private:
     bool IsTuple;
     bool UseIHash;
     TWatermark& Watermark;
+
+    NUdf::IEquate::TPtr Equate;
+    NUdf::IHash::TPtr Hash;
 };
 
 }

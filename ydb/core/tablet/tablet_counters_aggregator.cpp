@@ -837,13 +837,13 @@ private:
                 "table.datashard.size_bytes", false);
 
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.scan.rows", false);
+                "table.columnshard.scan.rows", true);
             ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.scan.bytes", false);
+                "table.columnshard.scan.bytes", true);
             ColumnShardBulkUpsertRows_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.bulk_upsert.rows", false);
+                "table.columnshard.bulk_upsert.rows", true);
             ColumnShardBulkUpsertBytes_ = ydbGroup->GetNamedCounter("name",
-                "table.columnshard.bulk_upsert.bytes", false);
+                "table.columnshard.bulk_upsert.bytes", true);
 
             ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name",
                 "resources.storage.used_bytes", false);

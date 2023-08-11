@@ -701,7 +701,7 @@ private:
             ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(ev->TraceId));
             AssimilateRequests.erase(it);
         } else {
-            const TString& message = TStringBuilder() << "unexpected TEvVAssimilateResult received"
+            const TString message = TStringBuilder() << "unexpected TEvVAssimilateResult received"
                 << " Cookie# " << ev->Cookie
                 << " Sender# " << ev->Sender
                 << " Msg# " << ev->Get()->ToString()

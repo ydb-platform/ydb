@@ -770,7 +770,7 @@ message TFeatureFlags {
     optional bool EnableGrpcAudit = 74 [default = false];
     reserved 75; // EnableKqpDataQueryStreamLookup
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
-    optional bool EnableChangefeedInitialScan = 77 [default = false];
+    optional bool EnableChangefeedInitialScan = 77 [default = true];
     reserved 78; // EnableKqpScanQuerySourceRead
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
     reserved 80; // EnableKqpImmediateEffect

@@ -1597,6 +1597,58 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(TtlRunInterval) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().ExtractValueSync().GetSession();
+
+        const auto ttl = TTtlSettings("Ts", TDuration::Zero())
+            .SetRunInterval(TDuration::Minutes(30));
+
+        // create with ttl
+        {
+            auto result = session.CreateTable("/Root/table", TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Ts", EPrimitiveType::Timestamp)
+                .SetPrimaryKeyColumn("Key")
+                .SetTtlSettings(ttl)
+                .Build()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.DescribeTable("/Root/table").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetTtlSettings()->GetRunInterval(), ttl.GetRunInterval());
+        }
+
+        {
+            auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .BeginAlterTtlSettings()
+                    .Drop()
+                .EndAlterTtlSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // alter table set ttl
+        {
+            auto result = session.AlterTable("/Root/table", TAlterTableSettings()
+                .BeginAlterTtlSettings()
+                    .Set(ttl)
+                .EndAlterTtlSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.DescribeTable("/Root/table").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTableDescription().GetTtlSettings()->GetRunInterval(), ttl.GetRunInterval());
+        }
+    }
+
     void CreateTableWithUniformPartitions(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

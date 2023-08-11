@@ -1,3 +1,5 @@
+import "ydb/core/protos/hive.proto";
+
 package NKikimrBlobDepot;
 
 message TChannelKind {
@@ -21,4 +23,5 @@ message TBlobDepotConfig {
     optional bool IsDecommittingGroup = 3;
     optional uint64 TabletId = 4;
     optional bool HiveContacted = 5;
+    optional NKikimrHive.TEvCreateTablet HiveParams = 6; // extra hive parameters
 }

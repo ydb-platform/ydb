@@ -14,21 +14,21 @@
 namespace NKikimr::NWrappers::NExternalStorage {
 
 class TEvCheckObjectExistsRequest: public TGenericRequest<TEvCheckObjectExistsRequest,
-    EvCheckObjectExistsRequest, Aws::S3::Model::ListObjectsRequest> {
+    EvCheckObjectExistsRequest, Aws::S3::Model::HeadObjectRequest> {
 private:
-    using TBase = TGenericRequest<TEvCheckObjectExistsRequest, EvCheckObjectExistsRequest, Aws::S3::Model::ListObjectsRequest>;
+    using TBase = TGenericRequest<TEvCheckObjectExistsRequest, EvCheckObjectExistsRequest, Aws::S3::Model::HeadObjectRequest>;
 public:
     using TBase::TBase;
 };
 
 class TEvCheckObjectExistsResponse: public TBaseGenericResponse<TEvCheckObjectExistsResponse,
-    EvCheckObjectExistsResponse, Aws::S3::Model::ListObjectsResult> {
+    EvCheckObjectExistsResponse, Aws::S3::Model::HeadObjectResult> {
 private:
-    using TBase = TBaseGenericResponse<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse, Aws::S3::Model::ListObjectsResult>;
+    using TBase = TBaseGenericResponse<TEvCheckObjectExistsResponse, EvCheckObjectExistsResponse, Aws::S3::Model::HeadObjectResult>;
 public:
     using TBase::TBase;
     bool IsExists() const {
-        return Result.IsSuccess() && Result.GetResult().GetContents().size();
+        return Result.IsSuccess();
     }
 };
 }

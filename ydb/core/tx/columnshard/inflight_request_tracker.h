@@ -14,7 +14,7 @@ public:
     // it's ref count. This will prevent the blob from beeing physically deleted when DeleteBlob() is called
     // until all the references are released.
     // NOTE: this ref counts are in-memory only, so the blobs can be deleted if tablet restarts
-    virtual void SetBlobInUse(const NOlap::TUnifiedBlobId& blobId, bool inUse) = 0;
+    virtual bool SetBlobInUse(const NOlap::TUnifiedBlobId& blobId, bool inUse) = 0;
     virtual bool BlobInUse(const NOlap::TUnifiedBlobId& blobId) const = 0;
 };
 
@@ -40,9 +40,11 @@ public:
     }
 
     // Forget completed request
-    void RemoveInFlightRequest(ui64 cookie, IBlobInUseTracker& blobTracker) {
+    THashSet<NOlap::TUnifiedBlobId> RemoveInFlightRequest(ui64 cookie, IBlobInUseTracker& blobTracker) {
         Y_VERIFY(RequestsMeta.count(cookie), "Unknown request cookie %" PRIu64, cookie);
         const auto& readMetaList = RequestsMeta[cookie];
+
+        THashSet<NOlap::TUnifiedBlobId> freedBlobs;
 
         for (const auto& readMetaBase : readMetaList) {
             NOlap::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(readMetaBase);
@@ -61,16 +63,21 @@ public:
                     it->second--;
                 }
                 for (auto& rec : portion.Records) {
-                    blobTracker.SetBlobInUse(rec.BlobRange.BlobId, false);
+                    if (blobTracker.SetBlobInUse(rec.BlobRange.BlobId, false)) {
+                        freedBlobs.emplace(rec.BlobRange.BlobId);
+                    }
                 }
             }
 
             for (const auto& committedBlob : readMeta->CommittedBlobs) {
-                blobTracker.SetBlobInUse(committedBlob.BlobId, false);
+                if (blobTracker.SetBlobInUse(committedBlob.BlobId, false)) {
+                    freedBlobs.emplace(committedBlob.BlobId);
+                }
             }
         }
 
         RequestsMeta.erase(cookie);
+        return freedBlobs;
     }
 
     // Checks if the portion is in use by any in-flight request

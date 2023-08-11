@@ -1,9 +1,11 @@
 #include "cms_impl.h"
+#include "cms_state.h"
 #include "sentinel.h"
 #include "sentinel_impl.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/services.pb.h>
@@ -13,8 +15,6 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/hash_set.h>
-#include <util/generic/map.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -275,29 +275,22 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
     return result;
 }
 
+/// Misc
+
+IActor* CreateBSControllerPipe(TCmsStatePtr cmsState) {
+    auto domains = AppData()->DomainsInfo;
+    const ui32 domainUid = domains->GetDomainUidByTabletId(cmsState->CmsTabletId);
+    const ui64 bscId = MakeBSControllerID(domains->GetDefaultStateStorageGroup(domainUid));
+
+    NTabletPipe::TClientConfig config;
+    config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+    return NTabletPipe::CreateClient(cmsState->CmsActorId, bscId, config);
+}
+
 /// Actors
 
-template <typename TDerived>
-class TSentinelChildBase: public TActorBootstrapped<TDerived> {
-public:
-    using TBase = TSentinelChildBase<TDerived>;
-
-    explicit TSentinelChildBase(const TActorId& parent, TCmsStatePtr cmsState)
-        : Parent(parent)
-        , CmsState(cmsState)
-        , Config(CmsState->Config.SentinelConfig)
-    {
-    }
-
-protected:
-    const TActorId Parent;
-    TCmsStatePtr CmsState;
-    const TCmsSentinelConfig& Config;
-
-}; // TSentinelChildBase
-
 template <typename TEvUpdated, typename TDerived>
-class TUpdaterBase: public TSentinelChildBase<TDerived> {
+class TUpdaterBase: public TActorBootstrapped<TDerived> {
 public:
     using TBase = TUpdaterBase<TEvUpdated, TDerived>;
 
@@ -309,8 +302,10 @@ protected:
 
 public:
     explicit TUpdaterBase(const TActorId& parent, TCmsStatePtr cmsState, TSentinelState::TPtr sentinelState)
-        : TSentinelChildBase<TDerived>(parent, cmsState)
+        : Parent(parent)
+        , CmsState(cmsState)
         , SentinelState(sentinelState)
+        , Config(CmsState->Config.SentinelConfig)
     {
         for (auto& [_, info] : SentinelState->PDisks) {
             info->ClearTouched();
@@ -318,7 +313,10 @@ public:
     }
 
 protected:
+    const TActorId Parent;
+    TCmsStatePtr CmsState;
     TSentinelState::TPtr SentinelState;
+    const TCmsSentinelConfig& Config;
 
 }; // TUpdaterBase
 
@@ -345,14 +343,11 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
     }
 
     void OnRetry(TEvents::TEvWakeup::TPtr& ev) {
-        const auto* msg = ev->Get();
-        switch (static_cast<RetryCookie>(msg->Tag)) {
+        switch (static_cast<RetryCookie>(ev->Get()->Tag)) {
             case RetryCookie::BSC:
-                RequestBSConfig();
-                break;
+                return RequestBSConfig();
             case RetryCookie::CMS:
-                RequestCMSClusterState();
-                break;
+                return RequestCMSClusterState();
             default:
                 Y_FAIL("Unexpected case");
         }
@@ -363,7 +358,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
             << ": attempt# " << SentinelState->ConfigUpdaterState.BSCAttempt);
 
         if (!CmsState->BSControllerPipe) {
-            CmsState->BSControllerPipe = this->Register(CreateBSCClientActor(CmsState));
+            CmsState->BSControllerPipe = this->Register(CreateBSControllerPipe(CmsState));
         }
 
         auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
@@ -933,7 +928,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }
 
         if (!CmsState->BSControllerPipe) {
-            CmsState->BSControllerPipe = this->Register(CreateBSCClientActor(CmsState));
+            CmsState->BSControllerPipe = Register(CreateBSControllerPipe(CmsState));
         }
 
         LOG_D("Change pdisk status"
@@ -1052,13 +1047,18 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         const auto& response = ev->Get()->Record.GetResponse();
 
         LOG_D("Handle TEvBlobStorage::TEvControllerConfigResponse"
-            << ": response# " << response.ShortDebugString());
+            << ": response# " << response.ShortDebugString()
+            << ", cookie# " << ev->Cookie);
 
         if (ev->Cookie != SentinelState->ChangeRequestId) {
+            LOG_W("Ignore TEvBlobStorage::TEvControllerConfigResponse"
+                << ": cookie# " << ev->Cookie
+                << ", expected# " << SentinelState->ChangeRequestId);
             return;
         }
 
         if (SentinelState->ChangeRequests.empty()) {
+            LOG_W("Ignore TEvBlobStorage::TEvControllerConfigResponse: empty queue");
             return;
         }
 
@@ -1207,16 +1207,6 @@ private:
     TSentinelState::TPtr SentinelState;
 
 }; // TSentinel
-
-IActor* CreateBSCClientActor(const TCmsStatePtr& cmsState) {
-    auto domains = AppData()->DomainsInfo;
-    const ui32 domainUid = domains->GetDomainUidByTabletId(cmsState->CmsTabletId);
-    const ui64 bscId = MakeBSControllerID(domains->GetDefaultStateStorageGroup(domainUid));
-
-    NTabletPipe::TClientConfig config;
-    config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    return NTabletPipe::CreateClient(cmsState->CmsActorId, bscId, config);
-}
 
 } // NSentinel
 

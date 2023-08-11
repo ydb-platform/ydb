@@ -7,7 +7,9 @@ description = 'Decommit physical group'
 
 def add_options(p):
     common.add_group_ids_option(p, required=True)
-    p.add_argument('--hive-id', type=int, required=True, help='tablet id of containing hive')
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument('--hive-id', type=int, help='tablet id of containing hive')
+    g.add_argument('--database', type=str, help='database path of containing hive')
     p.add_argument('--log-channel-sp', type=str, metavar='POOL_NAME', help='channel 0 specifier')
     p.add_argument('--snapshot-channel-sp', type=str, metavar='POOL_NAME', help='channel 1 specifier (defaults to channel 0)')
     p.add_argument('--data-channel-sp', type=str, metavar='POOL_NAME[*COUNT]', nargs='*', help='data channel specifier')
@@ -17,7 +19,10 @@ def do(args):
     request = common.create_bsc_request(args)
     cmd = request.Command.add().DecommitGroups
     cmd.GroupIds.extend(args.group_ids)
-    cmd.HiveId = args.hive_id
+    if args.hive_id is not None:
+        cmd.HiveId = args.hive_id
+    if args.database is not None:
+        cmd.Database = args.database
 
     if args.log_channel_sp or args.snapshot_channel_sp or args.data_channel_sp:
         if args.log_channel_sp is None:

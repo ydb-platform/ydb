@@ -178,10 +178,24 @@ void TFakeExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& /*ev*/)
 
 void TFakeExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const {
     TGuard<TMutex> g(Mutex);
-    auto awsResult = BuildListObjectsResult(ev->Get()->GetRequest());
-    THolder<TEvCheckObjectExistsResponse> result(new TEvCheckObjectExistsResponse(awsResult, ev->Get()->GetRequestContext()));
-    TlsActivationContext->ActorSystem()->Send(ev->Sender, result.Release());
 
+    auto& bucket = GetBucket(AwsToString(ev->Get()->GetRequest().GetBucket()));
+    const TString key = AwsToString(ev->Get()->GetRequest().GetKey());
+    auto object = bucket.GetObject(key);
+    std::unique_ptr<TEvCheckObjectExistsResponse> result;
+    if (object) {
+        Aws::S3::Model::HeadObjectResult awsResult;
+        awsResult.SetETag(MD5::Calc(*object));
+        awsResult.SetContentLength(object->size());
+        result.reset(new TEvCheckObjectExistsResponse(awsResult, ev->Get()->GetRequestContext()));
+        Y_VERIFY_DEBUG(result->IsSuccess());
+    } else {
+        Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> awsOutcome;
+        result.reset(new TEvCheckObjectExistsResponse(awsOutcome, ev->Get()->GetRequestContext()));
+        Y_VERIFY_DEBUG(!result->IsSuccess());
+    }
+
+    TlsActivationContext->ActorSystem()->Send(ev->Sender, result.release());
 }
 }
 

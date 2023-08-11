@@ -287,6 +287,97 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
+
+struct TDictCase {
+    const std::vector<TString> DictSet = {"($i.1)", "(Yql::Void)"};
+    const std::vector<TString> Compact = {"", "AsAtom('Compact')"};
+    const std::vector<TString> OneMany = {"One", "Many"};
+    const std::vector<TString> SortedHashed = {"Sorted", "Hashed"};
+
+    TString Expected;
+
+    ui32 MaxCase = DictSet.size() * Compact.size() * OneMany.size() * SortedHashed.size();
+    ui32 Case = 0;
+
+    bool InTheEnd() const {
+        return Case == MaxCase;
+    }
+
+    bool GetCase(size_t shift) {
+        return (Case >> shift) & 1;
+    }
+
+    TString GetExpected() const {
+        return Expected;
+    }
+
+    TString Get() {
+        if (InTheEnd()) {
+            Expected = "";
+            return {};
+        }
+
+        {
+            TStringStream expected;
+            expected << "[[[[1;";
+            if (OneMany[GetCase(1)] == "Many") {
+                expected << "[";
+            }
+            if (DictSet[GetCase(3)] == "(Yql::Void)") {
+                expected << "\"Void\"";
+            } else {
+                expected << "2";
+            }
+            if (OneMany[GetCase(1)] == "Many") {
+                expected << "]";
+            }
+            expected << "]]]]";
+            Expected = expected.Str();
+        }
+
+        TStringStream res;
+        res << "SELECT Yql::ToDict([(1, 2)], ($i) -> ($i.0), ($i) -> " << DictSet[GetCase(3)] << ", AsTuple(";
+        if (auto c = Compact[GetCase(2)]) {
+            res << c << ", ";
+        }
+        res << "AsAtom('" << OneMany[GetCase(1)] << "'), AsAtom('" << SortedHashed[GetCase(0)] << "')));";
+        ++Case;
+        return res.Str();
+    }
+};
+
+    // KIKIMR-18169
+    Y_UNIT_TEST_TWIN(ToDictCache, UseCache) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        size_t cacheSize = UseCache ? 1_MB : 0;
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
+        auto kikimr = TKikimrRunner{settings};
+        auto driver = kikimr.GetDriver();
+
+        size_t InFlight = 4;
+        NPar::LocalExecutor().RunAdditionalThreads(InFlight);
+
+        TDictCase gen;
+        while (!gen.InTheEnd()) {
+            auto query = gen.Get();
+            Cout << query << Endl;
+            NPar::LocalExecutor().ExecRange([&driver, &query, &gen](int /*id*/) {
+                TTimer t;
+                NYdb::NTable::TTableClient db(driver);
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                for (ui32 i = 0; i < 10; ++i) {
+                    auto params = TParamsBuilder();
+
+                    auto result = session.ExecuteDataQuery(query,
+                        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build()).ExtractValueSync();
+                    AssertSuccessResult(result);
+
+                    CompareYson(gen.GetExpected(), FormatResultSetYson(result.GetResultSet(0)));
+                }
+            }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+        }
+    }
 }
 
 } // namspace NKqp

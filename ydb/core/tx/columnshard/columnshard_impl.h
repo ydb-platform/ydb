@@ -419,13 +419,17 @@ private:
     THashSet<ui64> PathsToDrop;
     bool ActiveIndexingOrCompaction = false;
     bool ActiveCleanup = false;
-    bool ActiveTtl = false;
+    THashSet<ui64> ActiveTtlPortions;
     ui32 ActiveEvictions = 0;
     std::unique_ptr<TBlobManager> BlobManager;
     TInFlightReadsTracker InFlightReadsTracker;
     TSettings Settings;
     TLimits Limits;
     TCompactionLimits CompactionLimits;
+
+    bool ActiveTtl() const {
+        return !ActiveTtlPortions.empty();
+    }
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
@@ -466,7 +470,7 @@ private:
 
     void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(bool periodic = false, TBackgroundActivity activity = TBackgroundActivity::All());
-    void CleanForgottenBlobs(const TActorContext& ctx);
+    void CleanForgottenBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& allowList = {});
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);

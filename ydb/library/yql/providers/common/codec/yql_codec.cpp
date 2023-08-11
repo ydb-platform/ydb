@@ -1142,8 +1142,9 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 }
             };
 
-            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, nullptr,
-                useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr);
+            const NUdf::IHash* hash = holderFactory.GetHash(*keyType, useIHash);
+            const NUdf::IEquate* equate = holderFactory.GetEquate(*keyType, useIHash);
+            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, nullptr, hash, equate);
         }
         else {
             auto filler = [&](TValuesDictHashMap& map) {
@@ -1179,8 +1180,10 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 }
             };
 
+            const NUdf::IHash* hash = holderFactory.GetHash(*keyType, useIHash);
+            const NUdf::IEquate* equate = holderFactory.GetEquate(*keyType, useIHash);
             return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, encoded ? keyType : nullptr,
-                useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr);
+                hash, equate);
         }
     }
 

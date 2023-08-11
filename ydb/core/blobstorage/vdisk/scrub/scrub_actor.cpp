@@ -37,6 +37,7 @@ namespace NKikimr {
             hFunc(TEvNonrestoredCorruptedBlobNotify, Handle);
             hFunc(NPDisk::TEvLogResult, Handle);
             hFunc(NPDisk::TEvCutLog, Handle);
+            hFunc(TEvTakeHullSnapshotResult, Handle);
 
             default:
                 Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);

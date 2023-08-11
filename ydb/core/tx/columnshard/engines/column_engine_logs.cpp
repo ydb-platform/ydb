@@ -664,6 +664,10 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<TInsertedData>&& dataToIndex) {
     Y_VERIFY(dataToIndex.size());
 
+    if (ReadOnly) {
+        return {};
+    }
+
     auto changes = std::make_shared<TChanges>(*this, std::move(dataToIndex), Limits);
     ui32 reserveGranules = 0;
 
@@ -705,6 +709,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartInsert(TVector<
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std::unique_ptr<TCompactionInfo>&& info,
                                                                             const TSnapshot& outdatedSnapshot) {
     Y_VERIFY(info);
+
+    if (ReadOnly) {
+        return {};
+    }
 
     auto changes = std::make_shared<TChanges>(*this, std::move(info), Limits);
     changes->InitSnapshot = LastSnapshot;
@@ -758,6 +766,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std:
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
                                                                          THashSet<ui64>& pathsToDrop,
                                                                          ui32 maxRecords) {
+    if (ReadOnly) {
+        return {};
+    }
+
     auto changes = std::make_shared<TChanges>(*this, snapshot, Limits);
     ui32 affectedRecords = 0;
 
@@ -840,6 +852,10 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
 
 std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction,
                                                                      ui64 maxEvictBytes) {
+    if (ReadOnly) {
+        return {};
+    }
+
     if (pathEviction.empty()) {
         return {};
     }
@@ -1377,16 +1393,20 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
 
 void TColumnEngineForLogs::AddColumnRecord(const TColumnRecord& rec) {
     Y_VERIFY(rec.Valid());
-    auto& spg = Granules[rec.Granule];
-#if 0
-    if (!spg) {
-        LOG_S_ERROR("No granule " << rec.Granule << " for record " << rec << " at tablet " << TabletId);
-        Granules.erase(rec.Granule);
+
+    if (!Granules.contains(rec.Granule)) {
+        if (!ReadOnly) {
+            ReadOnly = true;
+            LOG_S_ERROR("No granule " << rec.Granule << " for record " << rec
+                << " Set index read-only at tablet " << TabletId);
+        } else {
+            LOG_S_DEBUG("No granule " << rec.Granule << " for record " << rec << " at tablet " << TabletId);
+        }
         return;
     }
-#else
+
+    auto& spg = Granules[rec.Granule];
     Y_VERIFY(spg);
-#endif
     auto& portionInfo = spg->Portions[rec.Portion];
     portionInfo.AddRecord(IndexInfo, rec);
 }
@@ -1548,6 +1568,10 @@ static bool NeedSplit(const TVector<const TPortionInfo*>& actual, const TCompact
 }
 
 std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(ui64& lastCompactedGranule) {
+    if (ReadOnly) {
+        return {};
+    }
+
     if (CompactionGranules.empty()) {
         return {};
     }

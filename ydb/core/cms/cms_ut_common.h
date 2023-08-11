@@ -387,7 +387,7 @@ public:
                                                ui32 limit = 100,
                                                ui32 offset = 0);
 
-    void AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> failuresPattern);
+    void AddBSCFailures(const NCms::TPDiskID &id, TVector<bool> &&failuresPattern);
 
     void EnableNoisyBSCPipe();
 

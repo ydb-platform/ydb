@@ -95,7 +95,7 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
 }
 
 struct TKeyPayloadPairLess {
-    TKeyPayloadPairLess(const TKeyTypes& types, bool isTuple, NUdf::ICompare::TPtr compare)
+    TKeyPayloadPairLess(const TKeyTypes& types, bool isTuple, const NUdf::ICompare* compare)
         : Types(&types)
         , IsTuple(isTuple)
         , Compare(compare)
@@ -111,11 +111,11 @@ struct TKeyPayloadPairLess {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::ICompare::TPtr Compare;
+    const NUdf::ICompare* Compare;
 };
 
 struct TKeyPayloadPairEqual {
-    TKeyPayloadPairEqual(const TKeyTypes& types, bool isTuple, NUdf::IEquate::TPtr equate)
+    TKeyPayloadPairEqual(const TKeyTypes& types, bool isTuple, const NUdf::IEquate* equate)
         : Types(&types)
         , IsTuple(isTuple)
         , Equate(equate)
@@ -131,11 +131,11 @@ struct TKeyPayloadPairEqual {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::IEquate* Equate;
 };
 
 struct TValueEqual {
-    TValueEqual(const TKeyTypes& types, bool isTuple, NUdf::IEquate::TPtr equate)
+    TValueEqual(const TKeyTypes& types, bool isTuple, const NUdf::IEquate* equate)
         : Types(&types)
         , IsTuple(isTuple)
         , Equate(equate)
@@ -151,11 +151,11 @@ struct TValueEqual {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::IEquate::TPtr Equate;
+    const NUdf::IEquate* Equate;
 };
 
 struct TValueLess {
-    TValueLess(const TKeyTypes& types, bool isTuple, NUdf::ICompare::TPtr compare)
+    TValueLess(const TKeyTypes& types, bool isTuple, const NUdf::ICompare* compare)
         : Types(&types)
         , IsTuple(isTuple)
         , Compare(compare)
@@ -171,13 +171,13 @@ struct TValueLess {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::ICompare::TPtr Compare;
+    const NUdf::ICompare* Compare;
 };
 
 constexpr NUdf::THashType HashOfNull = ~0ULL;
 
 struct TValueHasher {
-    TValueHasher(const TKeyTypes& types, bool isTuple, NUdf::IHash::TPtr hash)
+    TValueHasher(const TKeyTypes& types, bool isTuple, const NUdf::IHash* hash)
         : Types(&types)
         , IsTuple(isTuple)
         , Hash(hash)
@@ -214,7 +214,7 @@ struct TValueHasher {
 
     const TKeyTypes* Types;
     bool IsTuple;
-    NUdf::IHash::TPtr Hash;
+    const NUdf::IHash* Hash;
 };
 
 template<typename T>
@@ -383,6 +383,36 @@ private:
     arrow::Datum Datum_;
 };
 
+template <class IFace>
+class TTypeOperationsRegistry {
+    using TValuePtr = typename IFace::TPtr;
+public:
+    IFace* FindOrEmplace(const TType& type) {
+        auto it = Registry.find(type);
+        if (it == Registry.end()) {
+            TTypeBase tb(type);
+            TValuePtr ptr;
+            if constexpr (std::is_same_v<IFace, NUdf::IHash>) {
+                ptr = MakeHashImpl(&type);
+            } else if constexpr (std::is_same_v<IFace, NUdf::IEquate>) {
+                ptr = MakeEquateImpl(&type);
+            } else if constexpr (std::is_same_v<IFace, NUdf::ICompare>) {
+                ptr = MakeCompareImpl(&type);
+            } else {
+                static_assert(TDependentFalse<IFace>, "unexpected type");
+            }
+            auto p = std::make_pair((const TTypeBase)type, ptr);
+            it = Registry.insert(p).first;
+        }
+        return it->second.Get();
+    }
+
+private:
+    THashMap<TTypeBase, TValuePtr, THasherTType, TEqualTType> Registry;
+};
+
+
+
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
@@ -415,6 +445,9 @@ public:
     NUdf::TUnboxedValuePod NewVectorHolder() const;
     NUdf::TUnboxedValuePod NewTemporaryVectorHolder() const;
 
+    const NUdf::IHash* GetHash(const TType& type, bool useIHash) const;
+    const NUdf::IEquate* GetEquate(const TType& type, bool useIHash) const;
+    const NUdf::ICompare* GetCompare(const TType& type, bool useIHash) const;
 
     template <class TForwardIterator>
     NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const {
@@ -439,8 +472,8 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
-            NUdf::ICompare::TPtr compare,
-            NUdf::IEquate::TPtr equate) const;
+            const NUdf::ICompare* compare,
+            const NUdf::IEquate* equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectSortedDictHolder(
             TSortedDictFiller filler,
@@ -449,8 +482,8 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
-            NUdf::ICompare::TPtr compare,
-            NUdf::IEquate::TPtr equate) const;
+            const NUdf::ICompare* compare,
+            const NUdf::IEquate* equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedDictHolder(
             THashedDictFiller filler,
@@ -458,8 +491,8 @@ public:
             bool isTuple,
             bool eagerFill,
             TType* encodedType,
-            NUdf::IHash::TPtr hash,
-            NUdf::IEquate::TPtr equate) const;
+            const NUdf::IHash* hash,
+            const NUdf::IEquate* equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedSetHolder(
         THashedSetFiller filler,
@@ -467,8 +500,8 @@ public:
         bool isTuple,
         bool eagerFill,
         TType* encodedType,
-        NUdf::IHash::TPtr hash,
-        NUdf::IEquate::TPtr equate) const;
+        const NUdf::IHash* hash,
+        const NUdf::IEquate* equate) const;
 
     template <typename T, bool OptionalKey>
     NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedSetHolder(TValuesDictHashSingleFixedSet<T>&& set, bool hasNull) const;
@@ -568,6 +601,10 @@ private:
     TMemoryUsageInfo& MemInfo;
     const IFunctionRegistry* const FunctionRegistry;
     const NUdf::TUnboxedValue EmptyContainer;
+
+    mutable TTypeOperationsRegistry<NUdf::IHash> HashRegistry;
+    mutable TTypeOperationsRegistry<NUdf::IEquate> EquateRegistry;
+    mutable TTypeOperationsRegistry<NUdf::ICompare> CompareRegistry;
 };
 
 constexpr const ui32 STEP_FOR_RSS_CHECK = 100U;

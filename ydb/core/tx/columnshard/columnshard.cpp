@@ -112,7 +112,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
     LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
-    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, *BlobManager);
+    auto blobs = InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, *BlobManager);
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.count(txId)) {
@@ -122,8 +122,10 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     }
 
-    // Cleanup just freed dropped exported blobs
-    CleanForgottenBlobs(ctx);
+    if (blobs.size()) {
+        // Cleanup just freed blobs (dropped exported ones)
+        CleanForgottenBlobs(ctx, blobs);
+    }
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {

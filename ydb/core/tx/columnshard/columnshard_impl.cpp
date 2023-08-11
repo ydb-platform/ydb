@@ -737,7 +737,7 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     if (activity.HasCleanup()) {
         if (auto event = SetupCleanup()) {
             ctx.Send(SelfId(), event.release());
-        } else {
+        } else if (periodic) {
             // Small cleanup (no index changes)
             CleanForgottenBlobs(ctx);
         }
@@ -875,6 +875,13 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         return {};
     }
 
+    for (const auto& portionInfo : indexChanges->SwitchedPortions) {
+        if (ActiveTtlPortions.contains(portionInfo.Portion())) {
+            LOG_S_DEBUG("Compaction not started: ignore portions with other activities at tablet " << TabletID());
+            return {};
+        }
+    }
+
     auto actualIndexInfo = PrimaryIndex->GetIndexInfo();
     if (Tiers) {
         auto pathTiering = Tiers->GetTiering(); // TODO: pathIds
@@ -890,7 +897,7 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
 
 std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls,
                                                                 bool force) {
-    if (ActiveTtl) {
+    if (ActiveTtl()) {
         LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
         return {};
     }
@@ -940,7 +947,13 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
 
-    ActiveTtl = true;
+    for (const auto& portionInfo : indexChanges->PortionsToDrop) {
+        ActiveTtlPortions.insert(portionInfo.Portion());
+    }
+    for (const auto& [portionInfo, _] : indexChanges->PortionsToEvict) {
+        ActiveTtlPortions.insert(portionInfo.Portion());
+    }
+
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
     return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
@@ -1063,10 +1076,12 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
     }
 }
 
-void TColumnShard::CleanForgottenBlobs(const TActorContext& ctx) {
+void TColumnShard::CleanForgottenBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& allowList) {
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> tierBlobsToForget;
-    BlobManager->GetCleanupBlobs(tierBlobsToForget);
-    ForgetBlobs(ctx, tierBlobsToForget);
+    BlobManager->GetCleanupBlobs(tierBlobsToForget, allowList);
+    if (tierBlobsToForget.size()) {
+        ForgetBlobs(ctx, tierBlobsToForget);
+    }
 }
 
 void TColumnShard::Reexport(const TActorContext& ctx) {
@@ -1092,11 +1107,15 @@ void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPriv
     const auto& tierName = event->TierName;
     if (auto s3 = GetS3ActorForTier(tierName)) {
         TStringBuilder strBlobs;
+        ui64 sumBytes = 0;
         for (auto& [blobId, _] : event->Blobs) {
             strBlobs << "'" << blobId.ToStringNew() << "' ";
+            sumBytes += blobId.BlobSize();
         }
-
         event->DstActor = s3;
+        IncCounter(COUNTER_EXPORTING_BLOBS, event->Blobs.size());
+        IncCounter(COUNTER_EXPORTING_BYTES, sumBytes);
+
         LOG_S_NOTICE("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
         ctx.Register(CreateExportActor(TabletID(), SelfId(), event.release()));
     } else {
@@ -1109,6 +1128,14 @@ void TColumnShard::ForgetTierBlobs(const TActorContext& ctx, const TString& tier
     if (auto s3 = GetS3ActorForTier(tierName)) {
         auto forget = std::make_unique<TEvPrivate::TEvForget>();
         forget->Evicted = std::move(blobs);
+
+        ui64 sumBytes = 0;
+        for (auto& blob : forget->Evicted) {
+            sumBytes += blob.Blob.BlobSize();
+        }
+        IncCounter(COUNTER_FORGETTING_BLOBS, forget->Evicted.size());
+        IncCounter(COUNTER_FORGETTING_BYTES, sumBytes);
+
         ctx.Send(s3, forget.release());
     }
 }
@@ -1130,6 +1157,10 @@ void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashMap<TString,
 
             TEvictMetadata meta;
             auto evict = BlobManager->GetDropped(blobId, meta);
+            if (!evict.Blob.IsValid()) {
+                LOG_S_INFO("Forget forgotten blob '" << blobId.ToStringNew() << "' at tablet " << TabletID());
+                continue;
+            }
             if (tierName != meta.GetTierName()) {
                 LOG_S_ERROR("Forget with unexpected tier name '" << meta.GetTierName() << "' at tablet " << TabletID());
                 continue;
@@ -1168,6 +1199,15 @@ bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 
         get->DstCookie = cookie;
         get->Evicted = std::move(evicted);
         get->BlobRanges = std::move(ranges);
+
+        ui64 sumBytes = 0;
+        for (auto& blobRange : get->BlobRanges) {
+            sumBytes += blobRange.Size;
+        }
+        IncCounter(COUNTER_READING_EXPORTED_BLOBS);
+        IncCounter(COUNTER_READING_EXPORTED_RANGES, get->BlobRanges.size());
+        IncCounter(COUNTER_READING_EXPORTED_BYTES, sumBytes);
+
         ctx.Send(s3, get.release());
         return true;
     }

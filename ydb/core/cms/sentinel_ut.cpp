@@ -11,8 +11,7 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 
-namespace NKikimr {
-namespace NCmsTest {
+namespace NKikimr::NCmsTest {
 
 static constexpr ui32 DefaultStateLimit = 5;
 static constexpr ui32 DefaultErrorStateLimit = 60;
@@ -38,7 +37,6 @@ constexpr NCms::EPDiskState FaultyStates[] = {
 };
 
 Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
-
     using namespace NCms;
     using namespace NCms::NSentinel;
     using TPDiskID = NCms::TPDiskID;
@@ -313,11 +311,9 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         }
     }
 
-
 } // TSentinelBaseTests
 
 Y_UNIT_TEST_SUITE(TSentinelTests) {
-
     using namespace NCms;
     using namespace NCms::NSentinel;
     using TPDiskID = NCms::TPDiskID;
@@ -525,7 +521,6 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
     private:
         TCmsStatePtr State;
-        std::atomic<bool> NosiyBlobstoragePipe = false;
         TActorId Sentinel;
 
     }; // TTestEnv
@@ -617,12 +612,12 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
 
     Y_UNIT_TEST(BSControllerUnresponsive) {
         TTestEnv env(8, 4);
-
         env.EnableNoisyBSCPipe();
 
         const TPDiskID id1 = env.RandomPDiskID();
         const TPDiskID id2 = env.RandomPDiskID();
         const TPDiskID id3 = env.RandomPDiskID();
+
         for (size_t i = 0; i < sizeof(ErrorStates) / sizeof(ErrorStates[0]); ++i) {
             env.AddBSCFailures(id1, {false, true});
             env.AddBSCFailures(id2, {false, false, false, false, false, false});
@@ -640,6 +635,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         const TPDiskID id1 = env.RandomPDiskID();
         const TPDiskID id2 = env.RandomPDiskID();
         const TPDiskID id3 = env.RandomPDiskID();
+
         for (size_t i = 0; i < sizeof(ErrorStates) / sizeof(ErrorStates[0]); ++i) {
             env.AddBSCFailures(id1, {true, false, false, true, false, false});
             // will fail for all requests assuming there is only 5 retries
@@ -652,7 +648,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
     }
+
 } // TSentinelTests
 
-} // NCmsTest
-} // NKikimr
+}

@@ -527,6 +527,7 @@ public:
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
         TMaybe<Table::HiveId::Type> HiveId;
+        TMaybe<Table::Database::Type> Database;
         TMaybe<Table::BlobDepotConfig::Type> BlobDepotConfig;
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
@@ -596,6 +597,7 @@ public:
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
                     Table::HiveId,
+                    Table::Database,
                     Table::BlobDepotConfig,
                     Table::BlobDepotId,
                     Table::ErrorReason,
@@ -617,6 +619,7 @@ public:
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::HiveId,
+                    &TGroupInfo::Database,
                     &TGroupInfo::BlobDepotConfig,
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
@@ -1546,6 +1549,7 @@ private:
 
     TVSlotInfo* FindVSlot(TVDiskID id) { // GroupGeneration may be zero
         if (TGroupInfo *group = FindGroup(id.GroupID); group && !group->VDisksInGroup.empty()) {
+            Y_VERIFY(group->Topology->IsValidId(id));
             const ui32 index = group->Topology->GetOrderNumber(id);
             const TVSlotInfo *slot = group->VDisksInGroup[index];
             Y_VERIFY(slot->GetShortVDiskId() == TVDiskIdShort(id)); // sanity check

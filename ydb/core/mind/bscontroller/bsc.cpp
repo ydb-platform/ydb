@@ -60,8 +60,8 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
 void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
-    if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
-            (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW && VDisksInGroup.empty())) {
+    if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
+            VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
         Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
     }
 

@@ -67,6 +67,7 @@ struct Schema : NIceDb::Schema {
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
         struct HiveId            : Column<113, NScheme::NTypeIds::Uint64> {}; // hive id for this vg
+        struct Database          : Column<120, NScheme::NTypeIds::String> {}; // database path
         struct BlobDepotConfig   : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
         struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
@@ -76,7 +77,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, VirtualGroupName, VirtualGroupState, HiveId, BlobDepotConfig,
+              SeenOperational, DecommitStatus, VirtualGroupName, VirtualGroupState, HiveId, Database, BlobDepotConfig,
               BlobDepotId, ErrorReason, NeedAlter, Metrics>;
     };
 

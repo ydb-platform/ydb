@@ -138,6 +138,7 @@ target_link_libraries(run PUBLIC
   ydb-services-yq
 )
 target_sources(run PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/auto_config_initializer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/config_parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/dummy.cpp

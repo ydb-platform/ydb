@@ -185,6 +185,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     THashSet<TString> possibleKeys;
     TPredicateExtractorSettings settings;
     settings.MergeAdjacentPointRanges = true;
+    settings.HaveNextValueCallable = true;
     auto extractor = MakePredicateRangeExtractor(settings);
     YQL_ENSURE(tableDesc.SchemeNode);
 

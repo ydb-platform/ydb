@@ -208,9 +208,10 @@ struct Schema : NIceDb::Schema {
         struct Granule : Column<4, NScheme::NTypeIds::Uint64> {};   // FK: {Index, Granule} -> TIndexColumns
         struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
         struct TxId : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct Metadata : Column<7, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Index, PathId, IndexKey>;
-        using TColumns = TableColumns<Index, PathId, IndexKey, Granule, PlanStep, TxId>;
+        using TColumns = TableColumns<Index, PathId, IndexKey, Granule, PlanStep, TxId, Metadata>;
     };
 
     struct IndexColumns : NIceDb::Schema::Table<ColumnsTableId> {
@@ -525,9 +526,13 @@ struct Schema : NIceDb::Schema {
             ui64 granule = rowset.GetValue<IndexGranules::Granule>();
             ui64 planStep = rowset.GetValue<IndexGranules::PlanStep>();
             ui64 txId = rowset.GetValue<IndexGranules::TxId>();
+            TString metaStr = rowset.GetValue<IndexGranules::Metadata>();
 
-            TGranuleRecord row(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey));
-            callback(std::move(row));
+            // ignore granules made in future versions
+            if (metaStr.empty()) {
+                TGranuleRecord row(pathId, granule, {planStep, txId}, engine.DeserializeMark(indexKey));
+                callback(std::move(row));
+            }
 
             if (!rowset.Next())
                 return false;

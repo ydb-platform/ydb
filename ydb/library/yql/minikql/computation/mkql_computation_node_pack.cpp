@@ -807,7 +807,8 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
                     dictBuffer.emplace_back(std::move(key), std::move(payload));
                 }
 
-                Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple, useIHash ? MakeCompareImpl(keyType) : nullptr));
+                NUdf::ICompare::TPtr cmp = useIHash ? MakeCompareImpl(keyType) : nullptr;
+                Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple, cmp.Get()));
                 for (const auto& p: dictBuffer) {
                     PackImpl(keyType, p.first);
                     PackImpl(payloadType, p.second);

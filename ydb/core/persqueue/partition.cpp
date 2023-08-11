@@ -1437,7 +1437,7 @@ void TPartition::FailBadClient(const TActorContext& ctx) {
 
 
 bool CheckDiskStatus(const TStorageStatusFlags status) {
-    return !status.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+    return !status.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
 }
 
 void TPartition::HandleGetDiskStatus(const NKikimrClient::TResponse& response, const TActorContext& ctx) {

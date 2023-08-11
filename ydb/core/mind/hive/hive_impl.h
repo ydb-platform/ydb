@@ -146,6 +146,7 @@ TString GetLocationString(const NActors::TNodeLocation& location);
 void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
 TString GetBalancerProgressText(i32 balancerProgress, EBalancerType balancerType);
+TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
 public:

@@ -1350,8 +1350,7 @@ public:
 
         /*out << "<tr><td>" << "Nodes:" << "</td><td id='aliveNodes'>" << (nodes == 0 ? 0 : aliveNodes * 100 / nodes) << "% "
             << aliveNodes << "/" << nodes << "</td></tr>";*/
-        out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << (tablets == 0 ? 0 : runningTablets * 100 / tablets) << "% "
-            << runningTablets << "/" << tablets << "</td></tr>";
+        out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << GetRunningTabletsText(runningTablets, tablets, Self->WarmUp) << "</td></tr>";
         out << "<tr><td><a role='button' data-toggle='modal' href='#rebalance'>Balancer:</a></td><td id='balancerProgress'>"
             << GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger) << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
@@ -1822,7 +1821,7 @@ public:
                 var nlen;
                 try {
                     if ("TotalTablets" in result) {
-                        $('#runningTablets').html((result.TotalTablets == 0 ? 0 : Math.floor(result.RunningTablets * 100 / result.TotalTablets)) + '% ' + result.RunningTablets + '/' + result.TotalTablets);
+                        $('#runningTablets').html(result.RunningTabletsText);
                         //$('#aliveNodes').html(result.TotalNodes == 0 ? 0 : Math.floor(result.AliveNodes * 100 / result.TotalNodes) + '% ' + result.AliveNodes + '/' + result.TotalNodes);
                         $('#resourceVariance').html(result.ResourceVariance);
                         $('#resourceTotal').html(result.ResourceTotal);
@@ -2063,6 +2062,7 @@ public:
         jsonData["BalancerProgress"] = GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger);
         jsonData["MaxUsage"] =  GetColoredValue(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
         jsonData["Scatter"] = GetColoredValue(stats.Scatter, Self->GetMinScatterToBalance());
+        jsonData["RunningTabletsText"] = GetRunningTabletsText(runningTablets, tablets, Self->WarmUp);
 
         TVector<TNodeInfo*> nodeInfos;
         nodeInfos.reserve(Self->Nodes.size());

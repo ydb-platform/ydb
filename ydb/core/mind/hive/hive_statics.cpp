@@ -373,5 +373,14 @@ TString GetBalancerProgressText(i32 balancerProgress, EBalancerType balancerType
     return str;
 }
 
+TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp) {
+    TStringBuilder str;
+    str << (totalTablets == 0 ? 0 : runningTablets * 100 / totalTablets) << "% "<< runningTablets << "/" << totalTablets;
+    if (warmUp) {
+        str << " (Warming up...)";
+    }
+    return str;
+}
+
 } // NHive
 } // NKikimr

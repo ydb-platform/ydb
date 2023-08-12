@@ -22,8 +22,8 @@ THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>
     return GroupedBlobRanges(PortionsToEvict);
 }
 
-bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
-    if (!TBase::DoApplyChanges(self, context, dryRun)) {
+bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
+    if (!TBase::DoApplyChanges(self, context)) {
         return false;
     }
 
@@ -39,15 +39,10 @@ bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyC
         Y_VERIFY(oldInfo.IsActive());
         Y_VERIFY(portionInfo.TierName != oldInfo.TierName);
 
-        if (!self.UpsertPortion(portionInfo, !dryRun, &oldInfo)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot evict portion")("portion", portionInfo.DebugString());
-            return false;
-        }
+        self.UpsertPortion(portionInfo, &oldInfo);
 
-        if (!dryRun) {
-            for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
-            }
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Write(context.DB, portionInfo, record);
         }
     }
 

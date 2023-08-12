@@ -58,10 +58,8 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     }
 }
 
-bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
-    if (!TBase::DoApplyChanges(self, context, dryRun)) {
-        return false;
-    }
+bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
+    Y_VERIFY(TBase::DoApplyChanges(self, context));
     auto g = self.GranulesStorage->StartPackModification();
     for (auto& portionInfo : SwitchedPortions) {
         Y_VERIFY(!portionInfo.Empty());
@@ -69,39 +67,17 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
 
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
-        if (!self.Granules.contains(granule)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot update unknown granule")("granule_id", granule);
-            return false;
-        }
-        if (!self.IsPortionExists(granule, portion)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot update unknown portion")("portion", portionInfo.DebugString());
-            return false;
-        }
+
+        // In case of race with eviction portion could become evicted
+        const TPortionInfo& oldInfo = self.GetGranulePtrVerified(granule)->GetPortionVerified(portion);
 
         auto& granuleStart = self.Granules[granule]->Record.Mark;
 
-        if (dryRun) { // granule vs portion minPK
-            const auto& portionStart = portionInfo.IndexKeyStart();
-            if (portionStart < granuleStart) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot update invalid portion")
-                    ("granule_id", granule)("portion", portionInfo.DebugString())("start", TMark(portionStart).ToString())
-                    ("granule start", TMark(granuleStart).ToString());
-                return false;
-            }
-        }
+        Y_VERIFY(granuleStart <= portionInfo.IndexKeyStart());
+        self.UpsertPortion(portionInfo, &oldInfo);
 
-        // In case of race with eviction portion could become evicted
-        const TPortionInfo& oldInfo = self.Granules[granule]->GetPortionVerified(portion);
-
-        if (!self.UpsertPortion(portionInfo, !dryRun, &oldInfo)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot update portion")("portion", portionInfo.DebugString());
-            return false;
-        }
-
-        if (!dryRun) {
-            for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
-            }
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Write(context.DB, portionInfo, record);
         }
     }
     // Move portions in granules (zero-copy switch + append into new granules)
@@ -119,31 +95,21 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
         // In case of race with eviction portion could become evicted
         const TPortionInfo oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
 
-        if (!self.ErasePortion(portionInfo, !dryRun, false)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase moved portion")("portion", portionInfo.DebugString());
-            return false;
-        }
+        Y_VERIFY(self.ErasePortion(portionInfo, false));
 
         TPortionInfo moved = portionInfo;
         moved.SetGranule(dstGranule);
-        if (!self.UpsertPortion(moved, !dryRun, &oldInfo)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot insert moved portion")("portion", portionInfo.DebugString());
-            return false;
+        self.UpsertPortion(moved, &oldInfo);
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Erase(context.DB, portionInfo, record);
         }
-        if (!dryRun) {
-            for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Erase(context.DB, portionInfo, record);
-            }
-            for (auto& record : moved.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
-            }
+        for (auto& record : moved.Records) {
+            self.ColumnsTable->Write(context.DB, moved, record);
         }
     }
 
-    if (!dryRun) {
-        for (auto& portionInfo : SwitchedPortions) {
-            self.CleanupPortions.insert(portionInfo.GetAddress());
-        }
+    for (auto& portionInfo : SwitchedPortions) {
+        self.CleanupPortions.insert(portionInfo.GetAddress());
     }
 
     return true;

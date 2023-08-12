@@ -21,8 +21,8 @@ THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>
     return result;
 }
 
-bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
-    if (!TBase::DoApplyChanges(self, context, dryRun)) {
+bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
+    if (!TBase::DoApplyChanges(self, context)) {
         return false;
     }
     return true;

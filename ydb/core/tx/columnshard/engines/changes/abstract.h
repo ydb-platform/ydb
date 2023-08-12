@@ -180,7 +180,7 @@ protected:
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) = 0;
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
-    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) = 0;
+    virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) = 0;
     virtual bool NeedConstruction() const {
         return true;
     }
@@ -206,7 +206,7 @@ public:
 
     void Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
     void Start(NColumnShard::TColumnShard& self);
-    bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun);
+    bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context);
 
     virtual ui32 GetWritePortionsCount() const = 0;
     virtual const TPortionInfo& GetWritePortionInfo(const ui32 index) const = 0;

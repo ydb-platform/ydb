@@ -281,9 +281,9 @@ private:
     void EraseGranule(ui64 pathId, ui64 granule, const TMark& mark);
 
     /// Insert granule or check if same granule was already inserted.
-    bool SetGranule(const TGranuleRecord& rec, bool apply);
-    bool UpsertPortion(const TPortionInfo& portionInfo, bool apply, const TPortionInfo* exInfo = nullptr);
-    bool ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats = true);
+    void SetGranule(const TGranuleRecord& rec);
+    void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
+    bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT,
                             const TPortionInfo* exPortionInfo = nullptr);
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,

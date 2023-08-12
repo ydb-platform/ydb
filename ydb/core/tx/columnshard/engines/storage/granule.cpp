@@ -1,5 +1,6 @@
 #include "granule.h"
 #include "storage.h"
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NOlap {
 
@@ -27,7 +28,17 @@ ui64 TGranuleMeta::Size() const {
 }
 
 void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.DebugString())("granule", GetGranuleId());
     auto it = Portions.find(info.GetPortion());
+    AFL_VERIFY(info.GetGranule() == GetGranuleId())("event", "incompatible_granule")("portion", info.DebugString())("granule", GetGranuleId());
+
+    AFL_VERIFY(info.Valid())("event", "invalid_portion")("portion", info.DebugString());
+    AFL_VERIFY(info.ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info.DebugString());
+    for (auto& record : info.Records) {
+        AFL_VERIFY(record.Valid())("event", "incorrect_record")("record", record.DebugString())("portion", info.DebugString());
+    }
+
+    Y_VERIFY(Record.Mark <= info.IndexKeyStart());
     if (it == Portions.end()) {
         OnBeforeChangePortion(nullptr, &info);
         Portions.emplace(info.GetPortion(), info);
@@ -54,7 +65,9 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
 
 void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec) {
     auto it = Portions.find(portion.GetPortion());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_column_record")("portion_info", portion.DebugString())("record", rec.DebugString());
     if (it == Portions.end()) {
+        Y_VERIFY(portion.Records.empty());
         auto portionNew = portion;
         portionNew.AddRecord(indexInfo, rec);
         OnBeforeChangePortion(nullptr, &portionNew);

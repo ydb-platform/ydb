@@ -41,7 +41,6 @@ private:
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     const ui32 TabletTxNo;
     TBackgroundActivity TriggerActivity = TBackgroundActivity::All();
-    bool ApplySuccess = false;
     bool CompleteReady = false;
 
     TStringBuilder TxPrefix() const {
@@ -69,24 +68,23 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
-        ApplySuccess = Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot);
-        if (ApplySuccess) {
-            LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
-            NOlap::TWriteIndexContext context(txc, dbWrap);
-            changes->WriteIndex(*Self, context);
+        Y_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChanges(dbWrap, changes, snapshot));
+        LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
+        NOlap::TWriteIndexContext context(txc, dbWrap);
+        changes->WriteIndex(*Self, context);
 
-            if (Ev->Get()->PutResult->GetBlobBatch().GetBlobCount()) {
-                Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->PutResult->ReleaseBlobBatch()), *context.BlobManagerDb);
-            }
-
-            Self->UpdateIndexCounters();
-        } else {
-            NOlap::TChangesFinishContext context("cannot apply changes");
-            changes->Abort(*Self, context);
-            LOG_S_NOTICE(TxPrefix() << "(" << changes->TypeString() << ") cannot apply changes: "
-                << *changes << TxSuffix());
+        if (Ev->Get()->PutResult->GetBlobBatch().GetBlobCount()) {
+            Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->PutResult->ReleaseBlobBatch()), *context.BlobManagerDb);
         }
+
+        Self->UpdateIndexCounters();
     } else {
+        for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
+            for (auto&& i : changes->GetWritePortionInfo(i).Records) {
+                LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << i.BlobRange << ") blob cannot apply changes: "
+                    << TxSuffix());
+            }
+        }
         NOlap::TChangesFinishContext context("cannot write index blobs");
         changes->Abort(*Self, context);
         LOG_S_ERROR(TxPrefix() << " (" << changes->TypeString() << ") cannot write index blobs" << TxSuffix());
@@ -97,6 +95,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 }
 
 void TTxWriteIndex::Complete(const TActorContext& ctx) {
+    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID()));
     CompleteReady = true;
     LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
@@ -130,10 +129,9 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             ev->Get()->IndexChanges->Abort(*this, context);
             ctx.Schedule(FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
         } else {
-            auto& blobs = ev->Get()->Blobs;
-            LOG_S_DEBUG("WriteIndex (" << blobs.size() << " blobs) at tablet " << TabletID());
+            LOG_S_DEBUG("WriteIndex (" << ev->Get()->IndexChanges->GetWritePortionsCount() << " portions) at tablet " << TabletID());
 
-            Y_VERIFY(!blobs.empty());
+            Y_VERIFY(ev->Get()->IndexChanges->GetWritePortionsCount());
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release(),  Settings.BlobWriteGrouppingEnabled);
             ctx.Register(CreateWriteActor(TabletID(), writeController, BlobManager->StartBlobBatch(), TInstant::Max(), Settings.MaxSmallBlobSize));
         }

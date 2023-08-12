@@ -8,11 +8,11 @@ namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoDebugString(TStringOutput& out) const {
     if (ui32 added = AppendedPortions.size()) {
-        out << "add " << added << " portions";
+        out << "portions_count:" << added << ";portions=(";
         for (auto& portionInfo : AppendedPortions) {
             out << portionInfo;
         }
-        out << "; ";
+        out << "); ";
     }
 }
 
@@ -41,54 +41,23 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
     }
 }
 
-bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
+bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
     // Save new granules
     for (auto& [granule, p] : NewGranules) {
         ui64 pathId = p.first;
         TMark mark = p.second;
         TGranuleRecord rec(pathId, granule, context.Snapshot, mark.GetBorder());
-        if (!self.SetGranule(rec, !dryRun)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot insert granule")("record", rec.DebugString());
-            return false;
-        }
-        if (!dryRun) {
-            self.GranulesTable->Write(context.DB, rec);
-        }
+        self.SetGranule(rec);
+        self.GranulesTable->Write(context.DB, rec);
     }
     // Save new portions (their column records)
 
     for (auto& portionInfo : AppendedPortions) {
         Y_VERIFY(!portionInfo.Empty());
 
-        const ui64 granule = portionInfo.GetGranule();
-        if (dryRun) {
-            auto granulePtr = self.GetGranuleOptional(granule);
-            if (!granulePtr && !NewGranules.contains(granule)) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot write portion with unknown granule")("portion", portionInfo.DebugString())("granule", granule);
-                return false;
-            }
-
-            // granule vs portion minPK
-            NArrow::TReplaceKey granuleStart = granulePtr ? granulePtr->Record.Mark : NewGranules.find(granule)->second.second.GetBorder();
-
-            const auto& portionStart = portionInfo.IndexKeyStart();
-            if (portionStart < granuleStart) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot insert invalid portion")
-                    ("portion", portionInfo.DebugString())("granule", granule)
-                    ("start", TMark(portionStart).ToString())("granule_start", TMark(granuleStart).ToString());
-                return false;
-            }
-        }
-
-        if (!self.UpsertPortion(portionInfo, !dryRun)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot insert portion")("portion", portionInfo.DebugString())("granule", granule);
-            return false;
-        }
-
-        if (!dryRun) {
-            for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Write(context.DB, portionInfo, record);
-            }
+        self.UpsertPortion(portionInfo);
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Write(context.DB, portionInfo, record);
         }
     }
 

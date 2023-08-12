@@ -229,7 +229,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
 
 bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
     auto callback = [&](const TGranuleRecord& rec) {
-        Y_VERIFY(SetGranule(rec, true));
+        SetGranule(rec);
     };
 
     return GranulesTable->Load(db, callback);
@@ -588,17 +588,13 @@ std::vector<std::vector<std::pair<TMark, ui64>>> TColumnEngineForLogs::EmptyGran
 }
 
 bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept {
-    // Update tmp granules with real ids
     {
         TFinalizationContext context(LastGranule, LastPortion, snapshot);
         indexChanges->Compile(context);
     }
     {
         TApplyChangesContext context(db, snapshot);
-        if (!indexChanges->ApplyChanges(*this, context, true)) { // validate only
-            return false;
-        }
-        Y_VERIFY(indexChanges->ApplyChanges(*this, context, false));
+        Y_VERIFY(indexChanges->ApplyChanges(*this, context));
     }
     CountersTable->Write(db, LAST_PORTION, LastPortion);
     CountersTable->Write(db, LAST_GRANULE, LastGranule);
@@ -611,28 +607,16 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
     return true;
 }
 
-bool TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec, bool apply) {
+void TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_granule")("granule", rec.DebugString());
     const TMark mark(rec.Mark);
 
-    if (apply) {
-        // There should be only one granule with (PathId, Mark).
-        Y_VERIFY(PathGranules[rec.PathId].emplace(mark, rec.Granule).second);
+    // There should be only one granule with (PathId, Mark).
+    AFL_VERIFY(PathGranules[rec.PathId].emplace(mark, rec.Granule).second)("event", "marker_duplication")("granule_id", rec.Granule)("old_granule_id", PathGranules[rec.PathId][mark]);
 
-        // Allocate granule info and ensure that there is no granule with same id inserted before.
-        Y_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second);
-    } else {
-        // Granule with same id already exists.
-        if (Granules.contains(rec.Granule)) {
-            return false;
-        }
-
-        // Granule with same (PathId, Mark) already exists.
-        if (PathGranules.contains(rec.PathId) && PathGranules[rec.PathId].contains(mark)) {
-            return false;
-        }
-    }
-
-    return true;
+    // Allocate granule info and ensure that there is no granule with same id inserted before.
+    AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second)("event", "granule_duplication")
+        ("granule_id", rec.Granule)("old_granule", Granules[rec.Granule]->DebugString());
 }
 
 void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& mark) {
@@ -645,42 +629,17 @@ void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& 
     PathGranules[pathId].erase(mark);
 }
 
-bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool apply, const TPortionInfo* exInfo) {
-    const ui64 granule = portionInfo.GetGranule();
-
-    if (!apply) {
-        if (!portionInfo.ValidSnapshotInfo()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "incorrect_portion")("portion", portionInfo.DebugString());
-            return false;
-        }
-        if (granule != portionInfo.GetGranule()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "inconsistency_granule")("granule", granule)("portion_granule", portionInfo.GetGranule());
-            return false;
-        }
-        for (auto& record : portionInfo.Records) {
-            if (!record.Valid()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "incorrect_record")("record", record.DebugString());
-                return false;
-            }
-        }
-        return true;
-    }
-
-    Y_VERIFY(portionInfo.Valid());
-    auto& spg = Granules[granule];
-    Y_VERIFY(spg);
-
+void TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo) {
     if (exInfo) {
         UpdatePortionStats(portionInfo, EStatsUpdateType::DEFAULT, exInfo);
     } else {
         UpdatePortionStats(portionInfo, EStatsUpdateType::ADD);
     }
 
-    spg->UpsertPortion(portionInfo);
-    return true; // It must return true if (apply == true)
+    GetGranulePtrVerified(portionInfo.GetGranule())->UpsertPortion(portionInfo);
 }
 
-bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats) {
+bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {
     Y_VERIFY(!portionInfo.Empty());
     const ui64 portion = portionInfo.GetPortion();
     auto it = Granules.find(portionInfo.GetGranule());
@@ -691,13 +650,14 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool ap
 
     if (!p) {
         LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
-    } else if (apply) {
+        return false;
+    } else {
         if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
         Y_VERIFY(spg->ErasePortion(portion));
+        return true;
     }
-    return true;
 }
 
 static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot(const THashMap<ui64, TPortionInfo>& portions, const TSnapshot& snapshot) {
@@ -718,7 +678,7 @@ static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot
         if (visible) {
             out[recSnapshot].push_back(&portionInfo);
         }
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "GroupPortionsBySnapshot")("analyze_portion", portionInfo.DebugString())("visible", visible)("snapshot", snapshot.DebugString());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "GroupPortionsBySnapshot")("analyze_portion", portionInfo.DebugString())("visible", visible)("snapshot", snapshot.DebugString());
     }
     return out;
 }

@@ -9,8 +9,9 @@ namespace NKikimr::NOlap {
 
 TString TColumnEngineChanges::DebugString() const {
     TStringStream sb;
-    sb << TypeString() << ":";
+    sb << "type=" << TypeString() << ";details=(";
     DoDebugString(sb);
+    sb << ");";
     return sb.Str();
 }
 
@@ -35,15 +36,10 @@ NKikimr::TConclusion<std::vector<TString>> TColumnEngineChanges::ConstructBlobs(
     return result;
 }
 
-bool TColumnEngineChanges::ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
+bool TColumnEngineChanges::ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
     Y_VERIFY(Stage == EStage::Compiled);
-    NActors::TLogContextGuard lGuard(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", self.GetTabletId()));
-    if (!DoApplyChanges(self, context, dryRun)) {
-        Y_VERIFY(dryRun);
-        return false;
-    } else if (!dryRun) {
-        Stage = EStage::Applied;
-    }
+    Y_VERIFY(DoApplyChanges(self, context));
+    Stage = EStage::Applied;
     return true;
 }
 

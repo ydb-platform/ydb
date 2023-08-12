@@ -47,18 +47,16 @@ void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
     }
 }
 
-bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context, const bool dryRun) {
+bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
     // Drop old portions
 
     for (auto& portionInfo : PortionsToDrop) {
-        if (!self.ErasePortion(portionInfo, !dryRun)) {
+        if (!self.ErasePortion(portionInfo)) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
             return false;
         }
-        if (!dryRun) {
-            for (auto& record : portionInfo.Records) {
-                self.ColumnsTable->Erase(context.DB, portionInfo, record);
-            }
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Erase(context.DB, portionInfo, record);
         }
     }
 

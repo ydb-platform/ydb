@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     portion_info.cpp
     column_record.cpp
+    with_blobs.cpp
     meta.cpp
 )
 

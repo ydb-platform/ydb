@@ -32,7 +32,6 @@ struct TEvPrivate {
         NOlap::TVersionedIndex IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
-        std::vector<TString> Blobs;
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
         TUsage ResourceUsage;

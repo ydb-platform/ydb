@@ -77,7 +77,7 @@ TConclusionStatus InitInGranuleMerge(const TMark& granuleMark, std::vector<TPort
     }
 
     // It's a map for SliceIntoGranules(). We use fake granule ids here to slice batch with borders.
-    // We could merge inserted portions alltogether and slice result with filtered borders to prevent intersections.
+    // We could merge inserted portions altogether and slice result with filtered borders to prevent intersections.
     std::vector<TMark> borders;
     borders.push_back(granuleMark);
 
@@ -139,7 +139,7 @@ std::pair<std::shared_ptr<arrow::RecordBatch>, TSnapshot> TInGranuleCompactColum
     return std::make_pair(sortedBatch, maxSnapshot);
 }
 
-TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
+TConclusionStatus TInGranuleCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
     const ui64 pathId = GranuleMeta->GetPathId();
     std::vector<TString> blobs;
     auto& switchedPortions = SwitchedPortions;
@@ -149,7 +149,7 @@ TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstr
     auto [batch, maxSnapshot] = CompactInOneGranule(granule, switchedPortions, Blobs, context);
 
     auto resultSchema = context.SchemaVersions.GetLastSchema();
-    std::vector<TPortionInfo> portions;
+    std::vector<TPortionInfoWithBlobs> portions;
     if (!MergeBorders.Empty()) {
         Y_VERIFY(MergeBorders.GetOrderedMarks().size() > 1);
         auto slices = MergeBorders.SliceIntoGranules(batch, resultSchema->GetIndexInfo());
@@ -159,13 +159,13 @@ TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstr
             if (!slice || slice->num_rows() == 0) {
                 continue;
             }
-            auto tmp = MakeAppendedPortions(pathId, slice, granule, maxSnapshot, blobs, GranuleMeta.get(), context);
+            auto tmp = MakeAppendedPortions(pathId, slice, granule, maxSnapshot, GranuleMeta.get(), context);
             for (auto&& portionInfo : tmp) {
                 portions.emplace_back(std::move(portionInfo));
             }
         }
     } else {
-        portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, GranuleMeta.get(), context);
+        portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, GranuleMeta.get(), context);
     }
 
     Y_VERIFY(portions.size() > 0);
@@ -173,7 +173,7 @@ TConclusion<std::vector<TString>> TInGranuleCompactColumnEngineChanges::DoConstr
     // Set appended portions.
     AppendedPortions.swap(portions);
 
-    return blobs;
+    return TConclusionStatus::Success();
 }
 
 void TInGranuleCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {

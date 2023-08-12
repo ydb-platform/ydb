@@ -18,7 +18,7 @@ protected:
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
-    virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
+    virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     const TMark DefaultMark;

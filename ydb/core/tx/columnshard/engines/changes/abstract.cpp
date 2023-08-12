@@ -15,7 +15,7 @@ TString TColumnEngineChanges::DebugString() const {
     return sb.Str();
 }
 
-NKikimr::TConclusion<std::vector<TString>> TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) {
+TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) {
     Y_VERIFY(Stage == EStage::Started);
 
     {
@@ -26,8 +26,8 @@ NKikimr::TConclusion<std::vector<TString>> TColumnEngineChanges::ConstructBlobs(
         context.Counters.CompactionInputSize(readBytes);
     }
     const TMonotonic start = TMonotonic::Now();
-    TConclusion<std::vector<TString>> result = DoConstructBlobs(context);
-    if (result.IsSuccess()) {
+    TConclusionStatus result = DoConstructBlobs(context);
+    if (result.Ok()) {
         context.Counters.CompactionDuration->Collect((TMonotonic::Now() - start).MilliSeconds());
     } else {
         context.Counters.CompactionFails->Add(1);

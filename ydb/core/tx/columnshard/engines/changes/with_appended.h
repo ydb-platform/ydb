@@ -18,32 +18,28 @@ protected:
 
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    std::vector<TPortionInfo> MakeAppendedPortions(const ui64 pathId,
+    std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const ui64 pathId,
         const std::shared_ptr<arrow::RecordBatch> batch,
         const ui64 granule,
-        const TSnapshot& snapshot,
-        std::vector<TString>& blobs, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
+        const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
 
 public:
     virtual THashSet<ui64> GetTouchedGranules() const override {
         return {};
     }
 
-    std::vector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
+    std::vector<TPortionInfoWithBlobs> AppendedPortions; // New portions after indexing or compaction
     THashMap<ui64, std::pair<ui64, TMark>> NewGranules; // granule -> {pathId, key}
     ui64 FirstGranuleId = 0;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();
     }
-    virtual const TPortionInfo& GetWritePortionInfo(const ui32 index) const override {
+    virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) override {
         Y_VERIFY(index < AppendedPortions.size());
-        return AppendedPortions[index];
+        return &AppendedPortions[index];
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {
         return true;
-    }
-    virtual void UpdateWritePortionInfo(const ui32 index, const TPortionInfo& info) override {
-        AppendedPortions[index] = info;
     }
 };
 

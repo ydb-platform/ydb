@@ -80,7 +80,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         Self->UpdateIndexCounters();
     } else {
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
-            for (auto&& i : changes->GetWritePortionInfo(i).Records) {
+            for (auto&& i : changes->GetWritePortionInfo(i)->GetPortionInfo().Records) {
                 LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << i.BlobRange << ") blob cannot apply changes: "
                     << TxSuffix());
             }

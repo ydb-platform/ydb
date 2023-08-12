@@ -27,7 +27,8 @@ bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyC
         return false;
     }
 
-    for (auto& [portionInfo, _] : PortionsToEvict) {
+    for (auto& [portionInfoWithBlobs, _] : PortionsToEvict) {
+        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
         if (!self.IsPortionExists(granule, portion)) {
@@ -55,7 +56,8 @@ void TTTLColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWr
     THashSet<TUnifiedBlobId> protectedBlobs;
 
     self.IncCounter(NColumnShard::COUNTER_EVICTION_PORTIONS_WRITTEN, PortionsToEvict.size());
-    for (auto& [portionInfo, evictionFeatures] : PortionsToEvict) {
+    for (auto& [portionInfoWithBlobs, evictionFeatures] : PortionsToEvict) {
+        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         // Mark exported blobs
         if (evictionFeatures.NeedExport) {
             auto& tierName = portionInfo.TierName;
@@ -124,7 +126,7 @@ void TTTLColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWr
 void TTTLColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     TBase::DoCompile(context);
     for (auto& [portionInfo, _] : PortionsToEvict) {
-        portionInfo.UpdateRecordsMeta(TPortionMeta::EProduced::EVICTED);
+        portionInfo.GetPortionInfo().UpdateRecordsMeta(TPortionMeta::EProduced::EVICTED);
     }
 }
 
@@ -155,9 +157,10 @@ void TTTLColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& s
     self.IncCounter(NColumnShard::COUNTER_EVICTION_BYTES_WRITTEN, context.BytesWritten);
 }
 
-bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TPortionEvictionFeatures& evictFeatures,
-    const THashMap<TBlobRange, TString>& srcBlobs, std::vector<TColumnRecord>& evictedRecords, std::vector<TString>& newBlobs,
+bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfoWithBlobs& portionInfoWithBlobs, TPortionEvictionFeatures& evictFeatures,
+    const THashMap<TBlobRange, TString>& srcBlobs, std::vector<TColumnRecord>& evictedRecords,
     TConstructionContext& context) const {
+    TPortionInfo& portionInfo = portionInfoWithBlobs.GetPortionInfo();
     Y_VERIFY(portionInfo.TierName != evictFeatures.TargetTierName);
 
     auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
@@ -176,57 +179,64 @@ bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfo& portionInfo, TP
 
     auto blobSchema = context.SchemaVersions.GetSchema(undo.GetMinSnapshot());
     auto resultSchema = context.SchemaVersions.GetLastSchema();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_for_eviction", portionInfo.DebugString());
     auto batch = portionInfo.AssembleInBatch(*blobSchema, *resultSchema, srcBlobs);
 
-    size_t undoSize = newBlobs.size();
     TSaverContext saverContext;
     saverContext.SetTierName(evictFeatures.TargetTierName).SetExternalCompression(compression);
-    for (auto& rec : portionInfo.Records) {
+    portionInfo.Records.clear();
+    for (auto& rec : undo.Records) {
         auto pos = resultSchema->GetFieldIndex(rec.ColumnId);
         Y_VERIFY(pos >= 0);
         auto field = resultSchema->GetFieldByIndex(pos);
-        auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
 
-        auto blob = columnSaver.Apply(batch->GetColumnByName(field->name()), field);
+        TString blob;
+        {
+            auto it = srcBlobs.find(rec.BlobRange);
+            Y_VERIFY(it != srcBlobs.end());
+            auto rb = resultSchema->GetColumnLoader(rec.ColumnId)->Apply(it->second);
+            Y_VERIFY(rb.ok());
+            auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
+            blob = columnSaver.Apply(*rb);
+        }
         if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
-            portionInfo = undo;
-            newBlobs.resize(undoSize);
             return false;
         }
-        newBlobs.emplace_back(std::move(blob));
-        rec.BlobRange = TBlobRange{};
+        if (portionInfoWithBlobs.GetBlobs().empty() || portionInfoWithBlobs.GetBlobs().back().GetSize() + blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
+            portionInfoWithBlobs.StartBlob(0).AddChunk(portionInfoWithBlobs, TOrderedColumnChunk(rec.ColumnId, 0, blob));
+        } else {
+            portionInfoWithBlobs.GetBlobs().back().AddChunk(portionInfoWithBlobs, TOrderedColumnChunk(rec.ColumnId, 0, blob));
+        }
     }
 
     for (auto& rec : undo.Records) {
         evictedRecords.emplace_back(std::move(rec));
     }
 
-    portionInfo.AddMetadata(*resultSchema, batch, evictFeatures.TargetTierName);
+    portionInfoWithBlobs.GetPortionInfo().AddMetadata(*resultSchema, batch, evictFeatures.TargetTierName);
     return true;
 }
 
-NKikimr::TConclusion<std::vector<TString>> TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
+NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
     Y_VERIFY(!Blobs.empty());           // src data
     Y_VERIFY(!PortionsToEvict.empty()); // src meta
     Y_VERIFY(EvictedRecords.empty());   // dst meta
 
     auto baseResult = TBase::DoConstructBlobs(context);
-    Y_VERIFY(baseResult.IsSuccess() && baseResult.GetResult().empty());
+    Y_VERIFY(baseResult.Ok());
 
-    std::vector<TString> newBlobs;
-    std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>> evicted;
+    std::vector<std::pair<TPortionInfoWithBlobs, TPortionEvictionFeatures>> evicted;
     evicted.reserve(PortionsToEvict.size());
 
     for (auto& [portionInfo, evictFeatures] : PortionsToEvict) {
-        if (UpdateEvictedPortion(portionInfo, evictFeatures, Blobs,
-            EvictedRecords, newBlobs, context)) {
-            Y_VERIFY(portionInfo.TierName == evictFeatures.TargetTierName);
+        if (UpdateEvictedPortion(portionInfo, evictFeatures, Blobs, EvictedRecords, context)) {
+            Y_VERIFY(portionInfo.GetPortionInfo().TierName == evictFeatures.TargetTierName);
             evicted.emplace_back(std::move(portionInfo), evictFeatures);
         }
     }
 
     PortionsToEvict.swap(evicted);
-    return newBlobs;
+    return TConclusionStatus::Success();
 }
 
 NColumnShard::ECumulativeCounters TTTLColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

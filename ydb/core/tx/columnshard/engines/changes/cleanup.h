@@ -15,8 +15,8 @@ protected:
     virtual void DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) override;
     virtual void DoCompile(TFinalizationContext& /*context*/) override {
     }
-    virtual NKikimr::TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
-        return std::vector<TString>();
+    virtual TConclusionStatus DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
+        return TConclusionStatus::Success();
     }
     virtual bool NeedConstruction() const override {
         return false;
@@ -38,14 +38,11 @@ public:
         return {};
     }
 
-    virtual void UpdateWritePortionInfo(const ui32 index, const TPortionInfo& info) override {
-        PortionsToDrop[index] = info;
-    }
     virtual ui32 GetWritePortionsCount() const override {
-        return PortionsToDrop.size();
+        return 0;
     }
-    virtual const TPortionInfo& GetWritePortionInfo(const ui32 index) const override {
-        return PortionsToDrop[index];
+    virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 /*index*/) override {
+        return nullptr;
     }
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {
         return true;

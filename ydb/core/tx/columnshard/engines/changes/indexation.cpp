@@ -69,7 +69,7 @@ void TInsertColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TC
     self.BackgroundController.FinishIndexing();
 }
 
-NKikimr::TConclusion<std::vector<TString>> TInsertColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
+TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
     Y_VERIFY(!DataToIndex.empty());
     Y_VERIFY(AppendedPortions.empty());
 
@@ -117,7 +117,6 @@ NKikimr::TConclusion<std::vector<TString>> TInsertColumnEngineChanges::DoConstru
         pathBatches[inserted.PathId].push_back(batch);
         Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
-    std::vector<TString> blobs;
 
     for (auto& [pathId, batches] : pathBatches) {
         AddPathIfNotExists(pathId);
@@ -129,7 +128,7 @@ NKikimr::TConclusion<std::vector<TString>> TInsertColumnEngineChanges::DoConstru
 
         auto granuleBatches = TMarksGranules::SliceIntoGranules(merged, PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {
-            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, blobs, nullptr, context);
+            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, nullptr, context);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));
@@ -138,7 +137,7 @@ NKikimr::TConclusion<std::vector<TString>> TInsertColumnEngineChanges::DoConstru
     }
 
     Y_VERIFY(PathToGranule.size() == pathBatches.size());
-    return blobs;
+    return TConclusionStatus::Success();
 }
 
 std::shared_ptr<arrow::RecordBatch> TInsertColumnEngineChanges::AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,

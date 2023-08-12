@@ -133,15 +133,15 @@ private:
 
             TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
             NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
-            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
-            if (TxEvent->Blobs.empty()) {
+            Y_VERIFY(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
+            if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
                 TxEvent->SetPutStatus(NKikimrProto::OK);
             }
         }
-        ui32 blobsSize = TxEvent->Blobs.size();
+        const ui32 portionsCount = TxEvent->IndexChanges->GetWritePortionsCount();
         ctx.Send(Parent, TxEvent.release());
 
-        LOG_S_DEBUG("Portions eviction finished (" << blobsSize << " new blobs) at tablet " << TabletId);
+        LOG_S_DEBUG("Portions eviction finished (" << portionsCount << " new blobs) at tablet " << TabletId);
     }
 };
 

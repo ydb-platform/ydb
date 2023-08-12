@@ -6,109 +6,45 @@
 
 namespace NKikimr::NOlap {
 
-TCompactedWriteController::TBlobsConstructor::TBlobsConstructor(TCompactedWriteController& owner, bool blobGrouppingEnabled)
+TCompactedWriteController::TBlobsConstructor::TBlobsConstructor(TCompactedWriteController& owner)
     : Owner(owner)
     , IndexChanges(*Owner.WriteIndexEv->IndexChanges)
-    , Blobs(Owner.WriteIndexEv->Blobs)
-    , BlobGrouppingEnabled(blobGrouppingEnabled)
-    , CacheData(Owner.WriteIndexEv->CacheData)
 {
-    LastPortion = IndexChanges.GetWritePortionsCount();
-    Y_VERIFY(Blobs.size() > 0);
 }
 
 const TString& TCompactedWriteController::TBlobsConstructor::GetBlob() const {
-    return AccumulatedBlob;
+    return CurrentBlobInfo->GetBlob();
 }
 
 bool TCompactedWriteController::TBlobsConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
-    Y_VERIFY(AccumulatedBlob.size() > 0);
-    Y_VERIFY(RecordsInBlob.size() > 0);
-
-    auto& portionInfo = PortionUpdates.back();
-    LOG_S_TRACE("Write Index Blob " << blobId << " with " << RecordsInBlob.size() << " records");
-    for (const auto& rec : RecordsInBlob) {
-        size_t i = rec.first;
-        const TString& recData = rec.second;
-        auto& blobRange = portionInfo.Records[i].BlobRange;
-        blobRange.BlobId = blobId;
-        Y_VERIFY(blobRange.Offset + blobRange.Size <= AccumulatedBlob.size());
-        Y_VERIFY(blobRange.Size == recData.size());
-
-        if (CacheData) {
-            // Save original (non-accumulted) blobs with the corresponding TBlobRanges in order to
-            // put them into cache at commit time
-            Owner.WriteIndexEv->IndexChanges->Blobs[blobRange] = recData;
-        }
-    }
+    Y_VERIFY(CurrentBlobInfo);
+    CurrentBlobInfo->RegisterBlobId(*IndexChanges.GetWritePortionInfo(CurrentPortion), blobId);
     return true;
 }
 
 IBlobConstructor::EStatus TCompactedWriteController::TBlobsConstructor::BuildNext() {
-    AccumulatedBlob.clear();
-    RecordsInBlob.clear();
-
-    if (CurrentPortionRecord == 0) {
-        // Skip portions without data changes
-        for (; CurrentPortion < LastPortion; ++CurrentPortion) {
-            if (IndexChanges.NeedWritePortion(CurrentPortion)) {
-                break;
-            }
-            PortionUpdates.push_back(GetPortionInfo(CurrentPortion));
-        }
-    }
-
-    if (CurrentPortion == LastPortion) {
-        Y_VERIFY(CurrentBlob == Blobs.size());
-        return EStatus::Finished;
-    }
-
-    const auto& portionInfo = GetPortionInfo(CurrentPortion);
-    if (CurrentPortionRecord == 0) {
-        PortionUpdates.push_back(portionInfo);
-    }
-    NOlap::TPortionInfo& newPortionInfo = PortionUpdates.back();
-
-    const auto& records = portionInfo.Records;
-    for (; CurrentPortionRecord < records.size(); ++CurrentPortionRecord, ++CurrentBlob) {
-        Y_VERIFY(CurrentBlob < Blobs.size());
-        const TString& currentBlob = Blobs[CurrentBlob];
-        Y_VERIFY(currentBlob.size());
-
-        if ((!AccumulatedBlob.empty() && AccumulatedBlob.size() + currentBlob.size() > NColumnShard::TLimits::GetMaxBlobSize()) ||
-            (AccumulatedBlob.size() && !BlobGrouppingEnabled))
-        {
+    while (CurrentPortion < IndexChanges.GetWritePortionsCount()) {
+        TPortionInfoWithBlobs& portionWithBlobs = *IndexChanges.GetWritePortionInfo(CurrentPortion);
+        if (CurrentBlobIndex < portionWithBlobs.GetBlobs().size() && IndexChanges.NeedWritePortion(CurrentPortion)) {
+            CurrentBlobInfo = &portionWithBlobs.GetBlobs()[CurrentBlobIndex];
+            ++CurrentBlobIndex;
             return EStatus::Ok;
+        } else {
+            ++CurrentPortion;
+            CurrentBlobIndex = 0;
         }
-
-        // Accumulate data chunks into a single blob and save record indices of these chunks
-        newPortionInfo.Records[CurrentPortionRecord].BlobRange.Offset = AccumulatedBlob.size();
-        newPortionInfo.Records[CurrentPortionRecord].BlobRange.Size = currentBlob.size();
-        AccumulatedBlob.append(currentBlob);
-        RecordsInBlob.emplace_back(CurrentPortionRecord, currentBlob);
     }
-
-    ++CurrentPortion;
-    CurrentPortionRecord = 0;
-    return AccumulatedBlob.empty() ? EStatus::Finished : EStatus::Ok;
+    return EStatus::Finished;
 }
 
-const NOlap::TPortionInfo& TCompactedWriteController::TBlobsConstructor::GetPortionInfo(const ui64 index) const {
-    return IndexChanges.GetWritePortionInfo(index);
-}
-
-TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool blobGrouppingEnabled)
+TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool /*blobGrouppingEnabled*/)
     : WriteIndexEv(writeEv)
-    , BlobConstructor(std::make_shared<TBlobsConstructor>(*this, blobGrouppingEnabled))
+    , BlobConstructor(std::make_shared<TBlobsConstructor>(*this))
     , DstActor(dstActor)
 {}
 
 void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
     WriteIndexEv->PutResult = putResult;
-    for (ui64 index = 0; index < BlobConstructor->GetPortionUpdates().size(); ++index) {
-        const auto& portionInfo = BlobConstructor->GetPortionUpdates()[index];
-        WriteIndexEv->IndexChanges->UpdateWritePortionInfo(index, portionInfo);
-    }
     ctx.Send(DstActor, WriteIndexEv.Release());
 }
 

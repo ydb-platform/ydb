@@ -128,7 +128,7 @@ private:
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
             NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
-            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
+            Y_VERIFY(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
             return true;
         }
     public:

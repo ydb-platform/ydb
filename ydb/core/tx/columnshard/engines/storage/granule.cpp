@@ -165,7 +165,10 @@ void TGranuleMeta::RebuildHardMetrics() const {
             if (it == packedSizeByColumns.end()) {
                 it = packedSizeByColumns.emplace(c.ColumnId, TColumnSummary(c.ColumnId)).first;
             }
-            it->second.AddData(i.second.IsInserted(), c.BlobRange.Size, i.second.NumRows());
+            it->second.AddBlobsData(i.second.IsInserted(), c.BlobRange.Size);
+        }
+        for (auto&& c : packedSizeByColumns) {
+            c.second.AddRecordsData(i.second.IsInserted(), i.second.NumRows());
         }
     }
     {

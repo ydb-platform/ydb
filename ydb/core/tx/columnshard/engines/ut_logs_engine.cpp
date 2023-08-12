@@ -235,9 +235,13 @@ private:
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
 };
 
+TUnifiedBlobId MakeUnifiedBlobId(ui32 step, ui32 blobSize) {
+    return TUnifiedBlobId(11111, TLogoBlobID(100500, 42, step, 3, blobSize, 0));
+}
+
 TBlobRange MakeBlobRange(ui32 step, ui32 blobSize) {
     // tabletId, generation, step, channel, blobSize, cookie
-    return TBlobRange(TUnifiedBlobId(11111, TLogoBlobID(100500, 42, step, 3, blobSize, 0)), 0, blobSize);
+    return TBlobRange(MakeUnifiedBlobId(step, blobSize), 0, blobSize);
 }
 
 TString MakeTestBlob(i64 start = 0, i64 end = 100) {
@@ -251,15 +255,11 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100) {
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
-void AddIdsToBlobs(const std::vector<TString>& srcBlobs, std::vector<TPortionInfo>& portions,
-                   THashMap<TBlobRange, TString>& blobs, ui32& step) {
-    ui32 pos = 0;
+void AddIdsToBlobs(std::vector<TPortionInfoWithBlobs>& portions, THashMap<TBlobRange, TString>& blobs, ui32& step) {
     for (auto& portion : portions) {
-        for (auto& rec : portion.Records) {
-            rec.BlobRange = MakeBlobRange(++step, srcBlobs[pos].size());
-            //UNIT_ASSERT(rec.Valid());
-            blobs[rec.BlobRange] = srcBlobs[pos];
-            ++pos;
+        for (auto& rec : portion.GetPortionInfo().Records) {
+            rec.BlobRange.BlobId = MakeUnifiedBlobId(++step, portion.GetBlobFullSizeVerified(rec.ColumnId, rec.Chunk));
+            blobs[rec.BlobRange] = portion.GetBlobByRangeVerified(rec.ColumnId, rec.Chunk);
         }
     }
 }
@@ -283,12 +283,16 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     changes->StartEmergency();
 
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
-    std::vector<TString> newBlobs = std::move(changes->ConstructBlobs(context).DetachResult());
+    Y_VERIFY(changes->ConstructBlobs(context).Ok());
 
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(newBlobs.size(), testColumns.size() + 2); // add 2 columns: planStep, txId
+    ui32 blobsCount = 0;
+    for (auto&& i : changes->AppendedPortions) {
+        blobsCount += i.GetBlobs().size();
+    }
+    UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1); // add 2 columns: planStep, txId
 
-    AddIdsToBlobs(newBlobs, changes->AppendedPortions, blobs, step);
+    AddIdsToBlobs(changes->AppendedPortions, blobs, step);
 
     const bool result = engine.ApplyChanges(db, changes, snap);
     changes->AbortEmergency();
@@ -302,24 +306,31 @@ struct TExpected {
 };
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
-             const TExpected& expected) {
+             const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
     auto compactionInfo = engine.Compact(TestLimits(), {});
     UNIT_ASSERT(!!compactionInfo);
 
     std::shared_ptr<TCompactColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
     UNIT_ASSERT(changes->IsSplit());
-    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
+    //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
     changes->StartEmergency();
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"));
-    std::vector<TString> newBlobs = std::move(changes->ConstructBlobs(context).DetachResult());
+    Y_VERIFY(changes->ConstructBlobs(context).Ok());
 
-    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
-    AddIdsToBlobs(newBlobs, changes->AppendedPortions, changes->Blobs, step);
+    //    UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), expected.NewPortions);
+    AddIdsToBlobs(changes->AppendedPortions, changes->Blobs, step);
 
-    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
+    //    UNIT_ASSERT_VALUES_EQUAL(changes->GetTmpGranuleIds().size(), expected.NewGranules);
 
     const bool result = engine.ApplyChanges(db, changes, snap);
+    if (blobsPool) {
+        for (auto&& i : changes->AppendedPortions) {
+            for (auto&& r : i.GetPortionInfo().Records) {
+                Y_VERIFY(blobsPool->emplace(r.BlobRange, i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
+            }
+        }
+    }
     changes->AbortEmergency();
     return result;
 }

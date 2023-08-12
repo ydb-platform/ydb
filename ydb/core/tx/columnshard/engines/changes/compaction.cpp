@@ -40,9 +40,9 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
         if (granuleRemap.size()) {
-            auto it = granuleRemap.find(portionInfo.GetGranule());
+            auto it = granuleRemap.find(portionInfo.GetPortionInfo().GetGranule());
             Y_VERIFY(it != granuleRemap.end());
-            portionInfo.SetGranule(it->second);
+            portionInfo.GetPortionInfo().SetGranule(it->second);
         }
 
         TPortionMeta::EProduced produced = TPortionMeta::EProduced::INSERTED;
@@ -50,7 +50,7 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
         if (PortionsToMove.empty()) {
             produced = producedClassResultCompaction;
         }
-        portionInfo.UpdateRecordsMeta(produced);
+        portionInfo.GetPortionInfo().UpdateRecordsMeta(produced);
     }
     for (auto& portionInfo : SwitchedPortions) {
         Y_VERIFY(portionInfo.IsActive());

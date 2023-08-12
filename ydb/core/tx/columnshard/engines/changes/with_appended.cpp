@@ -2,7 +2,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
-#include <ydb/core/tx/columnshard/splitter/splitter.h>
+#include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
 
 namespace NKikimr::NOlap {
 
@@ -18,7 +18,7 @@ void TChangesWithAppend::DoDebugString(TStringOutput& out) const {
 
 void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
     for (auto& portionInfo : AppendedPortions) {
-        switch (portionInfo.Meta.Produced) {
+        switch (portionInfo.GetPortionInfo().Meta.Produced) {
             case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                 Y_VERIFY(false); // unexpected
             case NOlap::TPortionMeta::EProduced::INSERTED:
@@ -52,7 +52,8 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     }
     // Save new portions (their column records)
 
-    for (auto& portionInfo : AppendedPortions) {
+    for (auto& portionInfoWithBlobs : AppendedPortions) {
+        auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         Y_VERIFY(!portionInfo.Empty());
 
         self.UpsertPortion(portionInfo);
@@ -66,18 +67,18 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     for (auto&& i : AppendedPortions) {
-        i.SetPortion(context.NextPortionId());
-        i.UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
+        i.GetPortionInfo().SetPortion(context.NextPortionId());
+        i.GetPortionInfo().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
 }
 
-std::vector<TPortionInfo> TChangesWithAppend::MakeAppendedPortions(
+std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(
     const ui64 pathId, const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot,
-    std::vector<TString>& blobs, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
+    const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
     Y_VERIFY(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
-    std::vector<TPortionInfo> out;
+    std::vector<TPortionInfoWithBlobs> out;
 
     TString tierName;
     std::optional<NArrow::TCompression> compression;
@@ -92,22 +93,31 @@ std::vector<TPortionInfo> TChangesWithAppend::MakeAppendedPortions(
     TSaverContext saverContext;
     saverContext.SetTierName(tierName).SetExternalCompression(compression);
 
-    TSplitLimiter limiter(granuleMeta, context.Counters, resultSchema, batch);
+    NOlap::TSerializationStats stats;
+    if (granuleMeta) {
+        stats = granuleMeta->BuildSerializationStats(resultSchema);
+    }
+    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, saverContext, std::move(stats));
+    TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch);
 
-    std::vector<TString> portionBlobs;
+    std::vector<std::vector<TOrderedColumnChunk>> portionBlobs;
     std::shared_ptr<arrow::RecordBatch> portionBatch;
-    while (limiter.Next(portionBlobs, portionBatch, saverContext)) {
+    while (limiter.Next(portionBlobs, portionBatch)) {
         TPortionInfo portionInfo(granule, 0, snapshot);
-        portionInfo.Records.reserve(resultSchema->GetSchema()->num_fields());
-        for (auto&& f : resultSchema->GetSchema()->fields()) {
-            const ui32 columnId = resultSchema->GetIndexInfo().GetColumnId(f->name());
-            portionInfo.AppendOneChunkColumn(TColumnRecord::Make(columnId));
-        }
-        for (auto&& i : portionBlobs) {
-            blobs.emplace_back(i);
-        }
         portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
-        out.emplace_back(std::move(portionInfo));
+
+        TPortionInfoWithBlobs infoWithBlob(std::move(portionInfo), portionBlobs.size());
+        std::map<ui32, ui32> chunkIds;
+        THashMap<TBlobRange, TString> srcBlobs;
+        for (auto& blob : portionBlobs) {
+            auto& blobInfo = infoWithBlob.StartBlob(blob.size());
+            for (auto&& chunk : blob) {
+                const TString data = chunk.GetData();
+                srcBlobs.emplace(blobInfo.AddChunk(infoWithBlob, std::move(chunk)).BlobRange, data);
+            }
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_appended", infoWithBlob.GetPortionInfo().DebugString());
+        out.emplace_back(std::move(infoWithBlob));
     }
 
     return out;

@@ -74,12 +74,18 @@ private:
     ui64 InsertedBlobsSize = 0;
     ui64 InsertedRecordsCount = 0;
 public:
-    void AddData(const bool isInserted, const ui64 bytes, const ui64 records) {
+    void AddRecordsData(const bool isInserted, const ui64 records) {
         if (isInserted) {
             InsertedRecordsCount += records;
-            InsertedBlobsSize += bytes;
         } else {
             PackedRecordsCount += records;
+        }
+    }
+
+    void AddBlobsData(const bool isInserted, const ui64 bytes) {
+        if (isInserted) {
+            InsertedBlobsSize += bytes;
+        } else {
             PackedBlobsSize += bytes;
         }
     }
@@ -294,6 +300,16 @@ private:
     void OnAfterChangePortion();
     void OnAdditiveSummaryChange() const;
 public:
+    NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
+        NOlap::TSerializationStats result;
+        for (auto&& i : GetHardSummary().GetColumnIdsSortedBySizeDescending()) {
+            auto field = schema->GetFieldByColumnId(i.GetColumnId());
+            AFL_VERIFY(field)("column_id", i.GetColumnId())("schema", schema->DebugString());
+            result.AddStat(i.GetColumnId(), field->name(), NOlap::TColumnSerializationStat(i.GetBlobsSize(), i.GetRecordsCount()));
+        }
+        return result;
+    }
+
     TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleHardSummary& GetHardSummary() const {
         if (!HardSummaryCache) {
@@ -340,10 +356,11 @@ public:
     void UpsertPortion(const TPortionInfo& info);
 
     TString DebugString() const {
-        return TStringBuilder() << "granule:" << GetGranuleId() << ";"
+        return TStringBuilder() << "(granule:" << GetGranuleId() << ";"
             << "path_id:" << Record.PathId << ";"
             << "size:" << GetAdditiveSummary().GetGranuleSize() << ";"
             << "portions_count:" << Portions.size() << ";"
+            << ")"
             ;
     }
 

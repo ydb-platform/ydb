@@ -12,35 +12,16 @@ class TCompactedWriteController : public NColumnShard::IWriteController {
 private:
     class TBlobsConstructor : public IBlobConstructor {
         TCompactedWriteController& Owner;
-        const NOlap::TColumnEngineChanges& IndexChanges;
-        const std::vector<TString>& Blobs;
-
-        const bool BlobGrouppingEnabled;
-        const bool CacheData;
-
-        TString AccumulatedBlob;
-        std::vector<std::pair<size_t, TString>> RecordsInBlob;
+        NOlap::TColumnEngineChanges& IndexChanges;
 
         ui64 CurrentPortion = 0;
-        ui64 LastPortion = 0;
-
-        ui64 CurrentBlob = 0;
-        ui64 CurrentPortionRecord = 0;
-
-        TVector<NOlap::TPortionInfo> PortionUpdates;
-
+        ui64 CurrentBlobIndex = 0;
+        TPortionInfoWithBlobs::TBlobInfo* CurrentBlobInfo = nullptr;
     public:
-        TBlobsConstructor(TCompactedWriteController& owner, bool blobGrouppingEnabled);
+        TBlobsConstructor(TCompactedWriteController& owner);
         const TString& GetBlob() const override;
         bool RegisterBlobId(const TUnifiedBlobId& blobId) override;
         EStatus BuildNext() override;
-
-        const TVector<NOlap::TPortionInfo>& GetPortionUpdates() const {
-            return PortionUpdates;
-        }
-
-    private:
-        const NOlap::TPortionInfo& GetPortionInfo(const ui64 index) const;
     };
 
     TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> WriteIndexEv;

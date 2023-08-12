@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
@@ -185,14 +186,14 @@ protected:
         return true;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
-    virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept = 0;
+    virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
 
     }
 
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 public:
-    TConclusion<std::vector<TString>> ConstructBlobs(TConstructionContext& context);
+    TConclusionStatus ConstructBlobs(TConstructionContext& context);
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
@@ -209,9 +210,8 @@ public:
     bool ApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context);
 
     virtual ui32 GetWritePortionsCount() const = 0;
-    virtual const TPortionInfo& GetWritePortionInfo(const ui32 index) const = 0;
+    virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
-    virtual void UpdateWritePortionInfo(const ui32 index, const TPortionInfo& info) = 0;
 
     void WriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context);
     void WriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context);
@@ -254,14 +254,14 @@ public:
     }
 
     /// Returns blob-ranges grouped by blob-id.
-    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges(const std::vector<std::pair<TPortionInfo, TPortionEvictionFeatures>>& portions) {
+    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges(const std::vector<std::pair<TPortionInfoWithBlobs, TPortionEvictionFeatures>>& portions) {
         Y_VERIFY(portions.size());
 
         THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
         for (const auto& [portionInfo, _] : portions) {
-            Y_VERIFY(!portionInfo.Empty());
+            Y_VERIFY(!portionInfo.GetPortionInfo().Empty());
 
-            for (const auto& rec : portionInfo.Records) {
+            for (const auto& rec : portionInfo.GetPortionInfo().Records) {
                 sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
             }
         }

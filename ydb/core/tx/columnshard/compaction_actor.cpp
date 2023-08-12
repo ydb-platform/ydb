@@ -69,12 +69,12 @@ public:
             Y_ASSERT(false);
             LOG_S_WARN("TEvReadBlobRangeResult cannot get blob "
                 << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
-                << TabletId << " (compaction)");
+                << TabletId << " (" << TxEvent->IndexChanges->TypeString() << ")");
             TxEvent->SetPutStatus(NKikimrProto::ERROR);
         } else {
             LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob "
                         << blobId.ToString() << " status " << NKikimrProto::EReplyStatus_Name(event.Status) << " at tablet "
-                        << TabletId << " (compaction)");
+                        << TabletId << " (" << TxEvent->IndexChanges->TypeString() << ")");
             if (event.Status == NKikimrProto::UNKNOWN) {
                 TxEvent->SetPutStatus(NKikimrProto::ERROR);
             } else {
@@ -136,7 +136,7 @@ private:
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
             NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
-            TxEvent->Blobs = std::move(TxEvent->IndexChanges->ConstructBlobs(context).DetachResult());
+            Y_VERIFY(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
             return true;
         }
     public:
@@ -181,8 +181,8 @@ private:
             txEvent->SetPutStatus(NKikimrProto::ERROR);
             Send(Parent, txEvent.release());
         } else {
-            ACFL_DEBUG("event", "task_finished")("new_blobs", txEvent->Blobs.size());
-            if (txEvent->Blobs.empty()) {
+            ACFL_DEBUG("event", "task_finished")("new_blobs", txEvent->IndexChanges->GetWritePortionsCount());
+            if (!txEvent->IndexChanges->GetWritePortionsCount()) {
                 txEvent->SetPutStatus(NKikimrProto::OK); // nothing to write, commit
             }
             txEvent->Duration = TAppData::TimeProvider->Now() - LastActivationTime;

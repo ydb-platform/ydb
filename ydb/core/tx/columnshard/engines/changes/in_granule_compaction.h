@@ -16,7 +16,7 @@ private:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
 
 protected:
-    virtual TConclusion<std::vector<TString>> DoConstructBlobs(TConstructionContext& context) noexcept override;
+    virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
         return TPortionMeta::EProduced::COMPACTED;
     }

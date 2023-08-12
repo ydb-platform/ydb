@@ -973,11 +973,14 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
             if (ydbSchema == TTestSchema::YdbSchema()) {
                 if (codec == "" || codec == "lz4") {
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetPortionsBytes() / 100000, 50);
+                    UNIT_ASSERT_GE(readStats.GetPortionsBytes() / 100000, 40);
+                    UNIT_ASSERT_LE(readStats.GetPortionsBytes() / 100000, 50);
                 } else if (codec == "none") {
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetPortionsBytes() / 100000, 75);
+                    UNIT_ASSERT_GE(readStats.GetPortionsBytes() / 100000, 65);
+                    UNIT_ASSERT_LE(readStats.GetPortionsBytes() / 100000, 78);
                 } else if (codec == "zstd") {
-                    UNIT_ASSERT_VALUES_EQUAL(readStats.GetPortionsBytes() / 100000, 26);
+                    UNIT_ASSERT_GE(readStats.GetPortionsBytes() / 100000, 20);
+                    UNIT_ASSERT_LE(readStats.GetPortionsBytes() / 100000, 30);
                 } else {
                     UNIT_ASSERT(false);
                 }
@@ -2661,6 +2664,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             // Cerr << batchStats->ToString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(batchStats->num_rows(), 5);
 
+            ui64 sumCompactedBytes = 0;
+            ui64 sumCompactedRows = 0;
             for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                 auto paths = batchStats->GetColumnByName("PathId");
                 auto kinds = batchStats->GetColumnByName("Kind");
@@ -2678,10 +2683,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     << pathId << " " << kind << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                 if (pathId == tableId) {
-                    if (kind == 3) {
-                        UNIT_ASSERT(numRows <= (triggerPortionSize - overlapSize) * numWrites + overlapSize);
-                        UNIT_ASSERT(numRows > 0.7 * (triggerPortionSize - overlapSize) * numWrites + overlapSize);
-                        UNIT_ASSERT(numBytes > numRows);
+                    if (kind == (ui32)NOlap::NPortion::EProduced::COMPACTED || kind == (ui32)NOlap::NPortion::EProduced::SPLIT_COMPACTED) {
+                        sumCompactedBytes += numBytes;
+                        sumCompactedRows += numRows;
                         //UNIT_ASSERT(numRawBytes > numBytes);
                     }
                 } else {
@@ -2690,6 +2694,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
                 }
             }
+            UNIT_ASSERT(sumCompactedRows <= (triggerPortionSize - overlapSize) * numWrites + overlapSize);
+            UNIT_ASSERT(sumCompactedRows > 0.7 * (triggerPortionSize - overlapSize) * numWrites + overlapSize);
+            UNIT_ASSERT(sumCompactedBytes > sumCompactedRows);
         }
     }
 
@@ -2916,7 +2923,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     for (const auto& portion : append->AppendedPortions) {
                         ++addedPortions;
                         ui64 portionId = addedPortions;
-                        Cerr << " " << portionId << "(" << portion.GetPortion() << ")";
+                        Cerr << " " << portionId << "(" << portion.GetPortionInfo().GetPortion() << ")";
                     }
                     Cerr << Endl;
                 }

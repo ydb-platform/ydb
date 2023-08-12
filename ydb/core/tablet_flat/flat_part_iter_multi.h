@@ -254,9 +254,7 @@ namespace NTable {
                 }
 
                 if (seek != ESeek::Exact && Index.Off() > 0) {
-                    // The row we seek is on the previous page
-                    // N.B. actually this should never be triggered,
-                    // since reverse search should always have exact==true
+                    // The row we seek is on the next page
                     RowId = Index->GetRowId() - 1;
                     --Index;
                     Y_VERIFY_DEBUG(RowId < EndRowId,

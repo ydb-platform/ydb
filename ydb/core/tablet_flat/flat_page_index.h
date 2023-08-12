@@ -190,7 +190,7 @@ namespace NPage {
          * Lookup a page that may contain key with specified seek mode
          *
          * Returns end iterator when there is definitely no such page,
-         * otherwise the result is exact given such a key exists.
+         * otherwise the result is approximate and may be off by one page.
          */
         TIter LookupKeyReverse(
                 TCells key, const TPartScheme::TGroupInfo &group,

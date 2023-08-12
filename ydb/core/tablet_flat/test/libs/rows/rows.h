@@ -120,6 +120,11 @@ namespace NTest {
             return Put(tag, TTypeFor<TString>::Type, buf.data(), buf.size());
         }
 
+        TRow& Do(NTable::TTag tag, const TString &buf, TType type)
+        {
+            return Put(tag, type, buf.data(), buf.size());
+        }
+
         TRow& Do(NTable::TTag tag, const NPageCollection::TGlobId &glob)
         {
             auto *data = static_cast<const void*>(&glob);

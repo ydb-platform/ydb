@@ -607,6 +607,350 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto cooked2 = TCompaction(new TForwardEnv(512, 1024), conf).Do(subset);
     }
 
+    Y_UNIT_TEST(CutKeys_Seek)
+    {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        TVector<std::pair<ui32, TString>> fullRows = {
+            {1, "aaa"}, // -> (1, "aaa")
+            {1, "aab"},
+            {1, "aac"},
+
+            {1, "baaaa"}, // -> (1, "b")
+            {1, "bab"},
+            {1, "caa"},
+            
+            {2, "aaa"}, // -> (2, null)
+            {2, "bbb"},
+            {2, "ccc"},
+
+            {2, "ccx"}, // -> (2, "ccx")
+            {2, "cxy"},
+            {2, "cxz"}, // -> (2, "cxz")
+        };
+
+        NPage::TConf cutConf{ true, 8192 }, fullConf{ true, 8192 };
+        cutConf.CutIndexKeys = true;
+        fullConf.CutIndexKeys = false;
+        cutConf.Group(0).PageRows = fullConf.Group(0).PageRows = 3;
+
+        TPartCook cutCook(lay, cutConf), cutCookR(lay, cutConf), fullCook(lay, fullConf), fullCookR(lay, fullConf);
+        for (auto r : fullRows) {
+            cutCook.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            cutCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            fullCook.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+        }
+
+        TCheckIt cutWrap(cutCook.Finish(), { }), fullWrap(fullCook.Finish(), { });
+        TCheckReverseIt cutWrapR(cutCookR.Finish(), { }), fullWrapR(fullCookR.Finish(), { });
+
+        const auto cutPart = (*cutWrap).Eggs.Lone();
+        const auto fullPart = (*fullWrap).Eggs.Lone();
+
+        Cerr << "======= CUT =======" << Endl;
+        Cerr << DumpPart(*cutPart, 2) << Endl;
+        Cerr << "======= FULL =======" << Endl;
+        Cerr << DumpPart(*fullPart, 2) << Endl;
+
+        UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
+        
+        const NPage::TCompare<NPage::TIndex::TRecord> cmp(cutPart->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*cutPart->Index->Begin(), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "aaa"))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*(cutPart->Index->Begin() + 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, "b"))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*(cutPart->Index->Begin() + 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*(cutPart->Index->Begin() + 3), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "ccx"))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*cutPart->Index.GetLastKeyRecord(), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, "cxz"))), 0);
+
+        for (auto r : fullRows) {
+            cutWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            fullWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
+        }
+
+        for (size_t rowId = 0; rowId < fullRows.size(); rowId++)
+        for (auto seekMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper})
+        for (auto transformMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+            auto str = fullRows[rowId].second;
+
+            switch (transformMode) {
+            case ESeek::Exact:
+                break;
+            case ESeek::Lower:
+                str[str.size() - 1] = '#';
+                UNIT_ASSERT_LT(str, fullRows[rowId].second);
+                break;
+            case ESeek::Upper:
+                str += '#';
+                UNIT_ASSERT_GT(str, fullRows[rowId].second);
+                break;
+            }
+
+            cutWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            fullWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
+
+            cutWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            fullWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
+        }
+    }
+
+    Y_UNIT_TEST(CutKeys_SeekPages)
+    {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        TVector<std::pair<ui32, TString>> fullRows = {
+            {1, "aaa"}, // -> (1, "aaa")
+            {1, "aba"}, // -> (1, "ab")
+            {1, "aca"}, // -> (1, "ac")
+            {1, "baa"}, // -> (1, "b")
+            {1, "bba"}, // -> (1, "bb")
+            {2, "aaa"}, // -> (2, null)
+            {2, "aba"}, // -> (2, "ab")
+            {2, "aca"}, // -> (2, "ac")
+            {2, "baa"}, // -> (2, "b")
+            {2, "bba"}, // -> (2, "bba")
+        };
+
+        NPage::TConf cutConf{ true, 8192 }, fullConf{ true, 8192 };
+        cutConf.CutIndexKeys = true;
+        fullConf.CutIndexKeys = false;
+        cutConf.Group(0).PageRows = fullConf.Group(0).PageRows = 1;
+
+        TPartCook cutCook(lay, cutConf), cutCookR(lay, cutConf), fullCook(lay, fullConf), fullCookR(lay, fullConf);
+        for (auto r : fullRows) {
+            cutCook.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            cutCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            fullCook.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+        }
+
+        TCheckIt cutWrap(cutCook.Finish(), { }), fullWrap(fullCook.Finish(), { });
+        TCheckReverseIt cutWrapR(cutCookR.Finish(), { }), fullWrapR(fullCookR.Finish(), { });
+
+        const auto cutPart = (*cutWrap).Eggs.Lone();
+        const auto fullPart = (*fullWrap).Eggs.Lone();
+
+        Cerr << "======= CUT =======" << Endl;
+        Cerr << DumpPart(*cutPart, 2) << Endl;
+        Cerr << "======= FULL =======" << Endl;
+        Cerr << DumpPart(*fullPart, 2) << Endl;
+
+        UNIT_ASSERT_GT(fullPart->IndexesRawSize, cutPart->IndexesRawSize);
+        
+        for (auto r : fullRows) {
+            cutWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
+            fullWrap.Has(*TSchemedCookRow(*lay).Col(r.first, r.second));
+        }
+
+        for (size_t rowId = 0; rowId < fullRows.size(); rowId++)
+        for (auto seekMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper})
+        for (auto transformMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+            auto str = fullRows[rowId].second;
+
+            switch (transformMode) {
+            case ESeek::Exact:
+                break;
+            case ESeek::Lower:
+                str[str.size() - 1] = '#';
+                UNIT_ASSERT_LT(str, fullRows[rowId].second);
+                break;
+            case ESeek::Upper:
+                str += '#';
+                UNIT_ASSERT_GT(str, fullRows[rowId].second);
+                break;
+            }
+
+            cutWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            fullWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
+
+            cutWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            fullWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
+        }
+    }
+
+    Y_UNIT_TEST(CutKeys_CutString)
+    {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf{ true, 8192 };
+        conf.CutIndexKeys = true;
+        conf.Group(0).PageRows = 1;
+
+        auto check = [&] (ui32 testId, TString a, TString b, TString expected) {
+            TPartCook cook(lay, conf);
+
+            cook.Add(*TSchemedCookRow(*lay).Col(a == "<NULL>" ? nullptr : a));
+            cook.Add(*TSchemedCookRow(*lay).Col(b));
+
+            TCheckIt wrap(cook.Finish(), { });
+
+            const auto part = (*wrap).Eggs.Lone();
+
+            Cerr << DumpPart(*part, 2) << Endl;
+
+            TString actual((part->Index->Begin() + 1).GetRecord()->Cell(part->Scheme->Groups[0].ColsKeyIdx[0]).AsBuf());
+            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, testId << ": '" << a << "', '" << b << "'");
+        };
+
+        check(0,
+            "cccccc", 
+            "ccccccd", 
+            "ccccccd");
+
+        check(1,
+            "cccccc", 
+            "ccccccddd", 
+            "ccccccd");
+
+        check(2,
+            "cccccc", 
+            "cccccd", 
+            "cccccd");
+
+        check(3,
+            "cccccc", 
+            "cccccddd", 
+            "cccccd");
+
+        check(4,
+            "cccccc", 
+            "ccccd", 
+            "ccccd");
+
+        check(5,
+            "cccccc", 
+            "ccccddd", 
+            "ccccd");
+
+        check(6,
+            "cccccc", 
+            "cccd", 
+            "cccd");
+
+        check(7,
+            "cccccc", 
+            "cccddd", 
+            "cccd");
+
+        check(8,
+            "cccccc", 
+            "d", 
+            "d");
+
+        check(9,
+            "cccccc", 
+            "ddd", 
+            "d");
+
+        check(10,
+            "", 
+            "d", 
+            "d");
+        
+        check(11,
+            "", 
+            "ddd", 
+            "d");
+
+        check(12,
+            "<NULL>", 
+            "d", 
+            "d");
+        
+        check(12,
+            "<NULL>", 
+            "ddd", 
+            "d");
+
+        check(13,
+            TString(100, '_') + "cccddd",
+            TString(100, '_') + "cddddd",
+            TString(100, '_') + "cd");
+    }
+
+    Y_UNIT_TEST(CutKeys_CutUtf8String)
+    {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Utf8)
+            .Key({0});
+
+        NPage::TConf conf{ true, 8192 };
+        conf.CutIndexKeys = true;
+        conf.Group(0).PageRows = 1;
+
+        auto check = [&] (ui32 testId, TString a, TString b, TString expected) {
+            TPartCook cook(lay, conf);
+
+            TRow rowA, rowB;
+            rowA.Do(0, a, NScheme::NTypeIds::Utf8);
+            rowB.Do(0, b, NScheme::NTypeIds::Utf8);
+            cook.Add(rowA);
+            cook.Add(rowB);
+
+            TCheckIt wrap(cook.Finish(), { });
+
+            const auto part = (*wrap).Eggs.Lone();
+
+            Cerr << DumpPart(*part, 2) << Endl;
+
+            TString actual((part->Index->Begin() + 1).GetRecord()->Cell(part->Scheme->Groups[0].ColsKeyIdx[0]).AsBuf());
+            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, testId << ": '" << a << "', '" << b << "'");
+        };
+
+        check(0,
+            "cccccc", 
+            "cccddd", 
+            "cccd");
+
+        check(1,
+            "abc😔😔😔", // \xF0\x9F\x98\x94
+            "abc🉑🉑🉑", // \xF0\x9F\x89\x91
+            "abc🉑");
+
+        check(2,
+            "abc😔😔😔", // \xF0\x9F\x98\x94
+            "abc⚫⚫⚫", // \xE2\x9A\xAB
+            "abc⚫");
+
+        check(3,
+            "abc⚫⚫⚫", // \xE2\x9A\xAB
+            "abc😔😔😔", // \xF0\x9F\x98\x94
+            "abc😔");
+
+        check(4,
+            "abcxxx",
+            "abc😔😔😔", // \xF0\x9F\x98\x94
+            "abc😔");
+
+        check(5,
+            "abc😔😔😔", // \xF0\x9F\x98\x94
+            "abcxxx",
+            "abcx");
+
+        check(6,
+            "abc😔😔😔", // \xF0\x9F\x98\x94
+            "abc😖😖😖", // \xF0\x9F\x98\x96
+            "abc😖");
+    }
 }
 
 }

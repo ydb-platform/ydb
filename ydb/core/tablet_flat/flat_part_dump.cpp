@@ -92,7 +92,7 @@ namespace {
 
         auto label = part.Index.Label();
 
-        const auto items = (part.Index->End() - part.Index->Begin());
+        const auto items = (part.Index->End() - part.Index->Begin() + 1);
 
         Out
             << " + Index{" << (ui16)label.Type << " rev "
@@ -110,7 +110,7 @@ namespace {
 
         ssize_t seen = 0;
 
-        for (auto iter = part.Index->Begin(); iter; ++iter) {
+        for (ssize_t i = 0; i < items; i++) {
             Key.clear();
 
             if (depth < 2 && (seen += 1) > 10) {
@@ -121,6 +121,7 @@ namespace {
                 break;
             }
 
+            auto iter = i == items - 1 ? part.Index.GetLastKeyRecord() : (part.Index->Begin() + i).GetRecord();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
                 Key.push_back(iter->Cell(info));
 

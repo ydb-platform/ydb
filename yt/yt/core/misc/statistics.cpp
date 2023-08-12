@@ -172,9 +172,9 @@ void TStatistics::ProcessNodeWithCallback(const NYPath::TYPath& path, const NYTr
 
         default:
             THROW_ERROR_EXCEPTION(
-                "Invalid statistics type: expected map or integral type but found %v of type %v",
-                ConvertToYsonString(sample, EYsonFormat::Text).AsStringBuf(),
-                sample->GetType());
+                "Invalid statistics type: expected map or integral type but found sample of type %Qlv",
+                sample->GetType())
+                << TErrorAttribute("sample", sample);
     }
 }
 

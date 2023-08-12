@@ -40,7 +40,7 @@ public:
     std::vector<std::pair<TPortionInfo, ui64>> PortionsToMove; // {portion, new granule}
     std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
 
-    virtual void FillTouchedGranules(THashSet<ui64>& granules) const override;
+    virtual THashSet<ui64> GetTouchedGranules() const override;
 
     TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule);
     ~TCompactColumnEngineChanges();

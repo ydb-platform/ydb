@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    background_controller.cpp
     blob.cpp
     blob_cache.cpp
     blob_manager.cpp

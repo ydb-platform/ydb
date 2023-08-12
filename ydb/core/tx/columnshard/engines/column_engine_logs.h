@@ -11,6 +11,7 @@
 #include "changes/indexation.h"
 #include "changes/compaction.h"
 #include "changes/ttl.h"
+#include "changes/with_appended.h"
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -91,7 +92,8 @@ private:
         const ui64 MaxEvictBytes;
         std::shared_ptr<TTTLColumnEngineChanges> Changes;
         std::map<ui64, TDuration> DurationsForced;
-        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes);
+        const THashSet<ui64>& BusyGranules;
+        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<ui64>& busyGranules);
     };
 
     TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
@@ -171,7 +173,7 @@ public:
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
     std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo, const TCompactionLimits& limits) noexcept override;
     std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<ui64>& busyGranules,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,

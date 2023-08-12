@@ -8,19 +8,20 @@ namespace NKikimr::NOlap {
 
 void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
+    out << "original_granule=" << GranuleMeta->GetGranuleId() << ";";
     if (ui32 switched = SwitchedPortions.size()) {
-        out << "switch " << switched << " portions";
+        out << "switch " << switched << " portions:(";
         for (auto& portionInfo : SwitchedPortions) {
             out << portionInfo;
         }
-        out << "; ";
+        out << "); ";
     }
     if (ui32 moved = PortionsToMove.size()) {
-        out << "move " << moved << " portions";
+        out << "move " << moved << " portions:(";
         for (auto& [portionInfo, granule] : PortionsToMove) {
             out << portionInfo << " (to " << granule << ")";
         }
-        out << "; ";
+        out << "); ";
     }
 }
 
@@ -201,7 +202,7 @@ bool TCompactColumnEngineChanges::IsMovedPortion(const TPortionInfo& info) {
 
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
-    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId(), !IsSplit()));
+    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId(), !IsSplit()), *this);
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted(!IsSplit());
 }
@@ -253,8 +254,10 @@ TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
     Y_VERIFY_DEBUG(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
 }
 
-void TCompactColumnEngineChanges::FillTouchedGranules(THashSet<ui64>& granules) const {
-    granules.emplace(GranuleMeta->GetGranuleId());
+THashSet<ui64> TCompactColumnEngineChanges::GetTouchedGranules() const {
+    THashSet<ui64> result = TBase::GetTouchedGranules();
+    result.emplace(GranuleMeta->GetGranuleId());
+    return result;
 }
 
 }

@@ -285,6 +285,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
         if (PathGranules.contains(pathId)) {
             // Abort inserting if the path has overloaded granules.
             if (GranulesStorage->GetOverloaded(pathId)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_insertion_due_to_granule_overload")("path_id", pathId);
                 return {};
             }
 
@@ -428,6 +429,10 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             if (!info.IsActive()) {
                 continue;
             }
+            if (context.BusyGranules.contains(info.GetGranule())) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy granule")("granule_id", info.GetGranule());
+                continue;
+            }
 
             context.AllowEviction = (evictionSize <= context.MaxEvictBytes);
             context.AllowDrop = (dropBlobs <= TCompactionLimits::MAX_BLOBS_TO_DELETE);
@@ -529,13 +534,13 @@ bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<T
     return hasChanges;
 }
 
-std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, ui64 maxEvictBytes) noexcept {
+std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<ui64>& busyGranules, ui64 maxEvictBytes) noexcept {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
     auto changes = TChangesConstructor::BuildTtlChanges();
 
-    TTieringProcessContext context(maxEvictBytes, changes);
+    TTieringProcessContext context(maxEvictBytes, changes, busyGranules);
     bool hasExternalChanges = false;
     for (auto&& i : pathEviction) {
         context.DurationsForced[i.first] = ProcessTiering(i.first, i.second, context);
@@ -713,6 +718,7 @@ static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot
         if (visible) {
             out[recSnapshot].push_back(&portionInfo);
         }
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "GroupPortionsBySnapshot")("analyze_portion", portionInfo.DebugString())("visible", visible)("snapshot", snapshot.DebugString());
     }
     return out;
 }
@@ -857,10 +863,11 @@ void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTier
 
 }
 
-TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes)
+TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<ui64>& busyGranules)
     : Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
     , MaxEvictBytes(maxEvictBytes)
     , Changes(changes)
+    , BusyGranules(busyGranules)
 {
 
 }

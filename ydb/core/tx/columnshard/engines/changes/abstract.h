@@ -199,7 +199,7 @@ public:
         return Stage == EStage::Aborted;
     }
 
-    virtual void FillTouchedGranules(THashSet<ui64>& granules) const = 0;
+    virtual THashSet<ui64> GetTouchedGranules() const = 0;
 
     void StartEmergency();
     void AbortEmergency();

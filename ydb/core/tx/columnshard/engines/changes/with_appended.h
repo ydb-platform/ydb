@@ -25,6 +25,10 @@ protected:
         std::vector<TString>& blobs, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
 
 public:
+    virtual THashSet<ui64> GetTouchedGranules() const override {
+        return {};
+    }
+
     std::vector<TPortionInfo> AppendedPortions; // New portions after indexing or compaction
     THashMap<ui64, std::pair<ui64, TMark>> NewGranules; // granule -> {pathId, key}
     ui64 FirstGranuleId = 0;

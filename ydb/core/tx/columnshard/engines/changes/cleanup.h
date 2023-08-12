@@ -23,10 +23,12 @@ protected:
     }
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
-    virtual void FillTouchedGranules(THashSet<ui64>& granules) const override {
+    virtual THashSet<ui64> GetTouchedGranules() const override {
+        THashSet<ui64> result;
         for (const auto& portionInfo : PortionsToDrop) {
-            granules.emplace(portionInfo.GetGranule());
+            result.emplace(portionInfo.GetGranule());
         }
+        return result;
     }
 
     std::vector<TPortionInfo> PortionsToDrop;

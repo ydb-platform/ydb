@@ -61,6 +61,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   ydb-library-chunks_limiter
 )
 target_sources(core-tx-columnshard PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/background_controller.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob_manager.cpp

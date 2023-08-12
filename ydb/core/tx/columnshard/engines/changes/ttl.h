@@ -30,11 +30,12 @@ public:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }
-    virtual void FillTouchedGranules(THashSet<ui64>& granules) const override {
-        TBase::FillTouchedGranules(granules);
+    virtual THashSet<ui64> GetTouchedGranules() const override {
+        auto result = TBase::GetTouchedGranules();
         for (const auto& [portionInfo, _] : PortionsToEvict) {
-            granules.emplace(portionInfo.GetGranule());
+            result.emplace(portionInfo.GetGranule());
         }
+        return result;
     }
 
     std::vector<TColumnRecord> EvictedRecords;

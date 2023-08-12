@@ -33,12 +33,14 @@ public:
 
     }
 
-    virtual void FillTouchedGranules(THashSet<ui64>& granules) const override {
+    virtual THashSet<ui64> GetTouchedGranules() const override {
+        THashSet<ui64> result = TBase::GetTouchedGranules();
         for (auto&& i : PathToGranule) {
             for (auto&& g : i.second) {
-                granules.emplace(g.second);
+                result.emplace(g.second);
             }
         }
+        return result;
     }
 
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;

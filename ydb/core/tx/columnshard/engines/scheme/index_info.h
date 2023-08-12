@@ -54,6 +54,7 @@ public:
             << "id=" << Id << ";"
             << "version=" << Version << ";"
             << "name=" << Name << ";"
+            << "composite=" << CompositeIndexKey << "/" << CompositeMarks << ";"
             << ")";
     }
 

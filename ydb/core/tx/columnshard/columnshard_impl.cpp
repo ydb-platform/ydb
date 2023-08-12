@@ -84,14 +84,6 @@ bool ValidateTablePreset(const NKikimrSchemeOp::TColumnTableSchemaPreset& preset
 
 }
 
-void TColumnShard::TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
-    const NOlap::TTTLColumnEngineChanges* ttlChanges = dynamic_cast<const NOlap::TTTLColumnEngineChanges*>(&changes);
-    Y_VERIFY(ttlChanges);
-    Y_VERIFY(ActiveTtlGranules.empty());
-
-    ttlChanges->FillTouchedGranules(ActiveTtlGranules);
-}
-
 bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& schema) const {
     switch (Body.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
@@ -745,7 +737,7 @@ void TColumnShard::SetupCompaction() {
     BackgroundController.CheckDeadlines();
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto limits = CompactionLimits.Get();
-        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits, BackgroundController.GetActiveTtlGranules());
+        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits, BackgroundController.GetBusyGranules());
         if (!compactionInfo) {
             if (!BackgroundController.GetCompactionsCount()) {
                 LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
@@ -794,7 +786,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction);
+    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, BackgroundController.GetConflictTTLGranules());
 
     if (!indexChanges) {
         LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());

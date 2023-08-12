@@ -145,8 +145,10 @@ public:
         auto& columns = Indices[index].Columns;
         for (auto& [granule, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
+                auto copy = portionLocal;
+                copy.Records.clear();
                 for (const auto& rec : portionLocal.Records) {
-                    callback(portionLocal, rec);
+                    callback(copy, rec);
                 }
             }
         }
@@ -337,7 +339,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
 
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
-    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction);
+    std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, {});
     UNIT_ASSERT(changes);
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 

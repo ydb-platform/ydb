@@ -181,7 +181,8 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
 
         Y_VERIFY(columns.back());
         if (!columns.back()->type()->Equals(field->type())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())("column_type", field->type()->ToString());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+                                ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
             return nullptr;
         }
     }

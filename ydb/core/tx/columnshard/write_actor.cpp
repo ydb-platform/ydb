@@ -95,7 +95,7 @@ public:
 
         auto blobsConstructor = WriteController->GetBlobConstructor();
         if (!blobsConstructor) {
-            return SendResultAndDie(ctx, NKikimrProto::ERROR);
+            return SendResultAndDie(ctx, NKikimrProto::CORRUPTED);
         }
         auto status = NOlap::IBlobConstructor::EStatus::Finished;
         while (true) {
@@ -108,7 +108,7 @@ public:
 
         }
         if (status != NOlap::IBlobConstructor::EStatus::Finished) {
-            return SendResultAndDie(ctx, NKikimrProto::ERROR);
+            return SendResultAndDie(ctx, NKikimrProto::CORRUPTED);
         }
 
         if (BlobBatch.AllBlobWritesCompleted()) {

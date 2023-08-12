@@ -127,7 +127,7 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::Bytes: {
             Y_VERIFY(column->type()->id() == arrow::Type::STRING);
-            return std::make_shared<arrow::BinaryArray>(column->data());
+            return std::make_shared<arrow::BinaryArray>(arrow::ArrayData::Make(arrow::binary(), column->data()->length,  column->data()->buffers, column->data()->null_count, column->data()->offset));
         }
         case NScheme::NTypeIds::Date: {
             Y_VERIFY(arrow::is_primitive(column->type()->id()));

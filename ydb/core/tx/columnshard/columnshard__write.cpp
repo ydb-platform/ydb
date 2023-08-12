@@ -205,13 +205,13 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
     if (putResult.GetPutStatus() != NKikimrProto::OK) {
         IncCounter(COUNTER_WRITE_FAIL);
 
-        auto errCode = NKikimrTxColumnShard::EResultStatus::ERROR;
+        auto errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
         if (putResult.GetPutStatus() == NKikimrProto::TIMEOUT || putResult.GetPutStatus() == NKikimrProto::DEADLINE) {
             errCode = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
         } else if (putResult.GetPutStatus() == NKikimrProto::TRYLATER || putResult.GetPutStatus() == NKikimrProto::OUT_OF_SPACE) {
             errCode = NKikimrTxColumnShard::EResultStatus::OVERLOADED;
-        } else {
-            errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
+        } else if (putResult.GetPutStatus() == NKikimrProto::CORRUPTED) {
+            errCode = NKikimrTxColumnShard::EResultStatus::ERROR;
         }
 
         if (writeMeta.HasLongTxId()) {

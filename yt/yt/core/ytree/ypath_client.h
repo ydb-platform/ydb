@@ -188,8 +188,23 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO(gritukan): It's not easy to find a proper return type for these functions
+// that is suitable both for vanilla and patched protobufs. In an ideal world,
+// it would be TYPathBuf, but for now it breaks the advantages for CoW of the
+// TString. Rethink it if and when YT will try to use std::string or non-CoW
+// TString everywhere.
+#ifdef YT_USE_VANILLA_PROTOBUF
+
+TYPath GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+TYPath GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+
+#else
+
 const TYPath& GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 const TYPath& GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
+
+#endif
+
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPath path);
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header);

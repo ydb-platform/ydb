@@ -238,6 +238,24 @@ bool TYPathResponse::TryDeserializeBody(TRef /*data*/, std::optional<NCompressio
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef YT_USE_VANILLA_PROTOBUF
+
+TYPath GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
+{
+    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    return FromProto<TYPath>(ypathExt.target_path());
+}
+
+TYPath GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
+{
+    const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
+    return ypathExt.has_original_target_path()
+        ? FromProto<TYPath>(ypathExt.original_target_path())
+        : FromProto<TYPath>(ypathExt.target_path());
+}
+
+#else
+
 const TYPath& GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header)
 {
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
@@ -249,6 +267,8 @@ const TYPath& GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& 
     const auto& ypathExt = header.GetExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     return ypathExt.has_original_target_path() ? ypathExt.original_target_path() : ypathExt.target_path();
 }
+
+#endif
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPath path)
 {

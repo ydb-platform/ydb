@@ -4,6 +4,8 @@
 #include "sync_expiring_cache.h"
 #endif
 
+#include "collection_helpers.h"
+
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
 namespace NYT {
@@ -41,10 +43,10 @@ TSyncExpiringCache<TKey, TValue>::TEntry::operator=(typename TSyncExpiringCache<
 
 template <class TKey, class TValue>
 TSyncExpiringCache<TKey, TValue>::TSyncExpiringCache(
-    TCallback<TValue(const TKey&)> calculateValueAction,
+    TValueCalculator valueCalculator,
     std::optional<TDuration> expirationTimeout,
     IInvokerPtr invoker)
-    : CalculateValueAction_(std::move(calculateValueAction))
+    : ValueCalculator_(std::move(valueCalculator))
     , EvictionExecutor_(New<NConcurrency::TPeriodicExecutor>(
         invoker,
         BIND(&TSyncExpiringCache::DeleteExpiredItems, MakeWeak(this))))
@@ -92,7 +94,7 @@ TValue TSyncExpiringCache<TKey, TValue>::Get(const TKey& key)
         }
     }
 
-    auto result = CalculateValueAction_(key);
+    auto result = ValueCalculator_(key);
 
     {
         auto guard = WriterGuard(MapLock_);
@@ -143,18 +145,18 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
         return foundValues;
     }
 
-    std::vector<TValue> results;
-    results.reserve(keys.size());
+    std::vector<TValue> values;
+    values.reserve(keys.size());
 
     int missingIndex = 0;
     for (int keyIndex = 0; keyIndex < std::ssize(keys); ++keyIndex) {
         if (missingIndex < std::ssize(missingValueIndexes) &&
             missingValueIndexes[missingIndex] == keyIndex)
         {
-            results.push_back(CalculateValueAction_(keys[keyIndex]));
+            values.push_back(ValueCalculator_(keys[keyIndex]));
             ++missingIndex;
         } else {
-            results.push_back(std::move(foundValues[keyIndex - missingIndex]));
+            values.push_back(std::move(foundValues[keyIndex - missingIndex]));
         }
     }
 
@@ -162,22 +164,20 @@ std::vector<TValue> TSyncExpiringCache<TKey, TValue>::Get(const std::vector<TKey
         auto guard = WriterGuard(MapLock_);
 
         for (auto index : missingValueIndexes) {
+            const auto& value = values[index];
             if (auto it = Map_.find(keys[index]); it != Map_.end()) {
-                it->second = {now, now, results[index]};
+                it->second = {now, now, value};
             } else {
-                YT_VERIFY(Map_.emplace(
-                    keys[index],
-                    TEntry(now, now, results[index]))
-                    .second);
+                EmplaceOrCrash(Map_, keys[index], TEntry(now, now, value));
             }
         }
     }
 
-    return results;
+    return values;
 }
 
 template <class TKey, class TValue>
-void TSyncExpiringCache<TKey, TValue>::Set(const TKey& key, TValue value)
+std::optional<TValue> TSyncExpiringCache<TKey, TValue>::Set(const TKey& key, TValue value)
 {
     auto now = NProfiling::GetCpuInstant();
 
@@ -186,13 +186,12 @@ void TSyncExpiringCache<TKey, TValue>::Set(const TKey& key, TValue value)
     if (auto it = Map_.find(key);
         it != Map_.end())
     {
+        auto oldValue = std::move(it->second.Value);
         it->second = {now, now, std::move(value)};
-    } else
-    {
-        YT_VERIFY(Map_.emplace(
-            key,
-            TEntry(now, now, std::move(value)))
-            .second);
+        return oldValue;
+    } else {
+        EmplaceOrCrash(Map_, key, TEntry(now, now, std::move(value)));
+        return {};
     }
 }
 

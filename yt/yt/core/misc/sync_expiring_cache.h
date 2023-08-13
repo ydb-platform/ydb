@@ -4,6 +4,8 @@
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
+#include <optional>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13,8 +15,10 @@ class TSyncExpiringCache
     : public TRefCounted
 {
 public:
+    using TValueCalculator = TCallback<TValue(const TKey&)>;
+
     TSyncExpiringCache(
-        TCallback<TValue(const TKey&)> calculateValueAction,
+        TValueCalculator valueCalculator,
         std::optional<TDuration> expirationTimeout,
         IInvokerPtr invoker);
 
@@ -23,7 +27,8 @@ public:
     TValue Get(const TKey& key);
     std::vector<TValue> Get(const std::vector<TKey>& keys);
 
-    void Set(const TKey& key, TValue value);
+    //! Returns the previous value, if any.
+    std::optional<TValue> Set(const TKey& key, TValue value);
     void Invalidate(const TKey& key);
     void Clear();
 
@@ -45,7 +50,7 @@ private:
         TValue Value;
     };
 
-    const TCallback<TValue(const TKey&)> CalculateValueAction_;
+    const TValueCalculator ValueCalculator_;
     const NConcurrency::TPeriodicExecutorPtr EvictionExecutor_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, MapLock_);

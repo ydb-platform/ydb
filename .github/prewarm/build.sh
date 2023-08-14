@@ -6,6 +6,9 @@ export CCACHE_BASEDIR=/ydbwork/
 
 export CONAN_USER_HOME=/ydbwork/build
 
+export CC=/usr/bin/clang-14
+export CC_FOR_BUILD=$CC
+
 mkdir /ydbwork/build
 cd /ydbwork/build
 

@@ -936,8 +936,7 @@ private:
                 if (const auto complete = TConstraint::MakeComplete(ctx, lambda->GetColumnMapping(), original)) {
                     output.AddConstraint(complete);
                 }
-            }
-            if (const auto part = input.template GetConstraint<TConstraint>()) {
+            } else if (const auto part = input.template GetConstraint<TConstraint>()) {
                 auto mapping = lambda->GetColumnMapping();
                 for (auto it = mapping.cbegin(); mapping.cend() != it;) {
                     if (part->GetColumnMapping().contains(it->first))
@@ -948,6 +947,8 @@ private:
                 if (!mapping.empty()) {
                     output.AddConstraint(ctx.MakeConstraint<TConstraint>(std::move(mapping)));
                 }
+            } else if constexpr (std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>()) {
+                output.AddConstraint(lambda);
             }
         }
     }
@@ -957,13 +958,9 @@ private:
         if (const auto lambda = GetConstraintFromLambda<TConstraint, WideOutput>(input->Tail(), ctx)) {
             if (const auto original = GetDetailed(input->Head().GetConstraint<typename TConstraint::TMainConstraint>(), *input->Head().GetTypeAnn(), ctx)) {
                 if (const auto complete = TConstraint::MakeComplete(ctx, lambda->GetColumnMapping(), original)) {
-                    if constexpr (std::is_same<typename TConstraint::TMainConstraint, TUniqueConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TDistinctConstraintNode>())
-                        input->AddConstraint(complete->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
-                    else
-                        input->AddConstraint(complete);
+                    input->AddConstraint(complete->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
                 }
-            }
-            if (const auto part = input->Head().GetConstraint<TConstraint>()) {
+            } else if (const auto part = input->Head().GetConstraint<TConstraint>()) {
                 auto mapping = lambda->GetColumnMapping();
                 for (auto it = mapping.cbegin(); mapping.cend() != it;) {
                     if (part->GetColumnMapping().contains(it->first))
@@ -974,6 +971,8 @@ private:
                 if (!mapping.empty()) {
                     input->AddConstraint(ctx.MakeConstraint<TConstraint>(std::move(mapping)));
                 }
+            } else if constexpr (std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>()) {
+                input->AddConstraint(lambda);
             }
         }
     }

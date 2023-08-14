@@ -3,7 +3,7 @@
 
 namespace NSQLTranslationV1 {
 
-class TMatchRecognize: public TCallNode {
+class TMatchRecognize: public TAstListNode {
 public:
     TMatchRecognize(
             TPosition pos,
@@ -17,7 +17,9 @@ public:
             std::pair<TPosition, TRowPatternPtr>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
-            ): TCallNode(pos, "block", {BuildBlockStatements(
+            ): TAstListNode(pos, {BuildAtom(pos, "block")})
+    {
+        Add(BuildBlockStatements(
                     pos,
                     source,
                     inputTable,
@@ -29,8 +31,8 @@ public:
                     std::move(pattern),
                     std::move(subset),
                     std::move(definitions)
-            )})
-    {}
+        ));
+    }
 private:
     TNodePtr BuildBlockStatements(
             TPosition pos,

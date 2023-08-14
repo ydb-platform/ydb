@@ -72,6 +72,7 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     TVector<TString> FilterGroupIds;
     TString Filter;
     std::unordered_set<TNodeId> FilterNodeIds;
+    THashSet<TString> EffectiveFilterGroupIds;
     std::unordered_set<TNodeId> NodeIds;
     bool NeedGroups = true;
     bool NeedDisks = true;
@@ -417,6 +418,10 @@ public:
             }
             if (FilterNodeIds.empty() || FilterNodeIds.contains(nodeId)) {
                 StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
+                TString groupId(ToString(info.GetGroupID()));
+                if (FilterGroupIds.empty() || BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {
+                    EffectiveFilterGroupIds.insert(groupId);
+                }
             }
             for (const auto& vDiskNodeId : info.GetVDiskNodeIds()) {
                 Group2NodeId[info.GetGroupID()].push_back(vDiskNodeId);
@@ -574,7 +579,7 @@ public:
     }
 
     bool CheckGroupFilters(const TString& groupId, const TString& poolName) {
-        if (!FilterGroupIds.empty() && !BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {
+        if (!EffectiveFilterGroupIds.empty() && !EffectiveFilterGroupIds.contains(groupId)) {
             return false;
         }
         switch (With) {

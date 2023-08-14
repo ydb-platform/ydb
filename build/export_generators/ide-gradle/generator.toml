@@ -1,0 +1,47 @@
+[root]
+template="settings.gradle.kts.jinja"
+copy=[
+    "build.gradle.kts",
+    "gradlew",
+    "gradlew.bat",
+    "gradle/wrapper/gradle-wrapper.jar",
+    "gradle/wrapper/gradle-wrapper.properties"
+]
+
+[targets.jar]
+template="build.gradle.kts.jinja"
+
+[targets.jar_proto]
+template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
+
+[attrs.target]
+proto_files="list"
+proto_grpc="flag"
+proto_namespace="str"
+required_jdk="str"
+add_vcs_info_to_mf="bool"
+junit4_test="flag"
+junit5_test="flag"
+app_main_class="str"
+publish="flag"
+publish_group="str"
+publish_version="str"
+applied_excludes="list"
+peers_closure="list"
+peers_closure_coords="list"
+excludes_rules="list"
+
+[attrs.root]
+
+[attrs.dir]
+
+[attrs.induced]
+consumer_classpath="list"
+
+[merge]
+test=[
+    "/ut",
+    "/src/test",
+    "/src/test/java",
+    "/src/test-integration"
+]

@@ -903,8 +903,13 @@ IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TEx
 
     if (hasUserSchema || hasUserColumns) {
         const auto setting = GetSetting(tableInfo.Settings.Ref(), hasUserSchema ? EYtSettingType::UserSchema : EYtSettingType::UserColumns);
-        auto type = setting->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-        auto prevRowSpec = tableInfo.RowSpec;
+        auto type = setting->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        const auto prevRowSpec = tableInfo.RowSpec;
+        if (!(prevRowSpec && prevRowSpec->StrictSchema) && type->Cast<TStructExprType>()->FindItem("_other")) {
+            ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), "It is forbidden to specify the column '_other'."));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         TVector<TString> explicitYson;
         if (prevRowSpec && hasUserColumns) {
             const bool hasNativeFlags = prevRowSpec->GetNativeYtTypeFlags() != 0;

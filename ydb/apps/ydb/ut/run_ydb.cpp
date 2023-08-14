@@ -34,7 +34,11 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2)
     command.Run().Wait();
 
     if (command.GetExitCode() != 0) {
-        ythrow yexception() << "command `" << command.GetQuotedCommand() << "` exit with code " << command.GetExitCode();
+        ythrow yexception() << Endl <<
+            "command: " << command.GetQuotedCommand() << Endl <<
+            "exitcode: " << command.GetExitCode() << Endl <<
+            "stdout: " << Endl << command.GetOutput() << Endl <<
+            "stderr: " << Endl << command.GetError() << Endl;
     }
 
     return command.GetOutput();

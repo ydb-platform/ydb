@@ -1,3 +1,4 @@
 ydb-core-blobstorage-ut_blobstorage_9
 ydb-core-tx-schemeshard-ut_replication_reboots_0
 ydb-core-blobstorage-ut_vdisk2_0
+ydb-core-blobstorage-pdisk-ut_2

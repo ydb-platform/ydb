@@ -26,29 +26,38 @@
 
 # How to Build
 
-## (optional) Add CMake and LLVM APT repositories (for Ubuntu 18.04 and 20.04)
+<details>
+   <summary>For Ubuntu 18.04, install Python 3.8, create and activate a new virtual environment, and install the latest PIP.</summary>
 
-## Ubuntu 18.04 and Ubuntu 20.04
+   ```bash
+   apt-get install python3.8 python3.8-venv python3-venv
+   python3.8 -mvnev ~/ydbwork/ve
+   source ~/ydbwork/ve/bin/activate
+   pip install -U pip
+   ```
+</details>
 
-For Ubuntu 18.04 and Ubuntu 20.04, you have to add CMake and LLVM APT repositories:
+<details>
+   <summary>For Ubuntu 18.04 and Ubuntu 20.04, add CMake and LLVM APT repositories.</summary>
 
-```bash
-wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
-echo "deb http://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+   ```bash
+   wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
+   echo "deb http://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
+   
+   wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+   echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-14 main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+   
+   sudo apt-get update
+   
+   ```
 
-wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-echo "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-14 main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
-
-sudo apt-get update
-
-```
-
+</details>
 
 ## Install dependencies
 
 ```bash
 sudo apt-get -y install git cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev libaio1 libaio-dev llvm-14
-sudo pip3 install conan==1.59
+sudo pip3 install conan==1.59 grpcio-tools==1.57.0
 
 ```
 

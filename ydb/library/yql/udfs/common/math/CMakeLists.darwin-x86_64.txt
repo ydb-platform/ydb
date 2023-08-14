@@ -13,6 +13,12 @@ get_built_tool_path(
   tools/rescompiler/bin
   rescompiler
 )
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(math_udf INTERFACE)
 target_link_libraries(math_udf INTERFACE
@@ -92,3 +98,87 @@ resources(math_udf.global
   KEYS
   /llvm_bc/Math
 )
+
+add_shared_library(math_udf.dyn)
+set_property(TARGET math_udf.dyn PROPERTY
+  OUTPUT_NAME math_udf
+)
+target_compile_options(math_udf.dyn PRIVATE
+  -DBUILD_UDF
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(math_udf.dyn PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  common-math-lib
+  library-cpp-resource
+)
+target_link_options(math_udf.dyn PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
+  -fPIC
+  -undefined
+  dynamic_lookup
+  -fPIC
+)
+target_sources(math_udf.dyn PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/math_udf.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/e16170b202418194bf58dc2778af9bd8.cpp
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_optimized.bc
+  DEPENDS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_merged.bc
+  COMMAND
+  ${LLVMOPT}
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_merged.bc
+  -o
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_optimized.bc
+  -O2
+  -globalopt
+  -globaldce
+  -internalize
+  -internalize-public-api-list=PiIR#EIR#EpsIR#AbsIR#AcosIR#AsinIR#AsinhIR#AtanIR#CbrtIR#CeilIR#CosIR#CoshIR#ErfIR#ErfInvIR#ErfcInvIR#ExpIR#Exp2IR#FabsIR#FloorIR#LgammaIR#RintIR#SinIR#SinhIR#SqrtIR#TanIR#TanhIR#TgammaIR#TruncIR#IsFiniteIR#IsInfIR#IsNaNIR#Atan2IR#FmodIR#HypotIR#RemainderIR#PowIR#LdexpIR#LogIR#Log2IR#Log10IR#SigmoidIR#FuzzyEqualsIR#RoundIR#ModIR#RemIR
+)
+add_custom_command(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_merged.bc
+  DEPENDS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/math_ir.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp.bc
+  COMMAND
+  ${LLVMLINK}
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/math_ir.cpp.bc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp.bc
+  -o
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_merged.bc
+)
+llvm_compile_cxx(math_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/math_ir.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/math_ir.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+llvm_compile_cxx(math_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+resources(math_udf.dyn
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/e16170b202418194bf58dc2778af9bd8.cpp
+  INPUTS
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/math/Math_optimized.bc
+  KEYS
+  /llvm_bc/Math
+)
+use_export_script(math_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+)
+vcs_info(math_udf.dyn)

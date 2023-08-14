@@ -151,7 +151,7 @@ enum PlaceholderPosition { PH_EMPTY, PH_NONE, PH_BEGINNING, PH_MIDDLE, PH_END };
 void extractCorePattern(const UnicodeString &pattern,
                         UnicodeString &coreUnit,
                         PlaceholderPosition &placeholderPosition,
-                        UChar &joinerChar) {
+                        char16_t &joinerChar) {
     joinerChar = 0;
     int32_t len = pattern.length();
     if (pattern.startsWith(u"{0}", 3)) {
@@ -209,7 +209,7 @@ getGenderForBuiltin(const Locale &locale, const MeasureUnit &builtinUnit, UError
 
     UErrorCode localStatus = status;
     int32_t resultLen = 0;
-    const UChar *result =
+    const char16_t *result =
         ures_getStringByKeyWithFallback(unitsBundle.getAlias(), key.data(), &resultLen, &localStatus);
     if (U_SUCCESS(localStatus)) {
         status = localStatus;
@@ -258,7 +258,7 @@ class InflectedPluralSink : public ResourceSink {
     }
 
     // See ResourceSink::put().
-    void put(const char *key, ResourceValue &value, UBool /*noFallback*/, UErrorCode &status) U_OVERRIDE {
+    void put(const char *key, ResourceValue &value, UBool /*noFallback*/, UErrorCode &status) override {
         int32_t pluralIndex = getIndex(key, status);
         if (U_FAILURE(status)) { return; }
         if (!outArray[pluralIndex].isBogus()) {
@@ -384,7 +384,7 @@ class PluralTableSink : public ResourceSink {
         }
     }
 
-    void put(const char *key, ResourceValue &value, UBool /*noFallback*/, UErrorCode &status) U_OVERRIDE {
+    void put(const char *key, ResourceValue &value, UBool /*noFallback*/, UErrorCode &status) override {
         if (uprv_strcmp(key, "case") == 0) {
             return;
         }
@@ -431,13 +431,33 @@ void getMeasureData(const Locale &locale,
     subKey.append(unit.getType(), status);
     subKey.append("/", status);
 
+    // Check if unitSubType is an alias or not.
+    LocalUResourceBundlePointer aliasBundle(ures_open(U_ICUDATA_ALIAS, "metadata", &status));
+
+    UErrorCode aliasStatus = status;
+    StackUResourceBundle aliasFillIn;
+    CharString aliasKey;
+    aliasKey.append("alias/unit/", aliasStatus);
+    aliasKey.append(unit.getSubtype(), aliasStatus);
+    aliasKey.append("/replacement", aliasStatus);
+    ures_getByKeyWithFallback(aliasBundle.getAlias(), aliasKey.data(), aliasFillIn.getAlias(),
+                              &aliasStatus);
+    CharString unitSubType;
+    if (!U_FAILURE(aliasStatus)) {
+        // This means the subType is an alias. Then, replace unitSubType with the replacement.
+        auto replacement = ures_getUnicodeString(aliasFillIn.getAlias(), &status);
+        unitSubType.appendInvariantChars(replacement, status);
+    } else {
+        unitSubType.append(unit.getSubtype(), status);
+    }
+
     // Map duration-year-person, duration-week-person, etc. to duration-year, duration-week, ...
     // TODO(ICU-20400): Get duration-*-person data properly with aliases.
-    int32_t subtypeLen = static_cast<int32_t>(uprv_strlen(unit.getSubtype()));
-    if (subtypeLen > 7 && uprv_strcmp(unit.getSubtype() + subtypeLen - 7, "-person") == 0) {
-        subKey.append({unit.getSubtype(), subtypeLen - 7}, status);
+    int32_t subtypeLen = static_cast<int32_t>(uprv_strlen(unitSubType.data()));
+    if (subtypeLen > 7 && uprv_strcmp(unitSubType.data() + subtypeLen - 7, "-person") == 0) {
+        subKey.append({unitSubType.data(), subtypeLen - 7}, status);
     } else {
-        subKey.append({unit.getSubtype(), subtypeLen}, status);
+        subKey.append({unitSubType.data(), subtypeLen}, status);
     }
 
     if (width != UNUM_UNIT_WIDTH_FULL_NAME) {
@@ -540,7 +560,7 @@ UnicodeString getCompoundValue(StringPiece compoundKey,
 
     UErrorCode localStatus = status;
     int32_t len = 0;
-    const UChar *ptr =
+    const char16_t *ptr =
         ures_getStringByKeyWithFallback(unitsBundle.getAlias(), key.data(), &len, &localStatus);
     if (U_FAILURE(localStatus) && width != UNUM_UNIT_WIDTH_SHORT) {
         // Fall back to short, which contains more compound data
@@ -586,7 +606,7 @@ class DerivedComponents {
      */
     DerivedComponents(const Locale &locale, const char *feature, const char *structure) {
         StackUResourceBundle derivationsBundle, stackBundle;
-        ures_openDirectFillIn(derivationsBundle.getAlias(), NULL, "grammaticalFeatures", &status);
+        ures_openDirectFillIn(derivationsBundle.getAlias(), nullptr, "grammaticalFeatures", &status);
         ures_getByKey(derivationsBundle.getAlias(), "grammaticalData", derivationsBundle.getAlias(),
                       &status);
         ures_getByKey(derivationsBundle.getAlias(), "derivations", derivationsBundle.getAlias(),
@@ -675,7 +695,7 @@ class DerivedComponents {
 UnicodeString
 getDeriveCompoundRule(Locale locale, const char *feature, const char *structure, UErrorCode &status) {
     StackUResourceBundle derivationsBundle, stackBundle;
-    ures_openDirectFillIn(derivationsBundle.getAlias(), NULL, "grammaticalFeatures", &status);
+    ures_openDirectFillIn(derivationsBundle.getAlias(), nullptr, "grammaticalFeatures", &status);
     ures_getByKey(derivationsBundle.getAlias(), "grammaticalData", derivationsBundle.getAlias(),
                   &status);
     ures_getByKey(derivationsBundle.getAlias(), "derivations", derivationsBundle.getAlias(), &status);
@@ -739,7 +759,7 @@ UnicodeString getDerivedGender(Locale locale,
 ////////////////////////
 
 // TODO: promote this somewhere? It's based on patternprops.cpp' trimWhitespace
-const UChar *trimSpaceChars(const UChar *s, int32_t &length) {
+const char16_t *trimSpaceChars(const char16_t *s, int32_t &length) {
     if (length <= 0 || (!u_isJavaSpaceChar(s[0]) && !u_isJavaSpaceChar(s[length - 1]))) {
         return s;
     }
@@ -1033,7 +1053,7 @@ void LongNameHandler::forArbitraryUnit(const Locale &loc,
         }
         UnicodeString denominatorPattern = denominatorFormatter.getTextWithNoArguments();
         int32_t trimmedLen = denominatorPattern.length();
-        const UChar *trimmed = trimSpaceChars(denominatorPattern.getBuffer(), trimmedLen);
+        const char16_t *trimmed = trimSpaceChars(denominatorPattern.getBuffer(), trimmedLen);
         UnicodeString denominatorString(false, trimmed, trimmedLen);
         // 9. If the denominatorString is empty, set result to
         //    [numeratorString], otherwise set result to format(perPattern,
@@ -1124,7 +1144,7 @@ void LongNameHandler::processPatternTimes(MeasureUnitImpl &&productUnit,
     }
 
     PlaceholderPosition globalPlaceholder[ARRAY_LENGTH];
-    UChar globalJoinerChar = 0;
+    char16_t globalJoinerChar = 0;
     // Numbered list items are from the algorithms at
     // https://unicode.org/reports/tr35/tr35-general.html#compound-units:
     //
@@ -1321,7 +1341,7 @@ void LongNameHandler::processPatternTimes(MeasureUnitImpl &&productUnit,
             // 4.6. Extract(corePattern, coreUnit, placeholder, placeholderPosition) from that pattern.
             UnicodeString coreUnit;
             PlaceholderPosition placeholderPosition;
-            UChar joinerChar;
+            char16_t joinerChar;
             extractCorePattern(getWithPlural(singleUnitArray, plural, status), coreUnit,
                                placeholderPosition, joinerChar);
 
@@ -1509,7 +1529,7 @@ void LongNameHandler::multiSimpleFormatsToModifiers(const UnicodeString *leadFor
 
 void LongNameHandler::processQuantity(DecimalQuantity &quantity, MicroProps &micros,
                                       UErrorCode &status) const {
-    if (parent != NULL) {
+    if (parent != nullptr) {
         parent->processQuantity(quantity, micros, status);
     }
     StandardPlural::Form pluralForm = utils::getPluralSafe(micros.rounder, rules, quantity, status);
@@ -1549,7 +1569,7 @@ void MixedUnitLongNameHandler::forMeasureUnit(const Locale &loc,
     for (int32_t i = 0; i < fillIn->fMixedUnitCount; i++) {
         // Grab data for each of the components.
         UnicodeString *unitData = &fillIn->fMixedUnitData[i * ARRAY_LENGTH];
-        // TODO(CLDR-14502): check from the CLDR-14502 ticket whether this
+        // TODO(CLDR-14582): check from the CLDR-14582 ticket whether this
         // propagation of unitDisplayCase is correct:
         getMeasureData(loc, impl.singleUnits[i]->build(status), width, unitDisplayCase, unitData,
                        status);
@@ -1706,12 +1726,12 @@ LongNameMultiplexer *LongNameMultiplexer::forMeasureUnits(const Locale &loc,
         result->fMeasureUnits[i] = unit;
         if (unit.getComplexity(status) == UMEASURE_UNIT_MIXED) {
             MixedUnitLongNameHandler *mlnh = result->fMixedUnitHandlers.createAndCheckErrorCode(status);
-            MixedUnitLongNameHandler::forMeasureUnit(loc, unit, width, unitDisplayCase, rules, NULL,
+            MixedUnitLongNameHandler::forMeasureUnit(loc, unit, width, unitDisplayCase, rules, nullptr,
                                                      mlnh, status);
             result->fHandlers[i] = mlnh;
         } else {
             LongNameHandler *lnh = result->fLongNameHandlers.createAndCheckErrorCode(status);
-            LongNameHandler::forMeasureUnit(loc, unit, width, unitDisplayCase, rules, NULL, lnh, status);
+            LongNameHandler::forMeasureUnit(loc, unit, width, unitDisplayCase, rules, nullptr, lnh, status);
             result->fHandlers[i] = lnh;
         }
         if (U_FAILURE(status)) {

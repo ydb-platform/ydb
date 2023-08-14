@@ -73,6 +73,7 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/lsr.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/lstmbe.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/messagepattern.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/mlbe.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/normalizer2.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/normalizer2impl.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/common/normlzr.cpp
@@ -281,6 +282,7 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/decContext.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/decNumber.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/decimfmt.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/displayoptions.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/double-conversion-bignum-dtoa.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/double-conversion-bignum.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/double-conversion-cached-powers.cpp
@@ -313,6 +315,7 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/indiancal.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/inputext.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/islamcal.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/iso8601cal.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/japancal.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/listformatter.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/measfmt.cpp
@@ -348,6 +351,7 @@ target_sources(contrib-libs-icu PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_patternstring.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_rounding.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_scientific.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_simple.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_skeletons.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_symbolswrapper.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/icu/i18n/number_usageprefs.cpp
@@ -481,5 +485,5 @@ target_sources(contrib-libs-icu PRIVATE
 )
 target_rodata_sources(contrib-libs-icu
   PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/icudt70_dat.rodata
+  ${CMAKE_SOURCE_DIR}/contrib/libs/icu/icudt73_dat.rodata
 )

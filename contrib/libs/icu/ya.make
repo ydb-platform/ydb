@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(70.1)
+VERSION(73.2)
 
-ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-70-1/icu4c-70_1-src.tgz)
+ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-73-2/icu4c-73_2-src.tgz)
 
 ADDINCL(
     GLOBAL contrib/libs/icu/include
@@ -89,6 +89,7 @@ SRCS(
     common/lsr.cpp
     common/lstmbe.cpp
     common/messagepattern.cpp
+    common/mlbe.cpp
     common/normalizer2.cpp
     common/normalizer2impl.cpp
     common/normlzr.cpp
@@ -297,6 +298,7 @@ SRCS(
     i18n/decContext.cpp
     i18n/decNumber.cpp
     i18n/decimfmt.cpp
+    i18n/displayoptions.cpp
     i18n/double-conversion-bignum-dtoa.cpp
     i18n/double-conversion-bignum.cpp
     i18n/double-conversion-cached-powers.cpp
@@ -329,6 +331,7 @@ SRCS(
     i18n/indiancal.cpp
     i18n/inputext.cpp
     i18n/islamcal.cpp
+    i18n/iso8601cal.cpp
     i18n/japancal.cpp
     i18n/listformatter.cpp
     i18n/measfmt.cpp
@@ -364,6 +367,7 @@ SRCS(
     i18n/number_patternstring.cpp
     i18n/number_rounding.cpp
     i18n/number_scientific.cpp
+    i18n/number_simple.cpp
     i18n/number_skeletons.cpp
     i18n/number_symbolswrapper.cpp
     i18n/number_usageprefs.cpp
@@ -482,7 +486,7 @@ SRCS(
     i18n/zonemeta.cpp
     i18n/zrule.cpp
     i18n/ztrans.cpp
-    icudt70_dat.rodata
+    icudt73_dat.rodata
     io/locbund.cpp
     io/sprintf.cpp
     io/sscanf.cpp

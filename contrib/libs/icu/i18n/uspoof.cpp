@@ -38,30 +38,30 @@ U_NAMESPACE_USE
 //
 // Static Objects used by the spoof impl, their thread safe initialization and their cleanup.
 //
-static UnicodeSet *gInclusionSet = NULL;
-static UnicodeSet *gRecommendedSet = NULL;
-static const Normalizer2 *gNfdNormalizer = NULL;
-static UInitOnce gSpoofInitStaticsOnce = U_INITONCE_INITIALIZER;
+static UnicodeSet *gInclusionSet = nullptr;
+static UnicodeSet *gRecommendedSet = nullptr;
+static const Normalizer2 *gNfdNormalizer = nullptr;
+static UInitOnce gSpoofInitStaticsOnce {};
 
 namespace {
 
 UBool U_CALLCONV
-uspoof_cleanup(void) {
+uspoof_cleanup() {
     delete gInclusionSet;
-    gInclusionSet = NULL;
+    gInclusionSet = nullptr;
     delete gRecommendedSet;
-    gRecommendedSet = NULL;
-    gNfdNormalizer = NULL;
+    gRecommendedSet = nullptr;
+    gNfdNormalizer = nullptr;
     gSpoofInitStaticsOnce.reset();
-    return TRUE;
+    return true;
 }
 
 void U_CALLCONV initializeStatics(UErrorCode &status) {
     static const char16_t *inclusionPat =
-        u"['\\-.\\:\\u00B7\\u0375\\u058A\\u05F3\\u05F4\\u06FD\\u06FE\\u0F0B\\u200C"
-        u"\\u200D\\u2010\\u2019\\u2027\\u30A0\\u30FB]";
+        u"['\\-.\\:\\u00B7\\u0375\\u058A\\u05F3\\u05F4\\u06FD\\u06FE\\u0F0B\\u2010"
+        u"\\u2019\\u2027\\u30A0\\u30FB]";
     gInclusionSet = new UnicodeSet(UnicodeString(inclusionPat), status);
-    if (gInclusionSet == NULL) {
+    if (gInclusionSet == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
@@ -103,14 +103,14 @@ void U_CALLCONV initializeStatics(UErrorCode &status) {
         u"\\u0C56\\u0C5D\\u0C60\\u0C61\\u0C66-\\u0C6F\\u0C80\\u0C82\\u0C83\\u0C85-"
         u"\\u0C8C\\u0C8E-\\u0C90\\u0C92-\\u0CA8\\u0CAA-\\u0CB3\\u0CB5-\\u0CB9\\u0CBC-"
         u"\\u0CC4\\u0CC6-\\u0CC8\\u0CCA-\\u0CCD\\u0CD5\\u0CD6\\u0CDD\\u0CE0-\\u0CE3"
-        u"\\u0CE6-\\u0CEF\\u0CF1\\u0CF2\\u0D00\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-"
+        u"\\u0CE6-\\u0CEF\\u0CF1-\\u0CF3\\u0D00\\u0D02\\u0D03\\u0D05-\\u0D0C\\u0D0E-"
         u"\\u0D10\\u0D12-\\u0D3A\\u0D3D-\\u0D43\\u0D46-\\u0D48\\u0D4A-\\u0D4E\\u0D54-"
         u"\\u0D57\\u0D60\\u0D61\\u0D66-\\u0D6F\\u0D7A-\\u0D7F\\u0D82\\u0D83\\u0D85-"
         u"\\u0D8E\\u0D91-\\u0D96\\u0D9A-\\u0DA5\\u0DA7-\\u0DB1\\u0DB3-\\u0DBB\\u0DBD"
         u"\\u0DC0-\\u0DC6\\u0DCA\\u0DCF-\\u0DD4\\u0DD6\\u0DD8-\\u0DDE\\u0DF2\\u0E01-"
         u"\\u0E32\\u0E34-\\u0E3A\\u0E40-\\u0E4E\\u0E50-\\u0E59\\u0E81\\u0E82\\u0E84"
         u"\\u0E86-\\u0E8A\\u0E8C-\\u0EA3\\u0EA5\\u0EA7-\\u0EB2\\u0EB4-\\u0EBD\\u0EC0-"
-        u"\\u0EC4\\u0EC6\\u0EC8-\\u0ECD\\u0ED0-\\u0ED9\\u0EDE\\u0EDF\\u0F00\\u0F20-"
+        u"\\u0EC4\\u0EC6\\u0EC8-\\u0ECE\\u0ED0-\\u0ED9\\u0EDE\\u0EDF\\u0F00\\u0F20-"
         u"\\u0F29\\u0F35\\u0F37\\u0F3E-\\u0F42\\u0F44-\\u0F47\\u0F49-\\u0F4C\\u0F4E-"
         u"\\u0F51\\u0F53-\\u0F56\\u0F58-\\u0F5B\\u0F5D-\\u0F68\\u0F6A-\\u0F6C\\u0F71"
         u"\\u0F72\\u0F74\\u0F7A-\\u0F80\\u0F82-\\u0F84\\u0F86-\\u0F92\\u0F94-\\u0F97"
@@ -131,20 +131,21 @@ void U_CALLCONV initializeStatics(UErrorCode &status) {
         u"\\u2DBE\\u2DC0-\\u2DC6\\u2DC8-\\u2DCE\\u2DD0-\\u2DD6\\u2DD8-\\u2DDE\\u3005-"
         u"\\u3007\\u3041-\\u3096\\u3099\\u309A\\u309D\\u309E\\u30A1-\\u30FA\\u30FC-"
         u"\\u30FE\\u3105-\\u312D\\u312F\\u31A0-\\u31BF\\u3400-\\u4DBF\\u4E00-\\u9FFF"
-        u"\\uA67F\\uA717-\\uA71F\\uA788\\uA78D\\uA792\\uA793\\uA7AA\\uA7AE\\uA7B8"
-        u"\\uA7B9\\uA7C0-\\uA7CA\\uA7D0\\uA7D1\\uA7D3\\uA7D5-\\uA7D9\\uA9E7-\\uA9FE"
-        u"\\uAA60-\\uAA76\\uAA7A-\\uAA7F\\uAB01-\\uAB06\\uAB09-\\uAB0E\\uAB11-\\uAB16"
-        u"\\uAB20-\\uAB26\\uAB28-\\uAB2E\\uAB66\\uAB67\\uAC00-\\uD7A3\\uFA0E\\uFA0F"
-        u"\\uFA11\\uFA13\\uFA14\\uFA1F\\uFA21\\uFA23\\uFA24\\uFA27-\\uFA29\\U00011301"
-        u"\\U00011303\\U0001133B\\U0001133C\\U00016FF0\\U00016FF1\\U0001B11F-"
-        u"\\U0001B122\\U0001B150-\\U0001B152\\U0001B164-\\U0001B167\\U0001DF00-"
-        u"\\U0001DF1E\\U0001E7E0-\\U0001E7E6\\U0001E7E8-\\U0001E7EB\\U0001E7ED"
-        u"\\U0001E7EE\\U0001E7F0-\\U0001E7FE\\U00020000-\\U0002A6DF\\U0002A700-"
-        u"\\U0002B738\\U0002B740-\\U0002B81D\\U0002B820-\\U0002CEA1\\U0002CEB0-"
-        u"\\U0002EBE0\\U00030000-\\U0003134A]";
+        u"\\uA67F\\uA717-\\uA71F\\uA788\\uA78D\\uA792\\uA793\\uA7AA\\uA7C0-\\uA7CA"
+        u"\\uA7D0\\uA7D1\\uA7D3\\uA7D5-\\uA7D9\\uA9E7-\\uA9FE\\uAA60-\\uAA76\\uAA7A-"
+        u"\\uAA7F\\uAB01-\\uAB06\\uAB09-\\uAB0E\\uAB11-\\uAB16\\uAB20-\\uAB26\\uAB28-"
+        u"\\uAB2E\\uAB66\\uAB67\\uAC00-\\uD7A3\\uFA0E\\uFA0F\\uFA11\\uFA13\\uFA14"
+        u"\\uFA1F\\uFA21\\uFA23\\uFA24\\uFA27-\\uFA29\\U00011301\\U00011303"
+        u"\\U0001133B\\U0001133C\\U00016FF0\\U00016FF1\\U0001B11F-\\U0001B122"
+        u"\\U0001B132\\U0001B150-\\U0001B152\\U0001B155\\U0001B164-\\U0001B167"
+        u"\\U0001DF00-\\U0001DF1E\\U0001DF25-\\U0001DF2A\\U0001E08F\\U0001E7E0-"
+        u"\\U0001E7E6\\U0001E7E8-\\U0001E7EB\\U0001E7ED\\U0001E7EE\\U0001E7F0-"
+        u"\\U0001E7FE\\U00020000-\\U0002A6DF\\U0002A700-\\U0002B739\\U0002B740-"
+        u"\\U0002B81D\\U0002B820-\\U0002CEA1\\U0002CEB0-\\U0002EBE0\\U00030000-"
+        u"\\U0003134A\\U00031350-\\U000323AF]";
 
     gRecommendedSet = new UnicodeSet(UnicodeString(recommendedPat), status);
-    if (gRecommendedSet == NULL) {
+    if (gRecommendedSet == nullptr) {
         status = U_MEMORY_ALLOCATION_ERROR;
         delete gInclusionSet;
         return;
@@ -164,16 +165,16 @@ U_CAPI USpoofChecker * U_EXPORT2
 uspoof_open(UErrorCode *status) {
     umtx_initOnce(gSpoofInitStaticsOnce, &initializeStatics, *status);
     if (U_FAILURE(*status)) {
-        return NULL;
+        return nullptr;
     }
     SpoofImpl *si = new SpoofImpl(*status);
-    if (si == NULL) {
+    if (si == nullptr) {
         *status = U_MEMORY_ALLOCATION_ERROR;
-        return NULL;
+        return nullptr;
     }
     if (U_FAILURE(*status)) {
         delete si;
-        return NULL;
+        return nullptr;
     }
     return si->asUSpoofChecker();
 }
@@ -183,44 +184,44 @@ U_CAPI USpoofChecker * U_EXPORT2
 uspoof_openFromSerialized(const void *data, int32_t length, int32_t *pActualLength,
                           UErrorCode *status) {
     if (U_FAILURE(*status)) {
-        return NULL;
+        return nullptr;
     }
 
-    if (data == NULL) {
+    if (data == nullptr) {
         *status = U_ILLEGAL_ARGUMENT_ERROR;
-        return NULL;
+        return nullptr;
     }
 
     umtx_initOnce(gSpoofInitStaticsOnce, &initializeStatics, *status);
     if (U_FAILURE(*status))
     {
-        return NULL;
+        return nullptr;
     }
 
     SpoofData *sd = new SpoofData(data, length, *status);
-    if (sd == NULL) {
+    if (sd == nullptr) {
         *status = U_MEMORY_ALLOCATION_ERROR;
-        return NULL;
+        return nullptr;
     }
 
     if (U_FAILURE(*status)) {
         delete sd;
-        return NULL;
+        return nullptr;
     }
 
     SpoofImpl *si = new SpoofImpl(sd, *status);
-    if (si == NULL) {
+    if (si == nullptr) {
         *status = U_MEMORY_ALLOCATION_ERROR;
         delete sd; // explicit delete as the destructor for si won't be called.
-        return NULL;
+        return nullptr;
     }
 
     if (U_FAILURE(*status)) {
         delete si; // no delete for sd, as the si destructor will delete it.
-        return NULL;
+        return nullptr;
     }
 
-    if (pActualLength != NULL) {
+    if (pActualLength != nullptr) {
         *pActualLength = sd->size();
     }
     return si->asUSpoofChecker();
@@ -230,17 +231,17 @@ uspoof_openFromSerialized(const void *data, int32_t length, int32_t *pActualLeng
 U_CAPI USpoofChecker * U_EXPORT2
 uspoof_clone(const USpoofChecker *sc, UErrorCode *status) {
     const SpoofImpl *src = SpoofImpl::validateThis(sc, *status);
-    if (src == NULL) {
-        return NULL;
+    if (src == nullptr) {
+        return nullptr;
     }
     SpoofImpl *result = new SpoofImpl(*src, *status);   // copy constructor
-    if (result == NULL) {
+    if (result == nullptr) {
         *status = U_MEMORY_ALLOCATION_ERROR;
-        return NULL;
+        return nullptr;
     }
     if (U_FAILURE(*status)) {
         delete result;
-        result = NULL;
+        result = nullptr;
     }
     return result->asUSpoofChecker();
 }
@@ -257,7 +258,7 @@ uspoof_close(USpoofChecker *sc) {
 U_CAPI void U_EXPORT2
 uspoof_setChecks(USpoofChecker *sc, int32_t checks, UErrorCode *status) {
     SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
+    if (This == nullptr) {
         return;
     }
 
@@ -275,7 +276,7 @@ uspoof_setChecks(USpoofChecker *sc, int32_t checks, UErrorCode *status) {
 U_CAPI int32_t U_EXPORT2
 uspoof_getChecks(const USpoofChecker *sc, UErrorCode *status) {
     const SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
+    if (This == nullptr) {
         return 0;
     }
     return This->fChecks;
@@ -285,7 +286,7 @@ U_CAPI void U_EXPORT2
 uspoof_setRestrictionLevel(USpoofChecker *sc, URestrictionLevel restrictionLevel) {
     UErrorCode status = U_ZERO_ERROR;
     SpoofImpl *This = SpoofImpl::validateThis(sc, status);
-    if (This != NULL) {
+    if (This != nullptr) {
         This->fRestrictionLevel = restrictionLevel;
         This->fChecks |= USPOOF_RESTRICTION_LEVEL;
     }
@@ -295,7 +296,7 @@ U_CAPI URestrictionLevel U_EXPORT2
 uspoof_getRestrictionLevel(const USpoofChecker *sc) {
     UErrorCode status = U_ZERO_ERROR;
     const SpoofImpl *This = SpoofImpl::validateThis(sc, status);
-    if (This == NULL) {
+    if (This == nullptr) {
         return USPOOF_UNRESTRICTIVE;
     }
     return This->fRestrictionLevel;
@@ -304,7 +305,7 @@ uspoof_getRestrictionLevel(const USpoofChecker *sc) {
 U_CAPI void U_EXPORT2
 uspoof_setAllowedLocales(USpoofChecker *sc, const char *localesList, UErrorCode *status) {
     SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
+    if (This == nullptr) {
         return;
     }
     This->setAllowedLocales(localesList, *status);
@@ -313,8 +314,8 @@ uspoof_setAllowedLocales(USpoofChecker *sc, const char *localesList, UErrorCode 
 U_CAPI const char * U_EXPORT2
 uspoof_getAllowedLocales(USpoofChecker *sc, UErrorCode *status) {
     SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
-        return NULL;
+    if (This == nullptr) {
+        return nullptr;
     }
     return This->getAllowedLocales(*status);
 }
@@ -329,8 +330,8 @@ uspoof_getAllowedChars(const USpoofChecker *sc, UErrorCode *status) {
 U_CAPI const UnicodeSet * U_EXPORT2
 uspoof_getAllowedUnicodeSet(const USpoofChecker *sc, UErrorCode *status) {
     const SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
-        return NULL;
+    if (This == nullptr) {
+        return nullptr;
     }
     return This->fAllowedCharsSet;
 }
@@ -346,7 +347,7 @@ uspoof_setAllowedChars(USpoofChecker *sc, const USet *chars, UErrorCode *status)
 U_CAPI void U_EXPORT2
 uspoof_setAllowedUnicodeSet(USpoofChecker *sc, const UnicodeSet *chars, UErrorCode *status) {
     SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
+    if (This == nullptr) {
         return;
     }
     if (chars->isBogus()) {
@@ -354,7 +355,7 @@ uspoof_setAllowedUnicodeSet(USpoofChecker *sc, const UnicodeSet *chars, UErrorCo
         return;
     }
     UnicodeSet *clonedSet = chars->clone();
-    if (clonedSet == NULL || clonedSet->isBogus()) {
+    if (clonedSet == nullptr || clonedSet->isBogus()) {
         *status = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
@@ -367,28 +368,28 @@ uspoof_setAllowedUnicodeSet(USpoofChecker *sc, const UnicodeSet *chars, UErrorCo
 
 U_CAPI int32_t U_EXPORT2
 uspoof_check(const USpoofChecker *sc,
-             const UChar *id, int32_t length,
+             const char16_t *id, int32_t length,
              int32_t *position,
              UErrorCode *status) {
 
     // Backwards compatibility:
-    if (position != NULL) {
+    if (position != nullptr) {
         *position = 0;
     }
 
     // Delegate to uspoof_check2
-    return uspoof_check2(sc, id, length, NULL, status);
+    return uspoof_check2(sc, id, length, nullptr, status);
 }
 
 
 U_CAPI int32_t U_EXPORT2
 uspoof_check2(const USpoofChecker *sc,
-    const UChar* id, int32_t length,
+    const char16_t* id, int32_t length,
     USpoofCheckResult* checkResult,
     UErrorCode *status) {
 
     const SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
+    if (This == nullptr) {
         return 0;
     }
     if (length < -1) {
@@ -408,12 +409,12 @@ uspoof_checkUTF8(const USpoofChecker *sc,
                  UErrorCode *status) {
 
     // Backwards compatibility:
-    if (position != NULL) {
+    if (position != nullptr) {
         *position = 0;
     }
 
     // Delegate to uspoof_check2
-    return uspoof_check2UTF8(sc, id, length, NULL, status);
+    return uspoof_check2UTF8(sc, id, length, nullptr, status);
 }
 
 
@@ -434,8 +435,8 @@ uspoof_check2UTF8(const USpoofChecker *sc,
 
 U_CAPI int32_t U_EXPORT2
 uspoof_areConfusable(const USpoofChecker *sc,
-                     const UChar *id1, int32_t length1,
-                     const UChar *id2, int32_t length2,
+                     const char16_t *id1, int32_t length1,
+                     const char16_t *id2, int32_t length2,
                      UErrorCode *status) {
     SpoofImpl::validateThis(sc, *status);
     if (U_FAILURE(*status)) {
@@ -545,19 +546,19 @@ uspoof_checkUnicodeString(const USpoofChecker *sc,
                           UErrorCode *status) {
 
     // Backwards compatibility:
-    if (position != NULL) {
+    if (position != nullptr) {
         *position = 0;
     }
 
     // Delegate to uspoof_check2
-    return uspoof_check2UnicodeString(sc, id, NULL, status);
+    return uspoof_check2UnicodeString(sc, id, nullptr, status);
 }
 
 namespace {
 
 int32_t checkImpl(const SpoofImpl* This, const UnicodeString& id, CheckResult* checkResult, UErrorCode* status) {
-    U_ASSERT(This != NULL);
-    U_ASSERT(checkResult != NULL);
+    U_ASSERT(This != nullptr);
+    U_ASSERT(checkResult != nullptr);
     checkResult->clear();
     int32_t result = 0;
 
@@ -611,7 +612,7 @@ int32_t checkImpl(const SpoofImpl* This, const UnicodeString& id, CheckResult* c
         int32_t     i;
         UChar32     c;
         UChar32     firstNonspacingMark = 0;
-        UBool       haveMultipleMarks = FALSE;  
+        UBool       haveMultipleMarks = false;  
         UnicodeSet  marksSeenSoFar;   // Set of combining marks in a single combining sequence.
         
         for (i=0; i<nfdLength ;) {
@@ -621,7 +622,7 @@ int32_t checkImpl(const SpoofImpl* This, const UnicodeString& id, CheckResult* c
                 firstNonspacingMark = 0;
                 if (haveMultipleMarks) {
                     marksSeenSoFar.clear();
-                    haveMultipleMarks = FALSE;
+                    haveMultipleMarks = false;
                 }
                 continue;
             }
@@ -631,7 +632,7 @@ int32_t checkImpl(const SpoofImpl* This, const UnicodeString& id, CheckResult* c
             }
             if (!haveMultipleMarks) {
                 marksSeenSoFar.add(firstNonspacingMark);
-                haveMultipleMarks = TRUE;
+                haveMultipleMarks = true;
             }
             if (marksSeenSoFar.contains(c)) {
                 // report the error, and stop scanning.
@@ -655,14 +656,14 @@ uspoof_check2UnicodeString(const USpoofChecker *sc,
                           USpoofCheckResult* checkResult,
                           UErrorCode *status) {
     const SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
-        return FALSE;
+    if (This == nullptr) {
+        return false;
     }
 
-    if (checkResult != NULL) {
+    if (checkResult != nullptr) {
         CheckResult* ThisCheckResult = CheckResult::validateThis(checkResult, *status);
-        if (ThisCheckResult == NULL) {
-            return FALSE;
+        if (ThisCheckResult == nullptr) {
+            return false;
         }
         return checkImpl(This, id, ThisCheckResult, status);
     } else {
@@ -676,15 +677,15 @@ uspoof_check2UnicodeString(const USpoofChecker *sc,
 U_CAPI int32_t U_EXPORT2
 uspoof_getSkeleton(const USpoofChecker *sc,
                    uint32_t type,
-                   const UChar *id,  int32_t length,
-                   UChar *dest, int32_t destCapacity,
+                   const char16_t *id,  int32_t length,
+                   char16_t *dest, int32_t destCapacity,
                    UErrorCode *status) {
 
     SpoofImpl::validateThis(sc, *status);
     if (U_FAILURE(*status)) {
         return 0;
     }
-    if (length<-1 || destCapacity<0 || (destCapacity==0 && dest!=NULL)) {
+    if (length<-1 || destCapacity<0 || (destCapacity==0 && dest!=nullptr)) {
         *status = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }
@@ -738,7 +739,7 @@ uspoof_getSkeletonUTF8(const USpoofChecker *sc,
     if (U_FAILURE(*status)) {
         return 0;
     }
-    if (length<-1 || destCapacity<0 || (destCapacity==0 && dest!=NULL)) {
+    if (length<-1 || destCapacity<0 || (destCapacity==0 && dest!=nullptr)) {
         *status = U_ILLEGAL_ARGUMENT_ERROR;
         return 0;
     }
@@ -760,7 +761,7 @@ uspoof_getSkeletonUTF8(const USpoofChecker *sc,
 U_CAPI int32_t U_EXPORT2
 uspoof_serialize(USpoofChecker *sc,void *buf, int32_t capacity, UErrorCode *status) {
     SpoofImpl *This = SpoofImpl::validateThis(sc, *status);
-    if (This == NULL) {
+    if (This == nullptr) {
         U_ASSERT(U_FAILURE(*status));
         return 0;
     }
@@ -799,9 +800,9 @@ uspoof_getRecommendedUnicodeSet(UErrorCode *status) {
 U_CAPI USpoofCheckResult* U_EXPORT2
 uspoof_openCheckResult(UErrorCode *status) {
     CheckResult* checkResult = new CheckResult();
-    if (checkResult == NULL) {
+    if (checkResult == nullptr) {
         *status = U_MEMORY_ALLOCATION_ERROR;
-        return NULL;
+        return nullptr;
     }
     return checkResult->asUSpoofCheckResult();
 }
@@ -830,7 +831,7 @@ uspoof_getCheckResultRestrictionLevel(const USpoofCheckResult *checkResult, UErr
 U_CAPI const USet* U_EXPORT2
 uspoof_getCheckResultNumerics(const USpoofCheckResult *checkResult, UErrorCode *status) {
     const CheckResult* This = CheckResult::validateThis(checkResult, *status);
-    if (U_FAILURE(*status)) { return NULL; }
+    if (U_FAILURE(*status)) { return nullptr; }
     return This->fNumerics.toUSet();
 }
 

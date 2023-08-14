@@ -73,7 +73,7 @@ void  RBBITableBuilder::buildForwardTable() {
 
     // If there were no rules, just return.  This situation can easily arise
     //   for the reverse rules.
-    if (fTree==NULL) {
+    if (fTree==nullptr) {
         return;
     }
 
@@ -85,7 +85,7 @@ void  RBBITableBuilder::buildForwardTable() {
 #ifdef RBBI_DEBUG
     if (fRB->fDebugEnv && uprv_strstr(fRB->fDebugEnv, "ftree")) {
         RBBIDebugPuts("\nParse tree after flattening variable references.");
-        RBBINode::printTree(fTree, TRUE);
+        RBBINode::printTree(fTree, true);
     }
 #endif
 
@@ -99,7 +99,7 @@ void  RBBITableBuilder::buildForwardTable() {
         RBBINode *bofTop    = new RBBINode(RBBINode::opCat);
         RBBINode *bofLeaf   = new RBBINode(RBBINode::leafChar);
         // Delete and exit if memory allocation failed.
-        if (bofTop == NULL || bofLeaf == NULL) {
+        if (bofTop == nullptr || bofLeaf == nullptr) {
             *fStatus = U_MEMORY_ALLOCATION_ERROR;
             delete bofTop;
             delete bofLeaf;
@@ -119,7 +119,7 @@ void  RBBITableBuilder::buildForwardTable() {
     //
     RBBINode *cn = new RBBINode(RBBINode::opCat);
     // Exit if memory allocation failed.
-    if (cn == NULL) {
+    if (cn == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
@@ -127,7 +127,7 @@ void  RBBITableBuilder::buildForwardTable() {
     fTree->fParent = cn;
     RBBINode *endMarkerNode = cn->fRightChild = new RBBINode(RBBINode::endMark);
     // Delete and exit if memory allocation failed.
-    if (cn->fRightChild == NULL) {
+    if (cn->fRightChild == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
         delete cn;
         return;
@@ -143,7 +143,7 @@ void  RBBITableBuilder::buildForwardTable() {
 #ifdef RBBI_DEBUG
     if (fRB->fDebugEnv && uprv_strstr(fRB->fDebugEnv, "stree")) {
         RBBIDebugPuts("\nParse tree after flattening Unicode Set references.");
-        RBBINode::printTree(fTree, TRUE);
+        RBBINode::printTree(fTree, true);
     }
 #endif
 
@@ -203,20 +203,20 @@ void  RBBITableBuilder::buildForwardTable() {
 //
 //-----------------------------------------------------------------------------
 void RBBITableBuilder::calcNullable(RBBINode *n) {
-    if (n == NULL) {
+    if (n == nullptr) {
         return;
     }
     if (n->fType == RBBINode::setRef ||
         n->fType == RBBINode::endMark ) {
         // These are non-empty leaf node types.
-        n->fNullable = FALSE;
+        n->fNullable = false;
         return;
     }
 
     if (n->fType == RBBINode::lookAhead || n->fType == RBBINode::tag) {
         // Lookahead marker node.  It's a leaf, so no recursion on children.
         // It's nullable because it does not match any literal text from the input stream.
-        n->fNullable = TRUE;
+        n->fNullable = true;
         return;
     }
 
@@ -234,10 +234,10 @@ void RBBITableBuilder::calcNullable(RBBINode *n) {
         n->fNullable = n->fLeftChild->fNullable && n->fRightChild->fNullable;
     }
     else if (n->fType == RBBINode::opStar || n->fType == RBBINode::opQuestion) {
-        n->fNullable = TRUE;
+        n->fNullable = true;
     }
     else {
-        n->fNullable = FALSE;
+        n->fNullable = false;
     }
 }
 
@@ -250,7 +250,7 @@ void RBBITableBuilder::calcNullable(RBBINode *n) {
 //
 //-----------------------------------------------------------------------------
 void RBBITableBuilder::calcFirstPos(RBBINode *n) {
-    if (n == NULL) {
+    if (n == nullptr) {
         return;
     }
     if (n->fType == RBBINode::leafChar  ||
@@ -296,7 +296,7 @@ void RBBITableBuilder::calcFirstPos(RBBINode *n) {
 //
 //-----------------------------------------------------------------------------
 void RBBITableBuilder::calcLastPos(RBBINode *n) {
-    if (n == NULL) {
+    if (n == nullptr) {
         return;
     }
     if (n->fType == RBBINode::leafChar  ||
@@ -342,7 +342,7 @@ void RBBITableBuilder::calcLastPos(RBBINode *n) {
 //
 //-----------------------------------------------------------------------------
 void RBBITableBuilder::calcFollowPos(RBBINode *n) {
-    if (n == NULL ||
+    if (n == nullptr ||
         n->fType == RBBINode::leafChar ||
         n->fType == RBBINode::endMark) {
         return;
@@ -387,7 +387,7 @@ void RBBITableBuilder::calcFollowPos(RBBINode *n) {
 //
 //-----------------------------------------------------------------------------
 void RBBITableBuilder::addRuleRootNodes(UVector *dest, RBBINode *node) {
-    if (node == NULL || U_FAILURE(*fStatus)) {
+    if (node == nullptr || U_FAILURE(*fStatus)) {
         return;
     }
     U_ASSERT(!dest->hasDeleter());
@@ -567,21 +567,21 @@ void RBBITableBuilder::buildStateTable() {
         return;
     }
     RBBIStateDescriptor *failState;
-    // Set it to NULL to avoid uninitialized warning
-    RBBIStateDescriptor *initialState = NULL; 
+    // Set it to nullptr to avoid uninitialized warning
+    RBBIStateDescriptor *initialState = nullptr;
     //
     // Add a dummy state 0 - the stop state.  Not from Aho.
     int      lastInputSymbol = fRB->fSetBuilder->getNumCharCategories() - 1;
     failState = new RBBIStateDescriptor(lastInputSymbol, fStatus);
-    if (failState == NULL) {
+    if (failState == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
         goto ExitBuildSTdeleteall;
     }
     failState->fPositions = new UVector(*fStatus);
-    if (failState->fPositions == NULL) {
+    if (failState->fPositions == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
     }
-    if (failState->fPositions == NULL || U_FAILURE(*fStatus)) {
+    if (failState->fPositions == nullptr || U_FAILURE(*fStatus)) {
         goto ExitBuildSTdeleteall;
     }
     fDStates->addElement(failState, *fStatus);
@@ -592,14 +592,14 @@ void RBBITableBuilder::buildStateTable() {
     // initially, the only unmarked state in Dstates is firstpos(root),
     //       where toot is the root of the syntax tree for (r)#;
     initialState = new RBBIStateDescriptor(lastInputSymbol, fStatus);
-    if (initialState == NULL) {
+    if (initialState == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
     }
     if (U_FAILURE(*fStatus)) {
         goto ExitBuildSTdeleteall;
     }
     initialState->fPositions = new UVector(*fStatus);
-    if (initialState->fPositions == NULL) {
+    if (initialState->fPositions == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
     }
     if (U_FAILURE(*fStatus)) {
@@ -613,22 +613,22 @@ void RBBITableBuilder::buildStateTable() {
 
     // while there is an unmarked state T in Dstates do begin
     for (;;) {
-        RBBIStateDescriptor *T = NULL;
+        RBBIStateDescriptor *T = nullptr;
         int32_t              tx;
         for (tx=1; tx<fDStates->size(); tx++) {
             RBBIStateDescriptor *temp;
             temp = (RBBIStateDescriptor *)fDStates->elementAt(tx);
-            if (temp->fMarked == FALSE) {
+            if (temp->fMarked == false) {
                 T = temp;
                 break;
             }
         }
-        if (T == NULL) {
+        if (T == nullptr) {
             break;
         }
 
         // mark T;
-        T->fMarked = TRUE;
+        T->fMarked = true;
 
         // for each input symbol a do begin
         int32_t  a;
@@ -636,15 +636,15 @@ void RBBITableBuilder::buildStateTable() {
             // let U be the set of positions that are in followpos(p)
             //    for some position p in T
             //    such that the symbol at position p is a;
-            UVector    *U = NULL;
+            UVector    *U = nullptr;
             RBBINode   *p;
             int32_t     px;
             for (px=0; px<T->fPositions->size(); px++) {
                 p = (RBBINode *)T->fPositions->elementAt(px);
                 if ((p->fType == RBBINode::leafChar) &&  (p->fVal == a)) {
-                    if (U == NULL) {
+                    if (U == nullptr) {
                         U = new UVector(*fStatus);
-                        if (U == NULL) {
+                        if (U == nullptr) {
                         	*fStatus = U_MEMORY_ALLOCATION_ERROR;
                         	goto ExitBuildSTdeleteall;
                         }
@@ -655,8 +655,8 @@ void RBBITableBuilder::buildStateTable() {
 
             // if U is not empty and not in DStates then
             int32_t  ux = 0;
-            UBool    UinDstates = FALSE;
-            if (U != NULL) {
+            UBool    UinDstates = false;
+            if (U != nullptr) {
                 U_ASSERT(U->size() > 0);
                 int  ix;
                 for (ix=0; ix<fDStates->size(); ix++) {
@@ -666,7 +666,7 @@ void RBBITableBuilder::buildStateTable() {
                         delete U;
                         U  = temp2->fPositions;
                         ux = ix;
-                        UinDstates = TRUE;
+                        UinDstates = true;
                         break;
                     }
                 }
@@ -675,7 +675,7 @@ void RBBITableBuilder::buildStateTable() {
                 if (!UinDstates)
                 {
                     RBBIStateDescriptor *newState = new RBBIStateDescriptor(lastInputSymbol, fStatus);
-                    if (newState == NULL) {
+                    if (newState == nullptr) {
                     	*fStatus = U_MEMORY_ALLOCATION_ERROR;
                     }
                     if (U_FAILURE(*fStatus)) {
@@ -942,7 +942,7 @@ void  RBBITableBuilder::mergeRuleStatusVals() {
     for (n=0; n<fDStates->size(); n++) {
         RBBIStateDescriptor *sd = (RBBIStateDescriptor *)fDStates->elementAt(n);
         UVector *thisStatesTagValues = sd->fTagVals;
-        if (thisStatesTagValues == NULL) {
+        if (thisStatesTagValues == nullptr) {
             // No tag values are explicitly associated with this state.
             //   Set the default tag value.
             sd->fTagsIdx = 0;
@@ -1012,10 +1012,10 @@ void  RBBITableBuilder::mergeRuleStatusVals() {
 void RBBITableBuilder::sortedAdd(UVector **vector, int32_t val) {
     int32_t i;
 
-    if (*vector == NULL) {
+    if (*vector == nullptr) {
         *vector = new UVector(*fStatus);
     }
-    if (*vector == NULL || U_FAILURE(*fStatus)) {
+    if (*vector == nullptr || U_FAILURE(*fStatus)) {
         return;
     }
     UVector *vec = *vector;
@@ -1053,7 +1053,7 @@ void RBBITableBuilder::setAdd(UVector *dest, UVector *source) {
     void **destLim, **sourceLim;
 
     if (destOriginalSize > destArray.getCapacity()) {
-        if (destArray.resize(destOriginalSize) == NULL) {
+        if (destArray.resize(destOriginalSize) == nullptr) {
             return;
         }
     }
@@ -1061,7 +1061,7 @@ void RBBITableBuilder::setAdd(UVector *dest, UVector *source) {
     destLim = destPtr + destOriginalSize;  // destArray.getArrayLimit()?
 
     if (sourceSize > sourceArray.getCapacity()) {
-        if (sourceArray.resize(sourceSize) == NULL) {
+        if (sourceArray.resize(sourceSize) == nullptr) {
             return;
         }
     }
@@ -1125,13 +1125,13 @@ UBool RBBITableBuilder::setEquals(UVector *a, UVector *b) {
 //-----------------------------------------------------------------------------
 #ifdef RBBI_DEBUG
 void RBBITableBuilder::printPosSets(RBBINode *n) {
-    if (n==NULL) {
+    if (n==nullptr) {
         return;
     }
     printf("\n");
     RBBINode::printNodeHeader();
     RBBINode::printNode(n);
-    RBBIDebugPrintf("         Nullable:  %s\n", n->fNullable?"TRUE":"FALSE");
+    RBBIDebugPrintf("         Nullable:  %s\n", n->fNullable?"true":"false");
 
     RBBIDebugPrintf("         firstpos:  ");
     printSet(n->fFirstPosSet);
@@ -1339,7 +1339,7 @@ int32_t  RBBITableBuilder::getTableSize() const {
     int32_t    numCols;
     int32_t    rowSize;
 
-    if (fTree == NULL) {
+    if (fTree == nullptr) {
         return 0;
     }
 
@@ -1373,7 +1373,7 @@ void RBBITableBuilder::exportTable(void *where) {
     uint32_t           state;
     int                col;
 
-    if (U_FAILURE(*fStatus) || fTree == NULL) {
+    if (U_FAILURE(*fStatus) || fTree == nullptr) {
         return;
     }
 
@@ -1651,7 +1651,7 @@ void RBBITableBuilder::printSet(UVector *s) {
     int32_t  i;
     for (i=0; i<s->size(); i++) {
         const RBBINode *v = static_cast<const RBBINode *>(s->elementAt(i));
-        RBBIDebugPrintf("%5d", v==NULL? -1 : v->fSerialNum);
+        RBBIDebugPrintf("%5d", v==nullptr? -1 : v->fSerialNum);
     }
     RBBIDebugPrintf("\n");
 }
@@ -1773,19 +1773,19 @@ void RBBITableBuilder::printRuleStatusTable() {
 //-----------------------------------------------------------------------------
 
 RBBIStateDescriptor::RBBIStateDescriptor(int lastInputSymbol, UErrorCode *fStatus) {
-    fMarked    = FALSE;
+    fMarked    = false;
     fAccepting = 0;
     fLookAhead = 0;
     fTagsIdx   = 0;
-    fTagVals   = NULL;
-    fPositions = NULL;
-    fDtran     = NULL;
+    fTagVals   = nullptr;
+    fPositions = nullptr;
+    fDtran     = nullptr;
 
     fDtran     = new UVector32(lastInputSymbol+1, *fStatus);
     if (U_FAILURE(*fStatus)) {
         return;
     }
-    if (fDtran == NULL) {
+    if (fDtran == nullptr) {
         *fStatus = U_MEMORY_ALLOCATION_ERROR;
         return;
     }
@@ -1800,9 +1800,9 @@ RBBIStateDescriptor::~RBBIStateDescriptor() {
     delete       fPositions;
     delete       fDtran;
     delete       fTagVals;
-    fPositions = NULL;
-    fDtran     = NULL;
-    fTagVals   = NULL;
+    fPositions = nullptr;
+    fDtran     = nullptr;
+    fTagVals   = nullptr;
 }
 
 U_NAMESPACE_END

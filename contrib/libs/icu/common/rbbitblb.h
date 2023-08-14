@@ -156,7 +156,7 @@ private:
 public:
 #ifdef RBBI_DEBUG
     void     printSet(UVector *s);
-    void     printPosSets(RBBINode *n /* = NULL*/);
+    void     printPosSets(RBBINode *n /* = nullptr */);
     void     printStates();
     void     printRuleStatusTable();
     void     printReverseTable();
@@ -219,8 +219,8 @@ public:
     ~RBBIStateDescriptor();
 
 private:
-    RBBIStateDescriptor(const RBBIStateDescriptor &other); // forbid copying of this class
-    RBBIStateDescriptor &operator=(const RBBIStateDescriptor &other); // forbid copying of this class
+    RBBIStateDescriptor(const RBBIStateDescriptor &other) = delete; // forbid copying of this class
+    RBBIStateDescriptor &operator=(const RBBIStateDescriptor &other) = delete; // forbid copying of this class
 };
 
 

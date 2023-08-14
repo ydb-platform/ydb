@@ -99,14 +99,6 @@ bool UVector::operator==(const UVector& other) const {
     return true;
 }
 
-// TODO: delete this function once all call sites have been migrated to the
-//       new addElement().
-void UVector::addElementX(void* obj, UErrorCode &status) {
-    if (ensureCapacityX(count + 1, status)) {
-        elements[count++].pointer = obj;
-    }
-}
-
 void UVector::addElement(void* obj, UErrorCode &status) {
     U_ASSERT(deleter == nullptr);
     if (ensureCapacity(count + 1, status)) {
@@ -201,40 +193,40 @@ int32_t UVector::elementAti(int32_t index) const {
 UBool UVector::containsAll(const UVector& other) const {
     for (int32_t i=0; i<other.size(); ++i) {
         if (indexOf(other.elements[i]) < 0) {
-            return FALSE;
+            return false;
         }
     }
-    return TRUE;
+    return true;
 }
 
 UBool UVector::containsNone(const UVector& other) const {
     for (int32_t i=0; i<other.size(); ++i) {
         if (indexOf(other.elements[i]) >= 0) {
-            return FALSE;
+            return false;
         }
     }
-    return TRUE;
+    return true;
 }
 
 UBool UVector::removeAll(const UVector& other) {
-    UBool changed = FALSE;
+    UBool changed = false;
     for (int32_t i=0; i<other.size(); ++i) {
         int32_t j = indexOf(other.elements[i]);
         if (j >= 0) {
             removeElementAt(j);
-            changed = TRUE;
+            changed = true;
         }
     }
     return changed;
 }
 
 UBool UVector::retainAll(const UVector& other) {
-    UBool changed = FALSE;
+    UBool changed = false;
     for (int32_t j=size()-1; j>=0; --j) {
         int32_t i = other.indexOf(elements[j]);
         if (i < 0) {
             removeElementAt(j);
-            changed = TRUE;
+            changed = true;
         }
     }
     return changed;
@@ -251,12 +243,12 @@ UBool UVector::removeElement(void* obj) {
     int32_t i = indexOf(obj);
     if (i >= 0) {
         removeElementAt(i);
-        return TRUE;
+        return true;
     }
-    return FALSE;
+    return false;
 }
 
-void UVector::removeAllElements(void) {
+void UVector::removeAllElements() {
     if (deleter != nullptr) {
         for (int32_t i=0; i<count; ++i) {
             if (elements[i].pointer != nullptr) {
@@ -271,12 +263,12 @@ UBool   UVector::equals(const UVector &other) const {
     int      i;
 
     if (this->count != other.count) {
-        return FALSE;
+        return false;
     }
     if (comparer == nullptr) {
         for (i=0; i<count; i++) {
             if (elements[i].pointer != other.elements[i].pointer) {
-                return FALSE;
+                return false;
             }
         }
     } else {
@@ -284,11 +276,11 @@ UBool   UVector::equals(const UVector &other) const {
         for (i=0; i<count; i++) {
             key.pointer = &other.elements[i];
             if (!(*comparer)(key, elements[i])) {
-                return FALSE;
+                return false;
             }
         }
     }
-    return TRUE;
+    return true;
 }
 
 
@@ -331,38 +323,6 @@ int32_t UVector::indexOf(UElement key, int32_t startIndex, int8_t hint) const {
     return -1;
 }
 
-UBool UVector::ensureCapacityX(int32_t minimumCapacity, UErrorCode &status) {
-    if (minimumCapacity < 0) {
-        status = U_ILLEGAL_ARGUMENT_ERROR;
-        return FALSE;
-	}
-    if (capacity < minimumCapacity) {
-        if (capacity > (INT32_MAX - 1) / 2) {        	// integer overflow check
-        	status = U_ILLEGAL_ARGUMENT_ERROR;
-        	return FALSE;
-        }
-        int32_t newCap = capacity * 2;
-        if (newCap < minimumCapacity) {
-            newCap = minimumCapacity;
-        }
-        if (newCap > (int32_t)(INT32_MAX / sizeof(UElement))) {	// integer overflow check
-        	// We keep the original memory contents on bad minimumCapacity.
-        	status = U_ILLEGAL_ARGUMENT_ERROR;
-        	return FALSE;
-        }
-        UElement* newElems = (UElement *)uprv_realloc(elements, sizeof(UElement)*newCap);
-        if (newElems == nullptr) {
-            // We keep the original contents on the memory failure on realloc or bad minimumCapacity.
-            status = U_MEMORY_ALLOCATION_ERROR;
-            return FALSE;
-        }
-        elements = newElems;
-        capacity = newCap;
-    }
-    return TRUE;
-}
-
-
 UBool UVector::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
     if (U_FAILURE(status)) {
         return false;
@@ -370,7 +330,7 @@ UBool UVector::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
     if (minimumCapacity < 0) {
         status = U_ILLEGAL_ARGUMENT_ERROR;
         return false;
-	}
+    }
     if (capacity < minimumCapacity) {
         if (capacity > (INT32_MAX - 1) / 2) {        	// integer overflow check
             status = U_ILLEGAL_ARGUMENT_ERROR;
@@ -396,6 +356,7 @@ UBool UVector::ensureCapacity(int32_t minimumCapacity, UErrorCode &status) {
     }
     return true;
 }
+
 /**
  * Change the size of this vector as follows: If newSize is smaller,
  * then truncate the array, possibly deleting held elements for i >=
@@ -564,7 +525,7 @@ sortiComparator(const void * /*context */, const void *left, const void *right) 
 void UVector::sorti(UErrorCode &ec) {
     if (U_SUCCESS(ec)) {
         uprv_sortArray(elements, count, sizeof(UElement),
-                       sortiComparator, nullptr,  FALSE, &ec);
+                       sortiComparator, nullptr,  false, &ec);
     }
 }
 
@@ -586,7 +547,7 @@ void UVector::sorti(UErrorCode &ec) {
 void UVector::sort(UElementComparator *compare, UErrorCode &ec) {
     if (U_SUCCESS(ec)) {
         uprv_sortArray(elements, count, sizeof(UElement),
-                       sortComparator, &compare, FALSE, &ec);
+                       sortComparator, &compare, false, &ec);
     }
 }
 
@@ -597,7 +558,7 @@ void UVector::sort(UElementComparator *compare, UErrorCode &ec) {
 void UVector::sortWithUComparator(UComparator *compare, const void *context, UErrorCode &ec) {
     if (U_SUCCESS(ec)) {
         uprv_sortArray(elements, count, sizeof(UElement),
-                       compare, context, TRUE, &ec);
+                       compare, context, true, &ec);
     }
 }
 

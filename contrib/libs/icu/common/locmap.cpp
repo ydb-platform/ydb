@@ -1053,8 +1053,8 @@ uprv_convertToPosix(uint32_t hostid, char *posixID, int32_t posixIDCapacity, UEr
 {
     uint16_t langID;
     uint32_t localeIndex;
-    UBool bLookup = TRUE;
-    const char *pPosixID = NULL;
+    UBool bLookup = true;
+    const char *pPosixID = nullptr;
 
 #if U_PLATFORM_HAS_WIN32_API && UCONFIG_USE_WINDOWS_LCID_MAPPING_API
     static_assert(ULOC_FULLNAME_CAPACITY > LOCALE_NAME_MAX_LENGTH, "Windows locale names have smaller length than ICU locale names.");
@@ -1074,7 +1074,7 @@ uprv_convertToPosix(uint32_t hostid, char *posixID, int32_t posixIDCapacity, UEr
         if (tmpLen > 1) {
             int32_t i = 0;
             // Only need to look up in table if have _, eg for de-de_phoneb type alternate sort.
-            bLookup = FALSE;
+            bLookup = false;
             for (i = 0; i < UPRV_LENGTHOF(locName); i++)
             {
                 locName[i] = (char)(windowsLocaleName[i]);
@@ -1088,7 +1088,7 @@ uprv_convertToPosix(uint32_t hostid, char *posixID, int32_t posixIDCapacity, UEr
                     // TODO: Should these be mapped from _phoneb to @collation=phonebook, etc.?
                     locName[i] = '\0';
                     tmpLen = i;
-                    bLookup = TRUE;
+                    bLookup = true;
                     break;
                 }
                 else if (windowsLocaleName[i] == L'-')
@@ -1110,7 +1110,7 @@ uprv_convertToPosix(uint32_t hostid, char *posixID, int32_t posixIDCapacity, UEr
 #endif
 
     if (bLookup) {
-        const char *pCandidate = NULL;
+        const char *pCandidate = nullptr;
         langID = LANGUAGE_LCID(hostid);
 
         for (localeIndex = 0; localeIndex < gLocaleCount; localeIndex++) {
@@ -1123,7 +1123,7 @@ uprv_convertToPosix(uint32_t hostid, char *posixID, int32_t posixIDCapacity, UEr
         /* On Windows, when locale name has a variant, we still look up the hardcoded table.
            If a match in the hardcoded table is longer than the Windows locale name without
            variant, we use the one as the result */
-        if (pCandidate && (pPosixID == NULL || uprv_strlen(pCandidate) > uprv_strlen(pPosixID))) {
+        if (pCandidate && (pPosixID == nullptr || uprv_strlen(pCandidate) > uprv_strlen(pPosixID))) {
             pPosixID = pCandidate;
         }
     }
@@ -1201,7 +1201,7 @@ uprv_convertToLCIDPlatform(const char* localeID, UErrorCode* status)
 
     char asciiBCP47Tag[LOCALE_NAME_MAX_LENGTH] = {};
     // this will change it from de_DE@collation=phonebook to de-DE-u-co-phonebk form
-    (void)uloc_toLanguageTag(mylocaleID, asciiBCP47Tag, UPRV_LENGTHOF(asciiBCP47Tag), FALSE, status);
+    (void)uloc_toLanguageTag(mylocaleID, asciiBCP47Tag, UPRV_LENGTHOF(asciiBCP47Tag), false, status);
 
     if (U_SUCCESS(*status))
     {

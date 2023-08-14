@@ -75,6 +75,7 @@ class LanguageBreakEngine : public UMemory {
                               int32_t startPos,
                               int32_t endPos,
                               UVector32 &foundBreaks,
+                              UBool isPhraseBreaking,
                               UErrorCode &status) const = 0;
 
 };
@@ -194,6 +195,7 @@ class UnhandledEngine : public LanguageBreakEngine {
                               int32_t startPos,
                               int32_t endPos,
                               UVector32 &foundBreaks,
+                              UBool isPhraseBreaking,
                               UErrorCode &status) const override;
 
  /**
@@ -264,7 +266,7 @@ protected:
    * <p>Create a DictionaryMatcher for the specified script and break type.</p>
    * @param script An ISO 15924 script code that identifies the dictionary to be
    * created.
-   * @return A DictionaryMatcher with the desired characteristics, or NULL.
+   * @return A DictionaryMatcher with the desired characteristics, or nullptr.
    */
   virtual DictionaryMatcher *loadDictionaryMatcherFor(UScriptCode script);
 };

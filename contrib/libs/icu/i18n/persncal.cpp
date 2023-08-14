@@ -58,6 +58,7 @@ static const int32_t kPersianCalendarLimits[UCAL_FIELD_COUNT][4] = {
     {/*N/A*/-1,/*N/A*/-1,/*N/A*/-1,/*N/A*/-1}, // JULIAN_DAY
     {/*N/A*/-1,/*N/A*/-1,/*N/A*/-1,/*N/A*/-1}, // MILLISECONDS_IN_DAY
     {/*N/A*/-1,/*N/A*/-1,/*N/A*/-1,/*N/A*/-1}, // IS_LEAP_MONTH
+    {        0,        0,       11,       11}, // ORDINAL_MONTH
 };
 
 U_NAMESPACE_BEGIN
@@ -110,7 +111,7 @@ int32_t PersianCalendar::handleGetLimit(UCalendarDateFields field, ELimitType li
 UBool PersianCalendar::isLeapYear(int32_t year)
 {
     int32_t remainder;
-    ClockMath::floorDivide(25 * year + 11, 33, remainder);
+    ClockMath::floorDivide(25 * year + 11, 33, &remainder);
     return (remainder < 8);
 }
     
@@ -119,7 +120,7 @@ UBool PersianCalendar::isLeapYear(int32_t year)
  * from the Persian epoch, origin 0.
  */
 int32_t PersianCalendar::yearStart(int32_t year) {
-    return handleComputeMonthStart(year,0,FALSE);
+    return handleComputeMonthStart(year,0,false);
 }
     
 /**
@@ -130,7 +131,7 @@ int32_t PersianCalendar::yearStart(int32_t year) {
  * @param year  The Persian month, 0-based
  */
 int32_t PersianCalendar::monthStart(int32_t year, int32_t month) const {
-    return handleComputeMonthStart(year,month,TRUE);
+    return handleComputeMonthStart(year,month,true);
 }
     
 //----------------------------------------------------------------------
@@ -147,7 +148,7 @@ int32_t PersianCalendar::handleGetMonthLength(int32_t extendedYear, int32_t mont
     // If the month is out of range, adjust it into range, and
     // modify the extended year value accordingly.
     if (month < 0 || month > 11) {
-        extendedYear += ClockMath::floorDivide(month, 12, month);
+        extendedYear += ClockMath::floorDivide(month, 12, &month);
     }
 
     return isLeapYear(extendedYear) ? kPersianLeapMonthLength[month] : kPersianMonthLength[month];
@@ -169,7 +170,7 @@ int32_t PersianCalendar::handleComputeMonthStart(int32_t eyear, int32_t month, U
     // If the month is out of range, adjust it into range, and
     // modify the extended year value accordingly.
     if (month < 0 || month > 11) {
-        eyear += ClockMath::floorDivide(month, 12, month);
+        eyear += ClockMath::floorDivide(month, 12, &month);
     }
 
     int32_t julianDay = PERSIAN_EPOCH - 1 + 365 * (eyear - 1) + ClockMath::floorDivide(8 * eyear + 21, 33);
@@ -229,32 +230,37 @@ void PersianCalendar::handleComputeFields(int32_t julianDay, UErrorCode &/*statu
     internalSet(UCAL_YEAR, year);
     internalSet(UCAL_EXTENDED_YEAR, year);
     internalSet(UCAL_MONTH, month);
+    internalSet(UCAL_ORDINAL_MONTH, month);
     internalSet(UCAL_DAY_OF_MONTH, dayOfMonth);
     internalSet(UCAL_DAY_OF_YEAR, dayOfYear);
 }    
 
-UBool
-PersianCalendar::inDaylightTime(UErrorCode& status) const
+constexpr uint32_t kPersianRelatedYearDiff = 622;
+
+int32_t PersianCalendar::getRelatedYear(UErrorCode &status) const
 {
-    // copied from GregorianCalendar
-    if (U_FAILURE(status) || !getTimeZone().useDaylightTime()) 
-        return FALSE;
+    int32_t year = get(UCAL_EXTENDED_YEAR, status);
+    if (U_FAILURE(status)) {
+        return 0;
+    }
+    return year + kPersianRelatedYearDiff;
+}
 
-    // Force an update of the state of the Calendar.
-    ((PersianCalendar*)this)->complete(status); // cast away const
-
-    return (UBool)(U_SUCCESS(status) ? (internalGet(UCAL_DST_OFFSET) != 0) : FALSE);
+void PersianCalendar::setRelatedYear(int32_t year)
+{
+    // set extended year
+    set(UCAL_EXTENDED_YEAR, year - kPersianRelatedYearDiff);
 }
 
 // default century
 
 static UDate           gSystemDefaultCenturyStart       = DBL_MIN;
 static int32_t         gSystemDefaultCenturyStartYear   = -1;
-static icu::UInitOnce  gSystemDefaultCenturyInit        = U_INITONCE_INITIALIZER;
+static icu::UInitOnce  gSystemDefaultCenturyInit        {};
 
 UBool PersianCalendar::haveDefaultCentury() const
 {
-    return TRUE;
+    return true;
 }
 
 static void U_CALLCONV initializeSystemDefaultCentury() {

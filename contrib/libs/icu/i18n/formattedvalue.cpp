@@ -43,7 +43,7 @@ void ConstrainedFieldPosition::setInt64IterationContext(int64_t context) {
 UBool ConstrainedFieldPosition::matchesField(int32_t category, int32_t field) const {
     switch (fConstraint) {
     case UCFPOS_CONSTRAINT_NONE:
-        return TRUE;
+        return true;
     case UCFPOS_CONSTRAINT_CATEGORY:
         return fCategory == category;
     case UCFPOS_CONSTRAINT_FIELD:
@@ -193,7 +193,7 @@ ucfpos_close(UConstrainedFieldPosition* ptr) {
 }
 
 
-U_CAPI const UChar* U_EXPORT2
+U_CAPI const char16_t* U_EXPORT2
 ufmtval_getString(
         const UFormattedValue* ufmtval,
         int32_t* pLength,
@@ -223,7 +223,7 @@ ufmtval_nextPosition(
     const auto* fmtval = UFormattedValueApiHelper::validate(ufmtval, *ec);
     auto* cfpos = UConstrainedFieldPositionImpl::validate(ucfpos, *ec);
     if (U_FAILURE(*ec)) {
-        return FALSE;
+        return false;
     }
     return fmtval->fFormattedValue->nextPosition(cfpos->fImpl, *ec);
 }

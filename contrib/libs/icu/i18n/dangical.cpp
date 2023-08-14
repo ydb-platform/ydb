@@ -23,8 +23,8 @@
 #include "unicode/tzrule.h"
 
 // --- The cache --
-static icu::TimeZone *gDangiCalendarZoneAstroCalc = NULL;
-static icu::UInitOnce gDangiCalendarInitOnce = U_INITONCE_INITIALIZER;
+static icu::TimeZone *gDangiCalendarZoneAstroCalc = nullptr;
+static icu::UInitOnce gDangiCalendarInitOnce {};
 
 /**
  * The start year of the Korean traditional calendar (Dan-gi) is the inaugural
@@ -33,13 +33,13 @@ static icu::UInitOnce gDangiCalendarInitOnce = U_INITONCE_INITIALIZER;
 static const int32_t DANGI_EPOCH_YEAR = -2332; // Gregorian year
 
 U_CDECL_BEGIN
-static UBool calendar_dangi_cleanup(void) {
+static UBool calendar_dangi_cleanup() {
     if (gDangiCalendarZoneAstroCalc) {
         delete gDangiCalendarZoneAstroCalc;
-        gDangiCalendarZoneAstroCalc = NULL;
+        gDangiCalendarZoneAstroCalc = nullptr;
     }
     gDangiCalendarInitOnce.reset();
-    return TRUE;
+    return true;
 }
 U_CDECL_END
 
@@ -139,6 +139,23 @@ static void U_CALLCONV initDangiCalZoneAstroCalc(UErrorCode &status) {
 const TimeZone* DangiCalendar::getDangiCalZoneAstroCalc(UErrorCode &status) const {
     umtx_initOnce(gDangiCalendarInitOnce, &initDangiCalZoneAstroCalc, status);
     return gDangiCalendarZoneAstroCalc;
+}
+
+constexpr uint32_t kDangiRelatedYearDiff = -2333;
+
+int32_t DangiCalendar::getRelatedYear(UErrorCode &status) const
+{
+    int32_t year = get(UCAL_EXTENDED_YEAR, status);
+    if (U_FAILURE(status)) {
+        return 0;
+    }
+    return year + kDangiRelatedYearDiff;
+}
+
+void DangiCalendar::setRelatedYear(int32_t year)
+{
+    // set extended year
+    set(UCAL_EXTENDED_YEAR, year - kDangiRelatedYearDiff);
 }
 
 

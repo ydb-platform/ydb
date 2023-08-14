@@ -14,7 +14,7 @@ instance. For CMake users, `add_subdirectory` is supported, as is installation a
 
 * g++ 4.8 or later
 * clang++ 3.9 or later
-* Visual Studio 2013, 2015, 2017, 2019
+* Visual Studio 2013 or later
 
 Tested on [Github Actions](https://github.com/boostorg/mp11/actions) and [Appveyor](https://ci.appveyor.com/project/pdimov/mp11/).
 

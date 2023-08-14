@@ -29,6 +29,9 @@ RECURSE(
     client/ydb_topic/codecs
     client/ydb_topic/impl
     client/ydb_topic/ut
+    client/ydb_federated_topic
+    client/ydb_federated_topic/impl
+    client/ydb_federated_topic/ut
     client/ydb_extension
     client/ydb_result/ut
     client/ydb_params/ut

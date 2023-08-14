@@ -49,6 +49,26 @@ enum EPercentileCounters {
     };
 
     COUNTER_PERCENTILE_IGNORE = 0;
+
+    COUNTER_NODE_USAGE = 1 [(CounterOpts) = {
+        Name: "NodeUsage",
+        Integral: true,
+        Ranges: { Value: 30    Name: "30%"       },
+        Ranges: { Value: 35    Name: "35%"       },
+        Ranges: { Value: 40    Name: "40%"       },
+        Ranges: { Value: 45    Name: "45%"       },
+        Ranges: { Value: 50    Name: "50%"       },
+        Ranges: { Value: 55    Name: "55%"       },
+        Ranges: { Value: 60    Name: "60%"       },
+        Ranges: { Value: 65    Name: "65%"       },
+        Ranges: { Value: 70    Name: "70%"       },
+        Ranges: { Value: 75    Name: "75%"       },
+        Ranges: { Value: 80    Name: "80%"       },
+        Ranges: { Value: 85    Name: "85%"       },
+        Ranges: { Value: 90    Name: "90%"       },
+        Ranges: { Value: 95    Name: "95%"       },
+        Ranges: { Value: 100   Name: "100%"      },
+    }];
 }
 
 enum ETxTypes {

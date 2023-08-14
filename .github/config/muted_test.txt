@@ -24,3 +24,6 @@ KqpScanArrowInChanels::AllTypesColumns
 KqpScanArrowFormat::AllTypesColumnsCellvec
 TEST_BACKTRACE_AND_SYMBOLIZE::TEST_NO_KIKIMR
 YdbSdkSessionsPool::StressTestSync10
+TYardTest::TestLogMultipleWriteRead
+TYardTest::TestMultiYardLogMultipleWriteRead
+OperationLog::ConcurrentWrites

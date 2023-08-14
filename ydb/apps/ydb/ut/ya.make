@@ -1,7 +1,5 @@
 UNITTEST()
 
-FORK_SUBTESTS()
-
 IF (SANDBOXING)
     SIZE(LARGE)
     TAG(ya:fat)

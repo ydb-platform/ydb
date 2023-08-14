@@ -46,6 +46,9 @@ def get_options():
     parser.add_argument("--pdb", action="store_true", dest="pdb", default=False, help="run pdb on error")
     parser.add_argument("--sanitizer-extra-checks", dest="sanitizer_extra_checks", action="store_true", default=False, help="enables extra checks for tests built with sanitizers")
     parser.add_argument("--collect-cores", dest="collect_cores", action="store_true", default=False, help="allows core dump file recovering during test")
+    parser.add_argument("--build-root", type=str, dest="build_root", default=None, help="Build root directory")
+    parser.add_argument("--source-root", type=str, dest="source_root", default=None, help="Source root directory")
+    parser.add_argument("--output-dir", type=str, dest="output_dir", default=None, help="Output directory")
 
     args, opts = parser.parse_known_args()
 
@@ -56,7 +59,7 @@ def get_options():
         "test_stderr": args.test_stderr,
     }
 
-    ya = Ya(context=context)
+    ya = Ya(context=context, build_root=args.build_root, source_root=args.source_root, output_dir=args.output_dir)
 
     ya._data_root = ""  # XXX remove
 

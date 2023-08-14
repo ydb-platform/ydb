@@ -45,6 +45,7 @@
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
+#include <ydb/core/kafka_proxy/kafka_listener.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -907,6 +908,24 @@ namespace Tests {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx);
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
+        }
+
+        {
+            IActor* actor = CreatePollerActor();
+            TActorId actorId = Runtime->Register(actor, nodeIdx);
+            Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
+        }
+
+        {
+            NKafka::TListenerSettings settings;
+            settings.Port = Settings->AppConfig.GetKafkaProxyConfig().GetListeningPort();
+            if (Settings->AppConfig.GetKafkaProxyConfig().HasSslCertificate()) {
+                settings.SslCertificatePem = Settings->AppConfig.GetKafkaProxyConfig().GetSslCertificate();
+            }
+
+            IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig.GetKafkaProxyConfig());
+            TActorId actorId = Runtime->Register(actor, nodeIdx);
+            Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
         }
 
         if (Settings->EnableYq) {

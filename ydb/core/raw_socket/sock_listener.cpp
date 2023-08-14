@@ -63,9 +63,12 @@ public:
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
+            } else {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString() << ". Error: " << strerror(-err));
             }
+        } else {
+            LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to bind " << bindAddress->ToString() << ". Error: " << strerror(-err));
         }
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString());
         //abort();
         PassAway();
     }

@@ -37,6 +37,7 @@ target_link_options(ydb-core-kafka_proxy-ut PRIVATE
 )
 target_sources(ydb-core-kafka_proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_kafka_functions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_protocol.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/ut_serialization.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/ut/metarequest_ut.cpp
 )

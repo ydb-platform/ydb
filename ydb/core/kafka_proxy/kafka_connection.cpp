@@ -47,7 +47,7 @@ public:
     using TBase = TActorBootstrapped<TKafkaConnection>;
 
     struct Msg {
-        using TPtr=std::shared_ptr<Msg>;
+        using TPtr = std::shared_ptr<Msg>;
 
         size_t Size = 0;
         TKafkaInt32 ExpectedSize = 0;

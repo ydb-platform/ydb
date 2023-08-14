@@ -124,6 +124,8 @@ void TNodeWarden::Bootstrap() {
     }
 
     StartInvalidGroupProxy();
+
+    StartDistributedConfigKeeper();
 }
 
 void TNodeWarden::HandleReadCache() {

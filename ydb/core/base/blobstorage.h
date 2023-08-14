@@ -847,6 +847,9 @@ struct TEvBlobStorage {
         EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
+        EvNodeConfigPush,
+        EvNodeConfigReversePush,
+        EvNodeConfigUnbind,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

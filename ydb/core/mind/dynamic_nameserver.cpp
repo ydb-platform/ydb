@@ -222,7 +222,7 @@ void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
         for (const auto &pr : StaticConfig->StaticNodeTable) {
             reply->Nodes.emplace_back(pr.first,
                                       pr.second.Address, pr.second.Host, pr.second.ResolveHost,
-                                      pr.second.Port, pr.second.Location);
+                                      pr.second.Port, pr.second.Location, true);
         }
 
         for (auto &config : DynamicConfigs) {
@@ -230,7 +230,7 @@ void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
                 if (pr.second.Expire > now)
                     reply->Nodes.emplace_back(pr.first, pr.second.Address,
                                               pr.second.Host, pr.second.ResolveHost,
-                                              pr.second.Port, pr.second.Location);
+                                              pr.second.Port, pr.second.Location, false);
             }
         }
 

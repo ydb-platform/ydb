@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+import "ydb/core/protos/config.proto";
+
+package NKikimrBlobStorage;
+
+message TStorageConfig { // contents of storage metadata
+    uint64 Generation = 1;
+    bytes Fingerprint = 2; // hash for config validation (must be the same for all nodes with the same Generation)
+    NKikimrConfig.TBlobStorageConfig BlobStorageConfig = 3; // NodeWardenServiceSet for static group is inside
+}
+
+// Attach sender node to the recipient one; if already bound, then just update configuration.
+message TEvNodeConfigPush {
+    bool Initial = 1; // set to true if this push is initial connection establishment
+    TStorageConfig StorageConfig = 2; // configuration update (if called for the first time)
+    repeated uint32 NewBoundNodeIds = 3; // a list of nodes (not including sender) that are attached
+    repeated uint32 DeletedBoundNodeIds = 4; // a list of detached nodes
+}
+
+// Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
+message TEvNodeConfigReversePush {
+    TStorageConfig StorageConfig = 1; // only set if config is newer than provided
+    uint32 RootNodeId = 2; // current tree root as known by the sender
+    bool Rejected = 3; // is the request rejected due to cyclic graph?
+}
+
+// Remove node from bound list.
+message TEvNodeConfigUnbind {
+}

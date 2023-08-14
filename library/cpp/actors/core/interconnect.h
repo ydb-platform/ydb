@@ -195,6 +195,7 @@ namespace NActors {
             TString ResolveHost;
             ui16 Port;
             TNodeLocation Location;
+            bool IsStatic = true;
 
             TNodeInfo() = default;
             TNodeInfo(const TNodeInfo&) = default;
@@ -204,13 +205,15 @@ namespace NActors {
                       const TString& host,
                       const TString& resolveHost,
                       ui16 port,
-                      const TNodeLocation& location)
+                      const TNodeLocation& location,
+                      bool isStatic = true)
                 : NodeId(nodeId)
                 , Address(address)
                 , Host(host)
                 , ResolveHost(resolveHost)
                 , Port(port)
                 , Location(location)
+                , IsStatic(isStatic)
             {
             }
 

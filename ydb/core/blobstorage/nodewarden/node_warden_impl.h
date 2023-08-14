@@ -446,6 +446,13 @@ namespace NKikimr::NStorage {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+        TActorId DistributedConfigKeeperId;
+
+        void StartDistributedConfigKeeper();
+        void ForwardToDistributedConfigKeeper(STATEFN_SIG);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         struct TGroupResolverContext : TThrRefBase {
             struct TImpl;
             std::unique_ptr<TImpl> Impl;
@@ -516,6 +523,10 @@ namespace NKikimr::NStorage {
 
                 cFunc(TEvPrivate::EvReadCache, HandleReadCache);
                 fFunc(TEvPrivate::EvGetGroup, HandleGetGroup);
+
+                fFunc(TEvBlobStorage::EvNodeConfigPush, ForwardToDistributedConfigKeeper);
+                fFunc(TEvBlobStorage::EvNodeConfigReversePush, ForwardToDistributedConfigKeeper);
+                fFunc(TEvBlobStorage::EvNodeConfigUnbind, ForwardToDistributedConfigKeeper);
 
                 default:
                     EnqueuePendingMessage(ev);

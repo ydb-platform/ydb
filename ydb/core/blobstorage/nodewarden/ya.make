@@ -1,11 +1,17 @@
 LIBRARY()
 
 SRCS(
+    defs.h
     group_stat_aggregator.cpp
+    group_stat_aggregator.h
+    node_warden.h
     node_warden_cache.cpp
+    node_warden_distributed_config.cpp
+    node_warden_events.h
     node_warden_group.cpp
     node_warden_group_resolver.cpp
     node_warden_impl.cpp
+    node_warden_impl.h
     node_warden_mon.cpp
     node_warden_pdisk.cpp
     node_warden_pipe.cpp

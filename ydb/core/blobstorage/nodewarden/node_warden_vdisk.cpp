@@ -20,7 +20,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
-        STLOG(PRI_INFO, BS_NODE, NW35, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
+        STLOG(PRI_INFO, BS_NODE, NW00, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
             (RuntimeData, vdisk.RuntimeData.has_value()));
 
         if (vdisk.RuntimeData) {

@@ -1119,7 +1119,7 @@ BOOST_MULTI_INDEX_PROTECTED_IF_MEMBER_TEMPLATE_FRIENDS:
   template<class Archive>
   void save(Archive& ar,const unsigned int version)const
   {
-    const unsigned long                             s(size_());
+    const std::size_t                               s(size_());
     const detail::serialization_version<value_type> value_version;
     ar<<core::make_nvp("count",s);
     ar<<core::make_nvp("value_version",value_version);
@@ -1143,25 +1143,31 @@ BOOST_MULTI_INDEX_PROTECTED_IF_MEMBER_TEMPLATE_FRIENDS:
     BOOST_MULTI_INDEX_CHECK_INVARIANT;
 
     clear_(); 
-    unsigned long                             s;
+    std::size_t                               s;
     detail::serialization_version<value_type> value_version;
     if(version<1){
       std::size_t sz;
       ar>>core::make_nvp("count",sz);
-      s=static_cast<unsigned long>(sz);
+      s=static_cast<std::size_t>(sz);
     }
     else if(version<3){
 #if defined(BOOST_MULTI_INDEX_ENABLE_SERIALIZATION_COMPATIBILITY_V2)
       serialization::collection_size_type csz;
       ar>>core::make_nvp("count",csz);
-      s=static_cast<unsigned long>(csz);
+      s=static_cast<std::size_t>(csz);
 #else
       ar>>core::make_nvp("count",s);
 #endif
     }
+    else if(version<4){
+      unsigned long ul;
+      ar>>core::make_nvp("count",ul);
+      s=static_cast<std::size_t>(ul);
+    }
     else{
       ar>>core::make_nvp("count",s);
     }
+
     if(version<2){
       value_version=0;
     }
@@ -1569,6 +1575,8 @@ void swap(
  * class version = 3 : dropped boost::serialization::collection_size_type
  * in favor of unsigned long --this allows us to provide serialization
  * support without including any header from Boost.Serialization.
+ * class version = 4 : uses std::size_t rather than unsigned long (which
+ * is smaller in LLP64 data models).
  */
 
 namespace serialization {
@@ -1577,7 +1585,7 @@ struct version<
   boost::multi_index_container<Value,IndexSpecifierList,Allocator>
 >
 {
-  BOOST_STATIC_CONSTANT(int,value=3);
+  BOOST_STATIC_CONSTANT(int,value=4);
 };
 } /* namespace serialization */
 #endif

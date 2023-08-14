@@ -22,6 +22,8 @@
 
 namespace boost {
 
+/// The exception thrown in the event of a failed boost::any_cast of
+/// an boost::any, boost::anys::basic_any or boost::anys::unique_any value.
 class BOOST_SYMBOL_VISIBLE bad_any_cast :
 #ifndef BOOST_NO_RTTI
     public std::bad_cast

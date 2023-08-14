@@ -27,3 +27,4 @@ YdbSdkSessionsPool::StressTestSync10
 TYardTest::TestLogMultipleWriteRead
 TYardTest::TestMultiYardLogMultipleWriteRead
 OperationLog::ConcurrentWrites
+TPDiskTest::TestMultipleLogSpliceNonceJump

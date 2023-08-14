@@ -352,6 +352,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueryCacheEvicted;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompileQueueSize;
 
+    // Compile computation pattern service
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CompileComputationPatternsQueueSize;
+
     // Resource Manager
     ::NMonitoring::TDynamicCounters::TCounterPtr RmComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMemory;

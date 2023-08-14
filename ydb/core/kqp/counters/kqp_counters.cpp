@@ -753,6 +753,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     CompileQueueSize = KqpGroup->GetCounter("Compilation/QueueSize", false);
 
+    /* Compile computation pattern service */
+    CompiledComputationPatterns = KqpGroup->GetCounter("ComputationPatternCompilation/CompiledComputationPatterns");
+    CompileComputationPatternsQueueSize = KqpGroup->GetCounter("ComputationPatternCompilation/CompileComputationPatternsQueueSize");
+
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);

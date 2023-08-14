@@ -16,6 +16,7 @@ SRCS(
     mkql_custom_list.cpp
     mkql_validate.cpp
     mkql_value_builder.cpp
+    mkql_computation_pattern_cache.cpp
     presort.cpp
 )
 

@@ -1142,6 +1142,7 @@ message TTableServiceConfig {
         optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
         optional bool EnablePublishResourcesByExchanger = 18 [default = true];
         optional TInfoExchangerSettings InfoExchangerSettings = 19;
+        optional uint64 KqpPatternCachePatternAccessTimesBeforeTryToCompile = 20 [default = 5];
     }
 
     message TSpillingServiceConfig {
@@ -1160,6 +1161,10 @@ message TTableServiceConfig {
         }
 
         optional TLocalFileConfig LocalFileConfig = 1;
+    }
+
+    message TCompileComputationPatternServiceConfig {
+        optional uint64 WakeupIntervalMs = 1 [default = 1000]; // 1 sec
     }
 
     message TQueryPhaseLimits {
@@ -1329,6 +1334,8 @@ message TTableServiceConfig {
     optional bool EnableSequentialReads = 39 [default = false];
     optional bool EnablePreparedDdl = 42 [default = false];
     optional bool EnableSequences = 43 [default = true];
+    optional bool EnableAsyncComputationPatternCompilation = 46 [default = false];
+    optional TCompileComputationPatternServiceConfig CompileComputationPatternServiceConfig = 47;
 
     enum EBindingsMode {
         BM_ENABLED = 0;

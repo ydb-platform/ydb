@@ -185,7 +185,7 @@ public:
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {}
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext &ctx) {
         if (TokenAccessorConfig.GetEnabled()) {
             TString caContent;
             if (const auto& path = TokenAccessorConfig.GetSslCaCert()) {
@@ -240,6 +240,14 @@ public:
             KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), CredentialsFactory, HttpGateway));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
+
+        if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
+            IActor* ComputationPatternServiceActor = CreateKqpCompileComputationPatternService(TableServiceConfig, Counters);
+            ui32 batchPoolId = AppData(ctx)->BatchPoolId;
+            CompileComputationPatternService = ctx.Register(ComputationPatternServiceActor, TMailboxType::HTSwap, batchPoolId);
+            TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
+                MakeKqpCompileComputationPatternServiceID(SelfId().NodeId()), CompileComputationPatternService);
+        }
 
         KqpNodeService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpNodeService(TableServiceConfig, Counters, nullptr, AsyncIoFactory));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
@@ -423,6 +431,11 @@ public:
 
     void PassAway() override {
         Send(CompileService, new TEvents::TEvPoisonPill());
+
+        if (TableServiceConfig.GetEnableAsyncComputationPatternCompilation()) {
+            Send(CompileComputationPatternService, new TEvents::TEvPoisonPill());
+        }
+
         Send(SpillingService, new TEvents::TEvPoison);
         Send(KqpNodeService, new TEvents::TEvPoison);
         if (BoardPublishActor) {
@@ -1568,6 +1581,7 @@ private:
     TActorId BoardLookupActor;
     TActorId BoardPublishActor;
     TActorId CompileService;
+    TActorId CompileComputationPatternService;
     TActorId KqpNodeService;
     TActorId SpillingService;
     TActorId WhiteBoardService;

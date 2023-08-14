@@ -51,5 +51,6 @@ target_sources(minikql-computation-llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_custom_list.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_validate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_value_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_pattern_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/computation/presort.cpp
 )

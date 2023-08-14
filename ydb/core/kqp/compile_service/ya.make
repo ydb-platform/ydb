@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     kqp_compile_actor.cpp
     kqp_compile_service.cpp
+    kqp_compile_computation_pattern_service.cpp
 )
 
 PEERDIR(

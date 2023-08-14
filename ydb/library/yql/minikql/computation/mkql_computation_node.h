@@ -64,7 +64,7 @@ struct TComputationOptsFull: public TComputationOpts {
         , TimeProvider(timeProvider)
         , ValidatePolicy(validatePolicy)
         , SecureParamsProvider(secureParamsProvider)
-    {}    
+    {}
 
     TAllocState& AllocState;
     TTypeEnvironment* TypeEnv = nullptr;
@@ -116,7 +116,7 @@ struct TComputationContextLLVM {
 struct TComputationContext : public TComputationContextLLVM {
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
-    bool ExecuteLLVM = true;
+    bool ExecuteLLVM = false;
     arrow::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
     TTypeEnvironment* TypeEnv = nullptr;
@@ -405,6 +405,8 @@ public:
     typedef TIntrusivePtr<IComputationPattern> TPtr;
 
     virtual ~IComputationPattern() = default;
+    virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;
+    virtual bool IsCompiled() const = 0;
     virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0;
     virtual bool GetSuitableForCache() const = 0;
 };

@@ -10,6 +10,16 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
+// Normally we flush on every confirmed step, since usually they are confirmed
+// in the same order we planned them. However the first step in the queue may
+// be blocked by some shard, so make sure we flush when at least 2 other steps
+// have been confirmed.
+static constexpr size_t ConfirmedStepsToFlush = 2;
+
+// Coordinator may need to persist confirmed participants, and we need to limit
+// the number of rows as large transactions are problematic to commit.
+static constexpr size_t ConfirmedParticipantsToFlush = 10'000;
+
 void TMediatorStep::SerializeTo(TEvTxCoordinator::TEvCoordinatorStep *msg) const {
     for (const TTx &tx : Transactions) {
         NKikimrTx::TCoordinatorTransaction *x = msg->Record.AddTransactions();
@@ -37,6 +47,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     THashMap<std::pair<ui64, ui64>, TMediatorStepList::iterator> WaitingAcks;
 
     std::unique_ptr<TMediatorConfirmations> Confirmations;
+    size_t ConfirmedParticipants = 0;
+    size_t ConfirmedSteps = 0;
 
     void Die(const TActorContext &ctx) override {
         if (PipeClient) {
@@ -81,6 +93,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
                 << " tablet# " << Coordinator << " SEND EvMediatorQueueConfirmations to# " << Owner.ToString()
                 << " Owner");
             ctx.Send(Owner, new TEvMediatorQueueConfirmations(std::move(Confirmations)));
+            ConfirmedParticipants = 0;
+            ConfirmedSteps = 0;
         }
     }
 
@@ -177,8 +191,6 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
                 SendStep(*it, ctx);
             }
         }
-
-        SendConfirmations(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
@@ -214,7 +226,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " HANDLE EvPlanStepAck");
 
-        bool fullyConfirmed = false;
+        bool firstConfirmed = false;
 
         const TTabletId tabletId = record.GetTabletId();
         for (const auto txid : record.GetTxId()) {
@@ -224,10 +236,15 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
                 if (!Confirmations)
                     Confirmations.reset(new TMediatorConfirmations(Mediator));
-                Confirmations->Acks[txid].insert(tabletId);
+                if (Confirmations->Acks[txid].insert(tabletId).second)
+                    ++ConfirmedParticipants;
 
                 if (0 == --it->second->References) {
+                    ++ConfirmedSteps;
                     Y_VERIFY(!Queue.empty());
+                    if (it->second == Queue.begin()) {
+                        firstConfirmed = true;
+                    }
                     auto last = --Queue.end();
                     if (it->second != last) {
                         Queue.erase(it->second);
@@ -236,13 +253,15 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
                         it->second->Transactions.clear();
                         it->second->Transactions.shrink_to_fit();
                     }
-                    fullyConfirmed = true;
                 }
                 WaitingAcks.erase(it);
             }
         }
 
-        if (fullyConfirmed) {
+        if (firstConfirmed ||
+            ConfirmedSteps >= ConfirmedStepsToFlush ||
+            ConfirmedParticipants >= ConfirmedParticipantsToFlush)
+        {
             SendConfirmations(ctx);
         }
     }

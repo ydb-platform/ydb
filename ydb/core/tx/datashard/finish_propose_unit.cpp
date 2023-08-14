@@ -100,7 +100,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
         op->SetFinishProposeTs(DataShard.ConfirmReadOnlyLease());
     }
 
-    if (!op->HasResultSentFlag() && (op->IsDirty() || !Pipeline.WaitCompletion(op)))
+    if (!op->HasResultSentFlag() && (op->IsDirty() || op->HasVolatilePrepareFlag() || !Pipeline.WaitCompletion(op)))
         CompleteRequest(op, ctx);
 
     if (!DataShard.IsFollower())

@@ -901,6 +901,10 @@ private:
         transaction.SetMinStep(aggrMinStep);
         transaction.SetMaxStep(aggrMaxStep);
 
+        if (VolatileTx) {
+            transaction.SetFlags(TEvTxProxy::TEvProposeTransaction::FlagVolatile);
+        }
+
         LOG_T("Execute planned transaction, coordinator: " << TxCoordinator);
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), TxCoordinator, /* subscribe */ true));
     }

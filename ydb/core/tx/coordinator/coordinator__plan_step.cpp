@@ -220,10 +220,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             Self->SendStepConfirmations(ProxyPlanConfirmations, ctx);
 
             bool needCommit = (
-                // We want to persist steps that are aligned to configured resolution
-                (PlanOnStep % Self->Config.Resolution) == 0 ||
-                // We want to extend lease when less than half is left for new steps
-                (Self->VolatileState.LastBlockedPending - PlanOnStep) < volatileLeaseMs/2);
+                // We want to extend lease when only a half is left for new steps
+                (Self->VolatileState.LastBlockedPending - PlanOnStep) <= volatileLeaseMs/2);
 
             if (!needCommit) {
                 // Avoid making unnecessary commits

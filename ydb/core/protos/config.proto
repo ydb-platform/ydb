@@ -1334,7 +1334,7 @@ message TTableServiceConfig {
     optional bool EnableSequentialReads = 39 [default = false];
     optional bool EnablePreparedDdl = 42 [default = false];
     optional bool EnableSequences = 43 [default = true];
-    optional bool EnableAsyncComputationPatternCompilation = 46 [default = false];
+    optional bool EnableAsyncComputationPatternCompilation = 48 [default = false];
     optional TCompileComputationPatternServiceConfig CompileComputationPatternServiceConfig = 47;
 
     enum EBindingsMode {

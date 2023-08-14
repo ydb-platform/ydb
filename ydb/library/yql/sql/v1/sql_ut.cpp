@@ -18,8 +18,27 @@ Y_UNIT_TEST_SUITE(AnsiMode) {
 }
 
 Y_UNIT_TEST_SUITE(SqlParsingOnly) {
+    ///This function is used in BACKWARD COMPATIBILITY tests below that LIMIT the sets of token that CAN NOT be used
+    ///as identifiers in different contexts in a SQL request
+    ///\return list of tokens that failed this check
+    TVector<TString> ValidateTokens(const THashSet<TString>& forbidden, const std::function<TString (const TString& )>& makeRequest) {
+        THashMap<TString, bool> allTokens;
+        for (const auto& t: NSQLFormat::GetKeywords()) {
+            allTokens[t] = !forbidden.contains((t));
+        }
+        for (const auto& f: forbidden) {
+            UNIT_ASSERT(allTokens.contains(f)); //check that forbidden list contains tokens only(argument check)
+        }
+        TVector<TString> failed;
+        for (const auto& [token, allowed]: allTokens) {
+            if (SqlToYql(makeRequest(token)).IsOk() != allowed)
+               failed.push_back(token);
+        }
+        return failed;
+    }
+
     Y_UNIT_TEST(TokensAsColumnName) {
-        const auto& forbidden = THashSet<TString>{
+        auto failed = ValidateTokens({
                 "ALL", "ANY", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
                 "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
                 "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
@@ -27,23 +46,49 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
                 "SELECT", "SET", "STREAM", "STRUCT", "TAGGED", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
                 "WHEN", "WHERE", "WINDOW", "WITHOUT"
-            };
+            },
+            [](const TString& token){
+                TStringBuilder req;
+                req << "SELECT " << token << " FROM Plato.Input";
+                return req;
+            }
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
 
-        THashMap<TString, bool> tokens;
-        for (const auto& t: NSQLFormat::GetKeywords()) {
-            tokens[t] = !forbidden.contains((t));
-        }
-        for (const auto& f: forbidden) {
-            UNIT_ASSERT(tokens.contains(f)); //check that forbidden list contains tokens only(self check)
-        }
-        TStringBuilder failed;
-        for (const auto& [token, allowed]: tokens) {
-            TStringBuilder req;
-            req << "SELECT " << token << " FROM plato.Input";
-            if (SqlToYql(req).IsOk() != allowed)
-                failed << token << " ";
-        }
-        UNIT_ASSERT_EQUAL_C(TString{}, failed, failed);
+    Y_UNIT_TEST(TokensAsColumnAlias) {
+        auto failed = ValidateTokens({
+                 "AUTOMAP", "FALSE",
+                 "GLOBAL", "REPEATABLE", "TRUE"
+             },
+             [](const TString& token){
+                 TStringBuilder req;
+                 req << "SELECT Col as " << token << " FROM Plato.Input";
+                 return req;
+             }
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
+    Y_UNIT_TEST(TokensAsTableName) {
+        auto failed = ValidateTokens({
+            "ANY", "AUTOMAP", "COLUMN", "ERASE", "FALSE",
+            "GLOBAL", "REPEATABLE", "STREAM", "TRUE"
+            },
+            [](const TString& token){ return TString("SELECT * FROM Plato.") + token ;}
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
+    Y_UNIT_TEST(TokensAsTableAlias) {
+        auto failed = ValidateTokens({
+            "AUTOMAP", "CALLABLE", "DICT", "ENUM","FALSE", "FLOW",
+            "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
+            "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
+            },
+            [](const TString& token){ return TString("SELECT * FROM Plato.Input as ") + token ;}
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
     }
 
     Y_UNIT_TEST(TableHints) {

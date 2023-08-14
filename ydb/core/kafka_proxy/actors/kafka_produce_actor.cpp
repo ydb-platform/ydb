@@ -15,8 +15,8 @@ static constexpr TDuration TOPIC_UNATHORIZED_EXPIRATION_INTERVAL = TDuration::Mi
 static constexpr TDuration REQUEST_EXPIRATION_INTERVAL = TDuration::Seconds(30);
 static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
-NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const NACLib::TUserToken* userToken, const TString& clientDC) {
-    return new TKafkaProduceActor(parent, userToken, clientDC);
+NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
+    return new TKafkaProduceActor(context);
 }
 
 TString TKafkaProduceActor::LogPrefix() {
@@ -121,7 +121,7 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
 
             auto& topic = Topics[topicPath];
 
-            if (info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *UserToken)) {
+            if (info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
                 topic.Status = OK;
                 topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
                 for(auto& p : info.PQGroupInfo->Description.GetPartitions()) {
@@ -479,7 +479,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
             }
         }
 
-        Send(Client, new TEvKafka::TEvResponse(correlationId, response));
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response));
 
         if (!pendingRequest.WaitAcceptingCookies.empty()) {
             if (!expired) {

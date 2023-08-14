@@ -1,9 +1,11 @@
 #include "kafka_api_versions_actor.h"
 
+#include <ydb/core/kafka_proxy/kafka_events.h>
+
 namespace NKafka {
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 correlationId, const TApiVersionsRequestData* message) {
-    return new TKafkaApiVersionsActor(parent, correlationId, message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TApiVersionsRequestData* message) {
+    return new TKafkaApiVersionsActor(context, correlationId, message);
 }    
 
 TApiVersionsResponseData::TPtr GetApiVersions() {
@@ -40,7 +42,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
 void TKafkaApiVersionsActor::Bootstrap(const NActors::TActorContext& ctx) {
     Y_UNUSED(Message);
 
-    Send(Parent, new TEvKafka::TEvResponse(CorrelationId, GetApiVersions()));
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, GetApiVersions()));
     Die(ctx);
 }
 

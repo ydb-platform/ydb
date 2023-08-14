@@ -1415,8 +1415,10 @@ void TPartitionsLocationActor::HandleCacheNavigateResponse(
     if (!TBase::HandleCacheNavigateResponseBase(ev)) {
         return;
     }
+
     if (ProcessTablets(PQGroupInfo->Description, this->ActorContext())) {
-        Response->BalancerTabletId = BalancerTabletId;
+        Response->PathId = Self->Info.GetPathId();
+        Response->SchemeShardId = Self->Info.GetSchemeshardId();
     }
 }
 

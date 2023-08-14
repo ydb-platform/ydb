@@ -1,21 +1,22 @@
 #include "kafka_metadata_actor.h"
+
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 
 namespace NKafka {
 using namespace NKikimr::NGRpcProxy::V1;
 
-NActors::IActor* CreateKafkaMetadataActor(const TActorId parent,
-                                          const NACLib::TUserToken* userToken,
+NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
-                                          const TMetadataRequestData* message,
-                                          const NKikimrConfig::TKafkaProxyConfig& config) {
-    return new TKafkaMetadataActor(parent, userToken, correlationId, message, config);
+                                          const TMetadataRequestData* message) {
+    return new TKafkaMetadataActor(context, correlationId, message);
 }
 
 void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
     Response->Topics.resize(Message->Topics.size());
+
     THashMap<TString, TActorId> partitionActors;
-    for (auto i = 0u; i < Message->Topics.size(); ++i) {
+    for (size_t i = 0; i < Message->Topics.size(); ++i) {
         Response->Topics[i] = TMetadataResponseData::TMetadataResponseTopic{};
         auto& reqTopic = Message->Topics[i];
         Response->Topics[i].Name = reqTopic.Name.value_or("");
@@ -42,12 +43,12 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
 }
 
 TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMetadataRequestTopic& topicRequest) {
-    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << UserToken->GetUserSID() << "'");
+    KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
 
     TGetPartitionsLocationRequest locationRequest{};
     locationRequest.Topic = topicRequest.Name.value();
-    locationRequest.Token = UserToken->GetSerializedToken();
-    locationRequest.Database = "/Root/test"; // TODO
+    locationRequest.Token = Context->UserToken->GetSerializedToken();
+    locationRequest.Database = Context->Database;
 
     PendingResponses++;
 
@@ -62,7 +63,7 @@ void TKafkaMetadataActor::AddTopicError(
 
 void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response) {
     topic.ErrorCode = NONE_ERROR;
-    topic.TopicId = response->BalancerTabletId;
+    topic.TopicId = TKafkaUuid(response->SchemeShardId, response->PathId);
     topic.Partitions.reserve(response->Partitions.size());
     for (const auto& part : response->Partitions) {
         TMetadataResponseData::TMetadataResponseTopic::PartitionsMeta::ItemType responsePartition;
@@ -77,7 +78,7 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
             auto broker = TMetadataResponseData::TMetadataResponseBroker{};
             broker.NodeId = part.NodeId;
             broker.Host = part.Hostname;
-            broker.Port = Config.GetListeningPort();
+            broker.Port = Context->Config.GetListeningPort();
             Response->Brokers.emplace_back(std::move(broker));
         }
         topic.Partitions.emplace_back(std::move(responsePartition));
@@ -133,7 +134,7 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     if (PendingResponses == 0) {
-        Send(Parent, new TEvKafka::TEvResponse(CorrelationId, Response));
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response));
         Die(ctx);
     }
 }

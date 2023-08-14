@@ -5,7 +5,7 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-#include "../kafka_events.h"
+#include "actors.h"
 
 namespace NKafka {
 
@@ -16,24 +16,22 @@ const TVector<TString> SUPPORTED_SASL_MECHANISMS = {
 };
 
 public:
-    TKafkaSaslHandshakeActor(const TActorId parent, const ui64 correlationId, const EAuthSteps authStep, const TSaslHandshakeRequestData* message)
-        : Parent(parent)
+    TKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TSaslHandshakeRequestData* message)
+        : Context(context)
         , CorrelationId(correlationId)
-        , HandshakeRequestData(message)
-        , AuthStep(authStep) {
+        , HandshakeRequestData(message) {
     }
 
 void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
     void Handshake();
-    void SendResponse(TString errorMessage, EKafkaErrors kafkaError, EAuthSteps authStep, TString saslMechanism = "");
+    void SendResponse(const TString& errorMessage, EKafkaErrors kafkaError, EAuthSteps authStep, const TString& saslMechanism = "");
 
 private:
-    const TActorId Parent;
+    const TContext::TPtr Context;
     const ui64 CorrelationId;
     const TSaslHandshakeRequestData* HandshakeRequestData;
-    EAuthSteps AuthStep;
 };
 
 } // NKafka

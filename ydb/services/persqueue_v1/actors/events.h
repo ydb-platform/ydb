@@ -465,7 +465,8 @@ struct TEvPQProxy {
     {
         TEvPartitionLocationResponse() {}
         TVector<TPartitionLocationInfo> Partitions;
-        ui64 BalancerTabletId;
+        ui64 SchemeShardId;
+        ui64 PathId;
     };
 
 };

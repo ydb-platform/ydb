@@ -4,7 +4,6 @@
 
 #include "kafka_connection.h"
 #include "kafka_events.h"
-#include "kafka_messages.h"
 #include "kafka_log_impl.h"
 #include "actors/actors.h"
 
@@ -17,14 +16,6 @@ namespace NKafka {
 using namespace NActors;
 using namespace NKikimr;
 
-
-NActors::IActor* CreateKafkaApiVersionsActor(const TActorId parent, const ui64 correlationId, const TApiVersionsRequestData* message);
-NActors::IActor* CreateKafkaInitProducerIdActor(const TActorId parent, const ui64 correlationId, const TInitProducerIdRequestData* message);
-NActors::IActor* CreateKafkaMetadataActor(const TActorId parent, const NACLib::TUserToken* userToken, const ui64 correlationId, const TMetadataRequestData* message, const NKikimrConfig::TKafkaProxyConfig& config);
-NActors::IActor* CreateKafkaProduceActor(const TActorId parent, const NACLib::TUserToken* userToken, const TString& clientDC);
-NActors::IActor* CreateKafkaSaslHandshakeActor(const TActorId parent, const ui64 correlationId, const EAuthSteps authStep, const TSaslHandshakeRequestData* message);
-NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const EAuthSteps authStep, const TString saslMechanism, const TSaslAuthenticateRequestData* message);
-    
 
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;
@@ -65,7 +56,6 @@ public:
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
-    const NKikimrConfig::TKafkaProxyConfig& Config;
 
     THPTimer InactivityTimer;
 
@@ -76,7 +66,6 @@ public:
     bool CloseConnection = false;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
-    TString ClientDC;
 
     std::shared_ptr<Msg> Request;
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
@@ -91,26 +80,23 @@ public:
 
     TActorId ProduceActorId;
 
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    EAuthSteps AuthStep;
-    TString Database;
-    TString SaslMechanism;
-
+    TContext::TPtr Context;
 
     TKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
                      const NKikimrConfig::TKafkaProxyConfig& config)
         : Socket(std::move(socket))
         , Address(address)
-        , Config(config)
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
-        , AuthStep(EAuthSteps::WAIT_HANDSHAKE) {
+        , Context(std::make_shared<TContext>(config)) {
         SetNonBlock();
         IsSslSupported = IsSslSupported && Socket->IsSslSupported();
     }
 
     void Bootstrap() {
+        Context->ConnectionId = SelfId();
+
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
         KAFKA_LOG_I("incoming connection opened " << Address);
@@ -206,35 +192,31 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TApiVersionsRequestData* message) {
-        Register(CreateKafkaApiVersionsActor(SelfId(), header->CorrelationId, message));
+        Register(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message, const TActorContext& ctx) {
-        if (!UserToken) {
-            KAFKA_LOG_ERROR("Unauthenificated produce");
-            PassAway();
-        }
         if (!ProduceActorId) {
-            ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(SelfId(), UserToken.Get(), ClientDC));
+            ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(Context));
         }
 
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TInitProducerIdRequestData* message) {
-        Register(CreateKafkaInitProducerIdActor(SelfId(), header->CorrelationId, message));
+        Register(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMetadataRequestData* message) {
-        Register(CreateKafkaMetadataActor(SelfId(), UserToken.Get(), header->CorrelationId, message, Config));
+        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TSaslAuthenticateRequestData* message) {
-        Register(CreateKafkaSaslAuthActor(SelfId(), header->CorrelationId, Address, AuthStep, SaslMechanism, message));
+        Register(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TSaslHandshakeRequestData* message) {
-        Register(CreateKafkaSaslHandshakeActor(SelfId(), header->CorrelationId, AuthStep, message));
+        Register(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
     }
 
     void ProcessRequest(const TActorContext& ctx) {
@@ -242,6 +224,12 @@ protected:
                                                << ", Size=" << Request->Size);
 
         Msg::TPtr r = Request;
+
+        if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->Header.RequestApiKey))) {
+            KAFKA_LOG_ERROR("unauthenticated request: ApiKey=" << Request->Header.RequestApiKey);
+            return PassAway();
+        }
+
         PendingRequestsQueue.push_back(r);
         PendingRequests[r->Header.CorrelationId] = r;
 
@@ -293,10 +281,12 @@ protected:
             PassAway();
             return;
         }
-        UserToken = event->UserToken;
-        Database = event->Database;
-        AuthStep = authStep;
-        KAFKA_LOG_D("Authentificated successful. SID=" << UserToken->GetUserSID());
+
+        Context->UserToken = event->UserToken;
+        Context->Database = event->Database;
+        Context->AuthenticationStep = authStep;
+
+        KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
     }
 
     void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
@@ -309,8 +299,9 @@ protected:
             PassAway();
             return;
         }
-        SaslMechanism = event->SaslMechanism;
-        AuthStep = authStep;  
+
+        Context->SaslMechanism = event->SaslMechanism;
+        Context->AuthenticationStep = authStep;
     }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, const TActorContext& ctx) {
@@ -354,7 +345,7 @@ protected:
 
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
 
-        TBufferedWriter buffer(Socket.Get(), Config.GetPacketSize());
+        TBufferedWriter buffer(Socket.Get(), Context->Config.GetPacketSize());
         TKafkaWritable writable(buffer);
 
         writable << size;
@@ -400,14 +391,19 @@ protected:
 
                     case SIZE_PREPARE:
                         NormalizeNumber(Request->ExpectedSize);
-                        if ((ui64)Request->ExpectedSize > Config.GetMaxMessageSize()) {
+                        if ((ui64)Request->ExpectedSize > Context->Config.GetMaxMessageSize()) {
                             KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize);
                             return PassAway();
                         }
                         Step = INFLIGTH_CHECK;
 
                     case INFLIGTH_CHECK:
-                        if (InflightSize + Request->ExpectedSize > Config.GetMaxInflightSize()) {
+                        if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
+                            // Allow only one message to be processed at a time for non-authenticated users
+                            return;
+                        }
+                        if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
+                            // We limit the size of processed messages so as not to exceed the size of available memory
                             return;
                         }
                         InflightSize += Request->ExpectedSize;

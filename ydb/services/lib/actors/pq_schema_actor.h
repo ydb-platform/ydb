@@ -526,7 +526,11 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (this->ReplyIfNotTopic(ev)) {
                 return false;
             }
-            PQGroupInfo = ev->Get()->Request->ResultSet[0].PQGroupInfo;
+
+            auto& item = ev->Get()->Request->ResultSet[0];
+            PQGroupInfo = item.PQGroupInfo;
+            Self = item.Self;
+
             return true;
         }
 
@@ -559,6 +563,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     protected:
         THolder<TEvResponse> Response;
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
+        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     };
 
 }

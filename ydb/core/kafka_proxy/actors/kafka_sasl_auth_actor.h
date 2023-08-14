@@ -5,7 +5,6 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-#include "../kafka_events.h"
 #include "actors.h"
 
 namespace NKafka {
@@ -21,12 +20,12 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
-    struct TEvTokenReady : TEventLocal<TEvTokenReady, EvTokenReady> {
+    struct TEvTokenReady : NActors::TEventLocal<TEvTokenReady, EvTokenReady> {
         Ydb::Auth::LoginResult LoginResult;
         TString Database;
     };
 
-    struct TEvAuthFailed : TEventLocal<TEvAuthFailed, EvAuthFailed> {
+    struct TEvAuthFailed : NActors::TEventLocal<TEvAuthFailed, EvAuthFailed> {
         TString ErrorMessage;
     };
 };
@@ -38,13 +37,11 @@ struct TAuthData {
 };
 
 public:
-    TKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, EAuthSteps authStep, TString saslMechanism, const TSaslAuthenticateRequestData* message)
-        : Parent(parent)
+    TKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message)
+        : Context(context)
         , CorrelationId(correlationId)
         , AuthenticateRequestData(message)
-        , Address(address)
-        , AuthStep(authStep)
-        , SaslMechanism(saslMechanism) {
+        , Address(address) {
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -68,12 +65,12 @@ private:
     bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
 
 private:
-    const TActorId Parent;
+    const TContext::TPtr Context;
     const ui64 CorrelationId;
+
     const TSaslAuthenticateRequestData* AuthenticateRequestData;
     const NKikimr::NRawSocket::TNetworkConfig::TSocketAddressType Address;
-    const EAuthSteps AuthStep;
-    const TString SaslMechanism;
+
     TString Database;
 };
 

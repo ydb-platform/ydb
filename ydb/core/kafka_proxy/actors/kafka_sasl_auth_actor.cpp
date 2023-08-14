@@ -1,22 +1,23 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include "kafka_sasl_auth_actor.h"
 
 namespace NKafka {
 
-NActors::IActor* CreateKafkaSaslAuthActor(const TActorId parent, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const EAuthSteps authStep, const TString saslMechanism, const TSaslAuthenticateRequestData* message) {
-    return new TKafkaSaslAuthActor(parent, correlationId, address, authStep, saslMechanism, message);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message) {
+    return new TKafkaSaslAuthActor(context, correlationId, address, message);
 }    
 
 void TKafkaSaslAuthActor::Bootstrap(const NActors::TActorContext& ctx) {
-    if (AuthStep != EAuthSteps::WAIT_AUTH) {
+    if (Context->AuthenticationStep != EAuthSteps::WAIT_AUTH) {
         SendAuthFailedAndDie("Authentication failure. Request is not valid given the current SASL state.", EKafkaErrors::ILLEGAL_SASL_STATE, ctx);
         return; 
     }
-    if (SaslMechanism != "PLAIN") {
+    if (Context->SaslMechanism != "PLAIN") {
         SendAuthFailedAndDie("Does not support the requested SASL mechanism.", EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, ctx);
         return;
     }
@@ -47,7 +48,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
 
     auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, ev->Get()->Token, Database);
-    Send(Parent, authResult);  
+    Send(Context->ConnectionId, authResult);  
     
     Die(ctx);
 }
@@ -101,7 +102,7 @@ void TKafkaSaslAuthActor::SendAuthFailedAndDie(TString errorMessage, EKafkaError
 
     auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
     auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, nullptr, "", errorMessage);
-    Send(Parent, authResult);
+    Send(Context->ConnectionId, authResult);
    
     Die(ctx);
 }

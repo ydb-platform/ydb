@@ -2,11 +2,11 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/library/aclib/aclib.h>
 
-#include "../kafka_events.h"
+#include "actors.h"
 
 namespace NKafka {
 
@@ -37,10 +37,8 @@ class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
     };
 
 public:
-    TKafkaProduceActor(const TActorId& client, const NACLib::TUserToken* userToken, const TString& clientDC)
-        : Client(client)
-        , UserToken(userToken)
-        , ClientDC(clientDC) {
+    TKafkaProduceActor(const TContext::TPtr context)
+        : Context(context) {
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -135,8 +133,7 @@ private:
     void LogEvent(IEventHandle& ev);
 
 private:
-    const TActorId Client;
-    const NACLib::TUserToken* UserToken;
+    const TContext::TPtr Context;
     TString SourceId;
 
     TString ClientDC;

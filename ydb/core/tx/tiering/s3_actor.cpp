@@ -456,9 +456,10 @@ public:
 
         LOG_S_DEBUG("[S3] KeyFinished for key '" << key << "' at tablet " << TabletId);
         auto& ex = it->second;
-        TUnifiedBlobId blobId = ex.FinishKey(key);
-
-        ex.Event->AddResult(blobId, key, hasError, errStr);
+        if (ex.IsNotFinished(key)) {
+            TUnifiedBlobId blobId = ex.FinishKey(key);
+            ex.Event->AddResult(blobId, key, hasError, errStr);
+        }
 
         if (ex.ExtractionFinished()) {
             for (auto& [blobId, _] : ex.Blobs()) {

@@ -240,7 +240,7 @@ void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
         partitionsMap[partition.ShardId] = &partition;
     }
-    
+
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
 
     for (auto& originTaskId : inputStageInfo.Tasks) {
@@ -743,7 +743,8 @@ void FillEndpointDesc(NDqProto::TEndpoint& endpoint, const TTask& task) {
     }
 }
 
-void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NDqProto::TChannel& channelDesc, const TChannel& channel) {
+void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NDqProto::TChannel& channelDesc, const TChannel& channel,
+    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion) {
     channelDesc.SetId(channel.Id);
     channelDesc.SetSrcTaskId(channel.SrcTask);
     channelDesc.SetDstTaskId(channel.DstTask);
@@ -767,6 +768,11 @@ void FillChannelDesc(const TKqpTasksGraph& tasksGraph, NDqProto::TChannel& chann
 
     channelDesc.SetIsPersistent(IsCrossShardChannel(tasksGraph, channel));
     channelDesc.SetInMemory(channel.InMemory);
+    if (chanTransportVersion == NKikimrConfig::TTableServiceConfig::CTV_OOB_PICKLE_1_0) {
+        channelDesc.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0);
+    } else {
+        channelDesc.SetTransportVersion(NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0);
+    }
 }
 
 void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta) {
@@ -986,7 +992,7 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
 
     for (auto& channel : output.Channels) {
         auto& channelDesc = *outputDesc.AddChannels();
-        FillChannelDesc(tasksGraph, channelDesc, tasksGraph.GetChannel(channel));
+        FillChannelDesc(tasksGraph, channelDesc, tasksGraph.GetChannel(channel), tasksGraph.GetMeta().ChannelTransportVersion);
     }
 }
 
@@ -1036,7 +1042,7 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
 
     for (ui64 channel : input.Channels) {
         auto& channelDesc = *inputDesc.AddChannels();
-        FillChannelDesc(tasksGraph, channelDesc, tasksGraph.GetChannel(channel));
+        FillChannelDesc(tasksGraph, channelDesc, tasksGraph.GetChannel(channel), tasksGraph.GetMeta().ChannelTransportVersion);
     }
 
     if (input.Transform) {

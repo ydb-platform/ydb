@@ -1341,6 +1341,13 @@ message TTableServiceConfig {
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
     optional bool PredicateExtract20 = 44 [default = true];
     optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
+
+    enum EChannelTransportVersion {
+        CTV_UV_PICKLE_1_0 = 0;
+        CTV_OOB_PICKLE_1_0 = 1;
+    }
+
+    optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
 };
 
 // Config describes immediate controls and allows

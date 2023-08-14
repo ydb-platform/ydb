@@ -21,29 +21,10 @@
 
 LWTRACE_USING(QUOTER_SERVICE_PROVIDER);
 
-
 namespace NKikimr {
 namespace NQuoter {
 
-extern const TString CONSUMED_COUNTER_NAME = "QuotaConsumed";
-extern const TString REQUESTED_COUNTER_NAME = "QuotaRequested";
-extern const TString RESOURCE_COUNTER_SENSOR_NAME = "resource";
-extern const TString QUOTER_COUNTER_SENSOR_NAME = "quoter";
-extern const TString QUOTER_SERVICE_COUNTER_SENSOR_NAME = "quoter_service";
-extern const TString RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME = "QueueSize";
-extern const TString RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME = "QueueWeight";
-extern const TString RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME = "AllocatedOffline";
-extern const TString RESOURCE_DROPPED_COUNTER_SENSOR_NAME = "QuotaDropped";
-extern const TString RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME = "QuotaAccumulated";
-extern const TString RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME = "QuotaReceivedFromKesus";
-extern const TString REQUEST_QUEUE_TIME_SENSOR_NAME = "RequestQueueTimeMs";
-extern const TString REQUESTS_COUNT_SENSOR_NAME = "RequestsCount";
-extern const TString ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME = "ElapsedMicrosecInStarvation";
-extern const TString REQUEST_TIME_SENSOR_NAME = "RequestTimeMs";
-extern const TString DISCONNECTS_COUNTER_SENSOR_NAME = "Disconnects";
-
 constexpr double TICK_RATE_EPSILON = 0.0000000001;
-
 
 static_assert(EventSpaceBegin(NKikimr::TKikimrEvents::ES_QUOTA) == EventSpaceBegin(NKikimr::TEvQuota::ES_QUOTA), "quoter event ids mismatch");
 
@@ -51,49 +32,49 @@ NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
     return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000});
 }
 
-TRequest& TReqState::Get(ui32 idx) {
-    Y_VERIFY(idx < Requests.size());
-    auto &x = Requests[idx];
+TRequest& TReqState::Get(TRequestId idx) {
+    Y_VERIFY(idx.Value < Requests.size());
+    auto &x = Requests[idx.Value];
     Y_VERIFY(x.Source);
-    return Requests[idx];
+    return Requests[idx.Value];
 }
 
-ui32 TReqState::Idx(TRequest &request) {
-    const ui32 idx = static_cast<ui32>(&request - &*Requests.begin());
-    Y_VERIFY(idx < Requests.size());
+TRequestId TReqState::Idx(TRequest &request) {
+    const TRequestId idx = TRequestId{static_cast<ui32>(&request - &*Requests.begin())};
+    Y_VERIFY(idx.Value < Requests.size());
     return idx;
 }
 
-ui32 TReqState::HeadByOwner(TActorId ownerId) {
-    if (ui32 *x = ByOwner.FindPtr(ownerId))
+TRequestId TReqState::HeadByOwner(TActorId ownerId) {
+    if (TRequestId *x = ByOwner.FindPtr(ownerId))
         return *x;
     else
-        return Max<ui32>();
+        return TRequestId{};
 }
 
-ui32 TReqState::Allocate(TActorId source, ui64 eventCookie) {
-    ui32 idx;
+TRequestId TReqState::Allocate(TActorId source, ui64 eventCookie) {
+    TRequestId idx;
     if (Unused) {
         idx = Unused.back();
         Unused.pop_back();
     } else {
-        idx = Requests.size();
+        idx = TRequestId{static_cast<ui32>(Requests.size())};
         Requests.emplace_back();
     }
 
-    auto &x = Requests[idx];
+    auto &x = Requests[idx.Value];
     x.Source = source;
     x.EventCookie = eventCookie;
     x.StartTime = TActivationContext::Now();
 
-    Y_VERIFY_DEBUG(x.PrevByOwner == Max<ui32>());
-    Y_VERIFY_DEBUG(x.NextByOwner == Max<ui32>());
-    Y_VERIFY_DEBUG(x.PrevDeadlineRequest == Max<ui32>());
-    Y_VERIFY_DEBUG(x.NextDeadlineRequest == Max<ui32>());
+    Y_VERIFY_DEBUG(x.PrevByOwner == TRequestId{});
+    Y_VERIFY_DEBUG(x.NextByOwner == TRequestId{});
+    Y_VERIFY_DEBUG(x.PrevDeadlineRequest == TRequestId{});
+    Y_VERIFY_DEBUG(x.NextDeadlineRequest == TRequestId{});
 
     auto itpair = ByOwner.emplace(source, idx);
     if (!itpair.second) {
-        ui32 &other = itpair.first->second;
+        TRequestId &other = itpair.first->second;
         x.NextByOwner = other;
         Requests[other].PrevByOwner = idx;
         other = idx;
@@ -102,16 +83,16 @@ ui32 TReqState::Allocate(TActorId source, ui64 eventCookie) {
     return idx;
 }
 
-void TReqState::Free(ui32 idx) {
+void TReqState::Free(TRequestId idx) {
     auto &x = Get(idx);
 
     bool lastEntry = true;
-    if (x.NextByOwner != Max<ui32>()) {
+    if (x.NextByOwner != TRequestId{}) {
         lastEntry = false;
         Requests[x.NextByOwner].PrevByOwner = x.PrevByOwner;
     }
 
-    if (x.PrevByOwner != Max<ui32>()) {
+    if (x.PrevByOwner != TRequestId{}) {
         lastEntry = false;
         Requests[x.PrevByOwner].NextByOwner = x.NextByOwner;
     }
@@ -122,23 +103,23 @@ void TReqState::Free(ui32 idx) {
         auto byOwnerIt = ByOwner.find(x.Source);
         Y_VERIFY_DEBUG(byOwnerIt != ByOwner.end());
         if (byOwnerIt->second == idx) {
-            byOwnerIt->second = x.NextByOwner != Max<ui32>() ? x.NextByOwner : x.PrevByOwner;
+            byOwnerIt->second = x.NextByOwner != TRequestId{} ? x.NextByOwner : x.PrevByOwner;
         }
     }
 
-    x.NextByOwner = Max<ui32>();
-    x.PrevByOwner = Max<ui32>();
+    x.NextByOwner = TRequestId{};
+    x.PrevByOwner = TRequestId{};
 
-    if (x.NextDeadlineRequest != Max<ui32>()) {
+    if (x.NextDeadlineRequest != TRequestId{}) {
         Requests[x.NextDeadlineRequest].PrevDeadlineRequest = x.PrevDeadlineRequest;
     }
 
-    if (x.PrevDeadlineRequest != Max<ui32>()) {
+    if (x.PrevDeadlineRequest != TRequestId{}) {
         Requests[x.PrevDeadlineRequest].NextDeadlineRequest = x.NextDeadlineRequest;
     }
 
-    x.PrevDeadlineRequest = Max<ui32>();
-    x.NextDeadlineRequest = Max<ui32>();
+    x.PrevDeadlineRequest = TRequestId{};
+    x.NextDeadlineRequest = TRequestId{};
 
     x.Source = TActorId();
     x.Orbit.Reset();
@@ -146,18 +127,18 @@ void TReqState::Free(ui32 idx) {
     Unused.push_back(idx);
 }
 
-TResourceLeaf& TResState::Get(ui32 idx) {
+TResourceLeaf& TResState::Get(TResponseId idx) {
     Y_VERIFY(idx < Leafs.size());
     return Leafs[idx];
 }
 
-ui32 TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui32 requestIdx) {
-    ui32 idx;
+TResponseId TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, TRequestId requestIdx) {
+    TResponseId idx;
     if (Unused) {
         idx = Unused.back();
         Unused.pop_back();
     } else {
-        idx = Leafs.size();
+        idx = TResponseId{static_cast<ui32>(Leafs.size())};
         Leafs.emplace_back();
     }
 
@@ -167,9 +148,9 @@ ui32 TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui
     x.IsUsedAmount = isUsedAmount;
     x.RequestIdx = requestIdx;
 
-    Y_VERIFY_DEBUG(x.NextInWaitQueue == Max<ui32>());
-    Y_VERIFY_DEBUG(x.PrevInWaitQueue == Max<ui32>());
-    Y_VERIFY_DEBUG(x.NextResourceLeaf == Max<ui32>());
+    Y_VERIFY_DEBUG(x.NextInWaitQueue == TRequestId{});
+    Y_VERIFY_DEBUG(x.PrevInWaitQueue == TRequestId{});
+    Y_VERIFY_DEBUG(x.NextResourceLeaf == TRequestId{});
 
     Y_VERIFY_DEBUG(x.State == EResourceState::Unknown);
     Y_VERIFY_DEBUG(x.QuoterId == 0);
@@ -180,19 +161,19 @@ ui32 TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui
     return idx;
 }
 
-void TResState::FreeChain(ui32 headIdx) {
-    while (headIdx != Max<ui32>()) {
+void TResState::FreeChain(TResponseId headIdx) {
+    while (headIdx != TResponseId{}) {
         auto &x = Get(headIdx);
         Y_VERIFY_DEBUG(x.Resource == nullptr);
-        Y_VERIFY_DEBUG(x.NextInWaitQueue == Max<ui32>());
-        Y_VERIFY_DEBUG(x.PrevInWaitQueue == Max<ui32>());
+        Y_VERIFY_DEBUG(x.NextInWaitQueue == TRequestId{});
+        Y_VERIFY_DEBUG(x.PrevInWaitQueue == TRequestId{});
 
         Unused.push_back(headIdx);
         headIdx = x.NextResourceLeaf;
-        x.NextResourceLeaf = Max<ui32>();
+        x.NextResourceLeaf = TResponseId{};
 
         x.Amount = Max<ui64>();
-        x.RequestIdx = Max<ui32>();
+        x.RequestIdx = TRequestId{};
         x.State = EResourceState::Unknown;
         x.QuoterId = 0;
         x.ResourceId = 0;
@@ -403,20 +384,20 @@ void TQuoterService::TryTickSchedule(TInstant now) {
     }
 }
 
-void TQuoterService::ReplyRequest(TRequest &request, ui32 reqIdx, TEvQuota::TEvClearance::EResult resultCode) {
+void TQuoterService::ReplyRequest(TRequest &request, TRequestId reqIdx, TEvQuota::TEvClearance::EResult resultCode) {
     LWTRACK(RequestDone, request.Orbit, resultCode, request.EventCookie);
     Send(request.Source, new TEvQuota::TEvClearance(resultCode), 0, request.EventCookie);
 
     ForgetRequest(request, reqIdx);
 }
 
-void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
+void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
     // request must be replied
     // we must not stop track request while not replied or explicitly canceled
     // so only correct entry points are from ReplyRequest or from CancelRequest
 
     // cleanup from resource wait queue
-    for (ui32 leafIdx = request.ResourceLeaf; leafIdx != Max<ui32>(); ) {
+    for (TResponseId leafIdx = request.ResourceLeaf; leafIdx != TResponseId{}; ) {
         TResourceLeaf &leaf = ResState.Get(leafIdx);
 
         switch (leaf.State) {
@@ -450,8 +431,8 @@ void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
                 // TODO: resource schedule update over new active entry
 
                 leaf.Resource = nullptr;
-                leaf.PrevInWaitQueue = Max<ui32>();
-                leaf.NextInWaitQueue = Max<ui32>();
+                leaf.PrevInWaitQueue = TResponseId{};
+                leaf.NextInWaitQueue = TResponseId{};
             }
             break;
         case EResourceState::ResolveQuoter:
@@ -460,7 +441,7 @@ void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
             break;
         case EResourceState::ResolveResource:
             if (TQuoterState *quoter = Quoters.FindPtr(leaf.QuoterId))
-                if (TSet<ui32> *resWaitMap = quoter->WaitingResource.FindPtr(leaf.ResourceName))
+                if (TSet<TRequestId> *resWaitMap = quoter->WaitingResource.FindPtr(leaf.ResourceName))
                     resWaitMap->erase(reqIdx);
             break;
         }
@@ -470,7 +451,7 @@ void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
     }
 
     ResState.FreeChain(request.ResourceLeaf);
-    request.ResourceLeaf = Max<ui32>();
+    request.ResourceLeaf = TResponseId{};
 
     // cleanup from deadline queue is inside of generic ReqState::Free
     ReqState.Free(reqIdx);
@@ -478,32 +459,32 @@ void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
     Counters.RequestsInFly->Dec();
 }
 
-void TQuoterService::DeclineRequest(TRequest &request, ui32 reqIdx) {
+void TQuoterService::DeclineRequest(TRequest &request, TRequestId reqIdx) {
     Counters.ResultError->Inc();
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::UnknownResource);
 }
 
-void TQuoterService::FailRequest(TRequest &request, ui32 reqIdx) {
+void TQuoterService::FailRequest(TRequest &request, TRequestId reqIdx) {
     Counters.ResultError->Inc();
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::GenericError);
 }
 
-void TQuoterService::AllowRequest(TRequest &request, ui32 reqIdx) {
+void TQuoterService::AllowRequest(TRequest &request, TRequestId reqIdx) {
     Counters.ResultOk->Inc();
     Counters.RequestLatency->Collect((TActivationContext::Now() - request.StartTime).MilliSeconds());
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::Success);
 }
 
-void TQuoterService::DeadlineRequest(TRequest &request, ui32 reqIdx) {
+void TQuoterService::DeadlineRequest(TRequest &request, TRequestId reqIdx) {
     Counters.ResultDeadline->Inc();
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::Deadline);
 }
 
-TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx) {
+TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, TRequestId reqIdx) {
     if (leaf.ResourceId == TEvQuota::TResourceLeaf::ResourceForbid) {
         return EInitLeafStatus::Forbid;
     }
@@ -523,8 +504,8 @@ TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::T
             quores.NextTick = TInstant::Zero();
             quores.LastTick = TInstant::Zero();
 
-            quores.QueueHead = Max<ui32>();
-            quores.QueueTail = Max<ui32>();
+            quores.QueueHead = TResponseId{};
+            quores.QueueTail = TResponseId{};
 
             quores.LastAllocated = TInstant::Zero();
             quores.AmountConsumed = 0.0;
@@ -551,7 +532,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::T
     return EInitLeafStatus::Unknown;
 }
 
-TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx) {
+TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, TRequestId reqIdx) {
     // resolve quoter
     ui64 quoterId = leaf.QuoterId;
     TQuoterState *quoter = quoterId ? Quoters.FindPtr(quoterId) : nullptr;
@@ -597,7 +578,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         quoter->WaitingQueueResolve.emplace(reqIdx);
 
         // todo: make generic 'leaf for resolve' helper
-        const ui32 resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
+        const TResponseId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
         TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
         resLeaf.QuoterId = quoterId;
@@ -625,10 +606,10 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         }
 
         if (resHolder == nullptr) {
-            auto rIndxIt = quoter->WaitingResource.emplace(leaf.Resource, TSet<ui32>());
+            auto rIndxIt = quoter->WaitingResource.emplace(leaf.Resource, TSet<TRequestId>());
             rIndxIt.first->second.emplace(reqIdx);
 
-            const ui32 resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
+            const TResponseId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
             TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
             resLeaf.QuoterId = quoterId;
@@ -696,7 +677,7 @@ void TQuoterService::MarkScheduleAllocation(TResource& quores, TDuration delay, 
     }
 }
 
-TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui64 quoterId, ui64 resourceId, const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx) {
+TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui64 quoterId, ui64 resourceId, const TEvQuota::TResourceLeaf &leaf, TRequest &request, TRequestId reqIdx) {
     *quores.Counters.Requested += leaf.Amount;
     ++*quores.Counters.RequestsCount;
 
@@ -724,7 +705,7 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     }
 
     // need wait entry for resource
-    const ui32 resLeafIdx = ResState.Allocate(&quores, leaf.Amount, leaf.IsUsedAmount, reqIdx);
+    const TResponseId resLeafIdx = ResState.Allocate(&quores, leaf.Amount, leaf.IsUsedAmount, reqIdx);
     TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
     resLeaf.State = EResourceState::Wait;
@@ -758,7 +739,7 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     return EInitLeafStatus::Wait;
 }
 
-void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, const ui32 reqIdx) {
+void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, const TRequestId reqIdx) {
     TryTickSchedule();
 
     TEvQuota::TEvRequest *msg = ev->Get();
@@ -811,7 +792,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
             deadlineIt = ScheduleDeadline.emplace(deadline, ReqState.Allocate(TActorId(0, "placeholder"), 0)).first;
         }
 
-        const ui32 placeholderIdx = deadlineIt->second;
+        const TRequestId placeholderIdx = deadlineIt->second;
         TRequest &placeholder = ReqState.Get(placeholderIdx);
         TRequest &reqq = ReqState.Get(reqIdx);
 
@@ -831,7 +812,7 @@ void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
     Counters.Requests->Inc();
 
     TEvQuota::TEvRequest *msg = ev->Get();
-    const ui32 reqIdx = ReqState.Allocate(ev->Sender, ev->Cookie);
+    const TRequestId reqIdx = ReqState.Allocate(ev->Sender, ev->Cookie);
     TRequest &request = ReqState.Get(reqIdx);
     LWTRACK(StartRequest, request.Orbit, msg->Operator, msg->Deadline, ev->Cookie);
 
@@ -870,15 +851,15 @@ void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
 void TQuoterService::Handle(TEvQuota::TEvCancelRequest::TPtr &ev) {
     const ui64 cookie = ev->Cookie;
 
-    const ui32 headByOwner = ReqState.HeadByOwner(ev->Sender);
+    const TRequestId headByOwner = ReqState.HeadByOwner(ev->Sender);
     if (headByOwner == Max<ui32>())
         return;
 
     TRequest &headRequest = ReqState.Get(headByOwner);
 
-    ui32 nextReqIdx = headRequest.NextByOwner;
+    TRequestId nextReqIdx = headRequest.NextByOwner;
     while (nextReqIdx != Max<ui32>()) {
-        const ui32 reqIdx = nextReqIdx;
+        const TRequestId reqIdx = nextReqIdx;
         TRequest &req = ReqState.Get(nextReqIdx);
         nextReqIdx = req.NextByOwner;
 
@@ -907,14 +888,14 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     auto resIt = quoter.WaitingResource.find(resourceName);
     Y_VERIFY(resIt != quoter.WaitingResource.end());
 
-    TSet<ui32> waitingRequests = std::move(resIt->second);
+    TSet<TRequestId> waitingRequests = std::move(resIt->second);
     quoter.WaitingResource.erase(resIt);
 
     const bool isError = msg->Result != msg->Success;
     if (isError) {
         BLOG_I("resource sesson failed: " << quoter.QuoterName << ":" << resourceName);
 
-        for (ui32 reqIdx : waitingRequests) {
+        for (TRequestId reqIdx : waitingRequests) {
             if (msg->Result == TEvQuota::TEvProxySession::UnknownResource) {
                 DeclineRequest(ReqState.Get(reqIdx), reqIdx);
             } else {
@@ -942,10 +923,10 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     quores.LastAllocated = TInstant::Zero();
 
     // move requests to 'wait resource' state
-    for (ui32 reqId : waitingRequests) {
+    for (TRequestId reqId : waitingRequests) {
         TRequest &req = ReqState.Get(reqId);
-        ui32 resIdx = req.ResourceLeaf;
-        while (resIdx != Max<ui32>()) {
+        TResponseId resIdx = req.ResourceLeaf;
+        while (resIdx != TResponseId{}) {
             TResourceLeaf &leaf = ResState.Get(resIdx);
             Y_VERIFY(leaf.RequestIdx == reqId);
             if (leaf.State == EResourceState::ResolveResource
@@ -964,7 +945,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
                     quores.QueueTail = resIdx;
                     quores.QueueHead = resIdx;
                 } else {
-                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>());
+                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == TResponseId{});
                     leaf.PrevInWaitQueue = quores.QueueTail;
                     ResState.Get(quores.QueueTail).NextInWaitQueue = resIdx;
                     quores.QueueTail = resIdx;
@@ -1084,16 +1065,16 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
 
     quoter.ProxyId = Register(CreateKesusQuoterProxy(quoterId, navigate, SelfId()), TMailboxType::HTSwap, AppData()->UserPoolId);
 
-    TSet<ui32> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
-    for (ui32 reqIdx : waitingQueueResolve) {
+    TSet<TRequestId> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
+    for (TRequestId reqIdx : waitingQueueResolve) {
         TRequest &req = ReqState.Get(reqIdx);
-        for (ui32 resLeafIdx = req.ResourceLeaf; resLeafIdx != Max<ui32>(); ) {
+        for (TResponseId resLeafIdx = req.ResourceLeaf; resLeafIdx != Max<ui32>(); ) {
             TResourceLeaf &leaf = ResState.Get(resLeafIdx);
             if (leaf.QuoterId == quoterId) {
                 Y_VERIFY(leaf.State == EResourceState::ResolveQuoter);
                 Y_VERIFY(leaf.ResourceName);
 
-                auto itpair = quoter.WaitingResource.emplace(leaf.ResourceName, TSet<ui32>());
+                auto itpair = quoter.WaitingResource.emplace(leaf.ResourceName, TSet<TRequestId>());
                 itpair.first->second.emplace(reqIdx);
 
                 if (itpair.second) { // new resolve entry, request
@@ -1121,14 +1102,14 @@ void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, declt
         quoter.ProxyId = TActorId();
     }
 
-    TSet<ui32> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
-    for (ui32 reqIdx : waitingQueueResolve) {
+    TSet<TRequestId> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
+    for (TRequestId reqIdx : waitingQueueResolve) {
         DeclineRequest(ReqState.Get(reqIdx), reqIdx);
     }
 
-    TMap<TString, TSet<ui32>> waitingResource(std::move(quoter.WaitingResource));
+    TMap<TString, TSet<TRequestId>> waitingResource(std::move(quoter.WaitingResource));
     for (auto &xpair : waitingResource) {
-        for (ui32 reqIdx : xpair.second)
+        for (TRequestId reqIdx : xpair.second)
             DeclineRequest(ReqState.Get(reqIdx), reqIdx);
     }
 
@@ -1144,7 +1125,7 @@ void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, declt
 
 void TQuoterService::ForbidResource(TResource &quores) {
     while (quores.QueueHead != Max<ui32>()) {
-        const ui32 reqIdx = ResState.Get(quores.QueueHead).RequestIdx;
+        const TRequestId reqIdx = ResState.Get(quores.QueueHead).RequestIdx;
         DeclineRequest(ReqState.Get(reqIdx), reqIdx);
     }
 
@@ -1163,10 +1144,10 @@ void TQuoterService::ForbidResource(TResource &quores) {
     // cleanup is outside
 }
 
-void TQuoterService::CheckRequest(ui32 reqIdx) {
+void TQuoterService::CheckRequest(TRequestId reqIdx) {
     TRequest &request = ReqState.Get(reqIdx);
 
-    for (ui32 nextLeaf = request.ResourceLeaf; nextLeaf != Max<ui32>(); ) {
+    for (TResponseId nextLeaf = request.ResourceLeaf; nextLeaf != Max<ui32>(); ) {
         auto &leaf = ResState.Get(nextLeaf);
         if (leaf.State != EResourceState::Cleared)
             return;
@@ -1267,20 +1248,20 @@ void TQuoterService::AllocateResource(TResource &quores) {
 
             if (quores.QueueHead != Max<ui32>()) {
                 TResourceLeaf &nextLeaf = ResState.Get(quores.QueueHead);
-                nextLeaf.PrevInWaitQueue = Max<ui32>();
+                nextLeaf.PrevInWaitQueue = TResponseId{};
 
                 quores.QueueSize -= 1;
                 quores.QueueWeight -= leaf.Amount;
             } else {
                 // last entry in queue
-                quores.QueueTail = Max<ui32>();
+                quores.QueueTail = TResponseId{};
 
                 quores.QueueSize = 0;
                 quores.QueueWeight = 0.0;
             }
 
-            leaf.NextInWaitQueue = Max<ui32>();
-            leaf.PrevInWaitQueue = Max<ui32>();
+            leaf.NextInWaitQueue = TResponseId{};
+            leaf.PrevInWaitQueue = TResponseId{};
             leaf.Resource = nullptr;
             leaf.State = EResourceState::Cleared;
 

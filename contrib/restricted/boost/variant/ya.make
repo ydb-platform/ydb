@@ -6,9 +6,9 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.82.0)
+VERSION(1.83.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/variant/archive/boost-1.82.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/variant/archive/boost-1.83.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/assert

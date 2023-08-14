@@ -45,6 +45,8 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
     switch (node.Mode) {
         case IOptimizer::EJoinType::Unknown: b << prefix <<  " Node\n"; break;
         case IOptimizer::EJoinType::Inner: b << prefix <<  " Inner Join\n"; break;
+        case IOptimizer::EJoinType::Left: b << prefix <<  " Left Join\n"; break;
+        case IOptimizer::EJoinType::Right: b << prefix <<  " Right Join\n"; break;
         default: b << prefix <<  " Unknown\n"; break;
     }
     switch (node.Strategy) {

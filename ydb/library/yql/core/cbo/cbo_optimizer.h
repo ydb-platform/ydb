@@ -28,6 +28,7 @@ struct IOptimizer {
     struct TInput {
         std::vector<TRel> Rels;
         std::vector<TEq> EqClasses;
+        std::vector<TEq> Left;
 
         TString ToString() const;
         void Normalize();
@@ -35,7 +36,9 @@ struct IOptimizer {
 
     enum class EJoinType {
         Unknown,
-        Inner
+        Inner,
+        Left,
+        Right,
     };
 
     enum class EJoinStrategy {

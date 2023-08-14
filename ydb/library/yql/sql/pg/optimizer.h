@@ -34,7 +34,7 @@ private:
 };
 
 // export for tests
-Var* MakeVar(int varno, int relno);
+Var* MakeVar(int relno, int varno);
 RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno);
 List* MakeRelOptInfoList(const IOptimizer::TInput& input);
 

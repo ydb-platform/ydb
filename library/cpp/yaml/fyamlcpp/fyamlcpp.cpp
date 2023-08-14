@@ -417,6 +417,10 @@ void TMapping::Remove(const TNodePairRef& toRemove) {
     free(toRemove.Pair_);
 }
 
+bool TMapping::Has(TString key) {
+    return fy_node_mapping_lookup_by_string(Node_, key.data(), key.size()) != nullptr;
+}
+
 TMappingIterator TMapping::Remove(const TMappingIterator& toRemove) {
     ENSURE_NODE_NOT_EMPTY(Node_);
     Y_VERIFY_DEBUG(Node_ == toRemove.Node_);

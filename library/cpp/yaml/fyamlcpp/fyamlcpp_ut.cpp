@@ -170,6 +170,8 @@ x: b
         }
 
         auto seq = doc->Root().Map().at("test").Sequence();
+        UNIT_ASSERT(seq[0].Map().Has("x"));
+        UNIT_ASSERT(!seq[0].Map().Has("xx"));
         UNIT_ASSERT_VALUES_EQUAL(seq[0].Map().at("x").Scalar(), "1");
         UNIT_ASSERT_VALUES_EQUAL(seq[0].Map().at("y").Scalar(), "2");
         UNIT_ASSERT_VALUES_EQUAL(seq[1].Map().at("a").Scalar(), "noop");

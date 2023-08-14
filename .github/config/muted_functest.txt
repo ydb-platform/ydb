@@ -4,6 +4,7 @@ sqs.common.test_queues_managing.TestQueuesManagingWithPathTestQueuesManagingWith
 sqs.common.test_queue_attributes_validation.TestQueueAttributesValidation
 sqs.common.test_queues_managing.TestQueuesManagingWithTenant
 sqs.common.test_queues_managing.TestQueuesManagingWithPathTestQueuesManagingWithPath
+sqs.with_quotas.test_quoting.TestSqsQuotingWithKesus
 sqs.large.test_leader_start_inflight.TestSqsMultinodeCluster
 sqs.messaging.test_fifo_messaging.TestSqsFifoMessagingWithTenant
 sqs.messaging.test_fifo_messaging.TestSqsFifoMessagingWithPath
@@ -15,6 +16,7 @@ tenants.test_tenants
 tenants.test_dynamic_tenants
 tenants.test_storage_config.TestStorageConfig
 ydb_cli.test_ydb_impex.TestImpex::test_simple[csv-additional_args0-column]
+ydb_cli.test_ydb_impex.TestImpex::test_simple[csv-additional_args0-row]
 ydb_cli.test_ydb_impex.TestImpex::test_simple[csv-additional_args1-row]
 ydb_cli.test_ydb_impex.TestImpex::test_multiple_files_and_stdin[tsv-additional_args2-row]
 suite_tests.test_stream_query.TestStreamQuery::test_sql_suite[results-window.test]

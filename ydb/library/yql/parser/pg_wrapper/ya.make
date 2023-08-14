@@ -114,8 +114,10 @@ ELSEIF (OS_WINDOWS)
         ../../../../../contrib/libs/postgresql/src/port/pwrite.c
         ../../../../../contrib/libs/postgresql/src/port/pwritev.c
         ../../../../../contrib/libs/postgresql/src/port/system.c
+        ../../../../../contrib/libs/postgresql/src/port/win32common.c
         ../../../../../contrib/libs/postgresql/src/port/win32env.c
         ../../../../../contrib/libs/postgresql/src/port/win32error.c
+        ../../../../../contrib/libs/postgresql/src/port/win32fseek.c
         ../../../../../contrib/libs/postgresql/src/port/win32security.c
         ../../../../../contrib/libs/postgresql/src/port/win32setlocale.c
         ../../../../../contrib/libs/postgresql/src/port/win32stat.c

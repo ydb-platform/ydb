@@ -931,8 +931,10 @@ target_sources(yql-parser-pg_wrapper PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/pwrite.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/pwritev.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/system.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32common.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32env.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32error.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32fseek.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32security.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32setlocale.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/port/win32stat.c

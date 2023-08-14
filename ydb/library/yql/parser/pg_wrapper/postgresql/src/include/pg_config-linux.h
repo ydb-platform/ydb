@@ -620,6 +620,9 @@
 /* Define to 1 if you have the <sys/ipc.h> header file. */
 #define HAVE_SYS_IPC_H 1
 
+/* Define to 1 if you have the <sys/personality.h> header file. */
+#define HAVE_SYS_PERSONALITY_H 1
+
 /* Define to 1 if you have the <sys/prctl.h> header file. */
 #define HAVE_SYS_PRCTL_H 1
 
@@ -715,6 +718,9 @@
 
 /* Define to 1 if you have the `writev' function. */
 #define HAVE_WRITEV 1
+
+/* Define to 1 if you have the `X509_get_signature_info' function. */
+#define HAVE_X509_GET_SIGNATURE_INFO 1
 
 /* Define to 1 if you have the `X509_get_signature_nid' function. */
 #define HAVE_X509_GET_SIGNATURE_NID 1

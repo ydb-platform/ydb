@@ -1,4 +1,5 @@
 #include "sql_ut.h"
+#include "match_recognize.h"
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
@@ -198,7 +199,7 @@ FROM Input MATCH_RECOGNIZE(
         UNIT_ASSERT(IsQuotedListOfSize(nestedPattern->GetChild(1), 2));
     }
 
-    Y_UNIT_TEST(PatternLimietedNesting) {
+    Y_UNIT_TEST(PatternLimitedNesting) {
         const size_t MaxNesting = 20;
         for (size_t extraNesting = 0; extraNesting <= 1; ++extraNesting) {
             std::string pattern;
@@ -226,8 +227,183 @@ FROM Input MATCH_RECOGNIZE(
         }
     }
 
+    Y_UNIT_TEST(PatternFactorQuantifiers) {
+        auto makeRequest = [](const TString& factor) {
+           return TString(R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+        PATTERN(
+)") + factor + R"(
+            )
+    DEFINE A as A
+    )
+)";
+        };
+        auto getTheFactor = [](const NYql::TAstNode* root) {
+            const auto& patternCallable = FindMatchRecognizeParam(root, "pattern");
+            const auto& factor =  patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
+            return NSQLTranslationV1::TRowPatternFactor{
+                    TString(), //primary var or subexpression, not used in this test
+                    FromString<uint64_t>(factor->GetChild(1)->GetChild(1)->GetContent()), //QuantityMin
+                    FromString<uint64_t>(factor->GetChild(2)->GetChild(1)->GetContent()), //QuantityMax
+                    FromString<bool>(factor->GetChild(3)->GetChild(1)->GetContent()), //Greedy
+                    false //Output, not used in this test
+            };
+        };
+        {
+            //no quantifiers
+            const auto stmt = makeRequest("A");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(1, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(1, factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //optional greedy(default)
+            const auto stmt = makeRequest("A?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(1, factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //optional reluctant
+            const auto stmt = makeRequest("A??");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(1, factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
+        {
+            //+ greedy(default)
+            const auto stmt = makeRequest("A+");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(1, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(std::numeric_limits<uint64_t>::max(), factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //+ reluctant
+            const auto stmt = makeRequest("A+?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(1, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(std::numeric_limits<uint64_t>::max(), factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
+        {
+            //* greedy(default)
+            const auto stmt = makeRequest("A*");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(std::numeric_limits<uint64_t>::max(), factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //* reluctant
+            const auto stmt = makeRequest("A*?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(std::numeric_limits<uint64_t>::max(), factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
+        {
+            //exact n
+            const auto stmt = makeRequest("A{4}");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMax);
+        }
+        {
+            //from n to m greedy(default
+            const auto stmt = makeRequest("A{4, 7}");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(7, factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //from n to m reluctant
+            const auto stmt = makeRequest("A{4,7}?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(7, factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
+        {
+            //at least n greedy(default)
+            const auto stmt = makeRequest("A{4,}");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(std::numeric_limits<uint64_t>::max(), factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //at least n reluctant
+            const auto stmt = makeRequest("A{4,}?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(std::numeric_limits<uint64_t>::max(), factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
+        {
+            //at most m greedy(default)
+            const auto stmt = makeRequest("A{,7}");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(7, factor.QuantityMax);
+            UNIT_ASSERT(factor.Greedy);
+        }
+        {
+            //at least n reluctant
+            const auto stmt = makeRequest("A{,7}?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(0, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(7, factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
 
-    //TODO add tests for factors, quantifiers and greediness https://st.yandex-team.ru/YQL-16186
+        {
+            //quantifiers on subexpression
+            const auto stmt = makeRequest("(A B+ C | D | ^){4,7}?");
+            const auto &r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            const auto& factor = getTheFactor(r.Root);
+            UNIT_ASSERT_EQUAL(4, factor.QuantityMin);
+            UNIT_ASSERT_EQUAL(7, factor.QuantityMax);
+            UNIT_ASSERT(!factor.Greedy);
+        }
+    }
+
+
 
    Y_UNIT_TEST(row_pattern_subset_clause) {
         //TODO https://st.yandex-team.ru/YQL-16186

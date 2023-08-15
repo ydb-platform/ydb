@@ -494,6 +494,57 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     delayedAcks.clear();
 }
 
+void TDataShard::GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies) {
+    if (!op->HasOutputData()) {
+        // There are no replies
+        return;
+    }
+
+    auto& delayedAcks = op->DelayedAcks();
+    for (auto& x : delayedAcks) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+            "Cleanup TxId# " << op->GetTxId() << " at " << TabletID() << " Ack RS " << x->ToString());
+        cleanupReplies.emplace_back(x.Release());
+        IncCounter(COUNTER_ACK_SENT_DELAYED);
+    }
+    delayedAcks.clear();
+
+    auto& expectedReadSets = op->ExpectedReadSets();
+    for (auto& x : expectedReadSets) {
+        for (const auto& recipient : x.second) {
+            cleanupReplies.push_back(GenerateReadSetNoData(recipient, op->GetStep(), op->GetTxId(), x.first.first, x.first.second));
+        }
+    }
+    expectedReadSets.clear();
+}
+
+void TDataShard::SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies) {
+    if (replies.empty()) {
+        return;
+    }
+
+    struct TState : public TThrRefBase {
+        std::vector<std::unique_ptr<IEventHandle>> Replies;
+
+        TState(std::vector<std::unique_ptr<IEventHandle>>&& replies)
+            : Replies(std::move(replies))
+        {}
+    };
+
+    Executor()->ConfirmReadOnlyLease(ts,
+        [state = MakeIntrusive<TState>(std::move(replies))] {
+            for (auto& ev : state->Replies) {
+                TActivationContext::Send(std::move(ev));
+            }
+        });
+}
+
+void TDataShard::SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies) {
+    for (auto& ev : replies) {
+        TActivationContext::Send(std::move(ev));
+    }
+}
+
 class TDataShard::TWaitVolatileDependencies final : public IVolatileTxCallback {
 public:
     TWaitVolatileDependencies(
@@ -3110,18 +3161,6 @@ bool TDataShard::CheckChangesQueueOverflow() const {
     return ChangesQueue.size() >= sizeLimit || ChangesQueueBytes >= bytesLimit;
 }
 
-void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {
-    ui64 txId = ev->Get()->Record.GetTxId();
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvDataShard::TEvCancelTransactionProposal " << TabletID()
-                << " txId " <<  txId);
-
-    // Mark any queued proposals as cancelled
-    ProposeQueue.Cancel(txId);
-
-    // Cancel transactions that have already been proposed
-    Execute(new TTxCancelTransactionProposal(this, txId), ctx);
-}
-
 void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateLagCounters(ctx);
     UpdateTableStats(ctx);
@@ -3251,33 +3290,36 @@ void TDataShard::SendReadSetExpectation(const TActorContext& ctx, ui64 step, ui6
     PipeClientCache->Send(ctx, target, ev.Release());
 }
 
-void TDataShard::SendReadSetNoData(const TActorContext& ctx, const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target)
+std::unique_ptr<IEventHandle> TDataShard::GenerateReadSetNoData(const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target)
 {
-    Y_UNUSED(ctx);
-    auto ev = MakeHolder<TEvTxProcessing::TEvReadSet>(step, txId, source, target, TabletID());
-    ev->Record.SetFlags(
+    auto msg = std::make_unique<TEvTxProcessing::TEvReadSet>(step, txId, source, target, TabletID());
+    msg->Record.SetFlags(
         NKikimrTx::TEvReadSet::FLAG_NO_DATA |
         NKikimrTx::TEvReadSet::FLAG_NO_ACK);
     if (source != TabletID()) {
-        FillSplitTrajectory(source, *ev->Record.MutableBalanceTrackList());
+        FillSplitTrajectory(source, *msg->Record.MutableBalanceTrackList());
     }
 
-    struct TSendState : public TThrRefBase {
-        TDataShard* Self;
-        TActorId Recipient;
-        THolder<TEvTxProcessing::TEvReadSet> Event;
+    return std::make_unique<IEventHandle>(recipient, SelfId(), msg.release());
+}
 
-        TSendState(TDataShard* self, const TActorId& recipient, THolder<TEvTxProcessing::TEvReadSet>&& event)
-            : Self(self)
-            , Recipient(recipient)
-            , Event(std::move(event))
+void TDataShard::SendReadSetNoData(const TActorContext& ctx, const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target)
+{
+    Y_UNUSED(ctx);
+    auto ev = GenerateReadSetNoData(recipient, step, txId, source, target);
+
+    struct TSendState : public TThrRefBase {
+        std::unique_ptr<IEventHandle> Event;
+
+        TSendState(std::unique_ptr<IEventHandle>&& event)
+            : Event(std::move(event))
         { }
     };
 
     // FIXME: we can probably avoid lease confirmation here
     Executor()->ConfirmReadOnlyLease(
-        [state = MakeIntrusive<TSendState>(this, recipient, std::move(ev))] {
-            state->Self->Send(state->Recipient, state->Event.Release());
+        [state = MakeIntrusive<TSendState>(std::move(ev))] {
+            TActivationContext::Send(std::move(state->Event));
         });
 }
 

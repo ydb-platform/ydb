@@ -21,9 +21,12 @@ void TTransQueue::AddTxInFly(TOperation::TPtr op) {
     Self->SetCounter(COUNTER_TX_IN_FLY, TxsInFly.size());
 }
 
-void TTransQueue::RemoveTxInFly(ui64 txId) {
+void TTransQueue::RemoveTxInFly(ui64 txId, std::vector<std::unique_ptr<IEventHandle>> *cleanupReplies) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end()) {
+        if (cleanupReplies) {
+            Self->GetCleanupReplies(it->second, *cleanupReplies);
+        }
         if (!it->second->GetStep()) {
             --PlanWaitingTxCount;
         }
@@ -414,7 +417,7 @@ bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
     return true;
 }
 
-bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
+bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId, std::vector<std::unique_ptr<IEventHandle>>& replies) {
     using Schema = TDataShard::Schema;
 
     auto it = TxsInFly.find(txId);
@@ -433,7 +436,7 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
     }
 
     DeadlineQueue.erase(std::make_pair(maxStep, txId));
-    RemoveTxInFly(txId);
+    RemoveTxInFly(txId, &replies);
     Self->IncCounter(COUNTER_PREPARE_CANCELLED);
     return true;
 }
@@ -442,7 +445,9 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
 // The argument outdatedStep specifies the maximum step for which we received
 // all planned transactions.
 // NOTE: DeadlineQueue no longer contains planned transactions.
-ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs) {
+ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize,
+        TVector<ui64>& outdatedTxs, std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
     using Schema = TDataShard::Schema;
 
     outdatedTxs.reserve(batchSize);
@@ -482,7 +487,7 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
         DeadlineQueue.erase(pr);
     }
     for (ui64 txId : outdatedTxs) {
-        RemoveTxInFly(txId);
+        RemoveTxInFly(txId, &replies);
     }
 
     Self->IncCounter(COUNTER_TX_PROGRESS_OUTDATED, outdatedTxs.size());

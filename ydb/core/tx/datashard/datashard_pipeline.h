@@ -130,7 +130,8 @@ public:
     bool PlanTxs(ui64 step, TVector<ui64> &txIds, TTransactionContext &txc, const TActorContext &ctx);
     void PreserveSchema(NIceDb::TNiceDb& db, ui64 step);
     TDuration CleanupTimeout() const;
-    ECleanupStatus Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx);
+    ECleanupStatus Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
+        std::vector<std::unique_ptr<IEventHandle>>& replies);
 
     // times
 
@@ -191,8 +192,10 @@ public:
     void PersistTxFlags(TOperation::TPtr op, TTransactionContext &txc);
     void UpdateSchemeTxBody(ui64 txId, const TStringBuf &txBody, TTransactionContext &txc);
     void ProposeSchemeTx(const TSchemaOperation &op, TTransactionContext &txc);
-    bool CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 txId);
-    ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 outdatedStep);
+    bool CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 txId,
+        std::vector<std::unique_ptr<IEventHandle>>& replies);
+    ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 outdatedStep,
+        std::vector<std::unique_ptr<IEventHandle>>& replies);
     ui64 PlannedTxInFly() const;
     const TSet<TStepOrder> &GetPlan() const;
     bool HasProposeDelayers() const;

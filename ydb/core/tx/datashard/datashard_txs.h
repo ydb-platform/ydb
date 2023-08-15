@@ -140,16 +140,6 @@ private:
     const ui64 Seqno;
 };
 
-class TDataShard::TTxCancelTransactionProposal : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxCancelTransactionProposal(TDataShard *self, ui64 txId);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_CANCEL_TX_PROPOSAL; }
-private:
-    const ui64 TxId;
-};
-
 inline bool MaybeRequestMoreTxMemory(ui64 usage, NTabletFlatExecutor::TTransactionContext &txc) {
     if (usage > txc.GetMemoryLimit()) {
         ui64 request = Max(usage - txc.GetMemoryLimit(), txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);

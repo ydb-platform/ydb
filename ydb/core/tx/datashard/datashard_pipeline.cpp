@@ -133,7 +133,9 @@ TDuration TPipeline::CleanupTimeout() const {
     return TDuration::Zero();
 }
 
-ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
+        std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
     bool foundExpired = false;
     TOperation::TPtr op;
     ui64 step = 0;
@@ -174,7 +176,7 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx)
 
     // cleaunup outdated
     ui64 outdatedStep = Self->GetOutdatedCleanupStep();
-    auto status = CleanupOutdated(db, ctx, outdatedStep);
+    auto status = CleanupOutdated(db, ctx, outdatedStep, replies);
     switch (status) {
         case ECleanupStatus::None:
             if (!op || !CanRunOp(*op)) {
@@ -1076,20 +1078,32 @@ void TPipeline::ProposeSchemeTx(const TSchemaOperation &op,
     Self->TransQueue.ProposeSchemaTx(db, op);
 }
 
-bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 txId) {
-    ForgetTx(txId);
-    bool cancelled = Self->TransQueue.CancelPropose(db, txId);
-    if (cancelled) {
-        Self->CheckDelayedProposeQueue(ctx);
+bool TPipeline::CancelPropose(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 txId,
+        std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
+    auto op = Self->TransQueue.FindTxInFly(txId);
+    if (!op || op->GetStep()) {
+        // Operation either doesn't exist, or already planned and cannot be cancelled
+        return true;
     }
+
+    if (!Self->TransQueue.CancelPropose(db, txId, replies)) {
+        // Page fault, try again
+        return false;
+    }
+
+    ForgetTx(txId);
+    Self->CheckDelayedProposeQueue(ctx);
     MaybeActivateWaitingSchemeOps(ctx);
-    return cancelled;
+    return true;
 }
 
-ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 outdatedStep) {
+ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorContext& ctx, ui64 outdatedStep,
+        std::vector<std::unique_ptr<IEventHandle>>& replies)
+{
     const ui32 OUTDATED_BATCH_SIZE = 100;
     TVector<ui64> outdatedTxs;
-    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs);
+    auto status = Self->TransQueue.CleanupOutdated(db, outdatedStep, OUTDATED_BATCH_SIZE, outdatedTxs, replies);
     switch (status) {
         case ECleanupStatus::None:
         case ECleanupStatus::Restart:

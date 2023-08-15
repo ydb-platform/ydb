@@ -1807,6 +1807,193 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
     }
 
+    Y_UNIT_TEST(DistributedWriteLostPlanThenDrop) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
+
+        bool removeTransactions = true;
+        size_t removedTransactions = 0;
+        size_t receivedReadSets = 0;
+        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvPlanStep::EventType: {
+                    auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
+                    auto step = msg->Record.GetStep();
+                    auto tabletId = msg->Record.GetTabletID();
+                    auto recipient = ev->GetRecipientRewrite();
+                    Cerr << "... observed step " << step << " at tablet " << tabletId << Endl;
+                    if (removeTransactions && tabletId == shards1.at(0)) {
+                        THashMap<TActorId, TVector<ui64>> acks;
+                        for (auto& tx : msg->Record.GetTransactions()) {
+                            // Acknowledge transaction to coordinator
+                            auto ackTo = ActorIdFromProto(tx.GetAckTo());
+                            acks[ackTo].push_back(tx.GetTxId());
+                            ++removedTransactions;
+                        }
+                        // Acknowledge transactions to coordinator and remove them
+                        // It would be as if shard missed them for some reason
+                        for (auto& pr : acks) {
+                            auto* ack = new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
+                            runtime.Send(new IEventHandle(ev->Sender, recipient, ack), 0, true);
+                        }
+                        auto* accept = new TEvTxProcessing::TEvPlanStepAccepted(tabletId, step);
+                        runtime.Send(new IEventHandle(ev->Sender, recipient, accept), 0, true);
+                        msg->Record.ClearTransactions();
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    auto tabletId = msg->Record.GetTabletDest();
+                    Cerr << "... observed readset at " << tabletId << Endl;
+                    if (tabletId == shards1.at(0)) {
+                        ++receivedReadSets;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(observer);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", /* commitTx */ true), "/Root");
+
+        WaitFor(runtime, [&]{ return removedTransactions > 0 && receivedReadSets >= 2; }, "readset exchange start");
+        UNIT_ASSERT_VALUES_EQUAL(removedTransactions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(receivedReadSets, 2u);
+
+        removeTransactions = false;
+
+        auto dropStartTs = runtime.GetCurrentTime();
+        Cerr << "... dropping table" << Endl;
+        ui64 txId = AsyncDropTable(server, sender, "/Root", "table-2");
+        Cerr << "... drop table txId# " << txId << " started" << Endl;
+        WaitTxNotification(server, sender, txId);
+        auto dropLatency = runtime.GetCurrentTime() - dropStartTs;
+        Cerr << "... drop finished in " << dropLatency << Endl;
+        // TODO: we need to use neighbor readset hints to cancel earlier
+        // UNIT_ASSERT(dropLatency < TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(DistributedWriteLostPlanThenSplit) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000)
+            .SetEnableDataShardVolatileTransactions(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
+
+        bool removeTransactions = true;
+        size_t removedTransactions = 0;
+        size_t receivedReadSets = 0;
+        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxProcessing::TEvPlanStep::EventType: {
+                    auto* msg = ev->Get<TEvTxProcessing::TEvPlanStep>();
+                    auto step = msg->Record.GetStep();
+                    auto tabletId = msg->Record.GetTabletID();
+                    auto recipient = ev->GetRecipientRewrite();
+                    Cerr << "... observed step " << step << " at tablet " << tabletId << Endl;
+                    if (removeTransactions && tabletId == shards1.at(0)) {
+                        THashMap<TActorId, TVector<ui64>> acks;
+                        for (auto& tx : msg->Record.GetTransactions()) {
+                            // Acknowledge transaction to coordinator
+                            auto ackTo = ActorIdFromProto(tx.GetAckTo());
+                            acks[ackTo].push_back(tx.GetTxId());
+                            ++removedTransactions;
+                        }
+                        // Acknowledge transactions to coordinator and remove them
+                        // It would be as if shard missed them for some reason
+                        for (auto& pr : acks) {
+                            auto* ack = new TEvTxProcessing::TEvPlanStepAck(tabletId, step, pr.second.begin(), pr.second.end());
+                            runtime.Send(new IEventHandle(ev->Sender, recipient, ack), 0, true);
+                        }
+                        auto* accept = new TEvTxProcessing::TEvPlanStepAccepted(tabletId, step);
+                        runtime.Send(new IEventHandle(ev->Sender, recipient, accept), 0, true);
+                        msg->Record.ClearTransactions();
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+                case TEvTxProcessing::TEvReadSet::EventType: {
+                    auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    auto tabletId = msg->Record.GetTabletDest();
+                    Cerr << "... observed readset at " << tabletId << Endl;
+                    if (tabletId == shards1.at(0)) {
+                        ++receivedReadSets;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(observer);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+
+        auto future = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2);
+            UPSERT INTO `/Root/table-2` (key, value) VALUES (20, 20);
+        )", sessionId, "", /* commitTx */ true), "/Root");
+
+        WaitFor(runtime, [&]{ return removedTransactions > 0 && receivedReadSets >= 2; }, "readset exchange start");
+        UNIT_ASSERT_VALUES_EQUAL(removedTransactions, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(receivedReadSets, 2u);
+
+        removeTransactions = false;
+
+        auto splitStartTs = runtime.GetCurrentTime();
+        Cerr << "... splitting table" << Endl;
+        ui64 txId = AsyncSplitTable(server, sender, "/Root/table-1", shards1.at(0), 2);
+        Cerr << "... split txId# " << txId << " started" << Endl;
+        WaitTxNotification(server, sender, txId);
+        auto splitLatency = runtime.GetCurrentTime() - splitStartTs;
+        Cerr << "... split finished in " << splitLatency << Endl;
+        // TODO: we need to use neighbor readset hints to cancel earlier
+        // UNIT_ASSERT(splitLatency < TDuration::Seconds(5));
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)
 
 } // namespace NKikimr

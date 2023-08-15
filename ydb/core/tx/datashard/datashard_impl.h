@@ -1394,12 +1394,16 @@ public:
     bool AddExpectation(ui64 target, ui64 step, ui64 txId);
     bool RemoveExpectation(ui64 target, ui64 txId);
     void SendReadSetExpectation(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target);
+    std::unique_ptr<IEventHandle> GenerateReadSetNoData(const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target);
     void SendReadSetNoData(const TActorContext& ctx, const TActorId& recipient, ui64 step, ui64 txId, ui64 source, ui64 target);
     bool ProcessReadSetExpectation(TEvTxProcessing::TEvReadSet::TPtr& ev);
     void SendReadSets(const TActorContext& ctx,
                       TVector<THolder<TEvTxProcessing::TEvReadSet>> &&readsets);
     void ResendReadSet(const TActorContext& ctx, ui64 step, ui64 txId, ui64 source, ui64 target, const TString& body, ui64 seqno);
     void SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEventHandle>>& delayedAcks) const;
+    void GetCleanupReplies(const TOperation::TPtr& op, std::vector<std::unique_ptr<IEventHandle>>& cleanupReplies);
+    void SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr<IEventHandle>>&& replies);
+    void SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies);
 
     void WaitVolatileDependenciesThenSend(
             const absl::flat_hash_set<ui64>& dependencies,
@@ -1495,6 +1499,7 @@ public:
 
     bool CanDrop() const {
         Y_VERIFY(State != TShardState::Offline, "Unexpexted repeated drop");
+        // FIXME: why are we waiting for OutReadSets.Empty()?
         return (TxInFly() == 1) && OutReadSets.Empty() && (State != TShardState::PreOffline);
     }
 
